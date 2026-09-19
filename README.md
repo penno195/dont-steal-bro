@@ -22,12 +22,21 @@ Next action: **task P0-1** — resolve the eight open design questions in
 |---|---|
 | [`docs/gdd.md`](docs/gdd.md) | The game design document. §7 lists what is still undecided. |
 | [`docs/architecture.md`](docs/architecture.md) | Locked technical decisions, folder skeleton, and the NPC / mobile-UI / Decision Studio deep dives. |
+| [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
-Attach both to any AI session working on this project. The architecture doc is
-what stops each session from re-inventing the folder structure.
+Attach the first two to any AI session working on this project. The architecture
+doc is what stops each session from re-inventing the folder structure.
 
-The phased task tracker, with a ready-to-paste prompt per task, lives as a
-private artifact: https://claude.ai/artifact/RSqVYTXtKzUK8v3Zi3hRPX
+### On the tracker's two copies
+
+`docs/build-plan.html` is the offline copy — it ticks, but its tick state is
+stored in whichever browser opened it and goes no further.
+
+The **authoritative** tracker is the private artifact at
+https://claude.ai/artifact/RSqVYTXtKzUK8v3Zi3hRPX — tick state there syncs and is
+visible to anyone the artifact is shared with. Tick progress there, treat the
+file in this repo as a read-only backup, and re-export it when the task list
+itself changes.
 
 ## Planned layout
 

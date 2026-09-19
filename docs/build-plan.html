@@ -1,0 +1,1482 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Decision Studio Build Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --paper:#e9ebf0;
+    --surface:#ffffff;
+    --surface-2:#f4f5f8;
+    --ink:#14161d;
+    --ink-2:#555d6e;
+    --ink-3:#7c8496;
+    --line:#d2d7e0;
+    --line-2:#e2e6ed;
+    --teal:#1c6b67;
+    --teal-soft:#d8ebe9;
+    --oxide:#b4502a;
+    --oxide-soft:#f4e2d9;
+    --plum:#5f4494;
+    --plum-soft:#e8e2f4;
+    --slate:#4e5666;
+    --slate-soft:#e2e5ec;
+    --done:#1c6b67;
+    --shadow:0 1px 2px rgba(20,22,29,.06), 0 8px 24px -16px rgba(20,22,29,.28);
+    --display:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;
+    --body:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0d0f14;
+      --surface:#161922;
+      --surface-2:#1c202b;
+      --ink:#e8eaf0;
+      --ink-2:#a2aaba;
+      --ink-3:#7e8697;
+      --line:#2a2f3c;
+      --line-2:#232833;
+      --teal:#55b3ab;
+      --teal-soft:#123531;
+      --oxide:#e08153;
+      --oxide-soft:#3a2015;
+      --plum:#a58ddc;
+      --plum-soft:#251c3d;
+      --slate:#9aa3b4;
+      --slate-soft:#232833;
+      --done:#55b3ab;
+      --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px -20px rgba(0,0,0,.9);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0d0f14;
+    --surface:#161922;
+    --surface-2:#1c202b;
+    --ink:#e8eaf0;
+    --ink-2:#a2aaba;
+    --ink-3:#7e8697;
+    --line:#2a2f3c;
+    --line-2:#232833;
+    --teal:#55b3ab;
+    --teal-soft:#123531;
+    --oxide:#e08153;
+    --oxide-soft:#3a2015;
+    --plum:#a58ddc;
+    --plum-soft:#251c3d;
+    --slate:#9aa3b4;
+    --slate-soft:#232833;
+    --done:#55b3ab;
+    --shadow:0 1px 2px rgba(0,0,0,.5), 0 10px 30px -20px rgba(0,0,0,.9);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:15px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1020px;margin:0 auto;padding-left:18px;padding-right:18px}
+  h1,h2,h3{font-family:var(--display);font-weight:800;text-wrap:balance;margin:0}
+  a{color:var(--teal)}
+
+  /* ---- sticky bar ---- */
+  .bar{
+    position:sticky;top:env(safe-area-inset-top,0px);z-index:40;
+    background:color-mix(in srgb, var(--paper) 88%, transparent);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .bar .wrap{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding-block:10px}
+  .barname{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:-.01em;white-space:nowrap}
+  .meterwrap{flex:1 1 200px;min-width:160px;display:flex;align-items:center;gap:10px}
+  .meter{flex:1;height:8px;border-radius:99px;background:var(--line-2);overflow:hidden;border:1px solid var(--line)}
+  .meter i{display:block;height:100%;width:0%;background:var(--teal);transition:width .25s ease}
+  .metertxt{font-family:var(--mono);font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+  .filters{display:flex;flex-wrap:wrap;gap:6px;width:100%}
+  .fchip{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.02em;
+    padding:5px 10px;border-radius:99px;border:1px solid var(--line);
+    background:var(--surface);color:var(--ink-2);cursor:pointer;
+  }
+  .fchip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+  .fchip:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+
+  /* ---- masthead ---- */
+  header.mast{padding-block:36px 26px}
+  .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--oxide)}
+  h1{font-size:clamp(30px,6vw,50px);line-height:1.02;letter-spacing:-.025em;margin:10px 0 12px}
+  .lede{max-width:62ch;color:var(--ink-2);font-size:16px}
+  .lede strong{color:var(--ink);font-weight:600}
+
+  .legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin-top:24px}
+  .lcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:13px 14px;box-shadow:var(--shadow)}
+  .lcard h4{margin:0 0 5px;font-family:var(--display);font-size:14px;font-weight:700}
+  .lcard p{margin:0;font-size:13px;color:var(--ink-2);line-height:1.45}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:7px;vertical-align:1px}
+  .dot.opus{background:var(--plum)} .dot.sonnet{background:var(--teal)} .dot.haiku{background:var(--slate)}
+
+  .howto{margin-top:20px;border-left:3px solid var(--oxide);background:var(--surface);border-radius:0 10px 10px 0;padding:14px 16px}
+  .howto h4{margin:0 0 6px;font-family:var(--display);font-size:14px}
+  .howto ol{margin:0;padding-left:18px;font-size:13.5px;color:var(--ink-2)}
+  .howto li{margin-bottom:3px}
+  .howto code{font-family:var(--mono);font-size:12.5px;background:var(--surface-2);padding:1px 5px;border-radius:4px;color:var(--ink)}
+
+  /* ---- phases ---- */
+  .phase{margin-top:34px}
+  .phead{display:flex;gap:14px;align-items:flex-start;padding-bottom:12px;border-bottom:2px solid var(--ink)}
+  .pnum{font-family:var(--display);font-weight:800;font-size:38px;line-height:.85;letter-spacing:-.04em;color:var(--oxide);font-variant-numeric:tabular-nums}
+  .pmeta{flex:1;min-width:0}
+  .pmeta h2{font-size:22px;letter-spacing:-.02em}
+  .psub{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);letter-spacing:.03em;margin-top:3px}
+  .pcount{font-family:var(--mono);font-size:12px;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums;padding-top:6px}
+  .pgoal{font-size:14px;color:var(--ink-2);margin:12px 0 0;max-width:70ch}
+  .gate{margin-top:10px;font-size:13px;color:var(--ink);background:var(--oxide-soft);border-radius:8px;padding:9px 12px}
+  .gate b{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--oxide);display:block;margin-bottom:2px}
+
+  .tasks{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+  .task{
+    display:grid;grid-template-columns:auto 1fr;gap:12px;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:13px 14px;box-shadow:var(--shadow);
+  }
+  .task.is-done{background:var(--surface-2);border-color:var(--line-2)}
+  .task.is-done .ttitle{color:var(--ink-3);text-decoration:line-through;text-decoration-thickness:1px}
+
+  .tick{display:block;cursor:pointer;padding-top:1px}
+  .tick input{position:absolute;opacity:0;width:26px;height:26px;margin:0;cursor:pointer}
+  .box{
+    display:grid;place-items:center;width:26px;height:26px;border-radius:7px;
+    border:1.5px solid var(--line);background:var(--surface-2);transition:background .15s,border-color .15s;
+  }
+  .box::after{content:"";width:11px;height:6px;border-left:2.5px solid var(--surface);border-bottom:2.5px solid var(--surface);transform:rotate(-45deg) scale(.5);opacity:0;transition:opacity .15s,transform .15s}
+  .tick input:checked + .box{background:var(--done);border-color:var(--done)}
+  .tick input:checked + .box::after{opacity:1;transform:rotate(-45deg) scale(1)}
+  .tick input:focus-visible + .box{outline:2px solid var(--teal);outline-offset:2px}
+
+  .tbody{min-width:0}
+  .thead{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px}
+  .tid{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);letter-spacing:.04em}
+  .ttitle{font-family:var(--display);font-size:16px;font-weight:700;letter-spacing:-.012em}
+  .mrow{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;margin-top:7px}
+  .mchip{font-family:var(--mono);font-size:11px;letter-spacing:.03em;padding:2.5px 8px;border-radius:5px;white-space:nowrap}
+  .mchip.opus{background:var(--plum-soft);color:var(--plum)}
+  .mchip.sonnet{background:var(--teal-soft);color:var(--teal)}
+  .mchip.haiku{background:var(--slate-soft);color:var(--slate)}
+  .why{font-size:12.5px;color:var(--ink-3)}
+  .kv{margin:9px 0 0;font-size:12.5px;color:var(--ink-2);display:grid;grid-template-columns:auto 1fr;gap:2px 10px}
+  .kv dt{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);padding-top:2px}
+  .kv dd{margin:0}
+  .kv dd code{font-family:var(--mono);font-size:12px;color:var(--ink);overflow-wrap:anywhere}
+
+  details{margin-top:10px;border-top:1px dashed var(--line);padding-top:9px}
+  summary{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--teal);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px;
+  }
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:"▸";font-size:11px;transition:transform .15s}
+  details[open] summary::before{transform:rotate(90deg)}
+  summary:focus-visible{outline:2px solid var(--teal);outline-offset:3px}
+  .pbox{margin-top:9px;position:relative;background:var(--surface-2);border:1px solid var(--line-2);border-radius:8px}
+  .pbox pre{
+    margin:0;padding:13px 14px;font-family:var(--mono);font-size:12.5px;line-height:1.6;
+    white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink);
+  }
+  .copy{
+    position:absolute;top:8px;right:8px;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;
+    padding:4px 9px;border-radius:6px;border:1px solid var(--line);background:var(--surface);
+    color:var(--ink-2);cursor:pointer;
+  }
+  .copy:hover{color:var(--ink)}
+  .copy:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
+
+  footer.foot{margin:44px 0 40px;padding-top:18px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-3)}
+  footer.foot code{font-family:var(--mono);font-size:12px}
+  .savenote{font-family:var(--mono);font-size:11px;color:var(--ink-3);margin-top:6px}
+
+  [hidden]{display:none!important}
+  @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+  @media (max-width:560px){
+    .pnum{font-size:30px}
+    .task{padding:12px}
+    .kv{grid-template-columns:1fr;gap:0}
+    .kv dt{margin-top:5px}
+  }
+</style>
+
+<div class="bar">
+  <div class="wrap">
+    <span class="barname">Build Plan</span>
+    <div class="meterwrap">
+      <div class="meter"><i id="meterfill"></i></div>
+      <span class="metertxt" id="metertxt">0 / 0</span>
+    </div>
+    <div class="filters" id="filters">
+      <button class="fchip" data-f="status" data-v="all" aria-pressed="true">All tasks</button>
+      <button class="fchip" data-f="status" data-v="open" aria-pressed="false">Open</button>
+      <button class="fchip" data-f="status" data-v="done" aria-pressed="false">Done</button>
+      <button class="fchip" data-f="model" data-v="all" aria-pressed="true">All models</button>
+      <button class="fchip" data-f="model" data-v="opus" aria-pressed="false">Opus 5</button>
+      <button class="fchip" data-f="model" data-v="sonnet" aria-pressed="false">Sonnet 5</button>
+      <button class="fchip" data-f="model" data-v="haiku" aria-pressed="false">Haiku 4.5</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <header class="mast">
+    <div class="eyebrow">Don't Steal Bro! · Roblox · 6-player race · Steal or Share</div>
+    <h1>Decision Studio Build Plan</h1>
+    <p class="lede">Fifty-seven tickable production tasks across ten phases, each with a ready-to-paste prompt and a model recommendation. Phases are a <strong>sequence, not a menu</strong> — the gate note under each one is the condition for starting the next. Ticks are saved, so this doubles as your burndown.</p>
+
+    <div class="legend">
+      <div class="lcard">
+        <h4><span class="dot opus"></span>Opus 5</h4>
+        <p>Architecture, state machines, anti-exploit, DataStore correctness, anything where a subtle bug costs player data or competitive fairness. Turn on Fast mode for long sessions.</p>
+      </div>
+      <div class="lcard">
+        <h4><span class="dot sonnet"></span>Sonnet 5</h4>
+        <p>The bulk of implementation against a spec that already exists: UI components, task and power-up modules, content generation from a template, test suites.</p>
+      </div>
+      <div class="lcard">
+        <h4><span class="dot haiku"></span>Haiku 4.5</h4>
+        <p>Mechanical, high-volume, low-ambiguity work: config stubs, builder scripts, registry files, formatting and repetitive scaffolding. Cheap enough to re-run.</p>
+      </div>
+    </div>
+
+    <div class="howto">
+      <h4>Before you paste any prompt</h4>
+      <ol>
+        <li>Attach <code>docs/gdd.md</code> and <code>docs/architecture.md</code> from the <code>dont-steal-bro</code> repo to every session — most prompts below assume that context, and the architecture doc is what stops each session re-inventing the folder structure.</li>
+        <li>Work in the repo with Claude Code so the model reads real files instead of guessing at your codebase.</li>
+        <li>Every prompt ends with an acceptance line. Don't tick the box until that line is actually true in Studio, not just in the diff.</li>
+        <li>Luau is a smaller slice of training data than TypeScript. Expect to correct Roblox API details, and always verify against current docs.</li>
+      </ol>
+    </div>
+  </header>
+
+  <main id="board"></main>
+
+  <footer class="foot">
+    <div>Tick state is shared with anyone who can open this page, and saved as you go. Filters and open prompts are yours alone.</div>
+    <div class="savenote" id="savenote">Local only — sign-in required to sync.</div>
+  </footer>
+</div>
+
+<script>
+const PHASES = [
+{
+  n:"00", name:"Pre-production", weeks:"2–3 weeks · design lock",
+  goal:"Close every open design question and prove the concept on paper. Nothing here is code, and every hour spent here saves a week in Phase 2.",
+  gate:"Design doc v2 has no open questions, the task and power-up catalogues exist, the map kit contract is written, and the payoff table is signed off.",
+  tasks:[
+    {id:"P0-1", title:"Resolve the open design questions", model:"opus",
+     why:"Each answer cascades into three or four systems; this needs judgement, not typing.",
+     deps:"—", out:"docs/design-decisions.md",
+     prompt:`You are the lead designer on a Roblox competitive game. I am attaching the GDD.
+
+Eight questions are unresolved and each one blocks a system. For every one, give me: a recommendation, the reasoning in three to five sentences, the systems downstream that the answer changes, and the cheapest way to reverse the decision later if playtests disagree.
+
+1. What exactly is "bounty" — a currency, a score multiplier, or streak progress?
+2. What happens at the round timer if fewer than three players have finished their tasks?
+3. A qualifier disconnects between the race and the Decision Studio — promote the 4th-place finisher, or run the Studio with two?
+4. A qualifier disconnects inside the Studio — what is their choice counted as, and do they take a loss?
+5. Can NPCs qualify for the Studio? (Note: with one human and five NPCs, two NPCs must.)
+6. How does "progress to the next round" work mechanically — a new match, the same server, a priority re-queue?
+7. Does a loss reset the streak for everyone who fails to qualify, or only for Studio losers?
+8. Are starting power-ups sold for Robux, and if so how do you keep the mode from reading as pay-to-win?
+
+Write it as a decision memo with a one-line summary table at the top. Flag any answer where you think playtesting should override you.`},
+
+    {id:"P0-2", title:"Spec the mini-task catalogue", model:"sonnet",
+     why:"Structured generation from a fixed template — exactly Sonnet's strength.",
+     deps:"P0-1", out:"docs/tasks-catalogue.md",
+     prompt:`Design 15 mini-tasks for a 6-player Roblox race inspired by Among Us and The Crystal Maze. Players race to complete a personal list of tasks at stations scattered around a themed map.
+
+For each task give me: id, display name, one-sentence fantasy, the interaction verb (Tap, Hold, Drag, Sequence, Timing, Aim), target completion time for an average player, a failure or retry rule, how the server can validate it without trusting the client, and a mobile feasibility rating of 1 to 5 with a note.
+
+Hard constraints:
+- One thumb only. Reject anything needing two thumbs plus camera control.
+- No task may be solvable instantly by an exploiter firing a remote — the server issues the challenge and checks the answer.
+- Tasks must re-skin across 11 map themes (School, Factory, Museum, Laboratory, Mall, Construction Site, Space Station, Bunker, Aircraft Carrier, Prison, Deserted Island). Note the re-skin for each.
+- Spread the interaction verbs; do not give me 15 variations of a wire-connect puzzle.
+
+End with a shortlist of the 3 you would build first to prove the framework, and say why those 3.`},
+
+    {id:"P0-3", title:"Spec power-ups and the counter-play matrix", model:"sonnet",
+     why:"Systematic catalogue work with balance reasoning inside a defined frame.",
+     deps:"P0-1", out:"docs/powerups.md",
+     prompt:`Design a power-up set for a 6-player Roblox race where players buff themselves or grief opponents. Attached is the GDD.
+
+Give me 10 power-ups. For each: id, buff or debuff, targeting mode (self, nearest, aimed, area), duration, magnitude, cooldown, pickup rarity, the counter-play available to the victim, and stacking behaviour against every other effect in the set.
+
+Then design the anti-frustration layer and justify each number: an immunity window after hard control effects like Freeze, diminishing returns on repeat applications, and a cap on total time a player can be disabled in one round.
+
+Then give me a matrix of every debuff against every buff, marking whether it is blocked, reduced, or applies fully.
+
+Design constraint: a player who is griefed must always be able to do something about it, and nobody should ever be chain-frozen out of a round. Call out which of your own designs is closest to breaking that rule.`},
+
+    {id:"P0-4", title:"Tune the Steal / Share payoff table", model:"opus",
+     why:"Game-theory reasoning where the wrong numbers silently kill the climax.",
+     deps:"P0-1", out:"docs/payoff-table.md",
+     prompt:`Three finalists in a Roblox game blindly choose Steal or Share. Outcomes:
+- 1 Steal, 2 Share: the stealer progresses with a large bounty; the two sharers lose and reset their win streak.
+- 2 Steal, 1 Share: the sharer progresses with a smaller bounty; the two stealers lose and reset.
+- 3 Share: all three progress with the smallest bounty.
+- 3 Steal: all three lose and reset.
+
+Losing resets a win streak to zero, and the streak is the game's primary progression.
+
+Give me concrete bounty numbers and the expected-value analysis behind them, under three population assumptions: mostly cooperative, mostly greedy, and mixed. Show the equilibrium each payoff set pushes toward. I want tension, not a dominant strategy — if all-Share becomes the obvious play, the finale is dead, and if Steal always dominates, negotiation is theatre.
+
+Also model the effect of streak length: a player on a 12-streak has far more to lose than one on a 1-streak. Propose whether bounty or risk should scale with streak, and show the maths.
+
+Finish with the three telemetry metrics I should watch after launch to know the numbers are wrong, and the direction to move each value.`},
+
+    {id:"P0-5", title:"Write the map kit contract", model:"sonnet",
+     why:"A precise spec document derived from decisions already made.",
+     deps:"P0-1, P0-2", out:"docs/map-kit-spec.md",
+     prompt:`Write the map kit contract for a Roblox game with 11 themed maps that must all be interchangeable at runtime. Maps are built in Studio by hand from asset packs and stored in ServerStorage; one is cloned in per round.
+
+Specify every component a map MUST contain for the game code to work, as a CollectionService tag contract: spawn points, task stations (with attributes for which task ids they accept), power-up spawns, NPC navigation nodes, playable bounds, kill zones, and the Decision Studio hand-off point.
+
+For each: the tag name, the required instance class, every attribute with its type and valid range, the minimum and maximum count, and what breaks if it is missing.
+
+Then define the per-map config module shape (display name, thumbnail asset, lighting preset, music, enabled task ids, NPC difficulty modifier) as a strict Luau type.
+
+Then write the builder's checklist: what an artist must do to a raw asset pack model before it goes in a map — anchoring, collision fidelity, CanTouch and CanQuery, streaming behaviour, and removing any script that shipped with the pack.
+
+Format as a spec a level designer can follow without reading any code.`},
+
+    {id:"P0-6", title:"Set the performance budget and device matrix", model:"sonnet",
+     why:"Applies known platform constraints to your specific density target.",
+     deps:"P0-5", out:"docs/perf-budget.md",
+     prompt:`Set the performance budget for a Roblox game targeting mobile-first play, with heavily stylized, dense, highly populated maps and 6 characters plus NPCs per server.
+
+Give me hard numbers for: total instance count per map, parts and meshes in view, unique meshes and textures, draw calls, triangle budget, active particle emitters, sound instances, client memory ceiling, and target frame rate on a low-end Android phone from roughly four years ago.
+
+For each number, say how to measure it in Studio and on device, which tool shows it, and what to cut first when it is exceeded.
+
+Then give me StreamingEnabled settings for this shape of game and the reasoning: streaming radius, target radius, pause mode, and which models must be Persistent or Atomic so gameplay never streams out from under a player.
+
+Then a device test matrix: which devices I must test each milestone on, and the specific thing each device is there to catch.
+
+Mark any figure you are unsure about and tell me how to verify it, rather than presenting it as fact.`},
+
+    {id:"P0-7", title:"Threat-model exploits and streak collusion", model:"opus",
+     why:"Adversarial thinking against your specific economy — the highest-stakes analysis in pre-production.",
+     deps:"P0-1, P0-4", out:"docs/threat-model.md",
+     prompt:`Act as a security and economy designer for a competitive Roblox game. Attached is the GDD. The headline metagame is a win streak displayed on daily, weekly and all-time leaderboards.
+
+Produce a threat model covering:
+1. Client exploits — remote spam, forged task completion, speed and teleport hacks, power-up duplication, TeleportData tampering, DataStore manipulation through rejoin timing.
+2. Social exploits — three friends queueing together and always Sharing; a player farming NPC-filled lobbies; alt accounts feeding wins; disconnect-to-dodge a loss; queue sniping.
+3. Economy exploits — receipt replay on developer products, bounty duplication across teleports, streak restore after a loss.
+
+For each: how the attack works step by step, how it shows up in telemetry, the server-side mitigation, and the cost of that mitigation in false positives or player friction.
+
+Rank everything by expected damage to the leaderboard's credibility. Tell me which mitigations must exist before launch and which can wait, and be explicit about which attacks I fundamentally cannot prevent and must detect and reverse instead.`}
+  ]
+},
+{
+  n:"01", name:"Foundation and tooling", weeks:"2 weeks · infrastructure",
+  goal:"Build the spine every later phase attaches to: repo, loader, typed networking, config validation and player data. No gameplay yet.",
+  gate:"CI passes, a player joins and gets a profile, a remote with bad arguments is rejected and logged, and a malformed config file fails the server at boot.",
+  tasks:[
+    {id:"P1-1", title:"Rojo project, toolchain and CI", model:"sonnet",
+     why:"Well-trodden setup work with exact, verifiable output.",
+     deps:"P0-1", out:"default.project.json, wally.toml, .github/workflows/ci.yml",
+     prompt:`Set up the repository for a large Roblox game built with Rojo and Git, synced into Studio.
+
+Produce:
+1. A default.project.json mapping src/shared to ReplicatedStorage.Shared, src/server to ServerScriptService.Server, src/client to StarterPlayer.StarterPlayerScripts.Client, and a Packages folder — with ServerStorage map content deliberately NOT synced, and a comment saying why.
+2. wally.toml with the packages this project needs: a data-persistence library with session locking, a signal library, and a testing library. Pin exact versions and say what each is for.
+3. selene.toml and a .luaurc configured for strict type checking across the whole codebase.
+4. stylua.toml matching common Roblox community style.
+5. A GitHub Actions workflow that installs Aftman or Rokit, installs Wally packages, runs Selene, runs StyLua in check mode, and runs the Luau type checker. Fail the build on any of them.
+6. A README section explaining the sync workflow to someone who has only ever used Studio: what lives in Git, what lives in the .rbxl, and the rule for which is authoritative.
+
+Assume current tool versions and tell me where to verify each one.`},
+
+    {id:"P1-2", title:"Service and controller bootstrap loader", model:"sonnet",
+     why:"A small, well-understood pattern where a known shape matters more than novelty.",
+     deps:"P1-1", out:"src/server/init.server.luau, src/client/init.client.luau, src/shared/Loader.luau",
+     prompt:`Write a minimal lifecycle loader for a Roblox game in strict Luau. No external framework — about 100 lines total.
+
+Requirements:
+- The server script requires every ModuleScript in a Services folder; the client script does the same for Controllers.
+- Two-phase startup: call init() on all modules first, then start() on all of them, so cross-references are safe to resolve in init and safe to use in start.
+- Each module declares an optional dependency list by name; the loader topologically sorts init order and throws a clear error naming the cycle if there is one.
+- A typed get(name) accessor so a service can reach another service without requiring it directly.
+- Startup timing logged per module, and any error in init or start logged with the module name and a full traceback, then re-thrown — a broken service must not fail silently.
+- Exported Luau types for a Service and a Controller so new modules get autocomplete.
+
+Include one example service and one example controller using the pattern, and a short comment block explaining why two phases exist to a developer who has not seen this before.`},
+
+    {id:"P1-3", title:"Typed remote layer with validation and rate limits", model:"opus",
+     why:"This is the game's entire attack surface — get the guard wrong once and every later remote inherits it.",
+     deps:"P1-2, P0-7", out:"src/shared/Net.luau, src/server/Services/NetGuard.luau",
+     prompt:`Build the networking layer for a competitive Roblox game where every remote will be attacked. Strict Luau.
+
+Design a single shared Net module that is the only place remotes are declared. For each remote: a name, a direction, a Luau type for the payload, a per-player rate limit, and whether it is valid only in specific round states.
+
+Requirements:
+- A runtime validator generated from, or checked against, the declared payload type — the server rejects any call whose arguments do not match the shape exactly, including extra fields and wrong number ranges.
+- Per-player token-bucket rate limiting, configured per remote, with an escalation hook: log, then throttle, then flag the player for review. Never kick from inside the guard.
+- A state gate so a remote fired in the wrong round phase is dropped, not processed.
+- All rejections logged structurally (player, remote, reason, payload size) through one reporting function I can later point at analytics.
+- Client-side helpers that are thin and typed, so a controller calls one typed function rather than touching RemoteEvent directly.
+- Remote instances created at boot from the declaration table so the folder can never drift from the code.
+
+Explain how to add a new remote in five lines, and write two unit tests: one well-formed call, one hostile call with a spoofed extra field.
+
+Assume the client is fully compromised. Say explicitly which parts of this design would NOT save me if I later validate something on the client.`},
+
+    {id:"P1-4", title:"Config schema and boot-time validators", model:"sonnet",
+     why:"Repetitive, type-driven work with an unambiguous target.",
+     deps:"P1-2, P0-2, P0-3, P0-5", out:"src/shared/Config/*, src/server/Services/ConfigValidator.luau",
+     prompt:`Build the data-driven configuration layer for a Roblox game that must scale to 11 maps, 15+ mini-tasks, 10+ power-ups and a title ladder — without touching service code when content is added.
+
+Produce:
+1. Strict Luau type definitions for MapDef, TaskDef, PowerUpDef, TitleDef and a root GameConfig holding round timers, player counts, bounty values and streak rules.
+2. A folder convention where each definition is its own module file and a registry module auto-collects them, so adding content means adding one file.
+3. A validator that runs at server boot over every registry: checks required fields, value ranges, cross-references (a map's enabled task ids all exist; a title's threshold is reachable; bounty ordering holds), and duplicate ids. On failure it must fail loudly with the file name and the exact broken field — never boot a half-valid config.
+4. The invariant assertions I actually care about, as named checks: sole-stealer bounty > lone-sharer bounty > all-share bounty > 0; every map has at least as many task stations as tasks assigned per player; every task id used by a map is registered.
+5. Jest-Lua tests proving the validator catches each failure class.
+
+Write the config files for GameConfig and two example tasks so I can see the shape end to end.`},
+
+    {id:"P1-5", title:"Player data service over ProfileStore", model:"opus",
+     why:"Data loss and duplication bugs are unrecoverable and only appear under load.",
+     deps:"P1-2", out:"src/server/Services/DataService.luau",
+     prompt:`Build the player data service for a Roblox game using ProfileStore (the successor to ProfileService), in strict Luau. Players teleport constantly between a hub place and match places, so session locking and release ordering are the whole game here.
+
+Schema v1: currentStreak, bestStreak, pendingBounty, currency, ownedCosmetics, equipped, starterPowerUps, unlockedTitles, equippedTitle, stats (roundsPlayed, qualifications, steals, shares, wins, losses), lastSeen, schemaVersion.
+
+Requirements:
+- A versioned migration chain, each step a pure function from version n to n+1, with tests. Never mutate a profile in place without bumping the version.
+- Typed getters and setters; no service outside this one touches the raw profile table.
+- Correct handling for a player who leaves mid-round: apply any pending round outcome BEFORE releasing the profile, and make that ordering impossible to get wrong from a call site.
+- A Studio mock mode using an in-memory store so nobody develops against live data. Make the switch automatic via RunService, not a flag someone forgets.
+- A session-lock diagnostic: what to log when a profile fails to load because the previous server has not released it, and what the player should see.
+- A short comment explaining why streak and bounty must be read from the profile and never from TeleportData.
+
+Then write the tests: migration chain, mid-round leave, failed load, and double-release.`},
+
+    {id:"P1-6", title:"Test harness for pure logic", model:"sonnet",
+     why:"Standard harness wiring where correctness is easy to confirm.",
+     deps:"P1-1", out:"tests/, lune scripts",
+     prompt:`Set up automated testing for a Roblox game repo so the pure logic modules run in CI without opening Studio.
+
+Produce:
+1. Jest-Lua installed via Wally and wired so I can run the suite from Studio's command bar.
+2. A Lune script that runs the same suite headlessly in CI, with clear instructions on which modules can run outside Studio and which cannot.
+3. A conventions document: what belongs in a pure module (outcome resolution, pricing, ranking, tie-breaks, streak maths, validation) versus what needs an integration test in Studio, and how to keep Roblox API calls out of pure modules so they stay testable.
+4. Example test files for a pure module and a mocked-service module, showing how to fake a service dependency through the loader.
+5. A coverage expectation per module category, and a CI failure threshold.
+
+Also show me the one-line change to the GitHub Actions workflow that runs this on every push.`}
+  ]
+},
+{
+  n:"02", name:"Core loop gray-box", weeks:"4–5 weeks · the make-or-break phase",
+  goal:"The race, playable end to end in untextured gray boxes. If it is not fun here, art will not save it.",
+  gate:"Six real players can race, grief each other and qualify three, and the loop is fun without a single texture. Iterate here until that is true.",
+  tasks:[
+    {id:"P2-1", title:"Round state machine", model:"opus",
+     why:"Every later system hangs off this; ambiguity here becomes race conditions everywhere.",
+     deps:"P1-3, P1-4", out:"src/server/Services/RoundService.luau",
+     prompt:`Build the round state machine for a 6-player Roblox match server, strict Luau.
+
+States: WaitingForPlayers, Loading, Intro, Race, Qualified, DecisionStudio, Results, Cleanup. It is the single source of truth for what phase the server is in.
+
+Requirements:
+- Each state declares allowed transitions; an illegal transition throws in Studio and is logged and ignored in production.
+- Replicate state as one small payload: the state name plus an absolute end time taken from workspace:GetServerTimeNow(). Clients compute their own countdowns. Do not send a per-second tick.
+- Per-state entry and exit hooks other services subscribe to, so TaskService and PowerUpService never poll the phase.
+- Timers that survive a player joining late, and a handler for every player leaving mid-state.
+- A debug interface (server-side only, gated to Studio or a developer id list) to force any transition, skip a timer, or replay a state — I will need this constantly to test the Decision Studio.
+- A guard that a state's exit always runs exactly once, even when it is triggered by both a timer and a condition in the same frame.
+
+Write the transition table as data, not as branching code, and include Jest-Lua tests for the table: every legal path, and a sample of illegal ones.`},
+
+    {id:"P2-2", title:"Server-clock countdown helper", model:"haiku",
+     why:"Small, self-contained utility with one correct implementation.",
+     deps:"P2-1", out:"src/shared/Clock.luau",
+     prompt:`Write a small strict-Luau module for synchronised countdowns in a Roblox game.
+
+The server publishes an absolute end time from workspace:GetServerTimeNow(). The client must render a smooth countdown from it without any per-second network traffic.
+
+Provide: a function returning seconds remaining, a formatter for mm:ss and for a short "3" style final countdown, a subscribe helper that fires a callback each frame or each whole second, and correct behaviour when the end time is in the past or the player joined late.
+
+Handle clock drift by always deriving from the shared server clock, never from tick() or os.time() on the client. Add a comment explaining why for the next developer. Include unit tests for the formatter and the past-deadline case.`},
+
+    {id:"P2-3", title:"Gray-box test map builder script", model:"haiku",
+     why:"Mechanical geometry generation from a fixed spec.",
+     deps:"P0-5", out:"scripts/build-graybox.luau",
+     prompt:`Write a Roblox Studio command-bar script that generates a gray-box test map conforming to the attached map kit spec.
+
+It must create: a bounded arena roughly 250 by 250 studs with a few internal walls and two floor levels connected by ramps, 6 spawn points, 12 task stations, 8 power-up spawn points, a navigation node graph covering the walkable area, a kill-zone under the map, and a Decision Studio hand-off marker.
+
+Every object must carry the correct CollectionService tag and attributes from the spec. Parts anchored, neutral grey, no textures. Name everything readably.
+
+Print a summary at the end: what was created, the count per tag, and any spec requirement it could not satisfy. Make the script idempotent — running it twice replaces the previous build rather than duplicating it.
+
+The point is a map I can validate code against, not a map anyone plays. Keep it ugly and keep it fast.`},
+
+    {id:"P2-4", title:"Task assignment, progress and qualification", model:"opus",
+     why:"Ranking, ties and the timeout path are the rules of the sport; edge cases here are player-visible unfairness.",
+     deps:"P2-1, P1-4", out:"src/server/Services/TaskService.luau",
+     prompt:`Build the task and qualification service for a 6-player Roblox race, strict Luau.
+
+Behaviour:
+- At race start, assign each player N tasks drawn from the current map's station pool, using a seeded RNG so a round is reproducible for debugging. Respect per-station capacity and avoid giving every player an identical route.
+- Track per-player progress and completion order. The first 3 to finish all tasks qualify.
+- At the hard round timer, rank everyone by tasks completed, then by the timestamp of their last completion, then by distance to their next station. Take the top 3. Make the tie-break deterministic and documented, and expose it so the UI can show a player exactly why they placed where they did.
+- Handle players who leave mid-race: free their stations, and recompute qualification without them.
+- Publish a replicated, minimal progress payload for the HUD and a richer one for the results screen.
+- Emit a clean event with the ranked list for the Decision Studio to consume, including the 4th-place alternate.
+
+Write Jest-Lua tests for the ranking function as a pure function: fewer than three finishers, exact ties on task count, a leaver, and all six finishing inside the timer.`},
+
+    {id:"P2-5", title:"Task framework and one reference task", model:"opus",
+     why:"This interface gets copied 15 times — the abstraction must be right the first time.",
+     deps:"P2-4, P1-3", out:"src/shared/Config/Tasks/, src/server/TaskHandlers/, src/client/TaskViews/",
+     prompt:`Design the mini-task framework for a Roblox game that must scale to 15+ tasks without touching service code. Strict Luau.
+
+Each task splits three ways: a shared definition (id, display name, interaction verb, expected duration, mobile layout hint), a server handler (start, validate, cleanup), and a client view (the on-screen minigame).
+
+Requirements for the server handler contract:
+- start(ctx) generates the challenge server-side with a seeded RNG and returns only what the client needs to render it — never the answer.
+- validate(ctx, submission) returns a boolean, and additionally enforces a minimum plausible completion time, that the player is still within range of the station, and that the task is actually on their list and not already complete.
+- cleanup(ctx) always runs, including when the player disconnects or is frozen by a power-up mid-task.
+- ctx carries the player, the station, the RNG, elapsed time, and helper predicates — a handler must never reach for game state directly.
+
+Then implement one complete reference task end to end (a 4-digit keypad, verb Sequence): definition, handler, client view, and the remote round-trip through the existing Net layer.
+
+Then write the "how to add a task" document: three files, one registry entry, zero service edits. Prove it by listing exactly what a new task author must write.
+
+Call out any way an exploiter could complete a task without playing it, and show the line of code that stops it.`},
+
+    {id:"P2-6", title:"Two more tasks from the template", model:"sonnet",
+     why:"Template application — the model has the pattern and just needs to fill it.",
+     deps:"P2-5", out:"Two task triples",
+     prompt:`Using the existing task framework (definition, server handler, client view — I am attaching the reference keypad task), implement two more mini-tasks end to end:
+
+1. A Drag task: drag components into the right slots, wrong slot snaps back, complete when all slots are filled correctly.
+2. A Tap task: a timed rhythm of targets appearing at random positions, complete after N successful taps, with a miss penalty.
+
+Match the reference task exactly in structure, naming and comment style. Server generates the challenge and validates it; the client view never decides success.
+
+Both must be one-thumb playable on a phone in portrait: touch targets at least 44 points after scaling, hit areas larger than the visuals, no precision dragging near the screen edges, and camera input frozen while the view is open.
+
+Include each task's config entry and a note on how it re-skins for the School, Factory and Space Station themes.`},
+
+    {id:"P2-7", title:"Power-up pickups, inventory and use validation", model:"opus",
+     why:"A directly exploitable subsystem where server authority must be airtight.",
+     deps:"P2-1, P1-3, P0-3", out:"src/server/Services/PowerUpService.luau",
+     prompt:`Build the power-up service for a 6-player Roblox race, strict Luau. Attached is the power-up catalogue.
+
+Behaviour:
+- Spawn pickups at tagged points on a timed rotation with per-map rarity weights. Pickup is server-confirmed: the client shows an optimistic prompt but the server decides who actually got it.
+- One inventory slot per player by default, configurable. Picking up while full either swaps or is refused, per config.
+- A use-intent remote carrying only the target hint, never the effect. The server validates: the player owns that power-up, the cooldown has elapsed, the target is valid and in range and in the same round, and the round state allows it. Then the server applies the effect and replicates the result.
+- Smart targeting for touch: when the client sends no explicit target, the server picks the nearest valid target in a forward cone and returns which one it chose so the UI can confirm it.
+- Full server-side audit log of every use: who, what, target, result, rejected reason.
+
+Then list every way a client could try to cheat this — infinite use, retargeting after the fact, using someone else's power-up, range spoofing — and show which validation blocks each one.
+
+Include integration test steps I can run in Studio with two clients.`},
+
+    {id:"P2-8", title:"Status effect system with stacking and mercy rules", model:"opus",
+     why:"Stacking interactions are where fun dies quietly; this needs careful reasoning, not pattern-matching.",
+     deps:"P2-7", out:"src/server/Services/StatusEffects.luau",
+     prompt:`Build the status effect system for a Roblox competitive race, strict Luau. It owns every temporary modification to a character: speed, jump, control lock, vision, and task speed.
+
+Requirements:
+- Effects are data-driven: id, stat modified, operation (add, multiply, override), magnitude, duration, stacking rule (refresh, stack with a cap, ignore, replace), priority, and a category such as HardControl or Movement.
+- One resolver computes final stats from all active effects in a deterministic order, then applies them server-side. A stat is never written directly by anything but the resolver.
+- Anti-frustration layer, enforced centrally so no individual power-up can bypass it: an immunity window after any HardControl effect ends, diminishing returns on repeated applications of the same category within a window, and a hard cap on total disabled time per round per player.
+- Effects are cleared correctly on death, respawn, round end, and state transitions, with no orphaned modifiers.
+- Replicate the active effect list to the owning client for HUD icons, and a minimal version to others for visual feedback.
+
+Then write tests for the resolver as a pure function: overlapping speed buffs and slows, a freeze during an immunity window, three freezes in ten seconds under diminishing returns, and an effect expiring in the same frame as a round transition.
+
+Finally, tell me which combination in the attached catalogue produces the least fun outcome under these rules, and what you would change.`},
+
+    {id:"P2-9", title:"Movement sanity checks and cheat telemetry", model:"sonnet",
+     why:"A well-defined detection routine with clear thresholds to tune.",
+     deps:"P2-8", out:"src/server/Services/MovementWatch.luau",
+     prompt:`Write a server-side movement sanity checker for a Roblox competitive game, strict Luau.
+
+It must compare each character's observed movement against the maximum the status effect resolver says they should be capable of, accounting for legitimate causes of apparent speed: lag spikes, teleports the game itself performs, conveyors or launchers if the map has them, falling, and the respawn frame.
+
+Requirements:
+- Sample on a fixed interval, not every frame.
+- A rolling violation score rather than instant judgement, with separate thresholds for log, flag and act.
+- In this first version, LOG ONLY. No kicks, no rubber-banding. Emit structured events I can review before tuning thresholds.
+- A summary report per round: violations per player with the raw numbers behind them.
+- Configurable thresholds in the central config, not hard-coded.
+
+Include a short note on the false-positive sources you expect to dominate on mobile networks, and how I should read the first week of logs before enabling any enforcement.`}
+  ]
+},
+{
+  n:"03", name:"Decision Studio and NPC fill", weeks:"3–4 weeks · the climax",
+  goal:"The finale that the whole race exists to reach, plus the bots that keep a half-empty lobby playable.",
+  gate:"A full round runs with 1 human and 5 NPCs, and again with 6 humans. All four outcome branches are forced via debug, including 3-Steal, and the outcome tests pass.",
+  tasks:[
+    {id:"P3-1", title:"Outcome resolution table and tests", model:"sonnet",
+     why:"Pure function against a fixed spec — small, total, and fully testable.",
+     deps:"P0-4, P1-6", out:"src/shared/Config/Outcomes.luau, tests/Outcomes.spec.luau",
+     prompt:`Write a pure strict-Luau module resolving the Steal or Share finale for a Roblox game, with no Roblox API calls so it runs headlessly in CI.
+
+Rules with three finalists:
+- 1 Steal, 2 Share: the stealer wins the large bounty; the sharers lose.
+- 2 Steal, 1 Share: the sharer wins the small bounty; the stealers lose.
+- 3 Share: all three win the smallest bounty.
+- 3 Steal: nobody wins; all three lose.
+
+It must also handle fewer than three finalists, which happens when someone disconnects and no alternate was available: define and implement the 2-player and 1-player cases explicitly rather than letting them fall out of the generic code by accident.
+
+Return a structured result: the winner ids, the bounty per winner, the loser ids, and a tag naming the branch for analytics and for the reveal animation.
+
+Bounty values come from the central config, never literals in this module.
+
+Then write exhaustive Jest-Lua tests: every combination for one, two and three players, plus assertions on the design invariant that sole-stealer bounty is greater than lone-sharer bounty is greater than all-share bounty is greater than zero. The test suite should fail loudly if anyone later edits the config in a way that breaks the incentive ordering.`},
+
+    {id:"P3-2", title:"Decision Studio phase machine and secrecy", model:"opus",
+     why:"Leak a choice before the reveal and the finale is permanently solved for exploiters.",
+     deps:"P3-1, P2-1, P1-3", out:"src/server/Services/DecisionService.luau",
+     prompt:`Build the Decision Studio server logic for a Roblox game, strict Luau. Three qualifiers stand at podiums, negotiate out loud, then blindly pick Steal or Share.
+
+Phases, each broadcast as a name plus an absolute deadline from workspace:GetServerTimeNow(): Intro, Negotiate (chat open), Choose, Reveal, Resolve.
+
+Absolute requirement: no client may learn another player's choice before the reveal. Choices live only in a server-side table — never in Attributes, ValueObjects, NumberValues, or anything else that replicates. When someone locks in, broadcast only that they locked in, never what they chose. Audit your own design against an exploiter with a full client memory dump and say what they can and cannot see at each phase.
+
+Submission validation: the sender is a qualifier, the phase is Choose, the value is exactly Steal or Share, they have not already locked (locks are final), and the rate limit holds. Anything else is dropped silently and logged.
+
+Resolution order, which must be exactly this:
+1. Deadline hits or all three have locked.
+2. Anyone who never submitted takes the configured default choice.
+3. Resolve the outcome with the pure outcome module.
+4. Write results to profiles — before the reveal is broadcast, so quitting during the animation cannot dodge a loss.
+5. Broadcast the reveal with every choice and the outcome, timed from a shared reveal timestamp so all three clients animate in sync.
+6. Transition the round state.
+
+Handle a qualifier disconnecting in each phase. Include the debug hooks to force any of the four branches.`},
+
+    {id:"P3-3", title:"Proximity chat for the negotiation", model:"sonnet",
+     why:"Platform API wiring with well-documented shapes.",
+     deps:"P3-2", out:"src/server/Services/StudioChat.luau",
+     prompt:`Set up proximity communication for the negotiation phase of a Roblox game, where three finalists must be able to lie to each other. Strict Luau.
+
+Build both channels, because voice is not available to everyone:
+1. Text — a TextChannel restricted to the three finalists during the Negotiate phase, using ShouldDeliverCallback for a distance check, with bubble chat enabled above the podiums. Roblox text filtering must apply.
+2. Voice — spatial voice via the Audio API (an input on each character, an emitter, a listener on the camera), correctly set up and torn down per round.
+
+Requirements:
+- The experience must be fully playable with text alone. Many players, especially on mobile, will not have voice. Nothing in the finale may depend on being heard.
+- Channels open exactly with the Negotiate phase and close when Choose begins. After that, no communication at all.
+- A per-player indicator of who is speaking or typing, for the UI to consume.
+- Clean handling for a player who has voice disabled, is under-age, or declines the permission.
+
+Tell me what I must configure outside code — experience settings, age and permission requirements — and what a player without voice actually experiences.`},
+
+    {id:"P3-4", title:"Studio set and podium staging", model:"haiku",
+     why:"Scripted scene construction against a clear layout brief.",
+     deps:"P3-2", out:"scripts/build-studio.luau",
+     prompt:`Write a Roblox Studio command-bar script that builds a gray-box Decision Studio set: a small enclosed arena with three podiums arranged so all three players can see each other's faces clearly, plus tagged attachment points the game code will use.
+
+Create: three podium models tagged for the game code with a PodiumIndex attribute, three camera framing parts (one per player's personal view plus one wide shot for the reveal), a spotlight rig, a spectator-facing backdrop, and the player entry positions.
+
+Podiums must be close enough that spatial voice and proximity text both reach, and you should state the stud distance you chose and why.
+
+All parts anchored and neutral grey, everything named readably, idempotent on re-run, and a printed summary of what it created.`},
+
+    {id:"P3-5", title:"NPC fill: spawning, pathing and simulated task timing", model:"opus",
+     why:"Cross-cutting system touching pathfinding, performance and fairness at once.",
+     deps:"P2-4, P2-7", out:"src/server/Services/NPCService.luau",
+     prompt:`Build the NPC fill system for a 6-player Roblox race, strict Luau. When matchmaking does not find 6 humans, bots fill the remaining slots so the round still works.
+
+Core design decision to follow: NPCs do NOT play the minigames. They walk to a station and "work" for a duration sampled from that task's expected-duration range, scaled by a skill profile. Completion is reported through the exact same TaskService API a human uses, so qualification logic has no NPC branch anywhere.
+
+Requirements:
+- Derive the NPC count on the match server itself (6 minus the humans present after a grace window for slow teleports), never trusting TeleportData.
+- Pathfinding using the map's navigation nodes as coarse waypoints, with PathfindingService between them. Recompute only when blocked, never per frame.
+- Skill profiles (casual, average, strong) drawn from a distribution, with a soft rubber-band floor so an NPC never beats the median human time for a task.
+- AI ticks at 5 to 10 Hz, not on Heartbeat. Network ownership stays with the server. Simple rigs, unused Humanoid states disabled.
+- NPCs are affected by player power-ups exactly like humans are.
+- Generated display names that can never collide with a real username, and no impersonation of real players.
+
+Then give me the performance analysis: what 5 NPCs cost per server in pathfinding calls, instances and script time, and which knob to turn first if it is too much. And state clearly where NPC presence could distort the streak leaderboard, so I can gate rewards accordingly.`},
+
+    {id:"P3-6", title:"NPC griefing AI and Studio personalities", model:"sonnet",
+     why:"Behaviour authoring inside an existing framework, plus flavour text.",
+     deps:"P3-5, P3-2", out:"src/server/Services/NPCBrain.luau",
+     prompt:`Extend the existing NPC service with two behaviours. Strict Luau, matching the current code style.
+
+1. Power-up use during the race. A simple utility AI: score each available action by situation (how far behind the NPC is, distance to its next station, whether a human is close ahead, cooldown state) and pick the best. NPCs obey exactly the same cooldowns, ranges and immunity rules as players — route every use through the existing validated server path, never a shortcut.
+
+2. Decision Studio behaviour. Each NPC gets a hidden personality with a steal probability: Greedy around 0.7, Loyal around 0.2, Chaotic 0.5. During the negotiation phase it posts canned bubble-chat lines that may or may not match what it actually does, then locks in at a random point inside the window.
+
+Write 12 negotiation lines per personality: promises, pressure, accusations, and last-second wobbles. They must read like a Roblox player typing quickly, not like a chatbot — short, lowercase, typos allowed, no punctuation formality. A line must never state a fact only the server knows.
+
+Include a config block with every probability and timing exposed for tuning without code changes.`},
+
+    {id:"P3-7", title:"Alternates, disconnects and forfeits", model:"opus",
+     why:"The exact edge cases players will exploit to dodge a loss.",
+     deps:"P3-2, P1-5", out:"Patch across DecisionService + DataService",
+     prompt:`Harden the finale of a Roblox game against disconnects and dodging. Attached are the current DecisionService and DataService.
+
+Implement and test every one of these:
+1. A qualifier leaves between the race ending and the Studio starting: promote the 4th-place alternate, with a clear announcement to the others. If no alternate exists, run the finale with two and use the two-player outcome branch.
+2. A qualifier leaves during Negotiate: they take a forfeit loss; continue with the remainder.
+3. A qualifier leaves during Choose, after locking in: their locked choice stands, they still take a forfeit loss for leaving.
+4. A qualifier leaves during Choose, without locking: apply the configured default choice, and a forfeit loss.
+5. A qualifier leaves during Reveal or Resolve: the result was already written before the reveal, so nothing changes — prove this with a test.
+6. The server shuts down mid-finale (BindToClose): decide and implement what every participant's profile records, and justify the choice.
+
+In all cases the profile write must happen before ProfileStore releases the session, and no path may leave a player's streak in an undefined state.
+
+Write the integration test plan as numbered Studio steps with two clients, including exactly when to close a client window to trigger each case.`}
+  ]
+},
+{
+  n:"04", name:"Progression, economy and leaderboards", weeks:"3 weeks · the reason to come back",
+  goal:"Streaks, titles, boards and the store — everything that makes a round matter after it ends.",
+  gate:"Streaks survive teleports and rejoins, a forced disconnect applies the forfeit, a duplicated receipt never double-grants, and boards roll over correctly at a period boundary.",
+  tasks:[
+    {id:"P4-1", title:"Streak and bounty resolution", model:"sonnet",
+     why:"Clear rules against an existing data layer.",
+     deps:"P3-1, P1-5", out:"src/server/Services/ProgressionService.luau",
+     prompt:`Implement win streak and bounty progression for a Roblox game, strict Luau, on top of the existing DataService.
+
+Rules:
+- A win increments currentStreak and updates bestStreak to the maximum of the two.
+- Any loss — failing to qualify, losing the finale, or forfeiting by leaving — sets currentStreak to zero and clears pendingBounty.
+- Bounty is awarded per the outcome module and credited on the transition the design doc specifies.
+- Every change is written through one auditable function that logs the before state, the after state, and the reason code.
+
+Requirements:
+- A single applyRoundResult function that is the ONLY path to a streak change anywhere in the codebase. Make misuse hard: assert if it is called twice for the same round for the same player.
+- Idempotency keyed on a round id, so a retry or a duplicated event cannot double-count.
+- Reason codes for analytics: QualifiedWin, StudioWinSoleStealer, StudioWinLoneSharer, StudioWinAllShare, StudioLoss, FailedToQualify, ForfeitDisconnect.
+- Tests covering a full win chain of five rounds, a loss at each possible point, and a duplicate event.
+
+Then tell me where in the current codebase a streak could be changed without going through this function, and close those paths.`},
+
+    {id:"P4-2", title:"Titles, nametags and chat prefixes", model:"sonnet",
+     why:"Data-driven cosmetics with straightforward platform hooks.",
+     deps:"P4-1", out:"src/server/Services/TitleService.luau, nametag component",
+     prompt:`Implement the title system for a Roblox game, strict Luau.
+
+Titles unlock permanently on reaching a bestStreak threshold and are never removed when a streak resets — that permanence is the whole emotional point, so make it structurally impossible to revoke one.
+
+Requirements:
+- A data-driven title ladder in config: id, display text, threshold, colour, and an optional effect flag for the top tiers. Design 10 tiers from a first win to an absurd streak, and write the display text for each — they should read as bragging rights, short and punchy, in the voice of a competitive Roblox player.
+- Unlock detection on every bestStreak change, with a client notification event for the unlock moment.
+- Equip and unequip, persisted.
+- Display in two places: a BillboardGui nametag above the character (readable at distance, scaling sensibly, hidden in first person), and a chat prefix via TextChatService.OnIncomingMessage.
+- Titles must appear for NPCs too, drawn from a plausible fake distribution, so a bot-filled lobby does not look obviously fake.
+
+Include the nametag performance note: what to avoid when 6 of these exist on screen on a phone.`},
+
+    {id:"P4-3", title:"All-time leaderboard on OrderedDataStore", model:"opus",
+     why:"Request budgets and write amplification cause outages that only appear at scale.",
+     deps:"P4-1", out:"src/server/Services/LeaderboardService.luau",
+     prompt:`Build the all-time highest-streak leaderboard for a Roblox game using OrderedDataStore, strict Luau.
+
+Requirements:
+- Write only when a player's bestStreak actually improves, via UpdateAsync with a max comparison, so a lower value can never overwrite a higher one.
+- Read the top 100 once per server on an interval of 60 to 120 seconds and cache it. Never read on player demand, and never read once per viewer of the board.
+- A request budget manager: a queue with exponential backoff and jitter, respecting the documented per-server DataStore limits, with a metric for how close to the limit the game is running.
+- Resolve display names from user ids with a cache, handling deleted and renamed accounts.
+- Correct behaviour when the store is unavailable: serve the stale cache and show a clear staleness indicator to the UI, never an empty board.
+
+Then tell me what this design does at 1,000 concurrent players and at 20,000, where the first limit is hit, and what the mitigation is at that point. Be specific about which Roblox limits you are reasoning from and flag anything I must verify against current documentation.`},
+
+    {id:"P4-4", title:"Daily and weekly boards with automatic rollover", model:"opus",
+     why:"Period keys, expiry and timezone rollover are subtly wrong by default.",
+     deps:"P4-3", out:"Extension of LeaderboardService",
+     prompt:`Add daily and weekly highest-streak leaderboards to an existing Roblox leaderboard service, strict Luau.
+
+Use MemoryStoreService SortedMaps rather than OrderedDataStore, so entries expire on their own and no cleanup job is needed. Keys are period-scoped, for example a daily key carrying the UTC date and a weekly key carrying the ISO year and week number.
+
+Requirements:
+- Write only on improvement within the current period.
+- Expiry set so a period's data outlives the period itself by a small margin for display purposes, without unbounded growth.
+- Rollover that is correct across a UTC midnight and an ISO week boundary, with a stated policy on which timezone the "day" belongs to and why.
+- A frozen snapshot of the finishing standings at rollover, written to a regular DataStore, so yesterday's and last week's winners can still be shown and rewarded.
+- Reward hooks for the top N of a finished period, safe against double-awarding if two servers process the same rollover.
+
+Write pure tests for the key generation function: leap day, new year crossing an ISO week boundary, and a player improving twice in one period.
+
+State the MemoryStore limits you are designing against and how I should verify them against current documentation.`},
+
+    {id:"P4-5", title:"Store and idempotent receipt processing", model:"opus",
+     why:"A receipt bug either robs players or grants free items — both are unrecoverable trust damage.",
+     deps:"P1-5", out:"src/server/Services/StoreService.luau",
+     prompt:`Build the monetisation service for a Roblox game, strict Luau, on top of ProfileStore.
+
+Cover game passes (permanent cosmetics), developer products (consumable starting power-ups and currency), and equip state.
+
+The critical requirement is a correct ProcessReceipt:
+- Record the PurchaseId in the player's profile inside the same write that grants the item.
+- Return PurchaseGranted ONLY after that write is confirmed. Never before.
+- Return NotProcessedYet on any failure, so Roblox retries.
+- A replayed PurchaseId must return PurchaseGranted without granting anything a second time.
+- Correct behaviour when the buyer leaves mid-purchase, and when the profile is not loaded yet.
+
+Also implement: ownership checks with a cache for game passes, a purchase prompt flow the client can trigger, an equip and unequip path, and structured logging of every grant with enough detail to answer a support ticket.
+
+Then write the test plan, including how to simulate a failed grant and a replayed receipt in Studio.
+
+Finally, review the attached starting-power-up design for pay-to-win risk in a competitive mode, and tell me plainly whether it crosses the line and what would fix it.`},
+
+    {id:"P4-6", title:"Cosmetics pipeline and equip application", model:"sonnet",
+     why:"Data-driven content plumbing with a well-defined shape.",
+     deps:"P4-5", out:"src/shared/Config/Cosmetics/, src/server/Services/CosmeticService.luau",
+     prompt:`Build the cosmetics system for a Roblox game, strict Luau, data-driven so new items need no code changes.
+
+Cover: character skins, trail effects, a victory emote, and a podium decoration shown in the Decision Studio.
+
+Requirements:
+- One config module per item: id, category, display name, price, currency type, rarity, asset references, and any preview metadata the store UI needs.
+- A registry that validates every item at boot: unique ids, valid categories, resolvable assets, price sanity.
+- Application on character spawn and on equip change, with clean removal of the previous item — no orphaned accessories or leftover particle emitters, ever.
+- Ownership always checked server-side before application; a cosmetic must never appear because the client asked for it.
+- Preview mode in the store that applies an item to a viewport model without granting it.
+
+Include one complete example item per category, and a note on the instance-count cost of trails and particles on mobile given the performance budget.`},
+
+    {id:"P4-7", title:"Analytics funnel and round telemetry", model:"haiku",
+     why:"Repetitive instrumentation against an existing event list.",
+     deps:"P4-1", out:"src/server/Services/Telemetry.luau",
+     prompt:`Add analytics instrumentation to a Roblox game using AnalyticsService, strict Luau.
+
+Build the core funnel: queued, matched, round started, first task completed, all tasks completed, qualified, finale entered, choice locked, result received, returned to hub.
+
+Add custom events for: map voted and map played, task completed (with task id and duration), power-up used (with id, target and outcome), Steal versus Share choice by streak bucket, finale branch tag, streak length at loss, NPC count in the round, and purchase completed.
+
+Requirements:
+- One thin wrapper module so no service calls AnalyticsService directly.
+- Consistent event naming and a documented parameter schema for every event.
+- Rate limiting and batching where the platform requires it.
+- A kill switch in config.
+- Never log personally identifying data beyond the user id the platform already has.
+
+Output the module, a table of every event with its parameters, and the five dashboard questions this instrumentation is specifically designed to answer.`}
+  ]
+},
+{
+  n:"05", name:"Hub world and matchmaking", weeks:"3 weeks · the front door",
+  goal:"Queueing, voting, the store front, the boards, and something to do while waiting.",
+  gate:"Twelve test accounts can queue, vote, split into two matches, play, and return to the hub with correct streaks and no lost profiles.",
+  tasks:[
+    {id:"P5-1", title:"Cross-server queue and group forming", model:"opus",
+     why:"Distributed state across servers, where races and duplicates are the default failure mode.",
+     deps:"P1-5, P4-1", out:"src/server/Services/MatchmakingService.luau",
+     prompt:`Build cross-server matchmaking for a Roblox game, strict Luau. Players queue in a hub place and are sent to a match place in groups of 6.
+
+Use MemoryStoreService for shared queue state across hub servers.
+
+Requirements:
+- Join and leave the queue, with the player's streak available for later priority logic.
+- Form a group as soon as 6 are waiting; if a configurable timer expires with at least 1 player, form a partial group and record how many NPC slots it needs.
+- Exactly-once group formation: two hub servers must never claim the same queued player. Use a lease or claim primitive and explain precisely why your approach cannot double-book.
+- Priority re-queue for players returning with an active streak.
+- Clean removal of players who disconnect while queued, and of stale entries whose server has died.
+- A queue state broadcast for the UI: position, estimated wait, current queue size.
+
+Then walk through the concurrency failure cases explicitly: two servers forming simultaneously, a player leaving between claim and teleport, a MemoryStore outage, and a server crashing while holding a claim. For each, state what your implementation does.
+
+Cite the MemoryStore limits you are designing against and flag what I should verify against current documentation.`},
+
+    {id:"P5-2", title:"Reserved-server teleport with failure recovery", model:"opus",
+     why:"The transition where player data is most likely to be lost.",
+     deps:"P5-1", out:"src/server/Services/TeleportService wrapper",
+     prompt:`Implement the hub-to-match teleport for a Roblox game, strict Luau.
+
+Flow: a formed group of up to 6 gets a reserved server, then all members teleport together with TeleportData carrying the chosen map id, the group id and the NPC slot count.
+
+Requirements:
+- TeleportAsync for the group, with retry and exponential backoff on TeleportInitFailed, and a clear player-facing message per failure reason.
+- A teleport-failed path that returns the player to the queue with their place preserved and explains what happened. Never leave a player stranded on a loading screen.
+- On the match server: validate everything in TeleportData against the server's own config, fall back to a random valid map if the map id is unknown, and derive the NPC count locally rather than trusting the payload.
+- A grace window for arriving players before the round starts, and a rule for what happens if fewer arrive than expected.
+- Correct ordering with ProfileStore session locks: make sure the hub server releases the profile before the match server tries to load it, and handle the race where it does not.
+
+Then list every way TeleportData can be tampered with by a compromised client, and show the validation that makes each one harmless.`},
+
+    {id:"P5-3", title:"Map voting board with random tie-break", model:"sonnet",
+     why:"Contained feature with a precise, testable tie rule.",
+     deps:"P5-1, P1-4", out:"src/server/Services/VoteService.luau, board UI",
+     prompt:`Build the map voting system for a Roblox game, strict Luau.
+
+Behaviour:
+- When a match group forms, offer 3 to 4 randomly selected maps from the enabled pool — never all 11, because choosing from 11 on a phone is miserable.
+- One vote per player, changeable until the vote locks.
+- Ties are broken by a uniform random pick among the tied maps, using Random.new. This must be a pure, testable function.
+- Recently played maps are weighted down in the selection so the same map does not appear every round.
+- Players who do not vote are simply not counted.
+
+Also produce the board UI spec and implementation: the map cards with thumbnails, live vote counts with voter avatars, a countdown, and a clear reveal of the winning map — including a distinct visual for a tie broken randomly, because players must see that it was random rather than rigged.
+
+Write tests for the tie-break: all tied, two tied out of four, a single winner, and no votes at all. Assert the distribution is uniform over many runs.`},
+
+    {id:"P5-4", title:"Hub layout and zone build script", model:"haiku",
+     why:"Mechanical scene assembly from a written layout brief.",
+     deps:"P5-3", out:"scripts/build-hub.luau",
+     prompt:`Write a Roblox Studio command-bar script that builds a gray-box hub world for a competitive party game.
+
+Zones to create, each tagged for the game code and sensibly separated so a new player can read the space in five seconds from the spawn point: spawn plaza, queue pad with a visible countdown display, map voting board wall, store front with three display podiums, a leaderboard wall with three board surfaces (daily, weekly, all-time), and an interactive practice area with item spawn points and soft barriers.
+
+Include walk-path clarity: a player should be able to see the queue pad from spawn without turning around.
+
+All parts anchored, neutral grey, no textures, everything named and tagged per the attached spec, idempotent on re-run, with a printed summary. Also print the walking time in seconds from spawn to each zone, and flag any that is over 8 seconds.`},
+
+    {id:"P5-5", title:"Practice area with shared power-up code", model:"sonnet",
+     why:"Reuses an existing system behind a context flag — the trap is duplicating it.",
+     deps:"P2-7, P5-4", out:"src/server/Services/PracticeService.luau",
+     prompt:`Implement the hub practice area for a Roblox game, strict Luau, where waiting players pick up and use the real in-game items on each other for fun.
+
+Hard requirement: reuse the existing PowerUpService and StatusEffects modules through a context flag, do NOT write a second implementation. The two must never drift apart, and I want you to say in a comment exactly why that matters.
+
+The practice context must: skip all progression, stats and analytics writes; shorten effect durations; enforce a lower effect cap so nobody is annoying for long; exclude the practice area from any anti-cheat movement enforcement; and clear all effects the moment a player steps onto the queue pad or teleports.
+
+Also handle: a player being frozen when their match is ready (clear it and teleport anyway), griefers camping the queue pad (a no-effect zone around it), and effects leaking into the match server (assert they cannot).
+
+Include the config block, and the test steps to prove nothing from practice reaches a real round.`}
+  ]
+},
+{
+  n:"06", name:"UI and UX production", weeks:"4–5 weeks · starts during Phase 2",
+  goal:"A mobile-first interface. On a phone, in a tense 90-second race, with one thumb.",
+  gate:"Every screen passes the mobile checklist on a real small phone, a real tablet and desktop — not just the Studio emulator.",
+  tasks:[
+    {id:"P6-1", title:"Theme tokens, UIScale controller and safe areas", model:"opus",
+     why:"Every screen inherits these decisions; fixing them later means touching all of them.",
+     deps:"P0-6, P1-2", out:"src/client/UI/Theme.luau, src/client/Controllers/UIScaleController.luau",
+     prompt:`Build the UI foundation for a mobile-first Roblox game, strict Luau.
+
+1. A theme module: colour tokens, a type scale, a spacing scale, corner radii, and elevation. Two semantic accents specifically for Steal and Share that are distinguishable to colour-blind players without relying on red versus green — pair each with a distinct icon and shape, and say which colour-vision deficiency you tested the pair against.
+
+2. A UIScale controller: watch the camera's ViewportSize and set a global scale from the shortest axis against a reference resolution, clamped to a sensible range, so everything is authored once and scales everywhere. Explain the maths and the clamp values.
+
+3. Safe-area handling: correct use of ScreenGui.ScreenInsets so nothing lands under a notch, the Roblox top bar, or a home indicator. Provide a helper that returns the usable rect for layout code.
+
+4. Input mode detection using UserInputService.PreferredInput with a change listener, NOT TouchEnabled — which is true on touchscreen laptops. Expose a reactive value UI components can bind to.
+
+5. A thumb-zone layout guide, as constants: which screen regions are comfortable on a phone held one-handed, which are reserved by Roblox's own controls, and where primary actions must therefore go.
+
+Give me a test harness screen that visualises the safe area, the thumb zones and the current scale, so I can screenshot it on a real device.`},
+
+    {id:"P6-2", title:"Component library", model:"sonnet",
+     why:"Repetitive, pattern-heavy building against a theme that already exists.",
+     deps:"P6-1", out:"src/client/UI/Components/",
+     prompt:`Build the reusable UI component library for a mobile-first Roblox game, using the attached theme module and UI framework, strict Luau.
+
+Components: Button (primary, secondary, danger, disabled, loading), Panel, Modal with a backdrop, ProgressBar, CountdownRing, Toast, TaskCard, PlayerRow with avatar and title, CurrencyPill, IconButton, and a Tab bar.
+
+Requirements for every component:
+- All sizing in Scale, never Offset, and everything derived from the theme's spacing scale.
+- A minimum touch target of 44 points after scaling, with the hit area larger than the visual when needed.
+- Visible keyboard and gamepad focus states, and correct selection order for controller navigation.
+- Pressed, hovered, disabled and loading states defined for every interactive component.
+- Respect a reduced-motion setting from the player's settings store.
+- Text using TextScaled with a UITextSizeConstraint so labels neither vanish on phones nor balloon on tablets.
+
+Produce a gallery screen showing every component in every state at once, so I can review the whole set on a device in one screenshot.`},
+
+    {id:"P6-3", title:"Race HUD", model:"sonnet",
+     why:"Assembles existing components against replicated data already defined.",
+     deps:"P6-2, P2-4", out:"src/client/UI/Screens/RaceHUD.luau",
+     prompt:`Build the in-race HUD for a mobile-first 6-player Roblox race, strict Luau, using the attached component library.
+
+Elements: the player's task list with progress, a round countdown, current placement and the gap to third place (the qualification line), the held power-up with a use button, active status effect icons with remaining time, and a nearest-objective indicator.
+
+Layout rules:
+- Information in the top region, actions in the bottom-right thumb zone, clear of the jump button.
+- The HUD must be readable at a glance while moving. Nothing that requires reading a sentence.
+- Status effects the player is suffering get an unmissable screen-edge treatment, distinct per effect category, that does not obscure the middle of the screen.
+- Desktop and gamepad layouts derived from the same components, with the action moved to a keybind hint rather than a touch button.
+- Everything driven by the replicated round payload; the HUD computes its own countdown from the server deadline and never polls.
+
+Include the performance notes: how to update this at 60 fps on a phone without churning instances, what to bind versus what to poll, and which elements to update only on change.`},
+
+    {id:"P6-4", title:"Task view template and mobile input adapters", model:"opus",
+     why:"This is where mobile play is won or lost, and where 15 screens inherit one set of decisions.",
+     deps:"P6-2, P2-5", out:"src/client/UI/TaskViewBase.luau",
+     prompt:`Design the mini-task UI framework for a mobile-first Roblox game, strict Luau. Fifteen tasks will be built on it, so the template carries the decisions.
+
+Provide:
+- A base task view handling the shared shell: a full-screen modal on phones and a windowed panel on desktop, the open and close transitions, a timer, an abort path, and the remote round-trip to the server handler.
+- Camera and character input frozen while a view is open, restored exactly on close including when the player is knocked away, frozen by a power-up, or disconnects mid-task.
+- Input adapters for each interaction verb (Tap, Hold, Drag, Sequence, Timing, Aim) so an individual task declares its verb and gets correct touch, mouse and gamepad handling for free. Drag must handle touch cancellation, multi-touch noise and a finger leaving the screen edge.
+- Layout constraints enforced by the base: minimum touch target size, safe-area respect, a hit-area inflation helper, no interactive element within a configurable margin of the screen edges.
+- An accessibility pass: reduced motion, colour-blind-safe state signalling, and no task whose success depends on hearing a sound.
+
+Then refactor the existing keypad task onto this base to prove it, and write the one-page guide a developer follows to build task number 4 through 15.
+
+Finally, name the single biggest mobile usability risk in this design and how the base mitigates it.`},
+
+    {id:"P6-5", title:"Decision Studio UI and reveal sequence", model:"opus",
+     why:"The emotional peak of the game, with strict secrecy rules baked into the client.",
+     deps:"P6-2, P3-2", out:"src/client/UI/Screens/DecisionStudio.luau",
+     prompt:`Build the Decision Studio client experience for a Roblox game, strict Luau. Three finalists negotiate out loud, then blindly choose Steal or Share. This is the emotional peak of the entire game and it must land on a phone.
+
+Screens and states:
+1. Intro: the three finalists revealed with their titles and current win streaks — information players will use to bluff. State the deliberate design reason for showing streaks here.
+2. Negotiate: a prominent countdown, who is speaking or typing, and the payoff table always visible so nobody loses on a misunderstanding.
+3. Choose: two large committed buttons. Because a mis-tap here is unforgivable, require hold-to-confirm, show a clear confirmation, and make the lock final and obviously final. Show who else has locked in, never what they chose.
+4. Reveal: a staggered, dramatic reveal driven entirely by the server's shared reveal timestamp so all three clients are in sync — never by a client-side timer.
+5. Result: the outcome, the bounty, and for a loser, the streak that just died, shown without cruelty but without softening it either.
+
+Strict rule: the client must never receive another player's choice before the reveal packet. Audit your own implementation for any state that could leak it, including anything stored in an attribute, a replicated value, or a preloaded animation.
+
+Include the reduced-motion variant of the reveal, and confirm the whole flow works with text chat alone for a player with no voice.`},
+
+    {id:"P6-6", title:"Store, leaderboards, results and settings screens", model:"sonnet",
+     why:"Conventional screens assembled from finished components and data.",
+     deps:"P6-2, P4-3, P4-5", out:"src/client/UI/Screens/*",
+     prompt:`Build the remaining screens for a mobile-first Roblox game, strict Luau, using the attached component library and services.
+
+1. Store: category tabs, item grid with rarity treatment, a viewport preview of the selected item, price and purchase flow, owned and equipped states, and a clear error path for a failed purchase.
+2. Leaderboards: three tabs (daily, weekly, all-time), the top 100 with the viewer's own rank pinned even when off-list, a staleness indicator when the cache is old, and a sensible empty state for a fresh period.
+3. Results: the round recap with final placement, tasks completed, power-ups used, the finale outcome if the player reached it, streak change, and rewards — sequenced so the streak change lands last.
+4. Settings: reduced motion, music and SFX volume, voice toggle, HUD scale override, and a colour-blind mode.
+
+All of them: one-handed portrait usable, scrolling lists that perform with 100 rows on a phone, and loading and error states designed rather than left blank.
+
+Note for each screen which data it reads and whether it is cached, live, or per-request.`},
+
+    {id:"P6-7", title:"Mobile usability audit pass", model:"sonnet",
+     why:"Systematic checklist review against a written standard.",
+     deps:"P6-3, P6-4, P6-5, P6-6", out:"docs/mobile-audit.md + fixes",
+     prompt:`Audit every UI screen in this Roblox game for mobile usability. Attached is the UI code.
+
+Check every screen against: minimum touch target of 44 points after scaling; no interactive element within the safe-area or Roblox control reserved regions; one-handed portrait reachability for primary actions; text legibility at the smallest supported viewport; no reliance on hover; no element that requires precision beyond a thumb's accuracy; scroll performance with realistic list lengths; and correct behaviour when the on-screen keyboard is open.
+
+Produce a findings table: screen, element, issue, severity, and the specific fix. Then apply the fixes for everything you rate high severity, and list the rest for me to triage.
+
+Then write the repeatable checklist as a markdown file I can run against every new screen, and tell me which two issues you expect to recur most often in this codebase.`},
+
+    {id:"P6-8", title:"Accessibility and onboarding", model:"sonnet",
+     why:"Guideline application plus concise instructional copy.",
+     deps:"P6-7", out:"Accessibility pass + tutorial flow",
+     prompt:`Two related pieces of work for a Roblox competitive party game, strict Luau.
+
+1. Accessibility pass across the whole UI: colour-blind-safe signalling everywhere state is communicated (especially Steal versus Share), a reduced-motion mode that removes the flashing and screen-shake effects without removing information, text scaling, no information conveyed by sound alone, and controller navigation order on every screen. Implement it, and list anything that cannot be made accessible with a reason.
+
+2. First-time onboarding. A new player must understand the loop in under 60 seconds: race to finish tasks, grief your rivals, top 3 reach the finale, then Steal or Share. Design a first-round overlay flow — no forced tutorial level, no wall of text — that teaches through the round itself. Write the actual copy: short, in a Roblox player's register, never patronising.
+
+Also write the one-screen explanation of the Steal or Share payoff table that a 12-year-old understands on first read, because a player who misunderstands the finale feels cheated rather than outplayed.`}
+  ]
+},
+{
+  n:"07", name:"Map production", weeks:"ongoing · three waves",
+  goal:"Eleven dense, stylized maps that all satisfy one contract. Ship four, not eleven.",
+  gate:"Wave 1 maps pass the validator, hold the performance budget on a low-end phone, and playtest as readable — players find stations without being told.",
+  tasks:[
+    {id:"P7-1", title:"Map validator plugin", model:"opus",
+     why:"A tool that must be exhaustively right, because it is the only thing standing between a broken map and a live round.",
+     deps:"P0-5", out:"plugin/MapValidator/",
+     prompt:`Write a Roblox Studio plugin that validates a map against the attached map kit contract before it can ship.
+
+Checks:
+- Every required tag is present with counts inside the specified range.
+- Every attribute exists with the right type and a value in range.
+- Every task id referenced by a station is registered in config.
+- Reachability: run PathfindingService from each spawn to every task station and every power-up spawn, and report anything unreachable — this catches the single most common map bug.
+- Navigation node graph coverage and connectivity, with orphaned nodes reported.
+- Performance: instance count, part count, unique meshes and textures, unanchored parts, parts with CanTouch or CanQuery left on unnecessarily, and collision fidelity on meshes — all compared against the performance budget.
+- Security: ANY Script, LocalScript or ModuleScript inside the map, since maps are assembled from third-party asset packs and that is the main backdoor route into a Roblox game.
+- Bounds: geometry outside the playable bounds, and gaps a player could fall through that are not over a kill zone.
+
+Output a categorised report (errors block shipping, warnings do not) with a click-to-select for each offending instance, and a one-line pass or fail summary for the map.
+
+Also give me a headless variant I can run in CI over every map in the place file.`},
+
+    {id:"P7-2", title:"Asset pack sanitiser", model:"sonnet",
+     why:"A mechanical transform with clear rules and a big time payoff.",
+     deps:"P0-5", out:"scripts/sanitise-pack.luau",
+     prompt:`Write a Roblox Studio script that prepares a third-party asset pack for use in a performance-sensitive mobile game.
+
+For every model in the selection it must: remove every Script, LocalScript and ModuleScript and log exactly what was removed and from where; anchor everything; set CanCollide, CanTouch and CanQuery correctly by role, with decor non-interactive; set CollisionFidelity to Box on collidable meshes and report anything using PreciseConvexDecomposition; strip unused attributes and tags that could collide with my own tag contract; flag duplicate meshes that should be shared instances; and report texture sizes over the budget.
+
+It must never silently modify geometry or materials — only the properties listed — and must print a full before-and-after report including the instance count delta.
+
+Add a dry-run mode that reports without changing anything, and make that the default. Explain the reasoning: a script inside a downloaded asset pack is the most common way a Roblox game gets backdoored, and this is the gate.`},
+
+    {id:"P7-3", title:"Map registry and definition scaffolding", model:"haiku",
+     why:"Pure boilerplate generation across eleven near-identical files.",
+     deps:"P0-5, P1-4", out:"src/shared/Config/Maps/*.luau",
+     prompt:`Generate the map definition modules for a Roblox game, in strict Luau, matching the attached MapDef type and the existing config file style exactly.
+
+Create one file per map: School, Factory, Museum, Laboratory, Mall, Construction Site, Space Station, Bunker, Aircraft Carrier, Prison, Deserted Island.
+
+Each needs: id, display name, a short one-line description in the game's voice, a thumbnail asset placeholder, a lighting preset name, a music track placeholder, the enabled task id list (use the full registered set for now, with a comment marking which to prune after playtesting), an NPC difficulty modifier defaulting to 1.0, a wave number (1 for School, Factory, Museum, Laboratory; 2 for Mall, Construction Site, Prison, Bunker; 3 for the rest) and an enabled flag, true only for wave 1.
+
+Also generate the registry module that collects them and the boot-time assertion that every enabled map has a built model in ServerStorage.
+
+Consistency matters more than creativity here — every file identical in structure.`},
+
+    {id:"P7-4", title:"Gray-box layout briefs for wave 1", model:"sonnet",
+     why:"Applies level-design principles to four themes from one brief format.",
+     deps:"P7-3, P2-3", out:"docs/maps/wave1-briefs.md",
+     prompt:`Write level design briefs for the first four maps of a 6-player Roblox task race: School, Factory, Museum and Laboratory. Attached are the map kit contract and the task catalogue.
+
+For each map give me: the footprint and vertical layout, a described flow diagram of the main loops, where the 12+ task stations go and which tasks suit each location thematically, power-up spawn placement that creates interesting decisions rather than random pickups, sightlines that let a player see a rival about to overtake them, choke points where griefing is dramatic but not oppressive, and the NPC navigation node layout.
+
+Design rules to hold to:
+- Dense and highly populated visually, but readable — a player must find their next station without a map.
+- Never one dominant route. At least two viable paths between any pair of stations.
+- No dead ends longer than a few seconds of travel.
+- Readable at a phone's field of view; landmarks distinct in silhouette, not just in colour.
+- Every map must play the same game. Theme is the variable; the race is not.
+
+Also note the three asset-pack categories each map needs, and what the gray-box must prove before anyone spends a day on art.`},
+
+    {id:"P7-5", title:"Streaming and lighting presets per map", model:"sonnet",
+     why:"Applied optimisation with a defined budget to hit.",
+     deps:"P7-4, P0-6", out:"Per-map streaming + lighting config",
+     prompt:`Configure streaming and lighting for a Roblox game with 11 dense, heavily stylized maps running on mobile. Attached is the performance budget.
+
+For streaming: the StreamingEnabled settings this shape of game needs and why, which models must be Persistent or Atomic so gameplay never streams out from under a player mid-task, how to handle task stations at the edge of the streaming radius, and what a player sees when they outrun the stream.
+
+For lighting: a preset per wave-1 map theme (School, Factory, Museum, Laboratory) as a config block — technology, ambient, outdoor ambient, brightness, clock time, fog, colour correction and bloom — each written to reinforce the theme while keeping every task station readable. State the mobile cost of each effect you enable and drop anything that is not paying for itself.
+
+Include a switching module that applies a preset when a map loads and restores defaults on cleanup, with no leaked state between rounds.
+
+Then tell me the two settings most likely to break the performance budget on a low-end Android device, and what to cut first.`},
+
+    {id:"P7-6", title:"Station readability pass", model:"sonnet",
+     why:"Focused UX problem-solving inside a finished art context.",
+     deps:"P7-5", out:"Highlight system + per-map adjustments",
+     prompt:`Solve the readability problem for a Roblox game where dense, highly decorated maps make it hard to find the next mini-task station.
+
+Design and implement a layered system, strict Luau:
+1. World-space: a station highlight that reads at distance and through visual clutter without looking like a UI element pasted on the world. Consider silhouette, a subtle emissive treatment, motion, and negative space around the station.
+2. Screen-space: an off-screen indicator pointing to the nearest assigned station, with distance, that never clutters the middle of the screen on a phone.
+3. State: visually distinct treatments for not started, in progress by you, occupied by a rival, and complete — all distinguishable without colour alone.
+
+Requirements: it must work on a phone screen in a cluttered scene; it must not ruin the art direction, so the effect should feel designed into the world; it must cost little on mobile, so state the instance and draw cost; and it must be togglable per map for themes where the default reads poorly.
+
+Then give me the playtest protocol that proves it works: what I ask a first-time player to do, and what number tells me it failed.`}
+  ]
+},
+{
+  n:"08", name:"Polish, performance and security", weeks:"3 weeks · before anyone sees it",
+  goal:"Make it fast, make it safe, make it feel good. Everything is feature-complete before this phase starts.",
+  gate:"Holds the frame-rate target on the lowest target device with a full server, and no remote in the game accepts a hostile payload.",
+  tasks:[
+    {id:"P8-1", title:"Full remote surface security audit", model:"opus",
+     why:"Adversarial review across the whole codebase at once — the single highest-value Opus task in the project.",
+     deps:"All systems complete", out:"docs/security-audit.md + fixes",
+     prompt:`Perform a security audit of this Roblox game's entire server boundary. I am attaching the codebase. Assume the client is fully compromised: every remote can be fired with any arguments at any rate, every client-side check is absent, and the attacker can read all replicated state.
+
+For every remote in the game, produce a row: name, who may call it, in which round states, what it does, what happens on a malformed payload, what happens at 1000 calls per second, and what an attacker gains at best.
+
+Then specifically verify:
+- No task can be completed without the server-issued challenge being satisfied.
+- No power-up can be used without ownership, cooldown, range and state all checked server-side.
+- No Decision Studio choice is readable by any client before the reveal, including via replicated instances, attributes, or preloaded assets.
+- No streak, bounty or currency value is ever accepted from the client or from TeleportData.
+- No purchase path can grant twice or grant without a confirmed write.
+- No DataStore key is derived from client-supplied data.
+
+Rank every finding by exploitability times damage. Fix everything critical, and for each fix state the test that proves it. For anything you cannot fix server-side, propose the detection and reversal strategy instead.`},
+
+    {id:"P8-2", title:"Performance profiling and pooling pass", model:"opus",
+     why:"Diagnosing across rendering, network and script at once, on constrained hardware.",
+     deps:"P0-6, all systems complete", out:"docs/perf-report.md + optimisations",
+     prompt:`Run a performance optimisation pass on this Roblox game for low-end mobile. Attached is the codebase and the performance budget.
+
+Cover:
+- Script performance: anything running per frame that could run on an interval, unnecessary loops over all players, signal connections never disconnected, and table allocation in hot paths.
+- Instance churn: every place the game creates and destroys instances during a round (VFX, UI rows, indicators, pickups). Replace with pooling and show the implementation.
+- Network: replication volume per round, anything replicated that could be derived on the client, and unnecessary remote traffic. Confirm all countdowns derive from a shared clock rather than being ticked over the wire.
+- Memory: leak sources across round transitions. Prove a server can run 50 consecutive rounds without growth, and give me the measurement procedure.
+- Rendering: the effects most expensive on mobile and which to cut first.
+
+Deliver a prioritised list with estimated gain and implementation cost for each item, then implement the top items yourself.
+
+Then write the profiling protocol: exactly what to measure, with which tool, in which order, on a real low-end Android device, so I can repeat this every milestone and compare numbers.`},
+
+    {id:"P8-3", title:"Audio and game feel pass", model:"sonnet",
+     why:"Craft work against a clear emotional brief.",
+     deps:"P6-7", out:"src/client/Controllers/AudioController.luau + feel patches",
+     prompt:`Design the audio and game-feel layer for a Roblox competitive party game, strict Luau.
+
+Audio map: hub ambience, queue-ready sting, per-map music beds, race music that intensifies as the round timer runs down, task start, task success and task fail, power-up pickup, power-up used on you versus by you (distinctly different), qualification sting, Decision Studio negotiation bed, the lock-in sound, the reveal sequence, and separate win and loss resolutions.
+
+Game feel: the moments that need a physical punch are task completion, qualifying, locking in a choice, and the reveal. Specify camera shake, hit-stop, UI scale-punch and particle bursts for each, with concrete values and a reduced-motion variant.
+
+Implement the audio controller with: sound pooling, a ducking system so the reveal sting is never buried under music, per-category volume, spatial versus 2D decisions, and correct cleanup on round transitions.
+
+Also specify the mobile audio constraints: how many concurrent sounds is safe, what to do when the player is on speaker in a noisy room, and which cues must have a visual equivalent because the sound will not be heard.`},
+
+    {id:"P8-4", title:"Playtest protocol and bug triage", model:"haiku",
+     why:"Template and document generation from an established format.",
+     deps:"All systems complete", out:"docs/playtest-protocol.md, issue templates",
+     prompt:`Write the playtest package for a 6-player Roblox competitive game about to enter closed beta.
+
+Produce:
+1. A moderator script for a 6-player session: setup, what to say, what to deliberately not explain (to test onboarding), the specific moments to watch each player's face, and the questions to ask afterwards.
+2. An observation sheet: per-player, per-round data to record — time to find the first task station, tasks completed, power-ups used, whether they understood the finale before it started, and the Steal or Share choice with the stated reason.
+3. A post-session survey, 10 questions maximum, mixing scaled and open answers, written to surface confusion rather than politeness.
+4. GitHub issue templates for bug, balance concern and usability finding, each with the reproduction fields a developer actually needs including place id, device, and round id.
+5. A triage rubric: severity definitions, what blocks launch, and the rule for when a balance complaint becomes a bug.
+
+Keep it practical enough to run with friends in a Discord call, not a formal usability lab.`},
+
+    {id:"P8-5", title:"Live-ops config and feature flags", model:"sonnet",
+     why:"Standard operational tooling with clear requirements.",
+     deps:"P4-7", out:"src/server/Services/LiveConfig.luau",
+     prompt:`Build the live operations layer for a Roblox game, strict Luau, so I can tune the game after launch without shipping an update.
+
+Requirements:
+- A remote config fetched from a DataStore at server start and refreshed on an interval, with a version number, a schema check, and a safe fallback to the shipped defaults if the fetched config is invalid. A bad live config must never brick a server.
+- Feature flags for: enabling maps, enabling individual tasks and power-ups, NPC fill on or off, the store on or off, and an emergency read-only mode that disables all writes.
+- Tunable values: every round timer, bounty values, power-up magnitudes and durations, NPC difficulty, and matchmaking timings.
+- A staged rollout mechanism: apply a config to a percentage of servers, with the bucket derived from the job id so a given server is stable.
+- An admin command interface gated to a developer id list, with an audit log of who changed what and when.
+- A kill switch for anything that could cost money or corrupt data.
+
+Then list the five values I am most likely to want to change in the first week after launch, and confirm each one is covered.`}
+  ]
+},
+{
+  n:"09", name:"Launch and live ops", weeks:"ongoing",
+  goal:"Ship wave 1, read the telemetry honestly, and keep a content cadence.",
+  gate:"Soft launch is stable, the payoff numbers survive contact with real players, and there is a content update scheduled before the launch spike decays.",
+  tasks:[
+    {id:"P9-1", title:"Store page, icon and thumbnail brief", model:"sonnet",
+     why:"Marketing copy and art direction from a clear product understanding.",
+     deps:"P8-4", out:"docs/store-page.md",
+     prompt:`Write the Roblox experience store page for Don't Steal Bro! — a 6-player mini-task race with power-up griefing and a Steal or Share finale — plus the art briefs.
+
+Produce:
+1. A title validation, not alternatives. The name is fixed. Tell me how it behaves in Roblox discovery: how players will actually type it (with the apostrophe, without it, and as "dont steal bro"), what it truncates to in a search result and on a mobile game card, whether the exclamation mark or apostrophe causes any search or display problem, and whether an existing experience already owns the phrase. If spelling it differently on the store page improves discovery without renaming the game, say so and show the spelling. Then write a subtitle or tagline that carries what the title alone cannot — that this is a race you can win and still lose at the end.
+2. The description: a hook in the first line that survives truncation, then the loop in three lines, then the finale as the thing that makes it different, then a line on progression. Written for a Roblox player, not an investor.
+3. Genre and tag selections with reasoning.
+4. Icon brief: what must be legible at 150 pixels, the single emotional idea, and three concepts. At least one should build on the title's own phrase, since "Don't Steal Bro!" is something a player says out loud at the moment the game is most fun.
+5. Thumbnail briefs for five thumbnails, each showing a different moment: the race, a grief moment, the qualification, the three podiums, and the reveal.
+6. The 30-second trailer beat sheet, with the hook landing in the first 3 seconds and the title card timed to the betrayal, not to the start.
+
+Everything written in the register of a competitive Roblox party game — energetic, concrete, no corporate voice, no exclamation-mark spam.`},
+
+    {id:"P9-2", title:"Soft-launch telemetry review loop", model:"opus",
+     why:"Interpreting real data and deciding what to change is the hardest judgement call in the project.",
+     deps:"P4-7, P9-1", out:"docs/launch-review.md (recurring)",
+     prompt:`I have soft-launched the game and have a week of analytics. I am attaching the funnel data, the per-map win rates, task completion times, power-up usage, the Steal versus Share distribution by streak bucket, and retention by day.
+
+Act as a live-ops analyst and produce:
+1. The funnel read: where players drop, how that compares to reasonable expectations for a Roblox party game, and which drop is most fixable.
+2. The finale health check: is the payoff table producing tension or a dominant strategy? Show the evidence and the specific bounty change you would make, with the predicted effect.
+3. Balance: outlier maps, outlier tasks (too fast, too slow, too often abandoned), and power-ups that are never used or always used.
+4. NPC calibration: are bot-filled rounds producing distorted qualification rates?
+5. Integrity: any pattern in the data that looks like collusion, farming or exploitation.
+
+For each finding give me the change, the expected effect, the metric that confirms it, and how long to wait before judging. Rank everything by impact per unit of work, and tell me plainly which findings are noise at this sample size rather than pretending everything is actionable.`},
+
+    {id:"P9-3", title:"Content cadence and season plan", model:"sonnet",
+     why:"Planning work built on the roadmap and data that already exist.",
+     deps:"P9-2", out:"docs/liveops-roadmap.md",
+     prompt:`Plan the first 90 days of live operations for a Roblox competitive party game that launched with 4 maps, 8 mini-tasks and 10 power-ups, with 7 more maps built and waiting.
+
+Produce a week-by-week calendar covering: map releases from wave 2 and wave 3, new mini-tasks, seasonal title ladders, weekend events tied to the weekly leaderboard, store rotations, and balance patches.
+
+Rules:
+- Something new every two to three weeks, and never a dead month.
+- Every release needs a reason for a lapsed player to come back, stated explicitly.
+- Balance patches ship separately from content so their effect is measurable.
+- Leave two buffer weeks for reacting to what the data says rather than what this plan says.
+
+For each beat give me: what ships, the work it needs, the metric it targets, and the announcement hook.
+
+Then the season structure: how long a season runs, what resets, what carries over, and what the top streak holders get that makes the leaderboard worth chasing for a second season.`}
+  ]
+}
+];
+
+/* ---------- render ---------- */
+const board = document.getElementById("board");
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const MODEL_LABEL = {opus:"Opus 5", sonnet:"Sonnet 5", haiku:"Haiku 4.5"};
+
+let total = 0;
+board.innerHTML = PHASES.map(p => {
+  total += p.tasks.length;
+  const tasks = p.tasks.map(t => `
+    <article class="task" data-id="${t.id}" data-model="${t.model}">
+      <label class="tick" aria-label="Mark ${esc(t.id)} complete">
+        <input type="checkbox" id="chk-${t.id}" data-task="${t.id}">
+        <span class="box" aria-hidden="true"></span>
+      </label>
+      <div class="tbody">
+        <div class="thead"><span class="tid">${esc(t.id)}</span><h3 class="ttitle">${esc(t.title)}</h3></div>
+        <div class="mrow">
+          <span class="mchip ${t.model}">${MODEL_LABEL[t.model]}</span>
+          <span class="why">${esc(t.why)}</span>
+        </div>
+        <dl class="kv">
+          <dt>Needs</dt><dd>${esc(t.deps)}</dd>
+          <dt>Output</dt><dd><code>${esc(t.out)}</code></dd>
+        </dl>
+        <details>
+          <summary>Prompt</summary>
+          <div class="pbox">
+            <button class="copy" type="button">Copy</button>
+            <pre>${esc(t.prompt)}</pre>
+          </div>
+        </details>
+      </div>
+    </article>`).join("");
+  return `
+    <section class="phase" data-phase="${p.n}">
+      <div class="phead">
+        <div class="pnum">${p.n}</div>
+        <div class="pmeta">
+          <h2>${esc(p.name)}</h2>
+          <div class="psub">${esc(p.weeks)}</div>
+        </div>
+        <div class="pcount" data-count="${p.n}">0 / ${p.tasks.length}</div>
+      </div>
+      <p class="pgoal">${esc(p.goal)}</p>
+      <div class="gate"><b>Gate to the next phase</b>${esc(p.gate)}</div>
+      <div class="tasks">${tasks}</div>
+    </section>`;
+}).join("");
+
+/* ---------- copy ---------- */
+board.addEventListener("click", e => {
+  const btn = e.target.closest(".copy");
+  if (!btn) return;
+  const text = btn.parentElement.querySelector("pre").textContent;
+  const done = () => { btn.textContent = "Copied"; setTimeout(() => btn.textContent = "Copy", 1400); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallback(text, done));
+  } else fallback(text, done);
+});
+function fallback(text, done){
+  const ta = document.createElement("textarea");
+  ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand("copy"); done(); } catch (_) {}
+  ta.remove();
+}
+
+/* ---------- progress state ---------- */
+const LS_KEY = "dsbp-progress-v1";
+let checked = {};
+let dbDoc = null;
+let writing = Promise.resolve();
+
+function readLocal(){
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); } catch(_) { return {}; }
+}
+function writeLocal(){
+  try { localStorage.setItem(LS_KEY, JSON.stringify(checked)); } catch(_) {}
+}
+
+function paint(){
+  let doneCount = 0;
+  document.querySelectorAll(".task").forEach(el => {
+    const id = el.dataset.id;
+    const on = !!checked[id];
+    const input = el.querySelector("input");
+    if (input.checked !== on) input.checked = on;
+    el.classList.toggle("is-done", on);
+    if (on) doneCount++;
+  });
+  PHASES.forEach(p => {
+    const n = p.tasks.filter(t => checked[t.id]).length;
+    const node = document.querySelector('[data-count="' + p.n + '"]');
+    if (node) node.textContent = n + " / " + p.tasks.length;
+  });
+  document.getElementById("meterfill").style.width = (total ? (doneCount/total*100) : 0).toFixed(1) + "%";
+  document.getElementById("metertxt").textContent = doneCount + " / " + total + " done";
+  applyFilters();
+}
+
+board.addEventListener("change", e => {
+  const input = e.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  const id = input.dataset.task;
+  if (input.checked) checked[id] = true; else delete checked[id];
+  writeLocal();
+  paint();
+  push();
+});
+
+function push(){
+  if (!dbDoc) return;
+  const snapshot = Object.assign({}, checked);
+  writing = writing.then(() =>
+    dbDoc.set({ checked: snapshot, updatedAt: new Date().toISOString() })
+  ).catch(() => {});
+}
+
+/* ---------- filters ---------- */
+let fStatus = "all", fModel = "all";
+document.getElementById("filters").addEventListener("click", e => {
+  const b = e.target.closest(".fchip");
+  if (!b) return;
+  const group = b.dataset.f;
+  document.querySelectorAll('.fchip[data-f="' + group + '"]').forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  if (group === "status") fStatus = b.dataset.v; else fModel = b.dataset.v;
+  applyFilters();
+});
+function applyFilters(){
+  document.querySelectorAll(".phase").forEach(sec => {
+    let visible = 0;
+    sec.querySelectorAll(".task").forEach(t => {
+      const isDone = !!checked[t.dataset.id];
+      const okStatus = fStatus === "all" || (fStatus === "done") === isDone;
+      const okModel = fModel === "all" || t.dataset.model === fModel;
+      const show = okStatus && okModel;
+      t.hidden = !show;
+      if (show) visible++;
+    });
+    sec.hidden = visible === 0;
+  });
+}
+
+/* ---------- boot ---------- */
+checked = readLocal();
+paint();
+
+(async () => {
+  const note = document.getElementById("savenote");
+  let db = null;
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch(_) { db = null; }
+  if (!db) { note.textContent = "Saved in this browser only."; return; }
+  dbDoc = db.doc("progress/board");
+  note.textContent = "Synced — shared with everyone who can open this page.";
+  dbDoc.onSnapshot(snap => {
+    const data = snap.exists ? snap.data() : null;
+    if (data && data.checked && typeof data.checked === "object") {
+      checked = Object.assign({}, data.checked);
+      writeLocal();
+      paint();
+    }
+  }, () => { note.textContent = "Sync unavailable — saved in this browser only."; });
+})();
+</script>
+
+</body>
+</html>
