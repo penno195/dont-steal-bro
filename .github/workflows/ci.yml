@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-typecheck-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Rokit reads rokit.toml and installs the exact pinned tool versions
+      # (Rojo, Wally, Selene, StyLua, Lune, luau-analyze). Aftman is no
+      # longer actively maintained, so this project uses Rokit instead -
+      # verify CompeyDev/setup-rokit is still current before relying on
+      # this pin; it's a small community action, not an official one.
+      - name: Install Rokit toolchain
+        uses: CompeyDev/setup-rokit@v0.1.2
+
+      - name: Install Wally packages
+        run: wally install
+
+      - name: Lint (Selene)
+        run: selene src
+
+      - name: Format check (StyLua)
+        run: stylua --check src
+
+      # NOTE: verify the exact invocation once the toolchain is actually
+      # installed - luau-lang/luau's release archive ships both `luau`
+      # and `luau-analyze` binaries, but it's unconfirmed here whether
+      # Rokit's single `luau-analyze = "luau-lang/luau@..."` entry in
+      # rokit.toml correctly extracts the analyze binary under that alias
+      # for every platform. If it doesn't, pin the `luau` alias instead
+      # and invoke `luau-analyze` from the same install directory.
+      - name: Type check (luau-analyze)
+        run: luau-analyze src
+
+      # Pure-logic tests only (Outcomes, pricing, ranking, tie-breaks,
+      # streak maths - Ground Rule 4). Roblox-API-touching code is tested
+      # manually in Studio's "Clients and Servers" mode, not here.
+      - name: Run pure-logic tests (Lune)
+        run: lune run tests/run

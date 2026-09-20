@@ -9,19 +9,25 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Pre-production.** No game code exists yet. The design is written, the
-technical architecture is decided, and the build plan is broken into 57 tasks
-across 10 phases.
-
-Next action: **task P0-1** — resolve the eight open design questions in
-`docs/gdd.md` §7. Everything else is blocked behind it.
+**Foundation and tooling (Phase 01).** Pre-production (Phase 00) is done —
+all eight open design questions are resolved (`docs/design-decisions.md`),
+the task and power-up catalogues, map kit contract, payoff table, perf
+budget, and threat model are all written. The repo is now a working Rojo
+project (task P1-1); no gameplay code exists yet.
 
 ## Documents
 
 | File | What it is |
 |---|---|
-| [`docs/gdd.md`](docs/gdd.md) | The game design document. §7 lists what is still undecided. |
+| [`docs/gdd.md`](docs/gdd.md) | The game design document. §7's open questions are resolved in `design-decisions.md`. |
 | [`docs/architecture.md`](docs/architecture.md) | Locked technical decisions, folder skeleton, and the NPC / mobile-UI / Decision Studio deep dives. |
+| [`docs/design-decisions.md`](docs/design-decisions.md) | The eight GDD §7 questions, resolved — bounty, qualification edge cases, streak-reset scope, Robux power-ups. |
+| [`docs/tasks-catalogue.md`](docs/tasks-catalogue.md) | 15 mini-tasks, server-validated, reskinned across all 11 map themes. |
+| [`docs/powerups.md`](docs/powerups.md) | 10 power-ups and the anti-frustration/counter-play matrix. |
+| [`docs/payoff-table.md`](docs/payoff-table.md) | The Steal/Share equilibrium maths and bounty-tier numbers. |
+| [`docs/map-kit-spec.md`](docs/map-kit-spec.md) | The CollectionService tag contract every map must satisfy. |
+| [`docs/perf-budget.md`](docs/perf-budget.md) | Performance budget, `StreamingEnabled` config, and the device test matrix. |
+| [`docs/threat-model.md`](docs/threat-model.md) | Exploit and streak-collusion threat model, ranked by leaderboard-credibility damage. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture
@@ -38,21 +44,64 @@ visible to anyone the artifact is shared with. Tick progress there, treat the
 file in this repo as a read-only backup, and re-export it when the task list
 itself changes.
 
-## Planned layout
+## Layout
 
-This folder becomes the Rojo project root at task P1-1:
+This is now the Rojo project root (`default.project.json`, task P1-1):
 
 ```
 src/shared/     -> ReplicatedStorage.Shared   (config, types, Net)
-src/server/     -> ServerScriptService        (services, task handlers)
-src/client/     -> StarterPlayerScripts       (controllers, UI, task views)
+src/server/     -> ServerScriptService.Server (services, task handlers)
+src/client/     -> StarterPlayer.StarterPlayerScripts.Client
 docs/           design and architecture
-tests/          Jest-Lua suites, run headlessly via Lune
+tests/          pure-logic specs, run headlessly via `lune run tests/run`
 ```
 
-Maps are built by hand in Studio and live in `ServerStorage`. They are
-deliberately **not** synced by Rojo — the `.rbxl` is authoritative for map
-content, this repo is authoritative for everything else.
+`ServerStorage` (all 11 maps, built by hand in Studio) has **no entry** in
+`default.project.json` at all — deliberately. JSON has no comment syntax
+to say so inline, which is why it's written here instead: the `.rbxl` file
+is authoritative for map content, this repo is authoritative for
+everything else, and Rojo should never touch `ServerStorage.Maps` in
+either direction.
+
+### Sync workflow, for anyone who's only used Studio
+
+If you're used to editing everything in Studio and saving the `.rbxl`,
+here's the mental model for this repo:
+
+- **Code lives in Git, not the `.rbxl`.** Everything under `src/` is
+  plain text on your disk, edited in VS Code (or any editor), and synced
+  *into* a running Studio session by Rojo — Studio never saves this code
+  into the place file. If you edit a script directly in Studio's built-in
+  editor, that edit is **not persisted** anywhere Rojo looks; it'll be
+  overwritten the next time Rojo syncs.
+- **Maps live in the `.rbxl`, not Git.** `ServerStorage.Maps` is hand-built
+  in Studio the normal way you're used to, and it stays that way — it's
+  never converted to Rojo-synced files. Save the place file as you
+  normally would; that's still the source of truth for map content.
+- **The rule for which is authoritative:** if it's code (`src/`, configs,
+  types), Git wins — the `.rbxl` is disposable and gets rebuilt by
+  re-syncing. If it's map geometry, the `.rbxl` wins — Git never has an
+  opinion about it. Never "fix" a code file by editing it in Studio and
+  saving; always edit it on disk and let Rojo sync the change in.
+- **Running it locally:** install the pinned toolchain with `rokit
+  install`, then `wally install` to pull down `ProfileStore` and `Signal`,
+  then `rojo serve` and connect Studio's Rojo plugin to it. From then on,
+  editing a file on disk updates the running Studio session live.
+
+### Testing
+
+`architecture.md`'s original plan was "Jest-Lua for pure logic, run via
+Lune in CI." Verified while setting this up and found not to hold:
+Jest-Lua currently only runs inside the real Roblox engine (no Lune
+support), and TestEZ's headless CI path (Lemur) runs on a Lua 5.1
+interpreter that can't parse `--!strict` Luau syntax at all — so neither
+obvious choice actually satisfies Ground Rule 4 for this project. Since
+pure-logic modules are required to make zero Roblox API calls anyway, they
+don't need Roblox emulation in the first place — `tests/TestRunner.luau`
+is a ~60-line hand-rolled runner that executes directly under Lune's real
+Luau runtime, with no third-party dependency. See its header comment for
+the full reasoning, and revisit this if Jest-Lua ships real Lune support
+later.
 
 ## Ground rules
 

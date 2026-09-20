@@ -18,7 +18,7 @@ designer — confirm before relying on it.
 | **Persistence** | **ProfileStore** for player data. OrderedDataStore for the all-time board. MemoryStore SortedMaps for daily/weekly. | Session locking prevents streak duplication across teleports. MemoryStore entries expire on their own — no cleanup job. |
 | **Networking** | One typed `Net` module declaring every remote in one place. Optionally generated with Blink or Zap. | One place to audit; type safety; bandwidth savings. |
 | **UI framework** | React-lua if the team knows React, otherwise Fusion or Vide. | Declarative UI is the only practical way to keep 15+ task screens consistent. |
-| **Testing** | Jest-Lua for pure logic; Lune to run it in CI; Studio "Clients and Servers" (6 players) for integration. | Outcome table, pricing, ranking, tie-breaks and streak maths should all be pure and unit-tested. |
+| **Testing** | A hand-rolled `tests/TestRunner.luau` (no Roblox emulation needed) for pure logic, run via Lune in CI; Studio "Clients and Servers" (6 players) for integration. | Outcome table, pricing, ranking, tie-breaks and streak maths should all be pure and unit-tested. **Correction (P1-1):** the original Jest-Lua-via-Lune plan doesn't hold — Jest-Lua only runs inside the real Roblox engine, and TestEZ's Lemur-based CI path is Lua 5.1, which can't parse `--!strict` Luau. See `README.md`'s Testing section. |
 | **Authority** | **Server-authoritative for everything.** Clients send intents; the server validates and applies. | Competitive game with a public leaderboard — it will be exploited. |
 
 ## 2. Folder skeleton
