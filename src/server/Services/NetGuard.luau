@@ -10,8 +10,8 @@
 -- validation somewhere else and relied on the client instead:
 --   - Truthfulness. A well-shaped, rate-limit-respecting, correctly-
 --     timed payload can still be a LIE - "I finished the task" with no
---     server-side proof is a valid ExamplePing, not a valid task
---     completion. Shape/rate/state are necessary, never sufficient;
+--     server-side proof is a validly-shaped remote call, not a valid
+--     task completion. Shape/rate/state are necessary, never sufficient;
 --     each TaskHandler/PowerUpService/DecisionService still owns its own
 --     truth (threat-model.md §2, §4).
 --   - Physical plausibility. NetGuard has no idea whether a player could
@@ -103,10 +103,11 @@ local function on(remoteName: string, handler: (player: Player, payload: any) ->
 	handlers[remoteName] = handler
 end
 
--- Wired up later by RoundService once it exists (P2). Until then every
--- state-gated remote fails closed via Net.isStateAllowed's nil handling
--- - there are none yet (ExamplePing declares no states), so this has no
--- effect today, but the mechanism is real for when P2 lands.
+-- Wired up by RoundService's init() (P2-1: `NetGuard.setRoundStateProvider
+-- (function() return currentState end)`). No remote declares a `states`
+-- gate yet, so this has no observable effect today, but the mechanism is
+-- real for whenever the first one does (Net.isStateAllowed fails closed
+-- on an unrecognised state either way).
 local function setRoundStateProvider(provider: RoundStateProvider)
 	roundStateProvider = provider
 end

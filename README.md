@@ -9,18 +9,27 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Foundation and tooling (Phase 01).** Pre-production (Phase 00) is done —
-all eight open design questions are resolved (`docs/design-decisions.md`),
-the task and power-up catalogues, map kit contract, payoff table, perf
-budget, and threat model are all written. The repo is a working Rojo
-project (P1-1) with a two-phase Service/Controller bootstrap loader
-(P1-2, `src/shared/Loader.luau`) and a typed remote layer with payload
-validation, per-player rate limiting, a round-state gate and violation
-escalation (P1-3, `src/shared/Net.luau` and
+**Core loop gray-box (Phase 02), foundation complete.** Pre-production
+(Phase 00) is done — all eight open design questions are resolved
+(`docs/design-decisions.md`), the task and power-up catalogues, map kit
+contract, payoff table, perf budget, and threat model are all written.
+Foundation and tooling (Phase 01, P1-1 through P1-6) is done: a working
+Rojo project with CI; a two-phase Service/Controller bootstrap loader
+(`src/shared/Loader.luau`); a typed remote layer with payload validation,
+rate limiting and violation escalation (`src/shared/Net.luau`,
 `src/server/Services/NetGuard.luau`) — the game's entire client-facing
-attack surface, and the first real `Service` past the bootstrap loader
-itself. `ExampleController` is still a placeholder; no real controller
-exists yet.
+attack surface; a data-driven config layer with boot-time validation
+(`src/shared/Config/`, `src/server/Services/ConfigValidator.luau`); a
+player data service over ProfileStore with a versioned migration chain
+(`src/server/ProfileLogic.luau`, `src/server/Services/DataService.luau`);
+and documented testing conventions (`docs/testing-conventions.md`).
+
+Phase 02 (the make-or-break gray-box loop) is underway: the round state
+machine (P2-1, `src/shared/RoundStates.luau`,
+`src/server/Services/RoundService.luau`) is the single source of truth
+for round phase, replicated as one small payload with per-state Signals
+other services subscribe to instead of polling. `ExampleController` is
+still a placeholder; no real controller exists yet.
 
 ## Documents
 

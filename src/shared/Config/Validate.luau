@@ -126,6 +126,22 @@ export type StudioTimers = {
 	revealDelaySeconds: number,
 }
 
+-- Fixed durations for RoundService's (P2-1) own states that aren't
+-- covered by `raceDurationSeconds` or `studioTimers` above. All
+-- PLACEHOLDER - no locked value anywhere in docs/ yet, same stance as
+-- `raceDurationSeconds`. `waitingForPlayers` and `decisionStudio` have
+-- no entry here on purpose: the first ends when a matchmaking system
+-- (not built yet) says the server is full, the second ends when a
+-- future DecisionService's own inner phase machine resolves - neither
+-- is a fixed RoundService-owned timer.
+export type RoundTimers = {
+	loadingSeconds: number,
+	introSeconds: number, -- the top-level "Intro" round STATE (pre-race beat) - distinct from studioTimers.introSeconds, the Decision Studio's own separate inner phase
+	qualifiedSeconds: number, -- brief hold/teleport buffer before Decision Studio
+	resultsSeconds: number, -- reveal-hold before Cleanup
+	cleanupSeconds: number, -- teardown window
+}
+
 export type GameConfig = {
 	playerCount: number, -- 6, gdd.md
 	qualifierCount: number, -- 3, gdd.md
@@ -135,6 +151,7 @@ export type GameConfig = {
 	npcSeatStreakCreditThreshold: number, -- PLACEHOLDER: threat-model.md §8, playtest-tuned
 	raceDurationSeconds: number, -- PLACEHOLDER: no locked value in docs/ yet
 	studioTimers: StudioTimers,
+	roundTimers: RoundTimers,
 	bountyTiers: { BountyTier },
 }
 
@@ -328,6 +345,16 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	end
 	if config.qualificationFloorPercent < 0 or config.qualificationFloorPercent > 1 then
 		issue(issues, "GameConfig", "GameConfig.luau", "qualificationFloorPercent", "must be between 0 and 1")
+	end
+	if config.raceDurationSeconds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "raceDurationSeconds", "must be positive")
+	end
+
+	for _, field in { "loadingSeconds", "introSeconds", "qualifiedSeconds", "resultsSeconds", "cleanupSeconds" } do
+		local value = (config.roundTimers :: any)[field]
+		if type(value) ~= "number" or value <= 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", "roundTimers." .. field, "must be a positive number")
+		end
 	end
 
 	if #config.bountyTiers == 0 then

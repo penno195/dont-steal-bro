@@ -28,6 +28,16 @@ local GameConfig: Validate.GameConfig = {
 		revealDelaySeconds = 1,
 	},
 
+	-- RoundService's (P2-1) own state durations. All PLACEHOLDER - no
+	-- locked value in docs/ yet, same stance as raceDurationSeconds.
+	roundTimers = {
+		loadingSeconds = 5,
+		introSeconds = 5,
+		qualifiedSeconds = 3,
+		resultsSeconds = 8,
+		cleanupSeconds = 5,
+	},
+
 	-- payoff-table.md §3's table, verbatim.
 	bountyTiers = {
 		{ tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },

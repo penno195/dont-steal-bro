@@ -251,18 +251,47 @@ function Net.isStateAllowed(def: RemoteDef, currentState: string?): boolean
 	return table.find(def.states :: { string }, currentState) ~= nil
 end
 
--- Demonstrates the shape end to end (same spirit as ExampleController -
--- delete once a real ServerIntent remote exists to demonstrate it
--- instead). No `states` gate: this is meant to work from the lobby,
--- before any round system exists to report a state at all.
+-- P2-1's RoundService remotes - the first real ones (ExamplePing, the
+-- placeholder that used to live here, is deleted per its own "delete
+-- once a real ServerIntent remote exists" comment).
 Net.Remotes = {
-	ExamplePing = {
-		name = "ExamplePing",
+	-- Server -> client: the round state machine's entire replicated
+	-- payload (RoundService.luau, P2-1) - a state name plus an absolute
+	-- end time from workspace:GetServerTimeNow(). No schema: the sender
+	-- is always the server, trusted by definition for a ServerBroadcast
+	-- remote (see RemoteDirection above).
+	RoundState = {
+		name = "RoundState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server: forces any round transition, bypassing the
+	-- normal legality table - RoundService's debug interface (P2-1's own
+	-- requirement: "I will need this constantly to test the Decision
+	-- Studio"). No `states` gate on purpose: a debug override has to work
+	-- from every round state, not just some of them. The real gate is
+	-- inside RoundService's own handler, which checks RunService:
+	-- IsStudio() or a developer-id allowlist before honouring it -
+	-- NetGuard only proves the shape and throttles the call rate.
+	DebugForceRoundState = {
+		name = "DebugForceRoundState",
 		direction = "ServerIntent",
 		schema = Net.struct({
-			value = Net.number({ min = 1, max = 100, integer = true }),
+			state = Net.stringEnum({
+				"WaitingForPlayers",
+				"Loading",
+				"Intro",
+				"Race",
+				"Qualified",
+				"DecisionStudio",
+				"Results",
+				"Cleanup",
+			}),
 		}),
-		rateLimit = { capacity = 5, refillPerSecond = 1 },
+		rateLimit = { capacity = 3, refillPerSecond = 0.2 },
 		states = nil,
 	} :: RemoteDef,
 } :: { [string]: RemoteDef }

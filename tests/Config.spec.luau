@@ -17,6 +17,13 @@ local function validGameConfig(): Validate.GameConfig
 		npcSeatStreakCreditThreshold = 3,
 		raceDurationSeconds = 300,
 		studioTimers = { introSeconds = 5, negotiateSeconds = 45, chooseSeconds = 15, revealDelaySeconds = 1 },
+		roundTimers = {
+			loadingSeconds = 5,
+			introSeconds = 5,
+			qualifiedSeconds = 3,
+			resultsSeconds = 8,
+			cleanupSeconds = 5,
+		},
 		bountyTiers = {
 			{ tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
 			{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
