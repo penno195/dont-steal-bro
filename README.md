@@ -12,8 +12,11 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 **Foundation and tooling (Phase 01).** Pre-production (Phase 00) is done —
 all eight open design questions are resolved (`docs/design-decisions.md`),
 the task and power-up catalogues, map kit contract, payoff table, perf
-budget, and threat model are all written. The repo is now a working Rojo
-project (task P1-1); no gameplay code exists yet.
+budget, and threat model are all written. The repo is a working Rojo
+project (P1-1) with a two-phase Service/Controller bootstrap loader
+(P1-2, `src/shared/Loader.luau`) — the first real gameplay-adjacent code,
+though `ExampleService`/`ExampleController` are placeholders, not real
+game systems yet.
 
 ## Documents
 
