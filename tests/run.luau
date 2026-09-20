@@ -8,7 +8,7 @@
 
 local TestRunner = require("./TestRunner")
 
-require("./Example.spec")
+require("./Net.spec")
 -- require("./Outcomes.spec") -- add once src/shared/Config/Outcomes.luau exists
 
 TestRunner.run()

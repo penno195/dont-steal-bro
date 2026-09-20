@@ -14,9 +14,13 @@ all eight open design questions are resolved (`docs/design-decisions.md`),
 the task and power-up catalogues, map kit contract, payoff table, perf
 budget, and threat model are all written. The repo is a working Rojo
 project (P1-1) with a two-phase Service/Controller bootstrap loader
-(P1-2, `src/shared/Loader.luau`) — the first real gameplay-adjacent code,
-though `ExampleService`/`ExampleController` are placeholders, not real
-game systems yet.
+(P1-2, `src/shared/Loader.luau`) and a typed remote layer with payload
+validation, per-player rate limiting, a round-state gate and violation
+escalation (P1-3, `src/shared/Net.luau` and
+`src/server/Services/NetGuard.luau`) — the game's entire client-facing
+attack surface, and the first real `Service` past the bootstrap loader
+itself. `ExampleController` is still a placeholder; no real controller
+exists yet.
 
 ## Documents
 
