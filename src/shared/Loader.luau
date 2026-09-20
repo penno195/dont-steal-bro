@@ -46,11 +46,25 @@ function Loader.get(name: string): any
 	return mod
 end
 
+-- Testing-only seam (P1-6): registers a module directly into the
+-- singleton `modules` registry without needing a real Roblox `folder` to
+-- scan - Loader.start's own `folder:GetChildren()` is a Roblox API this
+-- can't reach under Lune. This is how a pure-logic unit test fakes a
+-- service dependency reachable via Loader.get(name), the exact way a
+-- real module would reach it in production - see
+-- tests/Loader.spec.luau's "fakes a dependency" case. Never call this
+-- outside a test.
+function Loader.registerForTesting(module: Lifecycle)
+	modules[module.name] = module
+end
+
 -- Topologically sorts by declared `dependencies`, so every module's
 -- dependencies finish init() before it does. DFS with an explicit path
 -- so a cycle error can name every module in the cycle, not just say
--- "a cycle exists somewhere."
-local function topoSort(registry: { [string]: Lifecycle }): { string }
+-- "a cycle exists somewhere." Exported (P1-6) so this pure algorithm can
+-- be unit-tested directly against a hand-built registry, without needing
+-- a real Roblox `folder` of ModuleScripts the way Loader.start does.
+function Loader.topoSort(registry: { [string]: Lifecycle }): { string }
 	local order: { string } = {}
 	local state: { [string]: "visiting" | "done" } = {}
 	local path: { string } = {}
@@ -137,7 +151,7 @@ function Loader.start(folder: Instance)
 		modules[name] = mod
 	end
 
-	local order = topoSort(registry)
+	local order = Loader.topoSort(registry)
 	runPhase(order, registry, "init")
 	runPhase(order, registry, "start")
 end

@@ -8,6 +8,7 @@
 
 local TestRunner = require("./TestRunner")
 
+require("./Loader.spec")
 require("./Net.spec")
 require("./Config.spec")
 require("./ProfileLogic.spec")

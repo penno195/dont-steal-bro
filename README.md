@@ -35,6 +35,7 @@ exists yet.
 | [`docs/map-kit-spec.md`](docs/map-kit-spec.md) | The CollectionService tag contract every map must satisfy. |
 | [`docs/perf-budget.md`](docs/perf-budget.md) | Performance budget, `StreamingEnabled` config, and the device test matrix. |
 | [`docs/threat-model.md`](docs/threat-model.md) | Exploit and streak-collusion threat model, ranked by leaderboard-credibility damage. |
+| [`docs/testing-conventions.md`](docs/testing-conventions.md) | What belongs in a pure vs. Studio-tested module, coverage expectations, and how to fake a dependency through the loader. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture
@@ -105,11 +106,17 @@ interpreter that can't parse `--!strict` Luau syntax at all — so neither
 obvious choice actually satisfies Ground Rule 4 for this project. Since
 pure-logic modules are required to make zero Roblox API calls anyway, they
 don't need Roblox emulation in the first place — `tests/TestRunner.luau`
-is a ~90-line hand-rolled runner that executes directly under Lune's real
+is a ~95-line hand-rolled runner that executes directly under Lune's real
 Luau runtime, with no third-party dependency. This was installed and run
-locally (not just researched): `lune run tests/run` passes both cases in
-`tests/Example.spec.luau`, and along the way `luau-lsp analyze` (see
-below) caught a real strict-mode typing bug in the runner's own
+locally (not just researched): `lune run tests/run` now passes 50+ cases
+across `tests/Loader.spec.luau`, `Net.spec.luau`, `Config.spec.luau` and
+`ProfileLogic.spec.luau` (P1-1's original placeholder, `Example.spec.
+luau`, was deleted once a real pure-logic module had its own spec file,
+per its own header comment). See `docs/testing-conventions.md` (P1-6) for
+what belongs in a pure module versus a Studio integration test, and how
+to fake a service dependency reached through the loader. Along the way,
+`luau-lsp analyze` (see below) caught a real strict-mode typing bug in
+the runner's own
 `xpcall` usage, since fixed. See `tests/TestRunner.luau`'s header comment
 for the full reasoning, and revisit this if Jest-Lua ships real Lune
 support later.
