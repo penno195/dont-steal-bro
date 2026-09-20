@@ -10,6 +10,7 @@ local TestRunner = require("./TestRunner")
 
 require("./Net.spec")
 require("./Config.spec")
+require("./ProfileLogic.spec")
 -- require("./Outcomes.spec") -- add once src/shared/Config/Outcomes.luau exists
 
 TestRunner.run()
