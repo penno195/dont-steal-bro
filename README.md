@@ -98,10 +98,29 @@ interpreter that can't parse `--!strict` Luau syntax at all — so neither
 obvious choice actually satisfies Ground Rule 4 for this project. Since
 pure-logic modules are required to make zero Roblox API calls anyway, they
 don't need Roblox emulation in the first place — `tests/TestRunner.luau`
-is a ~60-line hand-rolled runner that executes directly under Lune's real
-Luau runtime, with no third-party dependency. See its header comment for
-the full reasoning, and revisit this if Jest-Lua ships real Lune support
-later.
+is a ~90-line hand-rolled runner that executes directly under Lune's real
+Luau runtime, with no third-party dependency. This was installed and run
+locally (not just researched): `lune run tests/run` passes both cases in
+`tests/Example.spec.luau`, and along the way `luau-lsp analyze` (see
+below) caught a real strict-mode typing bug in the runner's own
+`xpcall` usage, since fixed. See `tests/TestRunner.luau`'s header comment
+for the full reasoning, and revisit this if Jest-Lua ships real Lune
+support later.
+
+### Type checking
+
+The build plan's original prompt named `luau-analyze` — but the standalone
+`luau-analyze-rojo` tool (the thing that name usually refers to) hasn't
+been released since 2022 and its bundled Luau parser can't read the
+current Roblox global type definitions file's syntax (confirmed locally:
+it fails with dozens of parse errors on `declare extern type ... with`
+syntax). `luau-lsp analyze` is JohnnyMorganz's actively maintained
+replacement for the exact same job, confirmed working against a real
+`rojo sourcemap` and the current Roblox definitions file. Two things to
+keep in sync if either ever changes: the definitions file must be fetched
+from the **same tagged `luau-lsp` version** pinned in `rokit.toml`, not
+its `master` branch — that mismatch (analyzer version vs. defs-file
+syntax version) is exactly what broke the original tool.
 
 ## Ground rules
 

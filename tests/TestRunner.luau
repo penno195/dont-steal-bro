@@ -67,14 +67,21 @@ function TestRunner.run()
 	for _, suite in suites do
 		print(suite.name)
 		for _, case in suite.cases do
-			local ok, err = pcall(case.fn)
+			-- Luau's strict-mode return-arity inference for pcall/xpcall only
+			-- accounts for the wrapped function's own return count (zero,
+			-- for a test case), so the failure message is captured through
+			-- the handler's upvalue instead of xpcall's second return value.
+			local errMessage: string? = nil
+			local ok = xpcall(case.fn, function(e)
+				errMessage = tostring(e)
+			end)
 			if ok then
 				totalPassed += 1
 				print(string.format("  PASS  %s", case.name))
 			else
 				totalFailed += 1
 				print(string.format("  FAIL  %s", case.name))
-				print(string.format("          %s", tostring(err)))
+				print(string.format("          %s", tostring(errMessage)))
 			end
 		end
 	end
