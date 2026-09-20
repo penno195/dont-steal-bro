@@ -215,8 +215,21 @@ export type MapDef = {
 	npcDifficultyModifier: number, -- 0.5–2.0, 1.0 = baseline
 	waveNumber: 1 | 2 | 3,
 	enabled: boolean, -- false = built but not yet live
+	taskStationCount: number, -- 12–24; see note below
 }
 ```
+
+**`taskStationCount` (added by P1-4).** The map author's own DECLARED
+`TaskStation` count, not something introspected from real geometry — maps
+are hand-built in Studio and never synced by Rojo (`CLAUDE.md`), so
+`ConfigValidator` (P1-4) has no access to the live `.rbxl` to count tags
+itself. It exists so boot-time validation can assert this document's own
+rule — every map has at least as many stations as `GameConfig.
+tasksPerPlayer` — against a number, rather than skipping the check
+entirely until P7-1's Studio validator plugin can inspect the real tag
+count. Keep it honest: update it by hand whenever the actual station
+count in Studio changes. P7-1 checking the two numbers actually match is
+future work, not covered yet.
 
 A registry module collects every `MapDef` and asserts at boot that every
 `enabled = true` map has a matching built model in `ServerStorage.Maps` —
