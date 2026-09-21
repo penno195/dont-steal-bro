@@ -108,11 +108,21 @@ Using `c₀ = 2` and a 5-tier reward bracket that grows modestly per tier:
 
 | Tier | Streak range | L / M / S (VU) | Representative streak (n) | Closs = 2n | p* |
 |---|---|---|---|---|---|
-| 1 | 1–2 | 20 / 10 / 5 | 1 | 2 | 0.53 |
+| 1 | 0–2 | 20 / 10 / 5 | 1 | 2 | 0.53 |
 | 2 | 3–5 | 24 / 12 / 6 | 4 | 8 | 0.49 |
 | 3 | 6–9 | 28 / 14 / 7 | 8 | 16 | 0.46 |
 | 4 | 10–14 | 32 / 16 / 8 | 12 | 24 | 0.44 |
 | 5 | 15+ | 36 / 18 / 9 | 18 | 36 | 0.41 |
+
+**Correction, found integrating P3-2 (Decision Studio):** Tier 1's floor
+is streak 0, not 1. The original "1–2" range left a brand-new player's
+very first-ever qualification (streak 0, before any win has incremented
+it) with no covering tier at all — `ProfileLogic.resolveBountyTier`
+errors loudly rather than guessing when that happens, by design, which
+made this a hard crash the first time a real code path could actually
+reach it rather than a theoretical gap. `GameConfig.bountyTiers` and
+`Validate.checkGameConfig`'s own boot-time check (a tier's `minStreak`
+must reach down to 0) both reflect this now.
 
 `p*` falls monotonically from 0.53 to 0.41 as streak climbs — exactly the
 "more to lose, more cautious" effect the brief asks for, derived rather

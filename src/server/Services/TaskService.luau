@@ -70,6 +70,7 @@ local playerStates: { [Player]: PlayerRoundState } = {}
 local finishOrder: { Player } = {}
 local qualificationEmitted = false
 local nextSeedOverride: number? = nil
+local lastQualificationResult: Qualification.QualificationResult? = nil
 
 local function now(): number
 	return Workspace:GetServerTimeNow()
@@ -211,6 +212,7 @@ local function emitQualification()
 
 	local result = Qualification.rank(entries, GameConfig.qualifierCount, GameConfig.qualificationFloorPercent)
 	qualificationEmitted = true
+	lastQualificationResult = result
 	Net.fireAllClients("TaskQualificationResult", result)
 
 	print(
@@ -224,6 +226,7 @@ end
 
 local function beginRace()
 	qualificationEmitted = false
+	lastQualificationResult = nil
 	finishOrder = {}
 	playerStates = {}
 	stationOccupancy = {}
@@ -414,6 +417,15 @@ local TaskService: Loader.Service = {
 			end
 		end
 		return false
+	end,
+
+	-- P3-2: DecisionService's own starting point - the qualifiers/
+	-- alternate this round actually resolved, exactly as broadcast via
+	-- TaskQualificationResult. nil before qualification has been decided
+	-- yet, or after a fresh beginRace() reset (Studio debug-replay
+	-- safety, same reasoning as qualificationEmitted's own reset).
+	getLastQualificationResult = function(): Qualification.QualificationResult?
+		return lastQualificationResult
 	end,
 }
 

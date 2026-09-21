@@ -516,6 +516,88 @@ Net.Remotes = {
 		rateLimit = nil,
 		states = nil,
 	} :: RemoteDef,
+
+	-- P3-2's Decision Studio remotes. See DecisionService.luau's own
+	-- header comment for the full secrecy audit - the short version:
+	-- DecisionChooseIntent carries a choice INTO the server and nothing
+	-- ever carries one back out except DecisionReveal, fired once, after
+	-- every choice is already locked and irreversible.
+
+	-- Server -> client (broadcast - every finalist AND every spectator
+	-- needs the roster, design-decisions.md Q3's "up to 6 finalists
+	-- teleport in together"): fired once when the Studio begins.
+	DecisionParticipants = {
+		name = "DecisionParticipants",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (broadcast): the inner phase machine's own state -
+	-- a name plus an absolute deadline, the same shape RoundState uses
+	-- and for the same reason (architecture.md §3: clients compute their
+	-- own countdowns, no per-second remote).
+	DecisionPhaseChanged = {
+		name = "DecisionPhaseChanged",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (broadcast): "when someone locks in, broadcast
+	-- only that they locked in, never what they chose" (the task's own
+	-- requirement, verbatim) - this payload is ONLY ever {playerId}.
+	DecisionLockedIn = {
+		name = "DecisionLockedIn",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server: a qualifier's Steal/Share submission during
+	-- Choose. Gated to the "DecisionStudio" ROUND state here (NetGuard's
+	-- own coarse gate); DecisionService's own handler checks the FINER
+	-- "is it actually the Choose PHASE right now" itself, since NetGuard
+	-- has no notion of an inner phase machine.
+	DecisionChooseIntent = {
+		name = "DecisionChooseIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ choice = Net.stringEnum({ "Steal", "Share" }) }),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = { "DecisionStudio" },
+	} :: RemoteDef,
+
+	-- Server -> client (broadcast): every choice and the computed
+	-- outcome, fired exactly once, only after every choice is already
+	-- locked (or defaulted) and the profile writes have already
+	-- happened - see DecisionService.luau's own resolution-order
+	-- comment. `revealAt` is a shared absolute timestamp so all clients
+	-- animate the reveal in sync regardless of when each one's copy of
+	-- this event actually finished replicating.
+	DecisionReveal = {
+		name = "DecisionReveal",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server: RoundService's DebugForceRoundState's own
+	-- pattern, verbatim - no `states` gate (a debug override has to work
+	-- from any phase), the real gate is inside DecisionService's own
+	-- handler (Studio or a developer-id allowlist).
+	DecisionDebugForceOutcome = {
+		name = "DecisionDebugForceOutcome",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			branch = Net.stringEnum({ "SoleSteal", "LoneShare", "AllShare", "AllSteal" }),
+		}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.2 },
+		states = nil,
+	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 
 -- ===== Roblox-touching helpers (never called under Lune tests) ======

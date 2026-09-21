@@ -38,9 +38,17 @@ local GameConfig: Validate.GameConfig = {
 		cleanupSeconds = 5,
 	},
 
-	-- payoff-table.md §3's table, verbatim.
+	-- payoff-table.md §3's table, with one fix found integrating P3-2:
+	-- the doc's own "Tier 1: streak range 1-2" leaves streak 0 - a
+	-- player's very first-ever qualification, before they've won
+	-- anything - uncovered by every tier. ProfileLogic.resolveBountyTier
+	-- (P1-5) errors loudly on an uncovered streak by design, which is
+	-- correct behavior for a genuinely misconfigured table, but streak 0
+	-- reaching the Decision Studio is not a misconfiguration - it's the
+	-- ordinary first-time-winner case. Tier 1's floor is lowered to 0
+	-- here (payoff-table.md itself should be updated to "0-2" to match).
 	bountyTiers = {
-		{ tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
+		{ tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
 		{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
 		{ tier = 3, minStreak = 6, soleStealerVU = 28, loneSharerVU = 14, allShareVU = 7 },
 		{ tier = 4, minStreak = 10, soleStealerVU = 32, loneSharerVU = 16, allShareVU = 8 },
@@ -74,6 +82,10 @@ local GameConfig: Validate.GameConfig = {
 	movementViolationLogThreshold = 1.0,
 	movementViolationFlagThreshold = 3.0,
 	movementViolationActThreshold = 6.0, -- unused this version - LOG ONLY
+
+	-- P3-2: design-decisions.md Q4, verbatim ("the leaver's substituted
+	-- choice for the other two is Share") - locked, not a placeholder.
+	decisionStudioDefaultChoice = "Share",
 }
 
 return GameConfig

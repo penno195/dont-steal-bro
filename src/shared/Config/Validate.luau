@@ -186,6 +186,16 @@ export type GameConfig = {
 	movementViolationLogThreshold: number,
 	movementViolationFlagThreshold: number,
 	movementViolationActThreshold: number, -- unused for now - this version is LOG ONLY (the task's own requirement) - reserved for when enforcement is ever enabled
+
+	-- P3-2: the Decision Studio's "configured default choice" - applied
+	-- to any qualifier who never locks in by the Choose deadline (the
+	-- task's own requirement, verbatim: "anyone who never submitted
+	-- takes the configured default choice"). Locked at "Share" per
+	-- design-decisions.md Q4 ("the leaver's substituted choice for the
+	-- other two is Share") - this single field satisfies both a
+	-- disconnected qualifier's Q4 substitution AND a still-connected but
+	-- indecisive one with the same mechanism, deliberately.
+	decisionStudioDefaultChoice: "Steal" | "Share",
 }
 
 -- ===== Issues ============================================================
@@ -459,6 +469,16 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		)
 	end
 
+	if config.decisionStudioDefaultChoice ~= "Steal" and config.decisionStudioDefaultChoice ~= "Share" then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"decisionStudioDefaultChoice",
+			string.format('expected "Steal" or "Share", got %s', tostring(config.decisionStudioDefaultChoice))
+		)
+	end
+
 	for _, field in { "loadingSeconds", "introSeconds", "qualifiedSeconds", "resultsSeconds", "cleanupSeconds" } do
 		local value = (config.roundTimers :: any)[field]
 		if type(value) ~= "number" or value <= 0 then
@@ -468,6 +488,28 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 
 	if #config.bountyTiers == 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "bountyTiers", "must declare at least one tier")
+	end
+
+	-- P3-2 found this the hard way: ProfileLogic.resolveBountyTier errors
+	-- loudly when no tier covers a given streak, and a brand-new
+	-- qualifier's streak really can be 0 (their first-ever win, before
+	-- currentStreak has incremented at all) - so the lowest tier's own
+	-- floor must reach down to 0, not just "the lowest streak anyone
+	-- expects to see."
+	local coversZero = false
+	for _, tier in config.bountyTiers do
+		if tier.minStreak <= 0 then
+			coversZero = true
+		end
+	end
+	if #config.bountyTiers > 0 and not coversZero then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"bountyTiers",
+			"no tier's minStreak is <= 0 - a streak-0 qualifier (a first-ever win) would have no covering tier"
+		)
 	end
 
 	local previousMinStreak: number? = nil

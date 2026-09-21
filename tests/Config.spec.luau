@@ -25,7 +25,7 @@ local function validGameConfig(): Validate.GameConfig
 			cleanupSeconds = 5,
 		},
 		bountyTiers = {
-			{ tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
+			{ tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
 			{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
 		},
 		powerUpInventorySlots = 1,
@@ -39,6 +39,7 @@ local function validGameConfig(): Validate.GameConfig
 		movementViolationLogThreshold = 1.0,
 		movementViolationFlagThreshold = 3.0,
 		movementViolationActThreshold = 6.0,
+		decisionStudioDefaultChoice = "Share",
 	}
 end
 
@@ -271,6 +272,24 @@ TestRunner.describe("Validate.checkGameConfig (P2-9 movement-watch fields)", fun
 	end)
 end)
 
+TestRunner.describe("Validate.checkGameConfig (P3-2 decisionStudioDefaultChoice)", function()
+	TestRunner.it("rejects a value that isn't Steal or Share", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.decisionStudioDefaultChoice = "Pass" :: any
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("accepts Steal as well as the default Share", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.decisionStudioDefaultChoice = "Steal"
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+end)
+
 TestRunner.describe("Validate.checkGameConfig (bounty ordering)", function()
 	TestRunner.it("rejects a tier where soleStealer does not exceed loneSharer", function()
 		local issues = {}
@@ -289,6 +308,25 @@ TestRunner.describe("Validate.checkGameConfig (bounty ordering)", function()
 		}
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it(
+		"rejects a tier set where no tier covers streak 0 - a first-ever win would have no bounty tier",
+		function()
+			local issues = {}
+			local config = validGameConfig()
+			config.bountyTiers = { { tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 } }
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
+	)
+
+	TestRunner.it("accepts a tier set whose lowest floor is exactly 0", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.bountyTiers = { { tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 } }
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(0)
 	end)
 end)
 
