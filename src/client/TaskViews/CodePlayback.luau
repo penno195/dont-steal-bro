@@ -179,7 +179,13 @@ local function onResult(stationId: string, success: boolean)
 			end
 		end)
 	else
-		statusLabel.Text = "Wrong - try again"
+		-- Can't tell from `success` alone whether that digit was right
+		-- (just not the LAST one yet) or actually wrong (progress reset)
+		-- - TaskResult only ever carries the whole attempt's outcome, not
+		-- per-digit feedback (see Types.luau's own TaskHandler doc
+		-- comment on validate's return shape). Never claims "wrong" on a
+		-- digit that might have been correct.
+		statusLabel.Text = "Keep going"
 	end
 end
 

@@ -402,6 +402,37 @@ Net.Remotes = {
 		rateLimit = { capacity = 10, refillPerSecond = 5 },
 		states = { "Race" },
 	} :: RemoteDef,
+
+	-- PressureValve's (P2-6's Tap reference task) own submission remote:
+	-- one tap per call, no payload beyond which station - the server
+	-- privately holds the rolled target count and does its own min-
+	-- interval enforcement (src/server/TaskHandlers/PressureValve.luau).
+	-- Rate limit set comfortably above the server's own ~70ms min tap
+	-- interval (~14/s) so a legitimate fast tapper is never the one
+	-- throttled - only an actual flood is.
+	TapSubmit = {
+		name = "TapSubmit",
+		direction = "ServerIntent",
+		schema = Net.struct({ stationId = Net.string({ maxLength = 64 }) }),
+		rateLimit = { capacity = 20, refillPerSecond = 20 },
+		states = { "Race" },
+	} :: RemoteDef,
+
+	-- FuseRewire's (P2-6's Drag reference task) own submission remote:
+	-- one (fuseId, slotId) drop per call - the server privately holds the
+	-- correct mapping (src/server/TaskHandlers/FuseRewire.luau); this
+	-- payload alone never reveals it, right or wrong.
+	FuseDropSubmit = {
+		name = "FuseDropSubmit",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			stationId = Net.string({ maxLength = 64 }),
+			fuseId = Net.string({ maxLength = 32 }),
+			slotId = Net.string({ maxLength = 32 }),
+		}),
+		rateLimit = { capacity = 10, refillPerSecond = 3 },
+		states = { "Race" },
+	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 
 -- ===== Roblox-touching helpers (never called under Lune tests) ======

@@ -11,6 +11,10 @@
 -- luau firing KeypadDigitSubmit) - the controller never needs to know
 -- what that shape is, only which view to dispatch to by taskId.
 
+local Workspace = game:GetService("Workspace")
+
+local Types = {}
+
 export type TaskView = {
 	taskId: string,
 
@@ -32,4 +36,28 @@ export type TaskView = {
 	hide: (stationId: string) -> (),
 }
 
-return {}
+-- Shared by any view whose interaction (drag, precise tapping) would
+-- otherwise fight with the default camera-rotate gesture on the same
+-- touch input - P2-6's own requirement: "camera input frozen while the
+-- view is open." Scriptable hands the camera fully to script control
+-- (so the default rotate-on-drag behavior stops responding) without
+-- moving it - leaving CurrentCamera.CFrame exactly where it was is what
+-- "frozen," not "hidden" or "reset," actually means here. Custom hands
+-- it back to the default player camera script. A view calls freezeCamera
+-- from show() and unfreezeCamera from both onResult's success branch and
+-- hide() - see PressureValve.luau/FuseRewire.luau.
+function Types.freezeCamera()
+	local camera = Workspace.CurrentCamera
+	if camera ~= nil then
+		camera.CameraType = Enum.CameraType.Scriptable
+	end
+end
+
+function Types.unfreezeCamera()
+	local camera = Workspace.CurrentCamera
+	if camera ~= nil then
+		camera.CameraType = Enum.CameraType.Custom
+	end
+end
+
+return Types

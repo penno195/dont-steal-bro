@@ -208,6 +208,18 @@ function TaskHandlerService:init()
 		handleSubmission(player, payload.stationId, { digit = payload.digit })
 	end)
 
+	-- PressureValve's own submission remote (P2-6's Tap reference task) -
+	-- no task-specific fields beyond stationId, which the dispatcher
+	-- already consumed above.
+	NetGuard.on("TapSubmit", function(player: Player, payload: any)
+		handleSubmission(player, payload.stationId, {})
+	end)
+
+	-- FuseRewire's own submission remote (P2-6's Drag reference task).
+	NetGuard.on("FuseDropSubmit", function(player: Player, payload: any)
+		handleSubmission(player, payload.stationId, { fuseId = payload.fuseId, slotId = payload.slotId })
+	end)
+
 	Players.PlayerRemoving:Connect(function(player: Player)
 		endSession(player)
 	end)
