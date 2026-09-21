@@ -196,6 +196,15 @@ export type GameConfig = {
 	-- disconnected qualifier's Q4 substitution AND a still-connected but
 	-- indecisive one with the same mechanism, deliberately.
 	decisionStudioDefaultChoice: "Steal" | "Share",
+
+	-- P3-3: how close two finalists' Characters must be for the Negotiate
+	-- text channel to deliver between them (ShouldDeliverCallback) - also
+	-- the number P3-4's podium layout has to comfortably fit inside,
+	-- since it "must state the stud distance chosen and why" against
+	-- this same figure. Spatial voice's own falloff is a separate,
+	-- Audio-API-managed curve (AudioEmitter.DistanceAttenuation) this
+	-- field does NOT control - see StudioChat.luau's own header comment.
+	decisionStudioChatRangeStuds: number,
 }
 
 -- ===== Issues ============================================================
@@ -477,6 +486,9 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 			"decisionStudioDefaultChoice",
 			string.format('expected "Steal" or "Share", got %s', tostring(config.decisionStudioDefaultChoice))
 		)
+	end
+	if config.decisionStudioChatRangeStuds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "decisionStudioChatRangeStuds", "must be positive")
 	end
 
 	for _, field in { "loadingSeconds", "introSeconds", "qualifiedSeconds", "resultsSeconds", "cleanupSeconds" } do

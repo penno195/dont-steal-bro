@@ -80,6 +80,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Outcomes = require(ReplicatedStorage.Shared.Config.Outcomes)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
+local Signal = require(ReplicatedStorage.Packages.Signal)
 
 export type Phase = "Intro" | "Negotiate" | "Choose" | "Reveal" | "Resolve"
 export type OutcomeBranch = "SoleSteal" | "LoneShare" | "AllShare" | "AllSteal"
@@ -87,6 +88,29 @@ export type OutcomeBranch = "SoleSteal" | "LoneShare" | "AllShare" | "AllSteal"
 -- PLACEHOLDER: no real developer UserIds configured yet - same stance
 -- RoundService.luau's own identical placeholder takes.
 local DEBUG_USER_IDS: { number } = {}
+
+-- Lets another service (P3-3's StudioChat, P3-4+) react to a phase
+-- starting/ending without polling getPhase() - same Signal-per-state
+-- pattern RoundService.luau already established, and created eagerly at
+-- module load for the identical reason: a subscriber's own init() has
+-- to be free to subscribe regardless of Loader's topological order.
+-- `any`, not a generic Signal<T...> type - the same luau-lsp gap
+-- RoundService.luau's own header comment documents for this exact
+-- package.
+local enterSignals: { [Phase]: any } = {
+	Intro = Signal.new(),
+	Negotiate = Signal.new(),
+	Choose = Signal.new(),
+	Reveal = Signal.new(),
+	Resolve = Signal.new(),
+}
+local exitSignals: { [Phase]: any } = {
+	Intro = Signal.new(),
+	Negotiate = Signal.new(),
+	Choose = Signal.new(),
+	Reveal = Signal.new(),
+	Resolve = Signal.new(),
+}
 
 -- Small lead time between broadcasting DecisionReveal and the instant
 -- `revealAt` names, so a client's own (possibly LONGER) reveal
@@ -131,9 +155,17 @@ local function cancelPendingPhaseTimer()
 	end
 end
 
+-- The one place `currentPhase` ever changes - so it's also the one
+-- place that can correctly fire "the previous phase just ended" before
+-- "the new phase just began." A subscriber never sees these fire out of
+-- order or for the wrong phase.
 local function broadcastPhase(phase: Phase, endsAt: number?)
+	if currentPhase ~= nil then
+		exitSignals[currentPhase]:Fire()
+	end
 	currentPhase = phase
 	Net.fireAllClients("DecisionPhaseChanged", { phase = phase, endsAt = endsAt })
+	enterSignals[phase]:Fire(endsAt)
 end
 
 local function isDebugAuthorized(player: Player?): boolean
@@ -508,6 +540,14 @@ local DecisionService: Loader.Service = {
 
 	getQualifierIds = function(): { number }
 		return table.clone(qualifierIds)
+	end,
+
+	onPhaseEnter = function(phase: Phase, callback: (endsAt: number?) -> ())
+		return enterSignals[phase]:Connect(callback)
+	end,
+
+	onPhaseExit = function(phase: Phase, callback: () -> ())
+		return exitSignals[phase]:Connect(callback)
 	end,
 }
 

@@ -598,6 +598,36 @@ Net.Remotes = {
 		rateLimit = { capacity = 3, refillPerSecond = 0.2 },
 		states = nil,
 	} :: RemoteDef,
+
+	-- P3-3's typing-indicator remotes. No remote exists for "speaking" -
+	-- that's read directly off AudioDeviceInput.Active, a replicated
+	-- property, with no server relay needed at all (see StudioChat.luau's
+	-- own header comment).
+
+	-- Client -> server: "I'm typing, right now, in the Negotiate
+	-- channel." No text, no channel name (the server already knows which
+	-- channel is live) - just a bare ping the sender's own client-side
+	-- throttling already keeps infrequent.
+	StudioChatTypingIntent = {
+		name = "StudioChatTypingIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 1 },
+		states = { "DecisionStudio" },
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the OTHER finalists only, never
+	-- fireAllClients): "this playerId is typing right now." The
+	-- receiving client owns its own display expiry (see
+	-- StudioChatController.luau) - this fires once per intent, not on a
+	-- timer.
+	StudioChatTypingStatus = {
+		name = "StudioChatTypingStatus",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 
 -- ===== Roblox-touching helpers (never called under Lune tests) ======

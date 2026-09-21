@@ -86,6 +86,10 @@ local GameConfig: Validate.GameConfig = {
 	-- P3-2: design-decisions.md Q4, verbatim ("the leaver's substituted
 	-- choice for the other two is Share") - locked, not a placeholder.
 	decisionStudioDefaultChoice = "Share",
+
+	-- P3-3: PLACEHOLDER - no locked value in docs/ yet. P3-4's podium
+	-- layout is expected to fit comfortably inside this.
+	decisionStudioChatRangeStuds = 30,
 }
 
 return GameConfig

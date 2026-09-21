@@ -40,6 +40,7 @@ local function validGameConfig(): Validate.GameConfig
 		movementViolationFlagThreshold = 3.0,
 		movementViolationActThreshold = 6.0,
 		decisionStudioDefaultChoice = "Share",
+		decisionStudioChatRangeStuds = 30,
 	}
 end
 
@@ -287,6 +288,14 @@ TestRunner.describe("Validate.checkGameConfig (P3-2 decisionStudioDefaultChoice)
 		config.decisionStudioDefaultChoice = "Steal"
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects a non-positive decisionStudioChatRangeStuds", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.decisionStudioChatRangeStuds = 0
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
 	end)
 end)
 
