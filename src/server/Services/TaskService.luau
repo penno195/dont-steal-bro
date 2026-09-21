@@ -372,6 +372,49 @@ local TaskService: Loader.Service = {
 	getStationOccupancy = function(stationId: string): number
 		return stationOccupancy[stationId] or 0
 	end,
+
+	-- The three small read-only surfaces P2-5's TaskHandlerService needs
+	-- to dispatch a live interaction: which station Instance a stationId
+	-- actually is, which specific task id this PLAYER was assigned there
+	-- (a station's AcceptedTaskIds can list more than one; TaskAssignment
+	-- already picked exactly one per player at assignment time), and
+	-- whether it's still legitimately theirs to attempt right now.
+	getStationPart = function(stationId: string): BasePart?
+		return stationParts[stationId]
+	end,
+
+	getTaskIdFor = function(player: Player, stationId: string): string?
+		local state = playerStates[player]
+		if state == nil then
+			return nil
+		end
+		for _, assignment in state.assignments do
+			if assignment.stationId == stationId then
+				return assignment.taskId
+			end
+		end
+		return nil
+	end,
+
+	-- Combines "on their list" and "not already complete" into the one
+	-- check a dispatcher actually needs - "that the task is actually on
+	-- their list and not already complete" (P2-5's own requirement,
+	-- verbatim). recordCompletion re-checks both independently anyway
+	-- (defense in depth - see its own comment), so this is a read-only
+	-- convenience for a guard check BEFORE calling into a handler, not
+	-- the actual enforcement point.
+	isAssignedAndIncomplete = function(player: Player, stationId: string): boolean
+		local state = playerStates[player]
+		if state == nil or state.completed[stationId] then
+			return false
+		end
+		for _, assignment in state.assignments do
+			if assignment.stationId == stationId then
+				return true
+			end
+		end
+		return false
+	end,
 }
 
 function TaskService:init()

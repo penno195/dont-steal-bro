@@ -61,6 +61,33 @@ TestRunner.describe("Net.number", function()
 	end)
 end)
 
+TestRunner.describe("Net.string", function()
+	TestRunner.it("accepts a well-formed string within the default bounds", function()
+		local ok = Net.string().validate("station-01")
+		TestRunner.expect(ok):toBe(true)
+	end)
+
+	TestRunner.it("rejects the wrong type entirely", function()
+		local ok = Net.string().validate(42)
+		TestRunner.expect(ok):toBe(false)
+	end)
+
+	TestRunner.it("rejects a string shorter than minLength", function()
+		local ok = Net.string({ minLength = 3 }).validate("ab")
+		TestRunner.expect(ok):toBe(false)
+	end)
+
+	TestRunner.it("rejects a string longer than maxLength - the abuse case an unbounded string would allow", function()
+		local ok = Net.string({ maxLength = 8 }).validate(string.rep("x", 5000))
+		TestRunner.expect(ok):toBe(false)
+	end)
+
+	TestRunner.it("defaults maxLength to 64 rather than leaving it unbounded", function()
+		local ok = Net.string().validate(string.rep("x", 65))
+		TestRunner.expect(ok):toBe(false)
+	end)
+end)
+
 TestRunner.describe("Net.stringEnum", function()
 	local ChoiceSchema = Net.stringEnum({ "Steal", "Share" })
 

@@ -70,6 +70,34 @@ function Net.number(opts: { min: number?, max: number?, integer: boolean? }?): S
 	}
 end
 
+-- Bounded-length free text - `stationId`/task ids and the like, where
+-- `stringEnum` (a closed set) doesn't fit but an UNBOUNDED string would
+-- let a hostile payload carry an arbitrarily large string through a
+-- remote that otherwise looks well-formed (a bandwidth/memory abuse
+-- vector, not just a style nit) - `maxLength` defaults to a conservative
+-- 64 for exactly that reason, so a new call site has to opt INTO a
+-- longer bound rather than silently getting an unbounded one.
+function Net.string(opts: { minLength: number?, maxLength: number? }?): Schema<string>
+	local minLength = if opts and opts.minLength then opts.minLength else 1
+	local maxLength = if opts and opts.maxLength then opts.maxLength else 64
+
+	return {
+		validate = function(value: any): (boolean, string?, string?)
+			if type(value) ~= "string" then
+				return false, nil, string.format("expected a string, got %s", type(value))
+			end
+			local length = #(value :: string)
+			if length < minLength then
+				return false, nil, string.format("expected length >= %d, got %d", minLength, length)
+			end
+			if length > maxLength then
+				return false, nil, string.format("expected length <= %d, got %d", maxLength, length)
+			end
+			return true, value, nil
+		end,
+	}
+end
+
 function Net.boolean(): Schema<boolean>
 	return {
 		validate = function(value: any): (boolean, boolean?, string?)
@@ -321,6 +349,58 @@ Net.Remotes = {
 		schema = nil,
 		rateLimit = nil,
 		states = nil,
+	} :: RemoteDef,
+
+	-- P2-5's task-interaction remotes - see src/server/TaskHandlers/
+	-- Types.luau for the framework these plug into. TaskInteract is the
+	-- one remote every task's client view shares to start (or restart) a
+	-- challenge; TaskChallenge/TaskResult are ALSO shared, but critically
+	-- are fired with Net.fireClient (never fireAllClients) since a
+	-- challenge payload is that one player's private secret - see
+	-- TaskHandlerService.luau's own header comment for the exploit this
+	-- prevents. A per-task submission remote (e.g. KeypadDigitSubmit
+	-- below) is the one part of this that ISN'T shared - each task's
+	-- input shape is genuinely different, and that's fine: declaring one
+	-- more remote here is adding a config-like entry, not a service edit
+	-- (Ground Rule 2).
+
+	TaskInteract = {
+		name = "TaskInteract",
+		direction = "ServerIntent",
+		schema = Net.struct({ stationId = Net.string({ maxLength = 64 }) }),
+		rateLimit = { capacity = 5, refillPerSecond = 1 },
+		states = { "Race" },
+	} :: RemoteDef,
+
+	TaskChallenge = {
+		name = "TaskChallenge",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	TaskResult = {
+		name = "TaskResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- CodePlayback's (the P2-5 reference task) own submission remote: one
+	-- digit tap per call, against the server's privately-held code - see
+	-- src/server/TaskHandlers/CodePlayback.luau. Generous rate limit
+	-- (real rapid tapping shouldn't get throttled) but still bounded.
+	KeypadDigitSubmit = {
+		name = "KeypadDigitSubmit",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			stationId = Net.string({ maxLength = 64 }),
+			digit = Net.number({ min = 0, max = 9, integer = true }),
+		}),
+		rateLimit = { capacity = 10, refillPerSecond = 5 },
+		states = { "Race" },
 	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 
