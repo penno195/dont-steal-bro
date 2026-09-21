@@ -19,6 +19,6 @@ require("./TaskAssignment.spec")
 require("./PowerUpLogic.spec")
 require("./StatusEffectResolver.spec")
 require("./MovementSanity.spec")
--- require("./Outcomes.spec") -- add once src/shared/Config/Outcomes.luau exists
+require("./Outcomes.spec")
 
 TestRunner.run()
