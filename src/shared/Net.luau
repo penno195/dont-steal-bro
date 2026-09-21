@@ -294,6 +294,34 @@ Net.Remotes = {
 		rateLimit = { capacity = 3, refillPerSecond = 0.2 },
 		states = nil,
 	} :: RemoteDef,
+
+	-- P2-4's TaskService remotes - both server -> client, both trusted
+	-- senders, so ServerBroadcast/no schema, same as RoundState above.
+
+	-- The minimal HUD payload: just enough for a live standings display
+	-- (who's on how many tasks) - never a per-station breakdown, and
+	-- never on a per-second tick (architecture.md §3) - this fires once
+	-- per real completion event instead.
+	TaskProgress = {
+		name = "TaskProgress",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- The richer results-screen payload: TaskService's full Qualification.
+	-- QualificationResult (ranked list, tie-break reasons, qualifiers,
+	-- the 4th-place alternate for design-decisions.md Q3) - fired once,
+	-- the moment qualification is actually decided (either the first 3
+	-- finishers, or the hard round timer per Q2).
+	TaskQualificationResult = {
+		name = "TaskQualificationResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 
 -- ===== Roblox-touching helpers (never called under Lune tests) ======
