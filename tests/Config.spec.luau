@@ -28,6 +28,11 @@ local function validGameConfig(): Validate.GameConfig
 			{ tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
 			{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
 		},
+		powerUpInventorySlots = 1,
+		powerUpFullInventoryPolicy = "Refuse",
+		powerUpUseRangeStuds = 24,
+		powerUpTargetConeDegrees = 90,
+		powerUpRotationTimers = { Common = 20, Uncommon = 35, Rare = 60 },
 	}
 end
 
@@ -54,6 +59,7 @@ local function validMap(id: string, taskIds: { string }): Validate.MapDef
 		waveNumber = 1,
 		enabled = true,
 		taskStationCount = 12,
+		powerUpRarityWeightMultipliers = nil,
 	}
 end
 
@@ -129,6 +135,22 @@ TestRunner.describe("Validate.checkMap", function()
 		Validate.checkMap("M.luau", map, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
 	end)
+
+	TestRunner.it("accepts an omitted powerUpRarityWeightMultipliers (nil = no override)", function()
+		local issues = {}
+		local map = validMap("m", { "pressure-valve" }) -- non-empty enabledTaskIds, so only THIS field is under test
+		map.powerUpRarityWeightMultipliers = nil
+		Validate.checkMap("M.luau", map, issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects a non-positive powerUpRarityWeightMultipliers entry", function()
+		local issues = {}
+		local map = validMap("m", {})
+		map.powerUpRarityWeightMultipliers = { Common = 1, Uncommon = 1, Rare = 0 }
+		Validate.checkMap("M.luau", map, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
 end)
 
 TestRunner.describe("Validate.checkPowerUp (design-decisions.md Q8)", function()
@@ -161,6 +183,40 @@ TestRunner.describe("Validate.checkTitle", function()
 		local title = validTitle("t", 0)
 		title.colorHex = "teal"
 		Validate.checkTitle("T.luau", title, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P2-7 power-up fields)", function()
+	TestRunner.it("rejects a non-positive powerUpInventorySlots", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.powerUpInventorySlots = 0
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a powerUpFullInventoryPolicy that isn't Swap or Refuse", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.powerUpFullInventoryPolicy = "Discard" :: any
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a powerUpTargetConeDegrees above 360", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.powerUpTargetConeDegrees = 400
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a non-positive powerUpRotationTimers entry", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.powerUpRotationTimers = { Common = 20, Uncommon = 35, Rare = -1 }
+		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
 	end)
 end)

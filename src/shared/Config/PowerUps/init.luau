@@ -1,9 +1,9 @@
 --!strict
--- Auto-collects every sibling power-up definition file. Empty for now -
--- docs/powerups.md catalogues all 10, but none has been ported to a real
--- PowerUpDef file yet (that's P2-7's job, alongside the handler that
--- gives each one its actual effect). Add an 11th the same way as a task:
--- one file, nothing else to touch (Ground Rule 2).
+-- Auto-collects every sibling power-up definition file. All 10 of
+-- docs/powerups.md's catalogue are ported here as of P2-7 - the actual
+-- EFFECT each one applies (speed changes, immobilize, vision, etc) is
+-- P2-8's job (Status Effects), not this registry's. Add an 11th the same
+-- way as a task: one file, nothing else to touch (Ground Rule 2).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Registry = require(ReplicatedStorage.Shared.Config.Registry)

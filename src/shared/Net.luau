@@ -109,6 +109,24 @@ function Net.boolean(): Schema<boolean>
 	}
 end
 
+-- Wraps another schema to also accept a MISSING field - a Lua table has
+-- no way to store an explicit nil under a key distinct from the key
+-- simply being absent, so "the client omitted this field" and "the
+-- client sent nil" are the same case here, and this is what lets
+-- Net.struct declare a genuinely optional field (P2-7's PowerUpUseIntent:
+-- a target hint the client may or may not send) rather than every field
+-- being required.
+function Net.optional<T>(schema: Schema<T>): Schema<T?>
+	return {
+		validate = function(value: any): (boolean, T?, string?)
+			if value == nil then
+				return true, nil, nil
+			end
+			return schema.validate(value)
+		end,
+	}
+end
+
 function Net.stringEnum(values: { string }): Schema<string>
 	return {
 		validate = function(value: any): (boolean, string?, string?)
@@ -432,6 +450,48 @@ Net.Remotes = {
 		}),
 		rateLimit = { capacity = 10, refillPerSecond = 3 },
 		states = { "Race" },
+	} :: RemoteDef,
+
+	-- P2-7's power-up remotes. Note what's deliberately NOT in
+	-- PowerUpUseIntent's payload: no powerUpId (the server already knows
+	-- what's in the player's own inventory slot) and no effect of any
+	-- kind - "a use-intent remote carrying only the target hint, never
+	-- the effect" (the task's own requirement, verbatim). See
+	-- PowerUpService.luau's own header comment for the full exploit
+	-- list this shape closes off.
+	PowerUpUseIntent = {
+		name = "PowerUpUseIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			slotIndex = Net.optional(Net.number({ min = 1, integer = true })),
+			targetPlayerId = Net.optional(Net.number({ min = 1, integer = true })),
+		}),
+		rateLimit = { capacity = 5, refillPerSecond = 1 },
+		states = { "Race" },
+	} :: RemoteDef,
+
+	-- Server -> client (targeted, never fireAllClients - see
+	-- PowerUpService.luau): a player's own current inventory, for HUD
+	-- display.
+	PowerUpInventoryChanged = {
+		name = "PowerUpInventoryChanged",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the USER only): confirms what a use
+	-- attempt actually did, including which target smart-targeting
+	-- picked - "returns which one it chose so the UI can confirm it"
+	-- (the task's own requirement). Cross-player visual feedback for an
+	-- applied effect is P2-8's job (Status Effects), not this remote's.
+	PowerUpUseResult = {
+		name = "PowerUpUseResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
 	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 

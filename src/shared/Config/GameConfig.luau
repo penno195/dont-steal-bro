@@ -46,6 +46,24 @@ local GameConfig: Validate.GameConfig = {
 		{ tier = 4, minStreak = 10, soleStealerVU = 32, loneSharerVU = 16, allShareVU = 8 },
 		{ tier = 5, minStreak = 15, soleStealerVU = 36, loneSharerVU = 18, allShareVU = 9 },
 	},
+
+	-- P2-7: PowerUpService's own field-pickup inventory, distinct from
+	-- powerups.md's separate pre-game Loadout selection. All PLACEHOLDER
+	-- - no locked value in docs/ yet, same stance as raceDurationSeconds.
+	powerUpInventorySlots = 1, -- powerups.md: "one inventory slot per player by default"
+	powerUpFullInventoryPolicy = "Refuse", -- picking up while full is refused (the world pickup stays available) rather than swapping the held item
+	powerUpUseRangeStuds = 24, -- max range for an Aimed/Nearest target
+	powerUpTargetConeDegrees = 90, -- full cone width for smart-targeting an Aimed power-up with no explicit target hint
+
+	-- Base respawn seconds per rarity tier - a MapDef may multiply these
+	-- (Validate.PowerUpRarityWeights' own doc comment). Ordered so a
+	-- rarer tier respawns more slowly by default, without any map needing
+	-- to override anything.
+	powerUpRotationTimers = {
+		Common = 20,
+		Uncommon = 40,
+		Rare = 75,
+	},
 }
 
 return GameConfig

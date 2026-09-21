@@ -19,6 +19,18 @@
 
 local Validate = {}
 
+-- Shared by MapDef (below) and GameConfig.powerUpRotationTimers (P2-7,
+-- further down) - one number per PowerUpDef.rarity value. A weight in
+-- MapDef is a MULTIPLIER against GameConfig's own base respawn seconds
+-- (nil/omitted = {1,1,1}, no change); the same-shaped value in GameConfig
+-- IS the base respawn seconds. Two different units sharing one shape,
+-- documented at each use site rather than implied by the type alone.
+export type PowerUpRarityWeights = {
+	Common: number,
+	Uncommon: number,
+	Rare: number,
+}
+
 -- ===== MapDef: docs/map-kit-spec.md §2 ==================================
 -- `taskStationCount` is NOT part of the original map-kit-spec.md type -
 -- added here so this validator has a declared number to cross-check
@@ -41,6 +53,7 @@ export type MapDef = {
 	waveNumber: number, -- 1 | 2 | 3
 	enabled: boolean,
 	taskStationCount: number, -- see note above
+	powerUpRarityWeightMultipliers: PowerUpRarityWeights?, -- P2-7: nil = {1,1,1}, no change from GameConfig.powerUpRotationTimers' base respawn seconds - see PowerUpService.luau's own header comment for why "per-map rarity weights" lands here rather than as a map-kit-spec.md tag/attribute
 }
 
 -- ===== TaskDef: docs/tasks-catalogue.md =================================
@@ -153,6 +166,15 @@ export type GameConfig = {
 	studioTimers: StudioTimers,
 	roundTimers: RoundTimers,
 	bountyTiers: { BountyTier },
+
+	-- P2-7: the IN-ROUND field-pickup inventory PowerUpService owns - not
+	-- to be confused with powerups.md's separate pre-game 3-item Loadout
+	-- slot selection (a future Hub/StoreService concern, unbuilt).
+	powerUpInventorySlots: number, -- default 1, powerups.md: "one inventory slot per player by default, configurable"
+	powerUpFullInventoryPolicy: "Swap" | "Refuse", -- picking up while full: swap the oldest held item, or refuse the new pickup (world pickup stays available)
+	powerUpUseRangeStuds: number, -- max range for an Aimed/Nearest target
+	powerUpTargetConeDegrees: number, -- full cone width (not half-angle) for smart-targeting an Aimed power-up with no explicit target hint
+	powerUpRotationTimers: PowerUpRarityWeights, -- base respawn seconds per rarity tier; a MapDef may multiply these (see PowerUpRarityWeights' own doc comment)
 }
 
 -- ===== Issues ============================================================
@@ -217,6 +239,22 @@ function Validate.checkMap(fileName: string, def: MapDef, issues: { Issue })
 			"taskStationCount",
 			string.format("expected 12-24 per map-kit-spec.md §1, got %s", tostring(def.taskStationCount))
 		)
+	end
+
+	if def.powerUpRarityWeightMultipliers ~= nil then
+		local weights = def.powerUpRarityWeightMultipliers
+		for _, rarity in { "Common", "Uncommon", "Rare" } do
+			local multiplier = (weights :: any)[rarity]
+			if type(multiplier) ~= "number" or multiplier <= 0 then
+				issue(
+					issues,
+					"Map",
+					fileName,
+					"powerUpRarityWeightMultipliers." .. rarity,
+					string.format("must be a positive number, got %s", tostring(multiplier))
+				)
+			end
+		end
 	end
 end
 
@@ -348,6 +386,37 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	end
 	if config.raceDurationSeconds <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "raceDurationSeconds", "must be positive")
+	end
+
+	if config.powerUpInventorySlots <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "powerUpInventorySlots", "must be positive")
+	end
+	if config.powerUpFullInventoryPolicy ~= "Swap" and config.powerUpFullInventoryPolicy ~= "Refuse" then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"powerUpFullInventoryPolicy",
+			string.format('expected "Swap" or "Refuse", got %s', tostring(config.powerUpFullInventoryPolicy))
+		)
+	end
+	if config.powerUpUseRangeStuds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "powerUpUseRangeStuds", "must be positive")
+	end
+	if config.powerUpTargetConeDegrees <= 0 or config.powerUpTargetConeDegrees > 360 then
+		issue(issues, "GameConfig", "GameConfig.luau", "powerUpTargetConeDegrees", "must be > 0 and <= 360")
+	end
+	for _, rarity in { "Common", "Uncommon", "Rare" } do
+		local seconds = (config.powerUpRotationTimers :: any)[rarity]
+		if type(seconds) ~= "number" or seconds <= 0 then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"powerUpRotationTimers." .. rarity,
+				"must be a positive number"
+			)
+		end
 	end
 
 	for _, field in { "loadingSeconds", "introSeconds", "qualifiedSeconds", "resultsSeconds", "cleanupSeconds" } do

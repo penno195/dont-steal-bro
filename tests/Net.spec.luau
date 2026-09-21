@@ -88,6 +88,37 @@ TestRunner.describe("Net.string", function()
 	end)
 end)
 
+TestRunner.describe("Net.optional", function()
+	local OptionalNumber = Net.optional(Net.number({ min = 1, integer = true }))
+
+	TestRunner.it("accepts a missing field (nil)", function()
+		local ok, value = OptionalNumber.validate(nil)
+		TestRunner.expect(ok):toBe(true)
+		TestRunner.expect(value):toBe(nil)
+	end)
+
+	TestRunner.it("accepts a well-formed present value", function()
+		local ok, value = OptionalNumber.validate(5)
+		TestRunner.expect(ok):toBe(true)
+		TestRunner.expect(value):toBe(5)
+	end)
+
+	TestRunner.it("still rejects a present but malformed value - optional isn't a bypass", function()
+		local ok = OptionalNumber.validate(0.5)
+		TestRunner.expect(ok):toBe(false)
+	end)
+
+	TestRunner.it("composes inside Net.struct as a genuinely optional field", function()
+		local Schema = Net.struct({ hint = Net.optional(Net.number({ min = 1 })) })
+		local ok1 = Schema.validate({})
+		local ok2 = Schema.validate({ hint = 5 })
+		local ok3 = Schema.validate({ hint = -1 })
+		TestRunner.expect(ok1):toBe(true)
+		TestRunner.expect(ok2):toBe(true)
+		TestRunner.expect(ok3):toBe(false)
+	end)
+end)
+
 TestRunner.describe("Net.stringEnum", function()
 	local ChoiceSchema = Net.stringEnum({ "Steal", "Share" })
 
