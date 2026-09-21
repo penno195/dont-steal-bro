@@ -33,6 +33,12 @@ local function validGameConfig(): Validate.GameConfig
 		powerUpUseRangeStuds = 24,
 		powerUpTargetConeDegrees = 90,
 		powerUpRotationTimers = { Common = 20, Uncommon = 35, Rare = 60 },
+		movementSampleIntervalSeconds = 0.5,
+		movementSpeedTolerance = 1.25,
+		movementViolationDecayPerSecond = 0.5,
+		movementViolationLogThreshold = 1.0,
+		movementViolationFlagThreshold = 3.0,
+		movementViolationActThreshold = 6.0,
 	}
 end
 
@@ -218,6 +224,50 @@ TestRunner.describe("Validate.checkGameConfig (P2-7 power-up fields)", function(
 		config.powerUpRotationTimers = { Common = 20, Uncommon = 35, Rare = -1 }
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P2-9 movement-watch fields)", function()
+	TestRunner.it("rejects a non-positive movementSampleIntervalSeconds", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.movementSampleIntervalSeconds = 0
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a non-positive movementSpeedTolerance", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.movementSpeedTolerance = 0
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a negative movementViolationDecayPerSecond", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.movementViolationDecayPerSecond = -1
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects thresholds not ordered log <= flag <= act", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.movementViolationFlagThreshold = 0.5 -- below the log threshold
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("accepts thresholds with equal log/flag/act values", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.movementViolationLogThreshold = 2
+		config.movementViolationFlagThreshold = 2
+		config.movementViolationActThreshold = 2
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(0)
 	end)
 end)
 

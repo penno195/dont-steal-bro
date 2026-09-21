@@ -256,6 +256,14 @@ local StatusEffects: Loader.Service = {
 	name = "StatusEffects",
 	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "PowerUpService" },
 
+	-- Exposed so a consumer (P2-9's MovementWatch, comparing observed
+	-- movement against "the maximum the status effect resolver says they
+	-- should be capable of") can derive a real studs/second figure from
+	-- getResolvedStats().MoveSpeed without duplicating this number as a
+	-- second, potentially-drifting constant of its own.
+	baseWalkSpeed = BASE_WALK_SPEED,
+	baseJumpPower = BASE_JUMP_POWER,
+
 	applyEffectFor = applyEffectFor,
 
 	getActiveEffects = function(player: Player): { StatusEffectResolver.ActiveEffect }

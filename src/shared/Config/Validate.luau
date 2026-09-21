@@ -175,6 +175,17 @@ export type GameConfig = {
 	powerUpUseRangeStuds: number, -- max range for an Aimed/Nearest target
 	powerUpTargetConeDegrees: number, -- full cone width (not half-angle) for smart-targeting an Aimed power-up with no explicit target hint
 	powerUpRotationTimers: PowerUpRarityWeights, -- base respawn seconds per rarity tier; a MapDef may multiply these (see PowerUpRarityWeights' own doc comment)
+
+	-- P2-9: MovementWatch's thresholds - "configurable... not hard-coded"
+	-- (the task's own requirement, verbatim). All PLACEHOLDER, same
+	-- stance raceDurationSeconds takes - no real logged data exists yet
+	-- to tune these against (see docs/movement-watch-notes.md).
+	movementSampleIntervalSeconds: number, -- fixed sampling interval, not every frame
+	movementSpeedTolerance: number, -- multiplier grace above the resolved max (e.g. 1.25 = 25% headroom) before a sample counts as any violation at all
+	movementViolationDecayPerSecond: number, -- how fast the rolling score falls back toward 0 between violations
+	movementViolationLogThreshold: number,
+	movementViolationFlagThreshold: number,
+	movementViolationActThreshold: number, -- unused for now - this version is LOG ONLY (the task's own requirement) - reserved for when enforcement is ever enabled
 }
 
 -- ===== Issues ============================================================
@@ -417,6 +428,35 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 				"must be a positive number"
 			)
 		end
+	end
+
+	if config.movementSampleIntervalSeconds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "movementSampleIntervalSeconds", "must be positive")
+	end
+	if config.movementSpeedTolerance <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "movementSpeedTolerance", "must be positive")
+	end
+	if config.movementViolationDecayPerSecond < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "movementViolationDecayPerSecond", "must not be negative")
+	end
+	if
+		not (
+			config.movementViolationLogThreshold <= config.movementViolationFlagThreshold
+			and config.movementViolationFlagThreshold <= config.movementViolationActThreshold
+		)
+	then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"movementViolation*Threshold",
+			string.format(
+				"expected log (%s) <= flag (%s) <= act (%s)",
+				tostring(config.movementViolationLogThreshold),
+				tostring(config.movementViolationFlagThreshold),
+				tostring(config.movementViolationActThreshold)
+			)
+		)
 	end
 
 	for _, field in { "loadingSeconds", "introSeconds", "qualifiedSeconds", "resultsSeconds", "cleanupSeconds" } do

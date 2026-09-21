@@ -64,6 +64,16 @@ local GameConfig: Validate.GameConfig = {
 		Uncommon = 40,
 		Rare = 75,
 	},
+
+	-- P2-9: MovementWatch's thresholds. All PLACEHOLDER - no real logged
+	-- data exists yet to tune against; docs/movement-watch-notes.md
+	-- covers how to read the first week of logs before touching these.
+	movementSampleIntervalSeconds = 0.5,
+	movementSpeedTolerance = 1.25, -- 25% grace above the resolved max
+	movementViolationDecayPerSecond = 0.5,
+	movementViolationLogThreshold = 1.0,
+	movementViolationFlagThreshold = 3.0,
+	movementViolationActThreshold = 6.0, -- unused this version - LOG ONLY
 }
 
 return GameConfig
