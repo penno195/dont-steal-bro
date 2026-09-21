@@ -493,6 +493,29 @@ Net.Remotes = {
 		rateLimit = nil,
 		states = nil,
 	} :: RemoteDef,
+
+	-- P2-8's replication remotes. StatusEffectsChanged is targeted at the
+	-- OWNING player only (fireClient - full detail, for HUD icons with
+	-- real countdowns); StatusEffectsVisual is broadcast to everyone
+	-- (fireAllClients - "a minimal version... for visual feedback," the
+	-- task's own requirement) and deliberately carries only categories,
+	-- never exact durations/magnitudes, so it can't be used to time a
+	-- counter-play more precisely than a player could just by watching.
+	StatusEffectsChanged = {
+		name = "StatusEffectsChanged",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	StatusEffectsVisual = {
+		name = "StatusEffectsVisual",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 
 -- ===== Roblox-touching helpers (never called under Lune tests) ======

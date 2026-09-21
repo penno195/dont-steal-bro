@@ -17,6 +17,7 @@ require("./Clock.spec")
 require("./Qualification.spec")
 require("./TaskAssignment.spec")
 require("./PowerUpLogic.spec")
+require("./StatusEffectResolver.spec")
 -- require("./Outcomes.spec") -- add once src/shared/Config/Outcomes.luau exists
 
 TestRunner.run()
