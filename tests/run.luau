@@ -26,5 +26,6 @@ require("./NPCBrainLogic.spec")
 require("./FinaleRoster.spec")
 require("./ProgressionLogic.spec")
 require("./TitleLogic.spec")
+require("./LeaderboardLogic.spec")
 
 TestRunner.run()
