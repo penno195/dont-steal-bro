@@ -125,6 +125,77 @@ export type TitleDef = {
 	effect: TitleEffect?, -- nil for most of the ladder; only the top tiers earn one
 }
 
+-- ===== CosmeticDef: P4-6 ==================================================
+-- gdd.md's cosmetics: a character skin, a trail, a victory emote, and a
+-- podium decoration for the Decision Studio. One file per item (Ground
+-- Rule 2) - adding a skin, trail, emote or podium flair is adding a
+-- src/shared/Config/Cosmetics/<Name>.luau and nothing else.
+--
+-- WHY THIS IS A FLAT TYPE WITH PER-CATEGORY OPTIONAL FIELDS, same
+-- reasoning as StoreGrant above: Luau doesn't narrow a union through a
+-- table field cleanly, so checkCosmeticItem enforces which fields each
+-- category actually requires and CosmeticService reads only the ones its
+-- own branch needs.
+--
+-- WHY THERE IS NO `robuxPrice`/`currency` FIELD HERE, even though a
+-- cosmetic is a purchasable thing: P4-5 already owns pricing entirely -
+-- a cosmetic is sold by a StoreItemDef whose `grants` names this item's
+-- `id` (see FounderPass.luau, VictoryEmotePass.luau). Duplicating a price
+-- here would be a second source of truth for the same number, and the
+-- two would eventually disagree. `rarity` stays here rather than on the
+-- store entry because it's a property of the ITEM regardless of which
+-- product happens to sell it (or whether one does yet), and because
+-- P6-6's item grid reads it directly for rarity treatment.
+--
+-- `rarity` reuses PowerUpRarity rather than inventing a second tier
+-- system - one ladder of "how special is this" for the whole game.
+export type CosmeticCategory = "Skin" | "Trail" | "Emote" | "Podium"
+
+local COSMETIC_CATEGORIES: { CosmeticCategory } = { "Skin", "Trail", "Emote", "Podium" }
+
+export type CosmeticDef = {
+	id: string,
+	category: CosmeticCategory,
+	displayName: string,
+	description: string,
+	rarity: PowerUpRarity,
+	sortOrder: number,
+
+	-- `enabled = false` + an asset id of 0 is the same "not built yet"
+	-- stance MapDef and StoreItemDef take - a cosmetic may be written,
+	-- validated and referenced by a (disabled) store grant before a
+	-- single Roblox asset behind it exists.
+	enabled: boolean,
+
+	-- Category "Skin": a full outfit, so both fields are required
+	-- together - half a skin swapped in is a worse bug than none.
+	shirtAssetId: number?,
+	pantsAssetId: number?,
+
+	-- Category "Trail": a Trail instance's texture and tuning. Colour is
+	-- a plain "#rrggbb" string, not Color3, for the same Lune-purity
+	-- reason TitleDef.colorHex is - a client/service converts it.
+	trailTextureAssetId: number?,
+	trailColorHex: string?,
+	trailLifetime: number?, -- seconds; CosmeticService clamps to a sane range
+
+	-- Category "Emote": played on victory, never persistently worn -
+	-- see CosmeticService's own note on why this category has nothing to
+	-- "apply" on spawn.
+	animationAssetId: number?,
+
+	-- Category "Podium": a small decoration shown only on a finalist's
+	-- podium slot during the Decision Studio (design-decisions.md's
+	-- podium circle) - see CosmeticService for why it's gated on round
+	-- state the same way TitleLogic.isVisibleInState gates a title.
+	podiumTextureAssetId: number?,
+	podiumColorHex: string?,
+
+	-- Store UI thumbnail (P6-6's item grid). Optional: falls back to
+	-- whatever the category's own primary asset id would render as.
+	previewIconAssetId: number?,
+}
+
 -- ===== StoreItemDef: P4-5 ================================================
 -- One file per purchasable thing, per Ground Rule 2 - adding a product
 -- is adding a src/shared/Config/Store/<Name>.luau and nothing else.
@@ -155,7 +226,7 @@ export type StoreGrant = {
 	kind: StoreGrantKind,
 	amount: number?, -- Currency: how much. PowerUpStock: how many.
 	powerUpId: string?, -- PowerUpStock: which power-up, cross-checked against the PowerUps registry
-	cosmeticId: string?, -- Cosmetic: which item. P4-6 owns the cosmetics registry; until it exists this is an opaque id
+	cosmeticId: string?, -- Cosmetic: which item, cross-checked against the Cosmetics registry (P4-6)
 	titleId: string?, -- Title: which title, cross-checked against the Titles registry
 }
 
@@ -676,6 +747,87 @@ function Validate.checkTitle(fileName: string, def: TitleDef, issues: { Issue })
 			"effect",
 			string.format("expected one of %s, got %s", table.concat(TITLE_EFFECTS, "/"), tostring(def.effect))
 		)
+	end
+end
+
+-- P4-6. Per-item cosmetic checks. The cross-registry half (a Store
+-- Cosmetic grant naming an id that exists here, and is enabled) lives in
+-- Validate.run below, the same split checkStoreItem/Validate.run already
+-- use for PowerUpStock and Title grants.
+local function checkAssetId(issues: { Issue }, fileName: string, field: string, value: any, enabled: boolean)
+	if type(value) ~= "number" or value < 0 or value % 1 ~= 0 then
+		issue(issues, "Cosmetic", fileName, field, string.format("expected a non-negative integer, got %s", tostring(value)))
+	elseif enabled and value == 0 then
+		issue(
+			issues,
+			"Cosmetic",
+			fileName,
+			field,
+			"enabled = true but this asset id is 0 - upload the asset and paste its id here, or set enabled = false"
+		)
+	end
+end
+
+function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: { Issue })
+	if not isNonEmptyString(def.id) then
+		issue(issues, "Cosmetic", fileName, "id", "id must be a non-empty string")
+	end
+	if not inSet(def.category, COSMETIC_CATEGORIES) then
+		issue(
+			issues,
+			"Cosmetic",
+			fileName,
+			"category",
+			string.format("expected one of %s, got %s", table.concat(COSMETIC_CATEGORIES, "/"), tostring(def.category))
+		)
+		return -- nothing below is checkable without knowing which fields apply
+	end
+	if not isNonEmptyString(def.displayName) then
+		issue(issues, "Cosmetic", fileName, "displayName", "displayName must be a non-empty string")
+	end
+	if not isNonEmptyString(def.description) then
+		issue(issues, "Cosmetic", fileName, "description", "description must be a non-empty string")
+	end
+	if not inSet(def.rarity, POWERUP_RARITIES) then
+		issue(
+			issues,
+			"Cosmetic",
+			fileName,
+			"rarity",
+			string.format("expected one of [%s], got %s", table.concat(POWERUP_RARITIES, ", "), tostring(def.rarity))
+		)
+	end
+
+	if def.category == "Skin" then
+		checkAssetId(issues, fileName, "shirtAssetId", def.shirtAssetId, def.enabled)
+		checkAssetId(issues, fileName, "pantsAssetId", def.pantsAssetId, def.enabled)
+	elseif def.category == "Trail" then
+		checkAssetId(issues, fileName, "trailTextureAssetId", def.trailTextureAssetId, def.enabled)
+		if not isNonEmptyString(def.trailColorHex) or not string.match(def.trailColorHex :: any, "^#%x%x%x%x%x%x$") then
+			issue(
+				issues,
+				"Cosmetic",
+				fileName,
+				"trailColorHex",
+				string.format('expected "#rrggbb", got %s', tostring(def.trailColorHex))
+			)
+		end
+		if def.trailLifetime == nil or def.trailLifetime <= 0 then
+			issue(issues, "Cosmetic", fileName, "trailLifetime", "must be a positive number of seconds")
+		end
+	elseif def.category == "Emote" then
+		checkAssetId(issues, fileName, "animationAssetId", def.animationAssetId, def.enabled)
+	elseif def.category == "Podium" then
+		checkAssetId(issues, fileName, "podiumTextureAssetId", def.podiumTextureAssetId, def.enabled)
+		if not isNonEmptyString(def.podiumColorHex) or not string.match(def.podiumColorHex :: any, "^#%x%x%x%x%x%x$") then
+			issue(
+				issues,
+				"Cosmetic",
+				fileName,
+				"podiumColorHex",
+				string.format('expected "#rrggbb", got %s', tostring(def.podiumColorHex))
+			)
+		end
 	end
 end
 
@@ -1468,6 +1620,12 @@ export type RegistryInput = {
 	-- fixture or a caller predating the store passes no store registry,
 	-- which is exactly "nothing is for sale."
 	store: { { fileName: string, def: StoreItemDef } }?,
+
+	-- P4-6. Optional for the same reason - a test fixture or a caller
+	-- predating the cosmetics registry passes none, which is exactly
+	-- "every Cosmetic grant's id stays opaque," the stance StoreGrant's
+	-- own comment already documents.
+	cosmetics: { { fileName: string, def: CosmeticDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -1493,11 +1651,18 @@ function Validate.run(input: RegistryInput): { Issue }
 			Validate.checkNPCPersonality(entry.fileName, entry.def, issues)
 		end
 	end
+	local cosmetics = input.cosmetics
+	if cosmetics ~= nil then
+		for _, entry in cosmetics do
+			Validate.checkCosmeticItem(entry.fileName, entry.def, issues)
+		end
+	end
 
 	checkDuplicateIds("Map", input.maps :: any, issues)
 	checkDuplicateIds("Task", input.tasks :: any, issues)
 	checkDuplicateIds("PowerUp", input.powerUps :: any, issues)
 	checkDuplicateIds("Title", input.titles :: any, issues)
+	checkDuplicateIds("Cosmetic", (cosmetics or {}) :: any, issues)
 
 	-- P4-2: two titles at the same threshold make "the highest title
 	-- you've unlocked" ambiguous, and which one a player sees would then
@@ -1621,6 +1786,15 @@ function Validate.run(input: RegistryInput): { Issue }
 		for _, entry in input.titles do
 			knownTitleIds[entry.def.id] = true
 		end
+		-- P4-6: nil (not just missing-key) when no cosmetics registry was
+		-- passed at all, which keeps every caller/fixture that predates
+		-- P4-6 exactly as unchecked as StoreGrant's own comment promises.
+		local cosmeticAt: { [string]: CosmeticDef }? = if input.cosmetics ~= nil then {} else nil
+		if cosmeticAt ~= nil and input.cosmetics ~= nil then
+			for _, entry in input.cosmetics do
+				(cosmeticAt :: { [string]: CosmeticDef })[entry.def.id] = entry.def
+			end
+		end
 
 		for _, entry in store do
 			-- `grants` is non-optional in the type, but checkStoreItem
@@ -1679,6 +1853,38 @@ function Validate.run(input: RegistryInput): { Issue }
 								powerUp.id
 							)
 						)
+					end
+				elseif grant.kind == "Cosmetic" then
+					if cosmeticAt ~= nil then
+						local cosmetic = cosmeticAt[grant.cosmeticId or ""]
+						if cosmetic == nil then
+							issue(
+								issues,
+								"Store",
+								entry.fileName,
+								field,
+								string.format("references unregistered cosmetic id %q", tostring(grant.cosmeticId))
+							)
+						elseif entry.def.enabled and not cosmetic.enabled then
+							-- Only checked when the PRODUCT itself is
+							-- enabled - a disabled product forward-
+							-- referencing a not-yet-built cosmetic
+							-- (FounderPass.luau, VictoryEmotePass.luau) is
+							-- the same legitimate bootstrap state
+							-- checkStoreItem's own "enabled = true but
+							-- assetId is 0" check allows for a disabled
+							-- entry.
+							issue(
+								issues,
+								"Store",
+								entry.fileName,
+								field,
+								string.format(
+									"cosmetic %q is not enabled - it has no Roblox asset yet, so this ENABLED product would grant something invisible",
+									cosmetic.id
+								)
+							)
+						end
 					end
 				elseif grant.kind == "Title" then
 					if not knownTitleIds[grant.titleId or ""] then

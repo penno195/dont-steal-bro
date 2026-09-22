@@ -163,6 +163,32 @@ local function validTitle(id: string, minStreak: number): Validate.TitleDef
 	return { id = id, displayName = "Test Title", colorHex = "#1c6b67", minStreak = minStreak }
 end
 
+local function validCosmetic(id: string, category: Validate.CosmeticCategory): Validate.CosmeticDef
+	local def: Validate.CosmeticDef = {
+		id = id,
+		category = category,
+		displayName = "Test Cosmetic",
+		description = "A thing you can wear.",
+		rarity = "Common",
+		sortOrder = 1,
+		enabled = true,
+	}
+	if category == "Skin" then
+		def.shirtAssetId = 111
+		def.pantsAssetId = 112
+	elseif category == "Trail" then
+		def.trailTextureAssetId = 113
+		def.trailColorHex = "#d4af37"
+		def.trailLifetime = 0.6
+	elseif category == "Emote" then
+		def.animationAssetId = 114
+	elseif category == "Podium" then
+		def.podiumTextureAssetId = 115
+		def.podiumColorHex = "#66e0ff"
+	end
+	return def
+end
+
 TestRunner.describe("Validate.run (happy path)", function()
 	TestRunner.it("reports no issues for an internally-consistent registry set", function()
 		local issues = Validate.run({
@@ -995,6 +1021,175 @@ TestRunner.describe("Validate.run - store cross-registry checks (P4-5)", functio
 		local def = validProduct("t")
 		def.grants = { { kind = "Title", titleId = "not-a-title" } }
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+end)
+
+-- ===== P4-6's cosmetics catalogue =========================================
+
+local function runWithCosmetics(cosmetics: { { fileName: string, def: Validate.CosmeticDef } }): { Validate.Issue }
+	return Validate.run({
+		gameConfig = validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = {},
+		titles = {},
+		cosmetics = cosmetics,
+	})
+end
+
+TestRunner.describe("Validate.checkCosmeticItem (P4-6)", function()
+	TestRunner.it("accepts a well-formed item in each category", function()
+		for _, category in { "Skin", "Trail", "Emote", "Podium" } do
+			local def = validCosmetic("t", category :: Validate.CosmeticCategory)
+			TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } })):toBe(0)
+		end
+	end)
+
+	TestRunner.it("treats an omitted cosmetics registry as nothing registered, not an error", function()
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("allows a disabled entry with no Roblox asset ids yet", function()
+		local def = validCosmetic("t", "Skin")
+		def.enabled = false
+		def.shirtAssetId = 0
+		def.pantsAssetId = 0
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses an ENABLED skin missing either asset id", function()
+		local def = validCosmetic("t", "Skin")
+		def.pantsAssetId = 0
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an unrecognised category", function()
+		local def = validCosmetic("t", "Skin")
+		;(def :: any).category = "Nonsense"
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a trail with a malformed colour", function()
+		local def = validCosmetic("t", "Trail")
+		def.trailColorHex = "gold"
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a trail with no lifetime", function()
+		local def = validCosmetic("t", "Trail")
+		def.trailLifetime = nil
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an unrecognised rarity", function()
+		local def = validCosmetic("t", "Skin")
+		;(def :: any).rarity = "Legendary"
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses two entries sharing an id", function()
+		local issues = runWithCosmetics({
+			{ fileName = "A.luau", def = validCosmetic("same", "Skin") },
+			{ fileName = "B.luau", def = validCosmetic("same", "Trail") },
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", function()
+	TestRunner.it("accepts a game pass granting a registered, enabled cosmetic", function()
+		local product = validProduct("t")
+		product.kind = "GamePass"
+		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+			store = { { fileName = "T.luau", def = product } },
+			cosmetics = { { fileName = "Skin.luau", def = validCosmetic("skin-founder", "Skin") } },
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("refuses a grant of a cosmetic nobody registered, once a cosmetics registry is provided", function()
+		local product = validProduct("t")
+		product.kind = "GamePass"
+		product.grants = { { kind = "Cosmetic", cosmeticId = "not-a-cosmetic" } }
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+			store = { { fileName = "T.luau", def = product } },
+			cosmetics = {},
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("leaves a Cosmetic grant unchecked when no cosmetics registry is passed at all", function()
+		-- The same "omitted registry is legal" stance every other
+		-- optional RegistryInput field takes (see checkStoreItem's own
+		-- "omitted store registry" test) - a caller/fixture that
+		-- predates P4-6 keeps working unchanged.
+		local product = validProduct("t")
+		product.kind = "GamePass"
+		product.grants = { { kind = "Cosmetic", cosmeticId = "whatever" } }
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = product } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a grant of a cosmetic that exists but isn't enabled yet", function()
+		local product = validProduct("t")
+		product.kind = "GamePass"
+		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		local cosmetic = validCosmetic("skin-founder", "Skin")
+		cosmetic.enabled = false
+		cosmetic.shirtAssetId = 0
+		cosmetic.pantsAssetId = 0
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+			store = { { fileName = "T.luau", def = product } },
+			cosmetics = { { fileName = "Skin.luau", def = cosmetic } },
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("allows a DISABLED product forward-referencing a not-yet-built cosmetic", function()
+		-- The real bootstrap state FounderPass.luau and
+		-- VictoryEmotePass.luau are in right now: neither the product nor
+		-- the cosmetic it names has a Roblox asset id yet.
+		local product = validProduct("t")
+		product.kind = "GamePass"
+		product.enabled = false
+		product.assetId = 0
+		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		local cosmetic = validCosmetic("skin-founder", "Skin")
+		cosmetic.enabled = false
+		cosmetic.shirtAssetId = 0
+		cosmetic.pantsAssetId = 0
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+			store = { { fileName = "T.luau", def = product } },
+			cosmetics = { { fileName = "Skin.luau", def = cosmetic } },
+		})
+		TestRunner.expect(#issues):toBe(0)
 	end)
 end)
 

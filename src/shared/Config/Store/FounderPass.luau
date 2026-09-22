@@ -5,10 +5,10 @@
 -- grant"), and Validate.checkStoreItem refuses a pass that grants
 -- currency or power-up stock rather than leaving it to review.
 --
--- `cosmeticId`s are forward references to P4-6's cosmetics registry,
--- which does not exist yet. They are opaque strings to this task on
--- purpose: the store's job is to record that a player owns them, and
--- P4-6's job is to know what they look like.
+-- `cosmeticId`s are cross-checked against P4-6's Cosmetics registry
+-- (src/shared/Config/Cosmetics/FounderSkin.luau,
+-- src/shared/Config/Cosmetics/FounderTrail.luau). This file only records
+-- that a player owns them; CosmeticService owns what they look like.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
