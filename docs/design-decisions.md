@@ -211,6 +211,30 @@ is a cheap state-machine change, but if the game is balanced and priced
 around the harsher rule, walking it back after players are used to the
 enforced difficulty is a live-balance change, not just a code change.
 
+### Applied case: titles and nametags (P4-2)
+
+Condition 1 above was tested by the first feature that wanted to put
+something over a player's head. P4-2's title ladder unlocks off
+`bestStreak`, so a visible title ("Untouchable", rung 7 of 10) telegraphs
+roughly how strong its wearer is — an indirect tell of exactly the kind
+condition 1 names, and it named "nameplate" specifically.
+
+**Resolution: titles display in the pre-round lobby and after the result
+is in, and are suppressed for every state in between,** including the
+Decision Studio — three finalists reading each other's rungs would learn
+who most needs the win, in the one phase where that information is worth
+most. Enforced server-side: `TitleService.broadcastTitles` does not send
+other players' titles while a round is live, so a modified client has
+nothing to un-hide, and both display surfaces (nametag and chat prefix)
+inherit the one decision. The `TitleUnlocked` remote is targeted at the
+earner alone, because it carries a threshold, and a threshold is a streak
+number.
+
+`GameConfig.titleDisplayDuringRound` flips it. **Flipping it to true means
+amending this decision, not just the flag** — condition 1 is load-bearing
+for the harsh reset rule, and Q7 itself says the decision needs revisiting
+if streak-hiding leaks rather than that a leak is acceptable.
+
 ## 8. Are starting power-ups sold for Robux?
 
 **Decision:** Power-ups may be purchased with Robux, provided **every**

@@ -72,6 +72,9 @@ local function validGameConfig(): Validate.GameConfig
 			minSecondsBetweenLines = 6,
 			chooseWobbleChance = 0.5,
 		},
+		titleDisplayDuringRound = false,
+		npcTitleNoneChance = 0.35,
+		npcTitleTopRungsExcluded = 3,
 	}
 end
 
@@ -693,5 +696,92 @@ TestRunner.describe("Validate.checkNPCPersonality (P3-6)", function()
 			titles = {},
 		})
 		TestRunner.expect(#issues):toBe(0)
+	end)
+end)
+
+TestRunner.describe("Validate.checkTitle (P4-2 ladder)", function()
+	local function validLadderTitle(id: string, minStreak: number): Validate.TitleDef
+		return { id = id, displayName = "Test", colorHex = "#1c6b67", minStreak = minStreak }
+	end
+
+	TestRunner.it("accepts a rung with no effect", function()
+		local issues = {}
+		Validate.checkTitle("T.luau", validLadderTitle("t", 5), issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("accepts each of the three effects", function()
+		for _, effect in { "Glow", "Pulse", "Rainbow" } do
+			local issues = {}
+			local def = validLadderTitle("t", 5)
+			def.effect = effect :: any
+			Validate.checkTitle("T.luau", def, issues)
+			TestRunner.expect(#issues):toBe(0)
+		end
+	end)
+
+	TestRunner.it("rejects an effect that isn't one of the three", function()
+		local issues = {}
+		local def = validLadderTitle("t", 5)
+		def.effect = "Sparkle" :: any
+		Validate.checkTitle("T.luau", def, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects an empty displayName", function()
+		local issues = {}
+		local def = validLadderTitle("t", 5)
+		def.displayName = ""
+		Validate.checkTitle("T.luau", def, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects two rungs claiming the same threshold", function()
+		-- The ladder has to be a total order, or "the highest title
+		-- you've unlocked" depends on a filename.
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {
+				{ fileName = "A.luau", def = validLadderTitle("a", 10) },
+				{ fileName = "B.luau", def = validLadderTitle("b", 10) },
+			},
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("accepts a ladder whose thresholds are all distinct", function()
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {
+				{ fileName = "A.luau", def = validLadderTitle("a", 1) },
+				{ fileName = "B.luau", def = validLadderTitle("b", 10) },
+			},
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects an out-of-range npc title distribution", function()
+		for _, mutate in
+			{
+				function(config: Validate.GameConfig)
+					config.npcTitleNoneChance = 1.5
+				end,
+				function(config: Validate.GameConfig)
+					config.npcTitleTopRungsExcluded = -1
+				end,
+			}
+		do
+			local issues = {}
+			local config = validGameConfig()
+			mutate(config)
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
 	end)
 end)

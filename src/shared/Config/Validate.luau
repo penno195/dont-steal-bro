@@ -108,11 +108,21 @@ export type PowerUpDef = {
 -- rank/streak... Titles are never revoked when a streak resets" (gdd.md)
 -- - a title's threshold is checked against a profile's bestStreak, never
 -- its current streak (src/server/DataMigrations.luau's schema, P1-5).
+-- P4-2's optional "effect flag for the top tiers": a named visual
+-- treatment the nametag applies on top of the colour. A string enum
+-- rather than a boolean, because "the top tiers are special" stops
+-- being expressible the moment there is more than one kind of special -
+-- and the client needs to know WHICH, not just THAT.
+export type TitleEffect = "Glow" | "Pulse" | "Rainbow"
+
+local TITLE_EFFECTS: { TitleEffect } = { "Glow", "Pulse", "Rainbow" }
+
 export type TitleDef = {
 	id: string,
 	displayName: string,
 	colorHex: string, -- "#rrggbb" - a plain string, not Color3, so this file stays Lune-pure; a client controller converts it
 	minStreak: number,
+	effect: TitleEffect?, -- nil for most of the ladder; only the top tiers earn one
 }
 
 -- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
@@ -210,6 +220,13 @@ export type GameConfig = {
 	-- except where noted - no real telemetry exists to tune against yet,
 	-- same stance raceDurationSeconds takes.
 	npc: NPCConfig,
+
+	-- P4-2: whether a title may be shown while a round is live. False
+	-- per design-decisions.md Q7 condition 1 - see GameConfig's own note
+	-- and TitleLogic.isVisibleInState.
+	titleDisplayDuringRound: boolean,
+	npcTitleNoneChance: number, -- 0-1: how often a bot wears no title at all
+	npcTitleTopRungsExcluded: number, -- how many of the rarest rungs a bot can never wear
 
 	-- P3-6: every probability and timing the NPC brain uses, "exposed
 	-- for tuning without code changes" (the task's own requirement).
@@ -527,6 +544,18 @@ function Validate.checkTitle(fileName: string, def: TitleDef, issues: { Issue })
 			fileName,
 			"minStreak",
 			string.format("expected a non-negative integer, got %s", tostring(def.minStreak))
+		)
+	end
+	if not isNonEmptyString(def.displayName) then
+		issue(issues, "Title", fileName, "displayName", "displayName must be a non-empty string")
+	end
+	if def.effect ~= nil and table.find(TITLE_EFFECTS, def.effect) == nil then
+		issue(
+			issues,
+			"Title",
+			fileName,
+			"effect",
+			string.format("expected one of %s, got %s", table.concat(TITLE_EFFECTS, "/"), tostring(def.effect))
 		)
 	end
 end
@@ -868,6 +897,13 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkNPCConfig(config.npc, issues)
 	checkNPCBrainConfig(config.npcBrain, issues)
 
+	if config.npcTitleNoneChance < 0 or config.npcTitleNoneChance > 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcTitleNoneChance", "must be between 0 and 1")
+	end
+	if config.npcTitleTopRungsExcluded < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcTitleTopRungsExcluded", "must not be negative")
+	end
+
 	for _, field in { "loadingSeconds", "introSeconds", "qualifiedSeconds", "resultsSeconds", "cleanupSeconds" } do
 		local value = (config.roundTimers :: any)[field]
 		if type(value) ~= "number" or value <= 0 then
@@ -1007,6 +1043,29 @@ function Validate.run(input: RegistryInput): { Issue }
 	checkDuplicateIds("Task", input.tasks :: any, issues)
 	checkDuplicateIds("PowerUp", input.powerUps :: any, issues)
 	checkDuplicateIds("Title", input.titles :: any, issues)
+
+	-- P4-2: two titles at the same threshold make "the highest title
+	-- you've unlocked" ambiguous, and which one a player sees would then
+	-- depend on registry iteration order - i.e. on a filename. The
+	-- ladder has to be a total order to be a ladder.
+	local titleByStreak: { [number]: string } = {}
+	for _, entry in input.titles do
+		local existing = titleByStreak[entry.def.minStreak]
+		if existing ~= nil then
+			issue(
+				issues,
+				"Title",
+				entry.fileName,
+				"minStreak",
+				string.format(
+					"threshold %d is already claimed by %s - each rung of the ladder needs its own",
+					entry.def.minStreak,
+					existing
+				)
+			)
+		end
+		titleByStreak[entry.def.minStreak] = entry.def.id
+	end
 	checkDuplicateIds("NPCPersonality", (input.npcPersonalities or {}) :: any, issues)
 
 	local knownTaskIds: { [string]: boolean } = {}

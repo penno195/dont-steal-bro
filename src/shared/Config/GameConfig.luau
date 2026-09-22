@@ -140,6 +140,27 @@ local GameConfig: Validate.GameConfig = {
 		maxRepathsPerStation = 5,
 	},
 
+	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which
+	-- forbids any in-round tell of a player's streak and names
+	-- "nameplate" specifically - a title maps to a bestStreak threshold,
+	-- so showing one mid-round announces who is worth targeting, and
+	-- Q7's safety argument for the harsh streak-reset rule depends on
+	-- that not being possible.
+	--
+	-- The flag exists so the decision is a config flip rather than a
+	-- rewrite if it's ever revisited. Setting it true means amending Q7
+	-- as well - Q7 itself says the decision "needs revisiting" if
+	-- streak-hiding leaks, not that the leak is acceptable.
+	titleDisplayDuringRound = false,
+
+	-- P4-2's NPC title distribution. PLACEHOLDER, both: bots wear a
+	-- title so a filled lobby doesn't look obviously fake, drawn from
+	-- the lower rungs only. 3 top rungs excluded - a bot wearing the
+	-- rarest title in the game is MORE obviously fake than a bot
+	-- wearing nothing.
+	npcTitleNoneChance = 0.35,
+	npcTitleTopRungsExcluded = 3,
+
 	-- P3-6: "every probability and timing exposed for tuning without
 	-- code changes" (the task's own requirement). The per-personality
 	-- steal probabilities are deliberately NOT here - they live on each

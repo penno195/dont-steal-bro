@@ -566,6 +566,55 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P4-2's three title remotes.
+	--
+	-- TitleUnlocked is targeted at the one player who earned it
+	-- (fireClient): it is the unlock MOMENT, and it carries the rung's
+	-- own threshold, which is a streak number - broadcasting that would
+	-- be the exact Q7 condition 1 leak the whole title-visibility rule
+	-- exists to prevent.
+	TitleUnlocked = {
+		name = "TitleUnlocked",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (broadcast): who is currently WEARING what, for
+	-- the nametags. Carries the title id, display text, colour and
+	-- effect - never a threshold and never a streak, so the payload
+	-- itself can't be mined for the number behind it.
+	--
+	-- The Q7 suppression is enforced HERE rather than on the client:
+	-- while a round is live the server simply doesn't send other
+	-- players' titles, so a modified client has nothing to un-hide
+	-- (Ground Rule 1). See TitleService.broadcastTitles.
+	TitleState = {
+		name = "TitleState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server: equip a title, or unequip with a nil id. Rate
+	-- limited because it writes to a profile, and validated against the
+	-- player's own unlocked list server-side - a client naming a title
+	-- it never earned is refused, not trusted.
+	-- No `states` restriction: equipping is a menu action, and a player
+	-- tidying their profile in the lobby, on the results screen, or
+	-- while dead mid-race is all legitimate. What a title does NOT do is
+	-- become visible mid-round, and that's enforced on the broadcast
+	-- side, not by refusing the equip.
+	TitleEquipIntent = {
+		name = "TitleEquipIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ titleId = Net.optional(Net.string({ minLength = 1, maxLength = 64 })) }),
+		rateLimit = { capacity = 5, refillPerSecond = 1 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- P4-1: this round didn't move your streak, and here is why.
 	-- Targeted at the one player it concerns (fireClient), never
 	-- broadcast - design-decisions.md Q7 condition 1 keeps streak off

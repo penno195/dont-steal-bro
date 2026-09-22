@@ -214,6 +214,19 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	-- somewhere it shouldn't have.
 	print(ProgressionLogic.formatAudit(player.Name, result.roundId, result.reason, before, after))
 
+	-- P4-2: a win that raised bestStreak may have crossed a title
+	-- threshold, and the unlock should land in the same beat as the win
+	-- that earned it rather than on the player's next join. Only ever
+	-- called AFTER the write, so TitleService reads the new bestStreak.
+	if after.bestStreak > before.bestStreak then
+		local ok, titleService = pcall(function()
+			return Loader.get("TitleService")
+		end)
+		if ok and titleService ~= nil then
+			(titleService :: any).refreshFor(player)
+		end
+	end
+
 	return after
 end
 

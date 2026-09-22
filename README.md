@@ -9,8 +9,8 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Phases 00–03 complete, Phase 04 underway — 30 of the tracker's 57
-tasks.** `lune run tests/run` currently passes 362 cases across 17 spec
+**Phases 00–03 complete, Phase 04 underway — 31 of the tracker's 57
+tasks.** `lune run tests/run` currently passes 398 cases across 18 spec
 files.
 
 Pre-production (Phase 00) resolved all eight open design questions
@@ -98,12 +98,26 @@ is a loss too", so a 4th-place finisher kept their streak indefinitely;
 and threat-model.md §8's NPC-seat streak-credit threshold now actually
 gates a win.
 
-**Next: P4-2**, titles and nametags, which builds on `bestStreak` —
-the one field `applyResult` will never lower.
+P4-2 added the title ladder — ten rungs from a first win ("Got One") to a
+streak nobody should have ("Touch Grass", 120), one config file each in
+`src/shared/Config/Titles/`. Permanence is structural rather than
+promised: unlocking is a function of `bestStreak` alone, `bestStreak` is
+never lowered, the stored list is append-only, and no module exposes a
+way to revoke one.
 
-Client UI is still essentially unbuilt: `src/client/` has three
-controllers and the task views, and the whole of Phase 06 (theme,
-components, HUD, Studio UI) is ahead.
+That task also ran into the first real conflict with a locked design
+decision. Q7 condition 1 forbids any in-round tell of a player's streak
+and names "nameplate" specifically, and a title maps to a `bestStreak`
+threshold. Resolved in `design-decisions.md` §7's new applied-case note:
+**titles show in the lobby and after the result, and are suppressed for
+every state in between**, enforced server-side so a modified client has
+nothing to un-hide.
+
+**Next: P4-3**, the all-time leaderboard on OrderedDataStore.
+
+Client UI is still thin: `src/client/` has four controllers and the task
+views, and the whole of Phase 06 (theme, components, HUD, Studio UI) is
+still ahead.
 
 ## Documents
 
