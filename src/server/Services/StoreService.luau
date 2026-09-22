@@ -616,14 +616,36 @@ local function handleEquipIntent(player: Player, slot: string, itemId: string?)
 		return
 	end
 
+	-- P4-6: ownership alone isn't enough - this repo's StoreLogic
+	-- predates the cosmetics registry and has no idea what a "Trail" is,
+	-- so nothing above refuses a real, owned trail aimed at the "skin"
+	-- slot. CosmeticService.canEquip is the category-aware gate, checked
+	-- here, before anything is written - not just applied defensively at
+	-- render time.
+	local CosmeticService = Loader.get("CosmeticService") :: any
+	local categoryAllowed, categoryReason = CosmeticService.canEquip(slot, itemId)
+	if not categoryAllowed then
+		warn(
+			string.format(
+				"StoreService: %s tried to equip %s into %q - %s",
+				player.Name,
+				tostring(itemId),
+				slot,
+				tostring(categoryReason)
+			)
+		)
+		return
+	end
+
 	-- DataService re-checks ownership against the profile itself. Same
-	-- defence-in-depth split TitleService uses: the check above avoids a
-	-- pointless write, the one below is the enforcement.
+	-- defence-in-depth split TitleService uses: the checks above avoid a
+	-- pointless write, this one is the enforcement.
 	if not DataService.setEquippedCosmetic(player, slot, itemId) then
 		return
 	end
 
 	pushState(player)
+	CosmeticService.refreshFor(player)
 end
 
 local function handleLoadoutIntent(player: Player, slotIndex: number, powerUpId: string?)
@@ -746,7 +768,7 @@ end
 
 local StoreService: Loader.Service = {
 	name = "StoreService",
-	dependencies = { "NetGuard", "ConfigValidator", "DataService" },
+	dependencies = { "NetGuard", "ConfigValidator", "DataService", "CosmeticService" },
 
 	ownsPass = ownsPass,
 	consumeLoadoutFor = consumeLoadoutFor,

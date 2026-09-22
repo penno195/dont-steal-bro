@@ -29,5 +29,6 @@ require("./TitleLogic.spec")
 require("./LeaderboardLogic.spec")
 require("./PeriodKeys.spec")
 require("./StoreLogic.spec")
+require("./CosmeticLogic.spec")
 
 TestRunner.run()
