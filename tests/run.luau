@@ -27,5 +27,6 @@ require("./FinaleRoster.spec")
 require("./ProgressionLogic.spec")
 require("./TitleLogic.spec")
 require("./LeaderboardLogic.spec")
+require("./PeriodKeys.spec")
 
 TestRunner.run()
