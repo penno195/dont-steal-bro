@@ -256,6 +256,24 @@ local GameConfig: Validate.GameConfig = {
 	npcTitleNoneChance = 0.35,
 	npcTitleTopRungsExcluded = 3,
 
+	-- P4-7: analytics instrumentation. All PLACEHOLDER - no analytics
+	-- schema exists yet. The disabled flag is a hard kill switch for when
+	-- the telemetry sink breaks or ingests slowly.
+	telemetry = {
+		enabled = true,
+		-- AnalyticsService batches up to this many events before flushing.
+		-- PLACEHOLDER: matches a common default, but the actual limit is
+		-- platform-specific - verify against current documentation.
+		batchSize = 50,
+		-- Seconds between forced flushes even if the batch isn't full.
+		-- Long enough to batch effectively on a normal server, short
+		-- enough that a dead server doesn't keep events for minutes.
+		flushIntervalSeconds = 10,
+		-- Per-event-name rate limit. 0 = no limit, >0 = max events per
+		-- minute. Applied per player. PLACEHOLDER.
+		perMinuteLimit = 0,
+	},
+
 	-- P3-6: "every probability and timing exposed for tuning without
 	-- code changes" (the task's own requirement). The per-personality
 	-- steal probabilities are deliberately NOT here - they live on each
