@@ -147,3 +147,120 @@ Watch for:
 - **`Stale` status persisting past a few cycles.** The store is
   unavailable and players are looking at old numbers. They are labelled
   as old, which is the requirement — but it should not be normal.
+
+---
+
+# Part 2: daily and weekly boards (P4-4)
+
+`LeaderboardService` also runs a **daily** and a **weekly** highest-streak
+board on `MemoryStoreService` SortedMaps. The calendar arithmetic is in
+`src/server/PeriodKeys.luau` and pinned by real dates in
+`tests/PeriodKeys.spec.luau`.
+
+## 5. The timezone policy
+
+**A day is a UTC day. A week is an ISO-8601 week — also UTC, starting
+Monday.** P4-4 asks for this to be stated rather than assumed, so:
+
+A local-time day is the intuitive choice and the wrong one here.
+
+1. **There is no single local time.** The board is shared and global, so
+   "today" would have to mean *one* timezone regardless; picking the
+   developer's own is arbitrary and invisible to every player who
+   doesn't live in it.
+2. **The server doesn't reliably know a player's timezone**, and asking
+   the client makes the period boundary a client-supplied value — i.e.
+   something a compromised client shifts to get two shots at a daily
+   reward (Ground Rule 1).
+3. **A MemoryStore TTL counts from the write, not to a wall-clock
+   instant.** A period whose end is a different real moment per player
+   has no single TTL that is correct for it.
+
+**The cost, named rather than hidden:** a player in UTC+13 sees the
+daily board reset at 1pm their time, mid-session. That is a
+*presentation* problem — the fix is a UI that says when the reset
+happens, not a data model that pretends the boundary is local.
+
+## 6. What makes ISO weeks worth a pure module
+
+ISO week 1 is the week containing the first Thursday of January, so **the
+ISO year is not always the calendar year**:
+
+| Date | Weekday | ISO key | Why |
+|---|---|---|---|
+| 2025-12-29 | Monday | `2026-W01` | Its week contains 2026-01-01, a Thursday |
+| 2026-01-01 | Thursday | `2026-W01` | The first Thursday — defines week 1 |
+| 2027-01-01 | Friday | `2026-W53` | Its week's Thursday is 2026-12-31 |
+
+Keying on the calendar year would split one week across two boards, on
+New Year's Eve — precisely when nobody wants to be debugging it. The spec
+asserts these named dates, and the weekday of each was verified
+independently of the module that produces them.
+
+(2026 starts on a Thursday, which is exactly the condition for a 53-week
+ISO year — so `2026-W53` is real, not an off-by-one.)
+
+## 7. Expiry, and why TTLs are measured from *now*
+
+`liveExpirySeconds` returns *time remaining in the period* + a grace
+margin, computed at write time — **not** a fixed "one day".
+
+A MemoryStore TTL starts when the entry is written. Give a fixed 24h to
+an entry written at 23:58 and it survives almost a full day into the
+next period, where it is both wrong and invisible (the new period reads
+a different map). Measuring from now means every entry in a period
+expires at roughly the same wall-clock moment regardless of when it was
+written.
+
+The grace margin (1h) exists so the rollover can still read the finished
+period's final standings. It is deliberately small: the **snapshot** is
+the durable copy, so the live map has no reason to outlive it by more
+than one read.
+
+## 8. Rollover, and the double-award guard
+
+Detection compares **keys, not timestamps**, so it is correct across a
+day boundary, a week boundary, a server asleep for three days, and a
+clock that jumped — the question is always "is the period I'm in now
+different from the one I last saw?"
+
+A server's **first** check is deliberately *not* a rollover. A server
+booting at 3am hasn't witnessed midnight, and treating `nil` as a
+rollover would have every new server re-processing a period that ended
+hours ago.
+
+**The guard against two servers awarding the same period** is the
+snapshot write itself, not a separate lock:
+
+1. Every server notices the rollover at roughly the same moment.
+2. Each calls `UpdateAsync` on the snapshot key with a transform that
+   **refuses to overwrite an existing snapshot**.
+3. `UpdateAsync` returns what the transform returned. A server compares
+   it against what it tried to write — if they match, it created the
+   snapshot; if not, someone else did.
+4. **Only the creator fires the reward hook.**
+
+There is no window, because the read and the write are one operation. A
+separate MemoryStore lock would also work, but it would be a second
+thing that can expire or fail independently of the snapshot it guards —
+using the snapshot means the guard cannot drift out of step with what it
+protects.
+
+## 9. Additional limits to verify (extends §0)
+
+| # | Assumption | Status |
+|---|---|---|
+| A6 | MemoryStore has a per-server request budget *and* a universe-wide quota scaling with player count | **VERIFY** |
+| A7 | SortedMap `GetRangeAsync` is charged as a single request regardless of `count` | **VERIFY** — if it is charged per item, a 100-row read costs 100× what this design assumes |
+| A8 | MemoryStore item size and per-map item-count ceilings are comfortably above 100 entries | **VERIFY** |
+| A9 | `UpdateAsync` on a SortedMap is atomic under contention across servers | **VERIFY** — the write-on-improvement guarantee depends on it |
+
+**A7 is the one that would change the design.** The period boards add two
+`GetRangeAsync` calls per refresh cycle per server. At 20,000 CCU that is
+~74 reads/sec universe-wide on top of P4-3's ~37 — still small *if* a
+range read is one request, and a different conversation entirely if it
+isn't.
+
+The mitigation if A6 or A7 bite is the same one §3 already recommends
+for the all-time board: elect one server per period to refresh and
+publish, and have everyone else read the published copy.
