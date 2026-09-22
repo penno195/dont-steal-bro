@@ -752,6 +752,107 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- ===== P4-5's store remotes ==========================================
+	--
+	-- What is deliberately ABSENT from every payload below: a price, an
+	-- item's contents, a quantity, and any notion of "grant me this."
+	-- A client can ask the server to OPEN a Roblox purchase prompt, and
+	-- it can ask to rearrange things it already owns. Everything that
+	-- costs money is decided by Roblox and confirmed to the server
+	-- through MarketplaceService.ProcessReceipt, which no client can
+	-- reach or forge - see StoreService.luau's own threat notes.
+
+	-- Client -> server: "open the Roblox purchase prompt for this
+	-- catalogue entry." Carries a `key` (the internal id from
+	-- Config/Store), never a Roblox assetId - so a client cannot aim
+	-- the prompt at an arbitrary asset, only at something this game
+	-- actually sells and has enabled.
+	--
+	-- No `states` gate: buying is a menu action, and the store is
+	-- reachable from the hub, the results screen, and the lobby. What a
+	-- purchase must never do is take effect mid-race, and that is
+	-- enforced where the loadout is spent (at Race entry), not by
+	-- refusing the sale.
+	StorePurchaseIntent = {
+		name = "StorePurchaseIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ key = Net.string({ minLength = 1, maxLength = 64 }) }),
+		rateLimit = { capacity = 4, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server: set one loadout slot, or clear it with a nil
+	-- powerUpId. One slot per call rather than the whole list, which
+	-- keeps the payload a fixed shape (no array schema needed), makes
+	-- the rate limit meaningful per edit, and means a rejected slot
+	-- rejects only itself.
+	--
+	-- The 3-slot cap is NOT expressed as a max on `slotIndex` here.
+	-- It's validated server-side against GameConfig.store.loadoutSlots
+	-- (StoreLogic.setLoadoutSlot), so the cap lives in one place that
+	-- design-decisions.md Q8 pins, rather than being half-stated in a
+	-- schema that would silently disagree if the config ever changed.
+	StoreLoadoutIntent = {
+		name = "StoreLoadoutIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			slotIndex = Net.number({ min = 1, max = 16, integer = true }),
+			powerUpId = Net.optional(Net.string({ minLength = 1, maxLength = 64 })),
+		}),
+		rateLimit = { capacity = 6, refillPerSecond = 1 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server: equip a cosmetic into a slot, or unequip with a
+	-- nil itemId. Validated against the player's own owned list
+	-- server-side - a client naming a cosmetic it never bought is
+	-- refused, not trusted (Ground Rule 1). P4-6 owns what the item
+	-- then LOOKS like; this remote only moves the state.
+	StoreEquipIntent = {
+		name = "StoreEquipIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			slot = Net.string({ minLength = 1, maxLength = 32 }),
+			itemId = Net.optional(Net.string({ minLength = 1, maxLength = 64 })),
+		}),
+		rateLimit = { capacity = 6, refillPerSecond = 1 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the owner only, never
+	-- fireAllClients): this player's own store state - currency,
+	-- power-up stock, loadout, owned cosmetics, equipped slots, and
+	-- which game passes they own. Targeted because it is a private
+	-- inventory: what someone else bought is nobody's business, and
+	-- broadcasting it would also hand a modified client a free census
+	-- of who is worth something.
+	StoreState = {
+		name = "StoreState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted): what happened to a purchase attempt.
+	-- Carries a machine-readable `status` plus a `message` the UI can
+	-- show verbatim, because P4-5 asks for "a clear error path for a
+	-- failed purchase" and a store screen that can only say "something
+	-- went wrong" generates the support tickets this task exists to
+	-- make answerable.
+	--
+	-- Note what this remote is NOT: it is not how a grant is delivered.
+	-- A grant lands in the profile via ProcessReceipt and is replicated
+	-- by StoreState above. This is a UI notification, and a client that
+	-- never receives it is still paid.
+	StorePurchaseResult = {
+		name = "StorePurchaseResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- P3-3's typing-indicator remotes. No remote exists for "speaking" -
 	-- that's read directly off AudioDeviceInput.Active, a replicated
 	-- property, with no server relay needed at all (see StudioChat.luau's

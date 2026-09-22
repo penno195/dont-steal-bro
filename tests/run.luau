@@ -28,5 +28,6 @@ require("./ProgressionLogic.spec")
 require("./TitleLogic.spec")
 require("./LeaderboardLogic.spec")
 require("./PeriodKeys.spec")
+require("./StoreLogic.spec")
 
 TestRunner.run()

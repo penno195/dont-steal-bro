@@ -252,6 +252,179 @@ local function claimProgressionWriter(claimantName: string): ProgressionWriter
 	return writeProgressionState
 end
 
+-- ===== the receipt write gate (P4-5) =====================================
+--
+-- Everywhere else in this file, a caller gets a narrow typed accessor
+-- and never sees a raw ProfileStore profile - that rule is what stops a
+-- dozen services each inventing their own idea of how player data is
+-- written. Receipt handling is the one case that genuinely cannot work
+-- through accessors, and it is worth being explicit about why rather
+-- than quietly punching a hole.
+--
+-- MarketplaceService.ProcessReceipt may only return PurchaseGranted once
+-- the grant is known to have reached the DataStore. Knowing that
+-- requires three things this module deliberately keeps private:
+--
+--   * `profile:IsActive()`  - is a write to Data still guaranteed to save?
+--   * `profile:Save()`      - push now, rather than at the next autosave.
+--   * `profile.LastSavedData` - what the DataStore actually holds, as
+--                             opposed to what this server's RAM holds.
+--
+-- There is no accessor shape that conveys "has this specific mutation
+-- been durably persisted yet," because that is a property of the
+-- storage layer, not of the data.
+--
+-- So it is handed out the same way the progression writer is: ONCE, to
+-- the first claimant, which is StoreService. A second caller gets a loud
+-- error at boot naming who already holds it. Loader's topological sort
+-- makes "first" deterministic - StoreService declares DataService as a
+-- dependency, so it runs after DataService's init and before anything
+-- depending on IT.
+--
+-- What the handle is NOT: a way to move a streak. It exposes Data, and
+-- Data has streak fields on it, so this is worth saying plainly - the
+-- streak rule from P4-1 is enforced by ProgressionService being the only
+-- holder of the progression writer, and by nothing in StoreService
+-- touching those fields. A future edit that reached through this handle
+-- to change a streak would be bypassing P4-1 and should be rejected in
+-- review; there is no way to express that constraint in the type.
+export type ReceiptHandle = {
+	isActive: () -> boolean,
+	getData: () -> ProfileLogic.ProfileData?,
+	getLastSavedData: () -> { [string]: any }?,
+	save: () -> (),
+	onAfterSave: (callback: () -> ()) -> () -> (),
+}
+
+local receiptAccessClaimedBy: string? = nil
+
+local function receiptHandleFor(player: Player): ReceiptHandle?
+	local profile = profiles[player]
+	if profile == nil then
+		return nil
+	end
+
+	return {
+		isActive = function(): boolean
+			-- Re-read `profiles[player]` rather than closing over the
+			-- captured `profile`: a handle taken before a session ended
+			-- must not keep reporting that session as live.
+			local current = profiles[player]
+			return current ~= nil and current:IsActive() == true
+		end,
+
+		getData = function(): ProfileLogic.ProfileData?
+			local current = profiles[player]
+			return if current ~= nil then current.Data :: any else nil
+		end,
+
+		getLastSavedData = function(): { [string]: any }?
+			local current = profiles[player]
+			return if current ~= nil then current.LastSavedData :: any else nil
+		end,
+
+		save = function()
+			local current = profiles[player]
+			if current ~= nil then
+				current:Save()
+			end
+		end,
+
+		-- Returns a disconnect function rather than a connection object,
+		-- so the caller never holds a ProfileStore type. ProfileStore's
+		-- own Signal implementation does have :Wait(), but its EXPORTED
+		-- type declares only :Connect - the same package-types gap
+		-- loadProfile's `Cancel` cast works around above. Connect-plus-
+		-- disconnect needs no cast and is what a bounded wait should be
+		-- built from anyway.
+		onAfterSave = function(callback: () -> ()): () -> ()
+			local current = profiles[player]
+			if current == nil then
+				return function() end
+			end
+			local connection = current.OnAfterSave:Connect(function()
+				callback()
+			end)
+			return function()
+				connection:Disconnect()
+			end
+		end,
+	}
+end
+
+local function claimReceiptAccess(claimantName: string): (player: Player) -> ReceiptHandle?
+	assert(
+		receiptAccessClaimedBy == nil,
+		string.format(
+			"DataService.claimReceiptAccess: already claimed by %q - there is exactly one receipt handler in this game, and it is StoreService (P4-5). MarketplaceService.ProcessReceipt can only be assigned by one script anyway.",
+			tostring(receiptAccessClaimedBy)
+		)
+	)
+	receiptAccessClaimedBy = claimantName
+	print(string.format("DataService: receipt access claimed by %s", claimantName))
+	return receiptHandleFor
+end
+
+-- ===== store-owned profile fields (P4-5) =================================
+-- Ordinary typed accessors, same contract as every other one in this
+-- file: collections are copied out, never handed back by reference.
+-- These exist for the paths that DON'T need durability confirmation -
+-- reading a store screen, spending stock at round start, equipping a
+-- cosmetic. Only the receipt path needs the handle above.
+
+local function getPowerUpStock(player: Player): { [string]: number }
+	local d = data(player)
+	return if d then table.clone(d.powerUpStock) else {}
+end
+
+local function getLoadout(player: Player): { string }
+	local d = data(player)
+	return if d then table.clone(d.starterPowerUps) else {}
+end
+
+local function getOwnedCosmetics(player: Player): { string }
+	local d = data(player)
+	return if d then table.clone(d.ownedCosmetics) else {}
+end
+
+local function getEquipped(player: Player): { [string]: string }
+	local d = data(player)
+	return if d then table.clone(d.equipped) else {}
+end
+
+-- Writes the loadout and the stock behind it together, because the two
+-- only make sense as one fact: a loadout entry with no stock backing it
+-- is an item the player will be handed and never paid for. Both callers
+-- (a slot change, and spending the loadout at round start) move both.
+local function setLoadoutAndStock(player: Player, loadout: { string }, stock: { [string]: number })
+	local d = data(player)
+	if d == nil then
+		return
+	end
+	d.starterPowerUps = table.clone(loadout)
+	d.powerUpStock = table.clone(stock)
+end
+
+-- Refuses a slot this profile doesn't own the item for - the same
+-- stance setEquippedTitle takes, and for the same reason: nothing
+-- upstream of a setter (a UI remote) should be trusted to have checked.
+local function setEquippedCosmetic(player: Player, slot: string, itemId: string?): boolean
+	local d = data(player)
+	if d == nil then
+		return false
+	end
+	if itemId ~= nil and table.find(d.ownedCosmetics, itemId) == nil then
+		return false
+	end
+	-- Unequipping REMOVES the key rather than storing an empty string,
+	-- so `equipped` never accumulates slots nothing is in. The local
+	-- alias is only to express that removal against a map whose value
+	-- type is a plain `string`.
+	local equipped: { [string]: string? } = d.equipped
+	equipped[slot] = itemId
+	return true
+end
+
 local function getCurrency(player: Player): number
 	local d = data(player)
 	return if d then d.currency else 0
@@ -325,6 +498,17 @@ local DataService: Loader.Service = {
 	-- P4-1: incrementStreak/resetStreak/setPendingBounty used to live
 	-- here. They are deliberately gone - see the write gate above.
 	claimProgressionWriter = claimProgressionWriter,
+
+	-- P4-5: see the receipt write gate above. Handed out once, to
+	-- StoreService, because ProcessReceipt needs durability facts no
+	-- accessor can express.
+	claimReceiptAccess = claimReceiptAccess,
+	getPowerUpStock = getPowerUpStock,
+	getLoadout = getLoadout,
+	setLoadoutAndStock = setLoadoutAndStock,
+	getOwnedCosmetics = getOwnedCosmetics,
+	getEquipped = getEquipped,
+	setEquippedCosmetic = setEquippedCosmetic,
 	getCurrency = getCurrency,
 	addCurrency = addCurrency,
 	getStats = getStats,
