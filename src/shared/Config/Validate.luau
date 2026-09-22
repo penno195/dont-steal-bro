@@ -267,6 +267,10 @@ export type LeaderboardConfig = {
 	backoffBaseSeconds: number,
 	backoffCapSeconds: number,
 	budget: LeaderboardBudget,
+	-- P4-4: daily/weekly boards.
+	snapshotStoreName: string,
+	periodGraceSeconds: number,
+	rewardTopN: number,
 }
 
 -- ===== NPCBrainConfig: P3-6 ==============================================
@@ -908,6 +912,16 @@ local function checkLeaderboardConfig(leaderboard: LeaderboardConfig, issues: { 
 			"leaderboard.backoffCapSeconds",
 			"must not be below backoffBaseSeconds"
 		)
+	end
+
+	if not isNonEmptyString(leaderboard.snapshotStoreName) then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.snapshotStoreName", "must be a non-empty string")
+	end
+	if leaderboard.periodGraceSeconds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.periodGraceSeconds", "must be positive")
+	end
+	if leaderboard.rewardTopN < 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.rewardTopN", "must be at least 1")
 	end
 
 	local budget = leaderboard.budget

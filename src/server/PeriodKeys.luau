@@ -38,6 +38,12 @@
 
 local PeriodKeys = {}
 
+-- Documentation for callers; the functions below take a plain `string`
+-- rather than this union, because Luau widens a string-literal array
+-- back to `string` on iteration and a narrowing cast at every call site
+-- is noise that hides the real types. Each function branches on the
+-- value, so an unrecognised kind behaves as Weekly rather than erroring
+-- - and there are exactly two callers, both in LeaderboardService.
 export type PeriodKind = "Daily" | "Weekly"
 
 local SECONDS_PER_DAY = 86400
@@ -110,7 +116,7 @@ function PeriodKeys.isoWeekKey(timestamp: number): string
 	return string.format("%d-W%02d", isoYear, week)
 end
 
-function PeriodKeys.keyFor(kind: PeriodKind, timestamp: number): string
+function PeriodKeys.keyFor(kind: string, timestamp: number): string
 	return if kind == "Daily" then PeriodKeys.dayKey(timestamp) else PeriodKeys.isoWeekKey(timestamp)
 end
 
@@ -119,7 +125,7 @@ end
 -- at midnight every server simply starts addressing a different map,
 -- and the old one ages out on its own TTL. No cleanup job, which is
 -- P4-4's stated reason for MemoryStore over OrderedDataStore.
-function PeriodKeys.liveMapName(kind: PeriodKind, periodKey: string): string
+function PeriodKeys.liveMapName(kind: string, periodKey: string): string
 	return string.format("streak_%s_%s", string.lower(kind), periodKey)
 end
 
@@ -127,14 +133,14 @@ end
 -- A different store entirely from the live map, because this one must
 -- outlive every TTL - yesterday's winners are still worth showing and
 -- still owe a reward.
-function PeriodKeys.snapshotKey(kind: PeriodKind, periodKey: string): string
+function PeriodKeys.snapshotKey(kind: string, periodKey: string): string
 	return string.format("snapshot_%s_%s", string.lower(kind), periodKey)
 end
 
 -- The single key two servers race for when a period ends. Whoever wins
 -- it processes the rollover; everyone else sees it taken and does
 -- nothing. See LeaderboardService's rollover section for the mechanism.
-function PeriodKeys.rolloverLockKey(kind: PeriodKind, periodKey: string): string
+function PeriodKeys.rolloverLockKey(kind: string, periodKey: string): string
 	return string.format("rollover_%s_%s", string.lower(kind), periodKey)
 end
 
@@ -145,7 +151,7 @@ export type PeriodBounds = {
 	endsAt: number, -- exclusive: the first instant of the NEXT period
 }
 
-function PeriodKeys.boundsFor(kind: PeriodKind, timestamp: number): PeriodBounds
+function PeriodKeys.boundsFor(kind: string, timestamp: number): PeriodBounds
 	if kind == "Daily" then
 		local startsAt = PeriodKeys.dayStart(timestamp)
 		return { startsAt = startsAt, endsAt = startsAt + SECONDS_PER_DAY }
@@ -170,7 +176,7 @@ end
 -- while the rollover snapshot is being taken and displayed. It is
 -- deliberately small: the snapshot is the durable copy, so the live map
 -- has no reason to linger beyond it.
-function PeriodKeys.liveExpirySeconds(kind: PeriodKind, now: number, graceSeconds: number): number
+function PeriodKeys.liveExpirySeconds(kind: string, now: number, graceSeconds: number): number
 	local bounds = PeriodKeys.boundsFor(kind, now)
 	local remaining = bounds.endsAt - now
 	-- At least the grace period even for a write landing exactly on the

@@ -625,6 +625,19 @@ Net.Remotes = {
 	-- entries rather than as its own event: a client that got the board
 	-- and missed a separate "this is old" message would present stale
 	-- numbers as current, which is worse than showing nothing.
+	-- P4-4: one period board (daily or weekly), same contract as
+	-- LeaderboardState - broadcast from a server-side cache, never in
+	-- response to a client, with the staleness status travelling
+	-- alongside the entries. `periodKey` is included so a client can
+	-- tell "today's board" from "yesterday's, not yet refreshed."
+	PeriodBoardState = {
+		name = "PeriodBoardState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	LeaderboardState = {
 		name = "LeaderboardState",
 		direction = "ServerBroadcast",

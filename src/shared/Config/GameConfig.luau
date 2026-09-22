@@ -176,6 +176,18 @@ local GameConfig: Validate.GameConfig = {
 			windowSeconds = 60,
 			softCeiling = 0.7, -- reads yield to writes past this fraction
 		},
+
+		-- P4-4. The snapshot store is a REGULAR DataStore and must
+		-- outlive every MemoryStore TTL - yesterday's winners are still
+		-- worth showing and still owe a reward.
+		snapshotStoreName = "PeriodSnapshots_v1",
+		-- How long a finished period's live entries linger past its end,
+		-- so the rollover can still read the final standings. Small on
+		-- purpose: the snapshot is the durable copy, so the live map has
+		-- no reason to outlast it by more than the read takes. 1 hour is
+		-- generous against a refresh interval measured in minutes.
+		periodGraceSeconds = 3600,
+		rewardTopN = 10, -- PLACEHOLDER: no locked value in docs/ yet
 	},
 
 	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which

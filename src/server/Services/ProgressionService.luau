@@ -240,6 +240,19 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		end
 	end
 
+	-- P4-4: the daily and weekly boards track the streak reached WITHIN
+	-- the current period, so they are fed on EVERY win rather than only
+	-- on an all-time best - a player whose record is 40 but who has
+	-- reached 3 today belongs on today's board at 3.
+	if credited and after.currentStreak > before.currentStreak then
+		local periodOk, periodBoard = pcall(function()
+			return Loader.get("LeaderboardService")
+		end)
+		if periodOk and periodBoard ~= nil then
+			(periodBoard :: any).submitPeriodStreak(player, after.currentStreak)
+		end
+	end
+
 	return after
 end
 
