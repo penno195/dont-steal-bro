@@ -369,6 +369,21 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P3-5: the round's NPC roster - {id, displayName} per bot, broadcast
+	-- once they've been spawned. It exists because every id-carrying
+	-- payload above (TaskProgress's `playerId`, the qualification
+	-- result's ranked ids) can now carry a NEGATIVE id, which no client
+	-- can resolve through Players:GetPlayerByUserId - this is how a HUD
+	-- puts a name to one. Nothing secret: the bots are standing in the
+	-- map in plain sight, and a client already sees their rigs.
+	NPCRoster = {
+		name = "NPCRoster",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- P2-5's task-interaction remotes - see src/server/TaskHandlers/
 	-- Types.luau for the framework these plug into. TaskInteract is the
 	-- one remote every task's client view shares to start (or restart) a

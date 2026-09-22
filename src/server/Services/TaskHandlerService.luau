@@ -181,7 +181,12 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 	Net.fireClient("TaskResult", player, { stationId = stationId, success = done })
 
 	if done then
-		TaskService.recordCompletion(player, stationId)
+		-- The session's own elapsed time goes along with the completion
+		-- (P3-5): it's the only place a REAL human duration for this task
+		-- exists, and NPCService's fairness floor is measured against the
+		-- median of exactly these numbers. Nothing about qualification
+		-- reads it - see TaskService.recordCompletionFor.
+		TaskService.recordCompletion(player, stationId, session.ctx.elapsedSeconds())
 		endSession(player)
 	end
 end

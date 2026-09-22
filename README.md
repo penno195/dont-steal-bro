@@ -9,9 +9,9 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Phases 00–02 complete. Phase 03 (Decision Studio and NPCs) is 4 of 7
-done — 26 of the tracker's 57 tasks.** `lune run tests/run` currently
-passes 202 cases across 12 spec files.
+**Phases 00–02 complete. Phase 03 (Decision Studio and NPCs) is 5 of 7
+done — 27 of the tracker's 57 tasks.** `lune run tests/run` currently
+passes 269 cases across 14 spec files.
 
 Pre-production (Phase 00) resolved all eight open design questions
 (`docs/design-decisions.md`) and wrote the task and power-up catalogues,
@@ -44,14 +44,28 @@ Phase 03 so far: the outcome resolution table and its spec (P3-1), the
 Decision Studio phase machine and its secrecy guarantees — no client ever
 learns another finalist's choice before Reveal (P3-2, `DecisionService`);
 proximity text and voice chat for the negotiation (P3-3, `StudioChat`,
-`docs/studio-chat-notes.md`); and a gray-box Studio set builder (P3-4,
-`scripts/build-studio.luau`).
+`docs/studio-chat-notes.md`); a gray-box Studio set builder (P3-4,
+`scripts/build-studio.luau`); and NPC fill (P3-5, `NPCService`,
+`src/server/NPCLogic.luau`, `docs/npc-notes.md`) — bots that don't play
+the minigames but simulate their timing, floored so one can never beat
+the median human time for a task.
 
-**Next: P3-5, NPC fill** — spawning, pathing and simulated task timing,
-then P3-6 (NPC griefing AI and Studio personalities) and P3-7 (alternates,
-disconnects and forfeits) to close the phase. Client UI is still
-essentially unbuilt: `src/client/` has two controllers and the task views,
-and the whole of Phase 06 (theme, components, HUD, Studio UI) is ahead.
+P3-5 also introduced the **participant roster**
+(`src/server/Participants.luau`, `ParticipantService`). Race-side
+services used to key their state on a `Player` instance, which made
+architecture.md §4's "an NPC reports completion through the same
+TaskService API a human uses, so qualification logic has no NPC branch
+anywhere" impossible to honour. `TaskService`, `StatusEffects` and
+`PowerUpService`'s targeting are now keyed on a participant id instead —
+a real `UserId` for a human, a negative one for a bot — so an NPC is
+just another racer to all of them. The only surviving distinction is
+"is there a client to fire a remote at."
+
+**Next: P3-6** (NPC griefing AI and Studio personalities), then P3-7
+(alternates, disconnects and forfeits) to close the phase. Client UI is
+still essentially unbuilt: `src/client/` has two controllers and the task
+views, and the whole of Phase 06 (theme, components, HUD, Studio UI) is
+ahead.
 
 ## Documents
 
@@ -71,6 +85,7 @@ and the whole of Phase 06 (theme, components, HUD, Studio UI) is ahead.
 | [`docs/powerup-threat-notes.md`](docs/powerup-threat-notes.md) | Every way a client could try to cheat the power-up service, and what blocks each one. |
 | [`docs/movement-watch-notes.md`](docs/movement-watch-notes.md) | How to read the first week of movement-watch telemetry on mobile before touching a threshold — or enabling enforcement. |
 | [`docs/studio-chat-notes.md`](docs/studio-chat-notes.md) | What proximity chat needs configured outside code, and what a player without voice actually experiences. |
+| [`docs/npc-notes.md`](docs/npc-notes.md) | What 5 NPCs cost a server, which knob to turn first, where bots can still distort the streak leaderboard, and the Studio checklist. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture

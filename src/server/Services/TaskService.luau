@@ -14,6 +14,16 @@
 -- right range, minimum plausible time, not already done). Nothing here
 -- ever trusts a raw client remote for "I finished" - Ground Rule 1.
 --
+-- WHO IS IN A RACE (P3-5): this service's per-racer state is keyed on a
+-- PARTICIPANT ID, not on a Player instance, and its roster comes from
+-- Participants.luau rather than Players:GetPlayers(). That is what lets
+-- an NPC report a completion "through the exact same TaskService API a
+-- human uses, so qualification logic has no NPC branch anywhere"
+-- (architecture.md §4) - there is no NPC path through this file at all,
+-- only racers with ids. The Player-shaped public methods below are thin
+-- wrappers that look up `player.UserId` and call the id-shaped one, so
+-- P2-5's TaskHandlerService and P3-2's DecisionService are unchanged.
+--
 -- WHERE THE STATION POOL COMES FROM: no map-loading service exists yet
 -- (maps are hand-built in Studio and never synced by Rojo - CLAUDE.md -
 -- and no MapDef has been registered in src/shared/Config/Maps yet
@@ -25,16 +35,18 @@
 -- convenience that fills it in today by scanning a map's own
 -- CollectionService tags (works right now against P2-3's GrayBoxTest).
 
-local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local Signal = require(ReplicatedStorage.Packages.Signal)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local TaskAssignment = require(ReplicatedStorage.Shared.TaskAssignment)
 local Qualification = require(ReplicatedStorage.Shared.Qualification)
+local Participants = require(ServerScriptService.Server.Participants)
 
 -- A station as this service knows it: TaskAssignment.luau's own
 -- StationInfo (id + accepted task ids) plus the live Instance needed for
@@ -46,7 +58,7 @@ export type StationRecord = {
 	part: BasePart,
 }
 
-type PlayerRoundState = {
+type RacerRoundState = {
 	assignments: { TaskAssignment.StationAssignment },
 	completed: { [string]: boolean },
 	tasksCompleted: number,
@@ -66,11 +78,20 @@ local stationPool: { TaskAssignment.StationInfo } = {}
 local stationParts: { [string]: BasePart } = {}
 local stationOccupancy: { [string]: number } = {}
 
-local playerStates: { [Player]: PlayerRoundState } = {}
-local finishOrder: { Player } = {}
+local racerStates: { [number]: RacerRoundState } = {}
+local finishOrder: { number } = {}
 local qualificationEmitted = false
 local nextSeedOverride: number? = nil
 local lastQualificationResult: Qualification.QualificationResult? = nil
+
+-- Fired on every accepted completion, human or NPC, with whatever the
+-- caller knew about how long it took (nil when nothing measured it).
+-- P3-5's NPCService listens for the human ones to keep a running median
+-- per task - the number its own fairness floor is measured against.
+-- Created at module load, not in init(), for the reason RoundService.
+-- luau's header gives: subscribing must be safe from any other
+-- service's init(), whatever order they happen to run in.
+local completed = Signal.new()
 
 local function now(): number
 	return Workspace:GetServerTimeNow()
@@ -137,10 +158,14 @@ local function capacityForRoster(playerCount: number): number
 	return math.ceil((playerCount * GameConfig.tasksPerPlayer) / #stationPool) + CAPACITY_HEADROOM
 end
 
+-- The payload field is still called `playerId` (the client contract
+-- predates NPCs and there is no reason to churn it): an NPC simply
+-- appears as a negative id, which Participants.luau guarantees can
+-- never collide with a real UserId.
 local function broadcastProgress()
 	local progress = {}
-	for player, state in playerStates do
-		table.insert(progress, { playerId = player.UserId, tasksCompleted = state.tasksCompleted })
+	for racerId, state in racerStates do
+		table.insert(progress, { playerId = racerId, tasksCompleted = state.tasksCompleted })
 	end
 	Net.fireAllClients("TaskProgress", { progress = progress })
 end
@@ -148,7 +173,7 @@ end
 -- The first not-yet-completed station in a player's own assigned order -
 -- "their next station," for the distance tie-break. nil once they've
 -- completed everything (nothing left to travel to).
-local function nextStationPartFor(state: PlayerRoundState): BasePart?
+local function nextStationPartFor(state: RacerRoundState): BasePart?
 	for _, assignment in state.assignments do
 		if not state.completed[assignment.stationId] then
 			return stationParts[assignment.stationId]
@@ -158,17 +183,19 @@ local function nextStationPartFor(state: PlayerRoundState): BasePart?
 end
 
 -- nil (not 0) when it can't actually be measured - no remaining station,
--- or the player has no live Character right now (respawning, just
--- teleported, etc). Qualification.rank treats a nil distance as "best,"
--- which is the right fail-safe here: a measurement gap should never rank
--- someone worse than they'd otherwise be.
-local function distanceToNextStation(player: Player, state: PlayerRoundState): number?
+-- or the racer has no live Character right now (a human respawning or
+-- just teleported; an NPC whose rig hasn't been parented yet).
+-- Qualification.rank treats a nil distance as "best," which is the right
+-- fail-safe here: a measurement gap should never rank someone worse than
+-- they'd otherwise be.
+local function distanceToNextStation(racerId: number, state: RacerRoundState): number?
 	local targetPart = nextStationPartFor(state)
 	if targetPart == nil then
 		return nil
 	end
 
-	local character = player.Character
+	local participant = Participants.get(racerId)
+	local character = if participant ~= nil then participant.character else nil
 	if character == nil then
 		return nil
 	end
@@ -183,13 +210,13 @@ end
 
 local function buildProgressEntries(): { Qualification.PlayerProgress }
 	local entries: { Qualification.PlayerProgress } = {}
-	for player, state in playerStates do
+	for racerId, state in racerStates do
 		table.insert(entries, {
-			playerId = player.UserId,
+			playerId = racerId,
 			tasksAssigned = #state.assignments,
 			tasksCompleted = state.tasksCompleted,
 			lastCompletionTime = state.lastCompletionTime,
-			distanceToNextStation = distanceToNextStation(player, state),
+			distanceToNextStation = distanceToNextStation(racerId, state),
 		})
 	end
 	return entries
@@ -228,7 +255,7 @@ local function beginRace()
 	qualificationEmitted = false
 	lastQualificationResult = nil
 	finishOrder = {}
-	playerStates = {}
+	racerStates = {}
 	stationOccupancy = {}
 
 	if #stationPool == 0 then
@@ -236,32 +263,27 @@ local function beginRace()
 		return
 	end
 
-	local players = Players:GetPlayers()
-	local playerIds: { number } = {}
-	local byId: { [number]: Player? } = {}
-	for _, player in players do
-		table.insert(playerIds, player.UserId)
-		byId[player.UserId] = player
+	-- Every racer on the roster, humans and NPCs alike, in one list -
+	-- NPCService has already registered its bots by the time Race is
+	-- entered (it spawns them during Loading, after its own fill grace
+	-- window). TaskAssignment never learns which is which.
+	local racerIds: { number } = {}
+	for _, participant in Participants.all() do
+		table.insert(racerIds, participant.id)
 	end
 
-	if #playerIds == 0 then
+	if #racerIds == 0 then
 		return
 	end
 
 	local seed = nextSeedOverride or math.floor(now() * 1000)
 	nextSeedOverride = nil
 
-	local capacity = capacityForRoster(#playerIds)
-	local assignmentsByPlayerId =
-		TaskAssignment.assign(seed, stationPool, playerIds, GameConfig.tasksPerPlayer, capacity)
+	local capacity = capacityForRoster(#racerIds)
+	local assignmentsByRacerId = TaskAssignment.assign(seed, stationPool, racerIds, GameConfig.tasksPerPlayer, capacity)
 
-	for playerId, assignments in assignmentsByPlayerId do
-		local player = byId[playerId]
-		if player == nil then
-			continue
-		end
-
-		playerStates[player] = {
+	for racerId, assignments in assignmentsByRacerId do
+		racerStates[racerId] = {
 			assignments = assignments,
 			completed = {},
 			tasksCompleted = 0,
@@ -275,29 +297,43 @@ local function beginRace()
 
 	broadcastProgress()
 	print(
-		string.format("TaskService: assigned tasks to %d player(s) - seed %d, capacity %d", #playerIds, seed, capacity)
+		string.format(
+			"TaskService: assigned tasks to %d racer(s) (%d human, %d NPC) - seed %d, capacity %d",
+			#racerIds,
+			Participants.countHumans(),
+			Participants.countNPCs(),
+			seed,
+			capacity
+		)
 	)
 end
 
--- Called by a future validated TaskHandler (P2-5), never directly by a
--- client remote - see this file's header comment. Returns false (a
--- normal no-op, not an error) for anything that isn't a legitimate,
--- not-yet-completed, actually-assigned station: no active round for this
--- player, a double submit, or a station never on their list.
-local function recordCompletion(player: Player, stationId: string): boolean
-	local state = playerStates[player]
+-- Called by P2-5's validated TaskHandler for a human, and by P3-5's
+-- NPCService for a bot that has finished "working" at a station - never
+-- directly by a client remote (see this file's header comment). Returns
+-- false (a normal no-op, not an error) for anything that isn't a
+-- legitimate, not-yet-completed, actually-assigned station: no active
+-- round for this racer, a double submit, or a station never on their
+-- list.
+--
+-- `durationSeconds` is how long the racer actually spent on it, when the
+-- caller measured it (TaskHandlerService has it from the challenge
+-- session's own clock). Only used to feed NPCService's running human
+-- median; nothing about qualification reads it.
+local function recordCompletionFor(racerId: number, stationId: string, durationSeconds: number?): boolean
+	local state = racerStates[racerId]
 	if state == nil or state.completed[stationId] then
 		return false
 	end
 
-	local isAssigned = false
+	local taskId: string? = nil
 	for _, assignment in state.assignments do
 		if assignment.stationId == stationId then
-			isAssigned = true
+			taskId = assignment.taskId
 			break
 		end
 	end
-	if not isAssigned then
+	if taskId == nil then
 		return false
 	end
 
@@ -307,9 +343,10 @@ local function recordCompletion(player: Player, stationId: string): boolean
 	stationOccupancy[stationId] = math.max(0, (stationOccupancy[stationId] or 0) - 1)
 
 	broadcastProgress()
+	completed:Fire(racerId, stationId, taskId, durationSeconds)
 
 	if state.tasksCompleted >= #state.assignments then
-		table.insert(finishOrder, player)
+		table.insert(finishOrder, racerId)
 		if #finishOrder >= GameConfig.qualifierCount and not qualificationEmitted then
 			emitQualification()
 			local RoundService = Loader.get("RoundService") :: any
@@ -320,10 +357,17 @@ local function recordCompletion(player: Player, stationId: string): boolean
 	return true
 end
 
+-- The Player-shaped wrapper P2-5's TaskHandlerService already calls.
+-- Kept so that file (and any future human-side caller) never has to
+-- know participant ids exist.
+local function recordCompletion(player: Player, stationId: string, durationSeconds: number?): boolean
+	return recordCompletionFor(player.UserId, stationId, durationSeconds)
+end
+
 -- Frees every station still outstanding on a leaving player's route -
 -- "free their stations," the task's own requirement - so
 -- getStationOccupancy no longer counts a slot nobody will ever fill.
-local function freeRemainingStations(state: PlayerRoundState)
+local function freeRemainingStations(state: RacerRoundState)
 	for _, assignment in state.assignments do
 		if not state.completed[assignment.stationId] then
 			stationOccupancy[assignment.stationId] = math.max(0, (stationOccupancy[assignment.stationId] or 0) - 1)
@@ -332,40 +376,93 @@ local function freeRemainingStations(state: PlayerRoundState)
 end
 
 -- "Recompute qualification without them" falls out for free: buildProgressEntries
--- only ever walks `playerStates`, so removing a leaver from it here means
+-- only ever walks `racerStates`, so removing a leaver from it here means
 -- any later Qualification.rank call (the 3rd-finisher trigger, or
 -- Qualified's own onEnter) simply never sees them.
+--
+-- P3-5 note: this is reached for a human leaving (RoundService's
+-- onPlayerLeaving) and for an NPC being despawned mid-race
+-- (NPCService calls removeRacer directly) - the same cleanup either way.
+local function removeRacer(racerId: number)
+	local state = racerStates[racerId]
+	if state == nil then
+		return
+	end
+
+	freeRemainingStations(state)
+	racerStates[racerId] = nil
+	broadcastProgress()
+end
+
 local function handlePlayerLeaving(player: Player, state: string)
 	if state ~= "Race" then
 		return
 	end
-
-	local playerState = playerStates[player]
-	if playerState == nil then
-		return
-	end
-
-	freeRemainingStations(playerState)
-	playerStates[player] = nil
-	broadcastProgress()
+	removeRacer(player.UserId)
 end
 
 local TaskService: Loader.Service = {
 	name = "TaskService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService" },
+	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService" },
 
 	setStations = setStations,
 	debugLoadStationsFromMap = debugLoadStationsFromMap,
 	debugSetNextSeed = debugSetNextSeed,
 	recordCompletion = recordCompletion,
 
+	-- P3-5's id-shaped surface. Everything below it that takes a Player
+	-- is a wrapper over one of these.
+	recordCompletionFor = recordCompletionFor,
+	removeRacer = removeRacer,
+
+	onCompletion = function(
+		callback: (racerId: number, stationId: string, taskId: string, durationSeconds: number?) -> ()
+	)
+		return completed:Connect(callback)
+	end,
+
+	getAssignmentFor = function(racerId: number): { TaskAssignment.StationAssignment }?
+		local state = racerStates[racerId]
+		return if state then state.assignments else nil
+	end,
+
+	getTaskIdForRacer = function(racerId: number, stationId: string): string?
+		local state = racerStates[racerId]
+		if state == nil then
+			return nil
+		end
+		for _, assignment in state.assignments do
+			if assignment.stationId == stationId then
+				return assignment.taskId
+			end
+		end
+		return nil
+	end,
+
+	-- Which of a racer's assigned stations are still outstanding, in
+	-- their own assigned order - NPCService's route, and the only thing
+	-- it needs to know about the race it's in.
+	getRemainingStations = function(racerId: number): { TaskAssignment.StationAssignment }
+		local state = racerStates[racerId]
+		if state == nil then
+			return {}
+		end
+		local remaining: { TaskAssignment.StationAssignment } = {}
+		for _, assignment in state.assignments do
+			if not state.completed[assignment.stationId] then
+				table.insert(remaining, assignment)
+			end
+		end
+		return remaining
+	end,
+
 	getAssignment = function(player: Player): { TaskAssignment.StationAssignment }?
-		local state = playerStates[player]
+		local state = racerStates[player.UserId]
 		return if state then state.assignments else nil
 	end,
 
 	getProgress = function(player: Player): { tasksCompleted: number, tasksAssigned: number }?
-		local state = playerStates[player]
+		local state = racerStates[player.UserId]
 		if state == nil then
 			return nil
 		end
@@ -387,7 +484,7 @@ local TaskService: Loader.Service = {
 	end,
 
 	getTaskIdFor = function(player: Player, stationId: string): string?
-		local state = playerStates[player]
+		local state = racerStates[player.UserId]
 		if state == nil then
 			return nil
 		end
@@ -407,7 +504,7 @@ local TaskService: Loader.Service = {
 	-- convenience for a guard check BEFORE calling into a handler, not
 	-- the actual enforcement point.
 	isAssignedAndIncomplete = function(player: Player, stationId: string): boolean
-		local state = playerStates[player]
+		local state = racerStates[player.UserId]
 		if state == nil or state.completed[stationId] then
 			return false
 		end

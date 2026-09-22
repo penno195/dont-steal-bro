@@ -41,6 +41,20 @@ local function validGameConfig(): Validate.GameConfig
 		movementViolationActThreshold = 6.0,
 		decisionStudioDefaultChoice = "Share",
 		decisionStudioChatRangeStuds = 30,
+		npc = {
+			fillGraceSeconds = 10,
+			tickHz = 8,
+			skillProfiles = {
+				{ id = "Casual", weight = 0.3, durationScale = 1.35, moveSpeedScale = 0.9 },
+				{ id = "Sweaty", weight = 0.2, durationScale = 0.9, moveSpeedScale = 1.05 },
+			},
+			fairnessFloorScale = 1.0,
+			medianSampleMinimum = 3,
+			stationArrivalRadiusStuds = 6,
+			nextStationTopK = 2,
+			repathAfterStuckSeconds = 1.5,
+			maxRepathsPerStation = 5,
+		},
 	}
 end
 
@@ -296,6 +310,124 @@ TestRunner.describe("Validate.checkGameConfig (P3-2 decisionStudioDefaultChoice)
 		config.decisionStudioChatRangeStuds = 0
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P3-5 npc block)", function()
+	TestRunner.it("rejects a tick rate outside architecture.md §4's 5-10 Hz band", function()
+		-- Both ends: the low end because the bots visibly stutter, the
+		-- high end because docs/npc-notes.md's whole cost analysis is
+		-- derived from this number staying inside the band.
+		for _, badRate in { 1, 4, 11, 60 } do
+			local issues = {}
+			local config = validGameConfig()
+			config.npc.tickHz = badRate
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
+	end)
+
+	TestRunner.it("accepts both ends of the 5-10 Hz band", function()
+		for _, rate in { 5, 10 } do
+			local issues = {}
+			local config = validGameConfig()
+			config.npc.tickHz = rate
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues):toBe(0)
+		end
+	end)
+
+	TestRunner.it("rejects a fairness floor below 1, which would let a bot beat the median human", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.npc.fairnessFloorScale = 0.9
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("accepts a floor above 1 - softer bots are a legitimate tuning choice", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.npc.fairnessFloorScale = 1.25
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects an empty skill profile list", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.npc.skillProfiles = {}
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects two profiles sharing an id", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.npc.skillProfiles = {
+			{ id = "Average", weight = 1, durationScale = 1, moveSpeedScale = 1 },
+			{ id = "Average", weight = 1, durationScale = 1.2, moveSpeedScale = 1 },
+		}
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a non-positive profile weight", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.npc.skillProfiles = { { id = "Dead", weight = 0, durationScale = 1, moveSpeedScale = 1 } }
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("accepts a profile faster than the fairness floor - it's floored at runtime, not at boot", function()
+		-- Deliberate: a durationScale below the floor scale is floored
+		-- on its faster draws only, which is what a rubber band is for.
+		-- See checkNPCConfig's own note.
+		local issues = {}
+		local config = validGameConfig()
+		config.npc.skillProfiles = { { id = "Sweaty", weight = 1, durationScale = 0.5, moveSpeedScale = 1 } }
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("names a missing npc block instead of erroring on it", function()
+		local issues = {}
+		local config = validGameConfig();
+		(config :: any).npc = nil
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects the remaining knobs at their boundaries", function()
+		local cases: { (config: Validate.GameConfig) -> () } = {
+			function(config)
+				config.npc.fillGraceSeconds = -1
+			end,
+			function(config)
+				config.npc.medianSampleMinimum = 0
+			end,
+			function(config)
+				config.npc.stationArrivalRadiusStuds = 0
+			end,
+			function(config)
+				config.npc.nextStationTopK = 0
+			end,
+			function(config)
+				config.npc.repathAfterStuckSeconds = 0
+			end,
+			function(config)
+				config.npc.maxRepathsPerStation = 0
+			end,
+		}
+
+		for _, mutate in cases do
+			local issues = {}
+			local config = validGameConfig()
+			mutate(config)
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
 	end)
 end)
 

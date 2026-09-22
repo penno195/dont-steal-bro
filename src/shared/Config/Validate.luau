@@ -205,6 +205,56 @@ export type GameConfig = {
 	-- Audio-API-managed curve (AudioEmitter.DistanceAttenuation) this
 	-- field does NOT control - see StudioChat.luau's own header comment.
 	decisionStudioChatRangeStuds: number,
+
+	-- P3-5: every NPC-fill tuning knob, in one block. All PLACEHOLDER
+	-- except where noted - no real telemetry exists to tune against yet,
+	-- same stance raceDurationSeconds takes.
+	npc: NPCConfig,
+}
+
+-- ===== NPCConfig: architecture.md §4 =====================================
+-- One profile an NPC can draw. `durationScale` > 1 means it works
+-- SLOWER than the task's catalogue range (a weaker bot), < 1 faster -
+-- though never fast enough to break the fairness floor below, which is
+-- checked here at boot rather than left to the service to remember.
+export type NPCSkillProfile = {
+	id: string,
+	weight: number, -- relative draw weight; the list need not sum to 1
+	durationScale: number,
+	moveSpeedScale: number,
+}
+
+export type NPCConfig = {
+	-- architecture.md §4's "~10s grace window so slow teleports aren't
+	-- replaced by bots."
+	fillGraceSeconds: number,
+	-- architecture.md §4: "AI tick at 5-10 Hz - never on Heartbeat."
+	-- Validated into that range, because the whole per-server cost
+	-- analysis in docs/npc-notes.md is derived from it.
+	tickHz: number,
+	skillProfiles: { NPCSkillProfile },
+	-- Multiple of the median human time an NPC may never finish faster
+	-- than. 1.0 = architecture.md's rule verbatim ("an NPC never
+	-- finishes faster than the median human time for that task"); above
+	-- 1.0 makes bots strictly slower still. Below 1.0 would let a bot
+	-- beat the median, so it fails validation.
+	fairnessFloorScale: number,
+	-- How many human completions of a task are needed before its
+	-- observed median replaces the catalogue-range fallback.
+	medianSampleMinimum: number,
+	-- How close the rig must get to a station part to count as arrived.
+	stationArrivalRadiusStuds: number,
+	-- How many of the nearest unfinished stations an NPC picks its next
+	-- target from (architecture.md §4's "nearest unfinished, with
+	-- randomness"). 1 = always the nearest, and every bot moves in
+	-- lockstep.
+	nextStationTopK: number,
+	-- Blocked-path handling: how long a rig may make no progress before
+	-- the path is recomputed, and how many recomputes it gets for one
+	-- station before it gives up and teleports to the station instead of
+	-- stalling the round forever.
+	repathAfterStuckSeconds: number,
+	maxRepathsPerStation: number,
 }
 
 -- ===== Issues ============================================================
@@ -401,6 +451,103 @@ function Validate.checkTitle(fileName: string, def: TitleDef, issues: { Issue })
 	end
 end
 
+-- P3-5. Split out of checkGameConfig purely for length - it's called
+-- from there, not separately, so a new NPC knob can't be added without
+-- passing through this.
+--
+-- Note on what is deliberately NOT checked here: that a profile's
+-- durationScale sits above fairnessFloorScale. It's tempting (a bot
+-- that's always floored is a profile that means nothing), but it isn't
+-- decidable at boot - whether a given draw is floored depends on where
+-- in that task's expected range the sample landed and on the observed
+-- human median at the time, neither of which exists yet. A profile
+-- below the floor scale is floored on its FASTER draws only, which is
+-- exactly what a rubber band is supposed to do. The runtime signal for
+-- "this profile never means anything" is NPCLogic.sampleWorkSeconds'
+-- own `flooredBy` return, which NPCService logs - see docs/npc-notes.md.
+local function checkNPCConfig(npc: NPCConfig, issues: { Issue })
+	-- A whole missing block is a config file that predates P3-5 rather
+	-- than a bad value, and it reads far better as one named issue than
+	-- as "attempt to index nil" from the first field below.
+	if npc == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc", "the NPC config block is missing entirely")
+		return
+	end
+
+	if npc.fillGraceSeconds < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.fillGraceSeconds", "must not be negative")
+	end
+	if npc.tickHz < 5 or npc.tickHz > 10 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"npc.tickHz",
+			string.format("architecture.md §4 requires 5-10 Hz, got %s", tostring(npc.tickHz))
+		)
+	end
+	if npc.fairnessFloorScale < 1 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"npc.fairnessFloorScale",
+			string.format(
+				"must be >= 1 - below 1 lets an NPC finish faster than the median human, which architecture.md §4 forbids (got %s)",
+				tostring(npc.fairnessFloorScale)
+			)
+		)
+	end
+	if npc.medianSampleMinimum < 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.medianSampleMinimum", "must be at least 1")
+	end
+	if npc.stationArrivalRadiusStuds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.stationArrivalRadiusStuds", "must be positive")
+	end
+	if npc.nextStationTopK < 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.nextStationTopK", "must be at least 1")
+	end
+	if npc.repathAfterStuckSeconds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.repathAfterStuckSeconds", "must be positive")
+	end
+	if npc.maxRepathsPerStation < 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.maxRepathsPerStation", "must be at least 1")
+	end
+
+	if #npc.skillProfiles == 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.skillProfiles", "must declare at least one profile")
+		return
+	end
+
+	local totalWeight = 0
+	local seenIds: { [string]: boolean } = {}
+	for index, profile in npc.skillProfiles do
+		local field = string.format("npc.skillProfiles[%d]", index)
+		if profile.id == "" then
+			issue(issues, "GameConfig", "GameConfig.luau", field .. ".id", "must not be empty")
+		elseif seenIds[profile.id] then
+			issue(issues, "GameConfig", "GameConfig.luau", field .. ".id", "duplicate profile id " .. profile.id)
+		end
+		seenIds[profile.id] = true
+
+		if profile.weight <= 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", field .. ".weight", "must be positive")
+		end
+		totalWeight += profile.weight
+
+		if profile.durationScale <= 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", field .. ".durationScale", "must be positive")
+		end
+		if profile.moveSpeedScale <= 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", field .. ".moveSpeedScale", "must be positive")
+		end
+	end
+
+	if totalWeight <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.skillProfiles", "weights must sum to more than zero")
+	end
+end
+
 function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	if config.playerCount <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "playerCount", "must be positive")
@@ -490,6 +637,8 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	if config.decisionStudioChatRangeStuds <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "decisionStudioChatRangeStuds", "must be positive")
 	end
+
+	checkNPCConfig(config.npc, issues)
 
 	for _, field in { "loadingSeconds", "introSeconds", "qualifiedSeconds", "resultsSeconds", "cleanupSeconds" } do
 		local value = (config.roundTimers :: any)[field]

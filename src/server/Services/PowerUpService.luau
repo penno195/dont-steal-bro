@@ -62,6 +62,7 @@ local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -69,6 +70,7 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
+local Participants = require(ServerScriptService.Server.Participants)
 
 local powerUpDefsById: { [string]: Validate.PowerUpDef } = {}
 for _, entry in PowerUps do
@@ -150,9 +152,20 @@ end
 
 -- ===== effect application (P2-8's seam) ===================================
 
-export type EffectApplier = (caster: Player, target: Player?, def: Validate.PowerUpDef) -> (boolean, string)
+-- Takes PARTICIPANTS, not Players (P3-5): a power-up's target may be an
+-- NPC, and "NPCs are affected by player power-ups exactly like humans
+-- are" is only true if the applier can't tell which it's been handed.
+export type EffectApplier = (
+	caster: Participants.Participant,
+	target: Participants.Participant?,
+	def: Validate.PowerUpDef
+) -> (boolean, string)
 
-local function defaultEffectApplier(_caster: Player, _target: Player?, _def: Validate.PowerUpDef): (boolean, string)
+local function defaultEffectApplier(
+	_caster: Participants.Participant,
+	_target: Participants.Participant?,
+	_def: Validate.PowerUpDef
+): (boolean, string)
 	return true, "no effect resolver wired in yet (P2-8)"
 end
 
@@ -393,8 +406,20 @@ end
 
 -- ===== use-intent validation pipeline ======================================
 
-local function resolveTarget(caster: Player, def: Validate.PowerUpDef, explicitTargetId: number?): Player?
-	local casterRoot = characterRoot(caster.Character)
+-- P3-5: scans the participant roster rather than Players:GetPlayers(),
+-- so an NPC standing in front of the caster is as targetable as a human
+-- standing in the same spot - the targeting math in PowerUpLogic never
+-- learns which it picked. An explicit target id from a client is still
+-- looked up in the registry (not via Players:GetPlayerByUserId), which
+-- also means a client CAN aim at a bot on purpose, deliberately: a
+-- power-up that can't be aimed at half the field would be a strange
+-- thing to hand a player.
+local function resolveTarget(
+	caster: Participants.Participant,
+	def: Validate.PowerUpDef,
+	explicitTargetId: number?
+): Participants.Participant?
+	local casterRoot = characterRoot(caster.character)
 	if casterRoot == nil then
 		return nil
 	end
@@ -402,11 +427,11 @@ local function resolveTarget(caster: Player, def: Validate.PowerUpDef, explicitT
 	local casterForward = toVec3(casterRoot.CFrame.LookVector)
 
 	if def.target == "Aimed" and explicitTargetId ~= nil then
-		local explicitPlayer = Players:GetPlayerByUserId(explicitTargetId)
-		if explicitPlayer == nil or explicitPlayer == caster then
+		local explicitTarget = Participants.get(explicitTargetId)
+		if explicitTarget == nil or explicitTarget.id == caster.id then
 			return nil
 		end
-		local targetRoot = characterRoot(explicitPlayer.Character)
+		local targetRoot = characterRoot(explicitTarget.character)
 		if targetRoot == nil then
 			return nil
 		end
@@ -418,7 +443,7 @@ local function resolveTarget(caster: Player, def: Validate.PowerUpDef, explicitT
 			GameConfig.powerUpTargetConeDegrees
 		)
 		if inRange then
-			return explicitPlayer
+			return explicitTarget
 		end
 		return nil
 	end
@@ -426,17 +451,17 @@ local function resolveTarget(caster: Player, def: Validate.PowerUpDef, explicitT
 	-- No usable explicit target (or a Nearest-target item, which always
 	-- auto-targets regardless of any client hint) - smart targeting.
 	local candidates: { PowerUpLogic.TargetCandidate } = {}
-	local byId: { [number]: Player } = {}
-	for _, other in Players:GetPlayers() do
-		if other == caster then
+	local byId: { [number]: Participants.Participant } = {}
+	for _, other in Participants.all() do
+		if other.id == caster.id then
 			continue
 		end
-		local otherRoot = characterRoot(other.Character)
+		local otherRoot = characterRoot(other.character)
 		if otherRoot == nil then
 			continue
 		end
-		table.insert(candidates, { id = other.UserId, position = toVec3(otherRoot.Position) })
-		byId[other.UserId] = other
+		table.insert(candidates, { id = other.id, position = toVec3(otherRoot.Position) })
+		byId[other.id] = other
 	end
 
 	local chosenId: number?
@@ -505,13 +530,24 @@ local function handleUseIntent(player: Player, slotIndex: number?, targetPlayerI
 		return
 	end
 
-	local resolvedTarget: Player? = nil
+	-- The caster is always a human here (this is a client remote's own
+	-- handler), but it still crosses over to a participant before
+	-- reaching the targeting and effect code, so those never see a
+	-- Player at all. P3-6's NPC power-up use enters at that same seam.
+	local casterParticipant = Participants.fromPlayer(player)
+	if casterParticipant == nil then
+		audit(player, def.id, nil, "Rejected", "caster is not on the participant roster")
+		sendResult(player, false, def.id, nil, "not in this round")
+		return
+	end
+
+	local resolvedTarget: Participants.Participant? = nil
 	if def.target == "Self" then
-		resolvedTarget = player
+		resolvedTarget = casterParticipant
 	elseif def.target == "Area" then
-		resolvedTarget = nil -- a zone at the caster's own position, not a player target
+		resolvedTarget = nil -- a zone at the caster's own position, not a racer target
 	else
-		resolvedTarget = resolveTarget(player, def, targetPlayerId)
+		resolvedTarget = resolveTarget(casterParticipant, def, targetPlayerId)
 		if resolvedTarget == nil then
 			audit(player, def.id, nil, "Rejected", "no valid target")
 			sendResult(player, false, def.id, nil, "no valid target")
@@ -519,8 +555,8 @@ local function handleUseIntent(player: Player, slotIndex: number?, targetPlayerI
 		end
 	end
 
-	local resolvedTargetId = if resolvedTarget ~= nil then resolvedTarget.UserId else nil
-	local applied, description = effectApplier(player, resolvedTarget, def)
+	local resolvedTargetId = if resolvedTarget ~= nil then resolvedTarget.id else nil
+	local applied, description = effectApplier(casterParticipant, resolvedTarget, def)
 
 	if not applied then
 		audit(player, def.id, resolvedTargetId, "Rejected", description)
@@ -568,7 +604,7 @@ end
 
 local PowerUpService: Loader.Service = {
 	name = "PowerUpService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService" },
+	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService" },
 
 	setSpawnPoints = setSpawnPoints,
 	debugLoadSpawnPointsFromMap = debugLoadSpawnPointsFromMap,

@@ -16,8 +16,17 @@
 --
 -- The pure resolver, stacking rules, and the central hard-control
 -- anti-frustration gate live in src/shared/StatusEffectResolver.luau;
--- this is the thin Roblox-touching wrapper that supplies real Players/
--- Humanoids/timers and applies what that module decides.
+-- this is the thin Roblox-touching wrapper that supplies real
+-- characters/Humanoids/timers and applies what that module decides.
+--
+-- P3-5 re-keyed this from Player to PARTICIPANT ID (see Participants.
+-- luau's own header for why). It is what makes "NPCs are affected by
+-- player power-ups exactly like humans are" true by construction rather
+-- than by a parallel bot-effect path: an NPC's rig has a Humanoid like
+-- any other, so every line below applies to it unchanged. The only
+-- thing a bot lacks is a client to replicate to, which is the single
+-- `if participant.player ~= nil` in `replicate` - and no rule,
+-- stacking decision or immunity window branches on it.
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -30,6 +39,7 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local RoundStates = require(ReplicatedStorage.Shared.RoundStates)
 local StatusEffectResolver = require(ReplicatedStorage.Shared.StatusEffectResolver)
 local StatusEffectDefs = require(ServerScriptService.Server.Services.StatusEffectDefs)
+local Participants = require(ServerScriptService.Server.Participants)
 
 -- Roblox defaults - PLACEHOLDER, same stance every unverified number in
 -- this repo takes (see GameConfig.luau): no locked baseline movement
@@ -38,12 +48,12 @@ local StatusEffectDefs = require(ServerScriptService.Server.Services.StatusEffec
 local BASE_WALK_SPEED = 16
 local BASE_JUMP_POWER = 50
 
-type PlayerState = {
+type RacerState = {
 	activeEffects: { StatusEffectResolver.ActiveEffect },
 	hardControlHistory: StatusEffectResolver.HardControlHistory,
 }
 
-local playerStates: { [Player]: PlayerState } = {}
+local racerStates: { [number]: RacerState } = {}
 local instanceCounter = 0
 
 local function now(): number
@@ -55,14 +65,14 @@ local function nextInstanceId(): string
 	return string.format("effect-%d", instanceCounter)
 end
 
-local function ensureState(player: Player): PlayerState
-	local state = playerStates[player]
+local function ensureState(racerId: number): RacerState
+	local state = racerStates[racerId]
 	if state == nil then
 		state = {
 			activeEffects = {},
 			hardControlHistory = { lastEndedAt = nil, recentApplications = {}, totalDisabledSeconds = 0 },
 		}
-		playerStates[player] = state
+		racerStates[racerId] = state
 	end
 	return state
 end
@@ -73,8 +83,8 @@ end
 -- timestamp is ever updated, so the immunity window (powerups.md rule 1)
 -- always starts counting from a real expiry, not from whenever
 -- something else happened to notice.
-local function pruneExpired(player: Player)
-	local state = ensureState(player)
+local function pruneExpired(racerId: number)
+	local state = ensureState(racerId)
 	local nowValue = now()
 	local stillActive = StatusEffectResolver.activeAt(state.activeEffects, nowValue)
 
@@ -95,8 +105,13 @@ local function pruneExpired(player: Player)
 	state.activeEffects = stillActive
 end
 
-local function applyResolvedStats(player: Player, stats: StatusEffectResolver.ResolvedStats)
-	local character = player.Character
+-- Reads the character off the participant registry rather than off a
+-- Player, which is the whole of what makes an NPC affectable: a bot's
+-- rig has a Humanoid exactly like a human's, and this function can no
+-- longer tell the difference.
+local function applyResolvedStats(racerId: number, stats: StatusEffectResolver.ResolvedStats)
+	local participant = Participants.get(racerId)
+	local character = if participant ~= nil then participant.character else nil
 	local humanoid = if character ~= nil then character:FindFirstChildOfClass("Humanoid") else nil
 	if humanoid == nil then
 		return
@@ -106,13 +121,27 @@ local function applyResolvedStats(player: Player, stats: StatusEffectResolver.Re
 	humanoid.JumpPower = if stats.ControlLock then 0 else BASE_JUMP_POWER * stats.JumpPower
 end
 
-local function replicate(player: Player, state: PlayerState)
-	local ownPayload = {}
-	for _, effect in state.activeEffects do
-		table.insert(ownPayload, { id = effect.def.id, category = effect.def.category, expiresAt = effect.expiresAt })
-	end
-	Net.fireClient("StatusEffectsChanged", player, { effects = ownPayload })
+local function replicate(racerId: number, state: RacerState)
+	local participant = Participants.get(racerId)
 
+	-- The targeted half only exists for a human: an NPC has no client to
+	-- send its own HUD detail to. This `if` is the ONLY place in the
+	-- status effect system that distinguishes a bot from a player.
+	local player = if participant ~= nil then participant.player else nil
+	if player ~= nil then
+		local ownPayload = {}
+		for _, effect in state.activeEffects do
+			table.insert(
+				ownPayload,
+				{ id = effect.def.id, category = effect.def.category, expiresAt = effect.expiresAt }
+			)
+		end
+		Net.fireClient("StatusEffectsChanged", player, { effects = ownPayload })
+	end
+
+	-- The broadcast half fires for everyone, bots included - a frozen
+	-- NPC has to LOOK frozen to the humans racing it, or a power-up
+	-- spent on one reads as a power-up that did nothing.
 	local seenCategories: { [string]: boolean } = {}
 	local categories = {}
 	for _, effect in state.activeEffects do
@@ -121,41 +150,41 @@ local function replicate(player: Player, state: PlayerState)
 			table.insert(categories, effect.def.category)
 		end
 	end
-	Net.fireAllClients("StatusEffectsVisual", { playerId = player.UserId, categories = categories })
+	Net.fireAllClients("StatusEffectsVisual", { playerId = racerId, categories = categories })
 end
 
--- The one place `recomputeAndApply` is ever skipped is a player with no
+-- The one place `recomputeAndApply` is ever skipped is a racer with no
 -- Character (already handled inside applyResolvedStats as a no-op) -
 -- resolve/replicate still run regardless, so the HUD/visual feed stays
--- correct even for a currently-dead-or-loading player.
-local function recomputeAndApply(player: Player)
-	local state = ensureState(player)
+-- correct even for a currently-dead-or-loading racer.
+local function recomputeAndApply(racerId: number)
+	local state = ensureState(racerId)
 	local stats = StatusEffectResolver.resolve(state.activeEffects)
-	applyResolvedStats(player, stats)
-	replicate(player, state)
+	applyResolvedStats(racerId, stats)
+	replicate(racerId, state)
 end
 
 -- "Effects are cleared correctly on death, respawn, round end, and state
 -- transitions, with no orphaned modifiers" (the task's own requirement,
 -- verbatim) - the one function that does that clearing, called from
 -- every one of those triggers below.
-local function clearAllEffects(player: Player)
-	local state = ensureState(player)
+local function clearAllEffects(racerId: number)
+	local state = ensureState(racerId)
 	state.activeEffects = {}
-	recomputeAndApply(player)
+	recomputeAndApply(racerId)
 end
 
-local function clearEveryPlayer()
-	for player in playerStates do
-		clearAllEffects(player)
+local function clearEveryRacer()
+	for racerId in racerStates do
+		clearAllEffects(racerId)
 	end
 end
 
 -- ===== applying an effect ===================================================
 
-local function applyEffect(target: Player, def: StatusEffectResolver.EffectDef, casterId: number?): (boolean, string)
-	pruneExpired(target)
-	local state = ensureState(target)
+local function applyEffect(targetId: number, def: StatusEffectResolver.EffectDef, casterId: number?): (boolean, string)
+	pruneExpired(targetId)
+	local state = ensureState(targetId)
 
 	local effectiveDef = def
 	local effectiveDuration = def.durationSeconds
@@ -194,7 +223,7 @@ local function applyEffect(target: Player, def: StatusEffectResolver.EffectDef, 
 	}
 
 	state.activeEffects = StatusEffectResolver.applyStacking(state.activeEffects, newEffect)
-	recomputeAndApply(target)
+	recomputeAndApply(targetId)
 
 	return true,
 		if effectiveDef.id ~= def.id
@@ -206,9 +235,9 @@ end
 -- header comment) - it strips every currently-active DEBUFF from the
 -- caster's own list and recomputes. Always targets the caster - it's a
 -- Self buff, never something aimed at anyone else.
-local function applySecondWind(caster: Player): (boolean, string)
-	pruneExpired(caster)
-	local state = ensureState(caster)
+local function applySecondWind(casterId: number): (boolean, string)
+	pruneExpired(casterId)
+	local state = ensureState(casterId)
 
 	local cleansedCount = 0
 	local kept: { StatusEffectResolver.ActiveEffect } = {}
@@ -221,7 +250,7 @@ local function applySecondWind(caster: Player): (boolean, string)
 	end
 
 	state.activeEffects = kept
-	recomputeAndApply(caster)
+	recomputeAndApply(casterId)
 
 	return true, string.format("cleansed %d active debuff(s)", cleansedCount)
 end
@@ -232,9 +261,13 @@ end
 -- task-scramble) still succeeds - consuming the cooldown and logging a
 -- clear reason - rather than silently rejecting a use that looks correct
 -- from the player's side.
-local function applyEffectFor(caster: Player, target: Player?, powerUpDef: Validate.PowerUpDef): (boolean, string)
+local function applyEffectFor(
+	caster: Participants.Participant,
+	target: Participants.Participant?,
+	powerUpDef: Validate.PowerUpDef
+): (boolean, string)
 	if powerUpDef.id == "second-wind" then
-		return applySecondWind(caster)
+		return applySecondWind(caster.id)
 	end
 
 	local effectDef = StatusEffectDefs[powerUpDef.id]
@@ -247,14 +280,14 @@ local function applyEffectFor(caster: Player, target: Player?, powerUpDef: Valid
 	end
 
 	local actualTarget = if target ~= nil then target else caster
-	return applyEffect(actualTarget, effectDef, caster.UserId)
+	return applyEffect(actualTarget.id, effectDef, caster.id)
 end
 
 -- ===== service =============================================================
 
 local StatusEffects: Loader.Service = {
 	name = "StatusEffects",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "PowerUpService" },
+	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "PowerUpService", "ParticipantService" },
 
 	-- Exposed so a consumer (P2-9's MovementWatch, comparing observed
 	-- movement against "the maximum the status effect resolver says they
@@ -266,14 +299,30 @@ local StatusEffects: Loader.Service = {
 
 	applyEffectFor = applyEffectFor,
 
+	-- P3-5: NPCService calls this when a bot's rig is despawned or
+	-- replaced, the same way a human's respawn clears theirs below.
+	clearFor = clearAllEffects,
+
+	getActiveEffectsFor = function(racerId: number): { StatusEffectResolver.ActiveEffect }
+		pruneExpired(racerId)
+		return ensureState(racerId).activeEffects
+	end,
+
+	getResolvedStatsFor = function(racerId: number): StatusEffectResolver.ResolvedStats
+		pruneExpired(racerId)
+		return StatusEffectResolver.resolve(ensureState(racerId).activeEffects)
+	end,
+
+	-- Player-shaped wrappers, kept so P2-9's MovementWatch (and any
+	-- other human-side caller) is unchanged by the re-key.
 	getActiveEffects = function(player: Player): { StatusEffectResolver.ActiveEffect }
-		pruneExpired(player)
-		return ensureState(player).activeEffects
+		pruneExpired(player.UserId)
+		return ensureState(player.UserId).activeEffects
 	end,
 
 	getResolvedStats = function(player: Player): StatusEffectResolver.ResolvedStats
-		pruneExpired(player)
-		return StatusEffectResolver.resolve(ensureState(player).activeEffects)
+		pruneExpired(player.UserId)
+		return StatusEffectResolver.resolve(ensureState(player.UserId).activeEffects)
 	end,
 }
 
@@ -285,7 +334,7 @@ function StatusEffects:init()
 	local RoundService = Loader.get("RoundService") :: any
 	for _, state in RoundStates.ALL do
 		RoundService.onExit(state, function()
-			clearEveryPlayer()
+			clearEveryRacer()
 		end)
 	end
 
@@ -293,19 +342,19 @@ function StatusEffects:init()
 		player.CharacterAdded:Connect(function(character: Model)
 			-- Respawn: a fresh character starts clean, never inheriting a
 			-- stale modifier meant for the character that just died.
-			clearAllEffects(player)
+			clearAllEffects(player.UserId)
 
 			local humanoid = character:WaitForChild("Humanoid")
 			if humanoid:IsA("Humanoid") then
 				humanoid.Died:Connect(function()
-					clearAllEffects(player)
+					clearAllEffects(player.UserId)
 				end)
 			end
 		end)
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)
-		playerStates[player] = nil
+		racerStates[player.UserId] = nil
 	end)
 
 	local PowerUpService = Loader.get("PowerUpService") :: any

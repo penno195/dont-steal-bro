@@ -20,5 +20,7 @@ require("./PowerUpLogic.spec")
 require("./StatusEffectResolver.spec")
 require("./MovementSanity.spec")
 require("./Outcomes.spec")
+require("./Participants.spec")
+require("./NPCLogic.spec")
 
 TestRunner.run()
