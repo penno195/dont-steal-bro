@@ -9,8 +9,9 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Phases 00–03 complete — 29 of the tracker's 57 tasks.** `lune run
-tests/run` currently passes 337 cases across 16 spec files.
+**Phases 00–03 complete, Phase 04 underway — 30 of the tracker's 57
+tasks.** `lune run tests/run` currently passes 362 cases across 17 spec
+files.
 
 Pre-production (Phase 00) resolved all eight open design questions
 (`docs/design-decisions.md`) and wrote the task and power-up catalogues,
@@ -84,10 +85,21 @@ neither dodge a loss nor manufacture one for a player who just won. A
 server shutdown mid-finale preserves every streak exactly as it was,
 because a player can't cause one and the streak is the whole metagame.
 
-**Next: Phase 04** — progression, economy and leaderboards. P4-1
-(`ProgressionService`) is the first task, and it is where
-`NPCService.roundEarnsStreakCredit()` gets consumed: threat-model.md §8
-requires *some* NPC-seat streak-credit threshold to ship day one.
+Phase 04 opened with P4-1, streak and bounty resolution
+(`ProgressionService`, `src/server/ProgressionLogic.luau`).
+`applyRoundResult` is now the only path to a streak change in the game,
+and that is enforced rather than asked for: `DataService` no longer
+publishes a way to move a streak at all, and hands its single atomic
+writer to one claimant, erroring loudly on a second. Every change
+carries a reason code, a round id for idempotency, and an audit line
+naming the before and after state. It also closed two real gaps —
+nothing anywhere applied design-decisions.md Q7's "failing to qualify
+is a loss too", so a 4th-place finisher kept their streak indefinitely;
+and threat-model.md §8's NPC-seat streak-credit threshold now actually
+gates a win.
+
+**Next: P4-2**, titles and nametags, which builds on `bestStreak` —
+the one field `applyResult` will never lower.
 
 Client UI is still essentially unbuilt: `src/client/` has three
 controllers and the task views, and the whole of Phase 06 (theme,

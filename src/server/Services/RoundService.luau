@@ -75,6 +75,24 @@ local currentEndsAt: number? = nil
 local exitRan = true -- nothing has been entered yet, so there's nothing pending to exit
 local pendingTimerThread: thread? = nil
 
+-- P4-1: the identity of the round currently being played. Every
+-- progression write is keyed on it, which is what makes a retried or
+-- double-fired result impossible to double-count - see
+-- ProgressionService.applyRoundResult.
+--
+-- It lives here because this service is the only thing that knows when
+-- one round ends and the next begins. A new one is minted on entering
+-- Loading (the first state of a real round - WaitingForPlayers is the
+-- idle state before any round exists).
+--
+-- Shaped as jobId:counter so it is unique across servers as well as
+-- within one, which matters the moment these ids reach analytics and
+-- two servers' round 1 would otherwise collide. game.JobId is an empty
+-- string in Studio, hence the fallback - a Studio round id only has to
+-- be unique on that one machine.
+local roundCounter = 0
+local currentRoundId = "pre-round"
+
 -- `any`, not the package's own exported `Signal<T...>` type: Signal's
 -- Wally package is a re-export wrapper (Packages/Signal.lua just returns
 -- another module's require), and luau-lsp doesn't resolve a generic type
@@ -181,6 +199,13 @@ local function exitCurrentState(): boolean
 	return ran
 end
 
+local function beginNewRoundId()
+	roundCounter += 1
+	local serverId = if game.JobId ~= "" then game.JobId else "studio"
+	currentRoundId = string.format("%s:%d", serverId, roundCounter)
+	print(string.format("RoundService: round %s begins", currentRoundId))
+end
+
 transition = function(to: RoundState, force: boolean?)
 	if not force and not RoundStates.isLegalTransition(currentState, to) then
 		local message = string.format("RoundService: illegal transition %s -> %s", currentState, to)
@@ -190,6 +215,16 @@ transition = function(to: RoundState, force: boolean?)
 			warn(message)
 		end
 		return
+	end
+
+	-- Minted before enterState, so anything reacting to Loading's own
+	-- onEnter already sees the new round's id rather than the previous
+	-- round's. Deliberately NOT on Race: a result can legitimately be
+	-- recorded from Loading onward (a player leaving during Intro is
+	-- already this round's business), and two states sharing one id
+	-- would be a silent idempotency collision across a round boundary.
+	if to == "Loading" then
+		beginNewRoundId()
 	end
 
 	exitCurrentState()
@@ -253,6 +288,12 @@ local RoundService: Loader.Service = {
 	end,
 	getEndsAt = function(): number?
 		return currentEndsAt
+	end,
+	-- P4-1's idempotency key. "pre-round" until the first Loading, so a
+	-- result recorded before any round exists is still keyed on
+	-- something stable rather than nil.
+	getRoundId = function(): string
+		return currentRoundId
 	end,
 	onEnter = function(state: RoundState, callback: (endsAt: number?) -> ())
 		return enterSignals[state]:Connect(callback)

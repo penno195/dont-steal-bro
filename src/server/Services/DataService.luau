@@ -191,38 +191,65 @@ local function getBestStreak(player: Player): number
 end
 
 -- On a win. Bumps bestStreak too if this is a new peak - bestStreak is
--- what titles key off (gdd.md §3) and is never itself decremented.
-local function incrementStreak(player: Player): number
-	local d = data(player)
-	if d == nil then
-		return 0
-	end
-	d.currentStreak += 1
-	if d.currentStreak > d.bestStreak then
-		d.bestStreak = d.currentStreak
-	end
-	return d.currentStreak
-end
-
--- On any loss - design-decisions.md Q7: everyone but the winner(s)
--- resets, including failing to qualify at all.
-local function resetStreak(player: Player)
-	local d = data(player)
-	if d ~= nil then
-		d.currentStreak = 0
-	end
-end
-
 local function getPendingBounty(player: Player): ProfileLogic.PendingBounty?
 	local d = data(player)
 	return if d then d.pendingBounty else nil
 end
 
-local function setPendingBounty(player: Player, bounty: ProfileLogic.PendingBounty?)
+-- ===== the progression write gate (P4-1) ==================================
+--
+-- P4-1 requires `ProgressionService.applyRoundResult` to be the ONLY
+-- path to a streak change anywhere in the codebase, and asks where the
+-- remaining paths are so they can be closed. The honest answer, before
+-- this, was "right here": DataService published incrementStreak,
+-- resetStreak and setPendingBounty on its service table, so any of the
+-- dozen services reachable through Loader.get could have moved a streak
+-- without an audit line, a reason code or an idempotency key - and two
+-- of them did.
+--
+-- Rather than rely on nobody doing it again, those three mutators are
+-- gone. What replaces them is one atomic state write, handed out ONCE,
+-- to the first caller that asks:
+--
+--   local writeStreakState = DataService.claimProgressionWriter()
+--
+-- ProgressionService claims it in its own init(). Any second caller -
+-- a future service, a well-meaning patch, a copy-pasted line - gets a
+-- loud error at boot naming who already holds it, rather than a silent
+-- second writer. Loader's topological sort makes "first" deterministic:
+-- ProgressionService declares DataService as a dependency, so it runs
+-- after DataService's own init and before anything that depends on IT.
+--
+-- One function, not three, because the whole state moves together:
+-- ProgressionLogic.applyResult computes currentStreak, bestStreak and
+-- pendingBounty as a single before -> after transformation, and writing
+-- them one at a time is what would let a yield land between "streak
+-- reset" and "bounty cleared."
+export type ProgressionWriter = (player: Player, state: ProfileLogic.ProgressionState) -> ()
+
+local progressionWriterClaimedBy: string? = nil
+
+local function writeProgressionState(player: Player, state: ProfileLogic.ProgressionState)
 	local d = data(player)
-	if d ~= nil then
-		d.pendingBounty = bounty
+	if d == nil then
+		return
 	end
+	d.currentStreak = state.currentStreak
+	d.bestStreak = state.bestStreak
+	d.pendingBounty = state.pendingBounty
+end
+
+local function claimProgressionWriter(claimantName: string): ProgressionWriter
+	assert(
+		progressionWriterClaimedBy == nil,
+		string.format(
+			"DataService.claimProgressionWriter: already claimed by %q - there is exactly one progression writer in this game, and it is ProgressionService (P4-1). If you need a streak to change, call ProgressionService.applyRoundResult.",
+			tostring(progressionWriterClaimedBy)
+		)
+	)
+	progressionWriterClaimedBy = claimantName
+	print(string.format("DataService: progression writer claimed by %s", claimantName))
+	return writeProgressionState
 end
 
 local function getCurrency(player: Player): number
@@ -294,10 +321,10 @@ local DataService: Loader.Service = {
 	setPendingRoundOutcomeResolver = setPendingRoundOutcomeResolver,
 	getStreak = getStreak,
 	getBestStreak = getBestStreak,
-	incrementStreak = incrementStreak,
-	resetStreak = resetStreak,
 	getPendingBounty = getPendingBounty,
-	setPendingBounty = setPendingBounty,
+	-- P4-1: incrementStreak/resetStreak/setPendingBounty used to live
+	-- here. They are deliberately gone - see the write gate above.
+	claimProgressionWriter = claimProgressionWriter,
 	getCurrency = getCurrency,
 	addCurrency = addCurrency,
 	getStats = getStats,

@@ -566,6 +566,25 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P4-1: this round didn't move your streak, and here is why.
+	-- Targeted at the one player it concerns (fireClient), never
+	-- broadcast - design-decisions.md Q7 condition 1 keeps streak off
+	-- every in-round surface, and telling the whole server that someone
+	-- just failed to gain a streak leaks the same signal by implication.
+	--
+	-- threat-model.md §8 requires this to exist: an NPC-heavy round
+	-- earns no streak credit, and "needs an explicit 'queue too thin for
+	-- streak credit right now' message, not silent non-progression."
+	-- Carries the seat count and the threshold so a results screen can
+	-- say something specific rather than something vague.
+	ProgressionStreakSkipped = {
+		name = "ProgressionStreakSkipped",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- P3-7: a finalist's seat changed. Two reasons, both broadcast to
 	-- everyone in the room because everyone needs to know who they're
 	-- actually negotiating with:

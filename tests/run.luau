@@ -24,5 +24,6 @@ require("./Participants.spec")
 require("./NPCLogic.spec")
 require("./NPCBrainLogic.spec")
 require("./FinaleRoster.spec")
+require("./ProgressionLogic.spec")
 
 TestRunner.run()

@@ -305,17 +305,35 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			end
 		end
 
-		if won then
-			DataService.incrementStreak(player)
-			DataService.recordRoundStat(player, "wins")
+		-- P4-1: the streak change goes through ProgressionService and
+		-- nowhere else - reason code, round id, idempotency and the
+		-- audit line all come with it. This file no longer knows how to
+		-- move a streak, and DataService no longer publishes a way.
+		local ProgressionService = Loader.get("ProgressionService") :: any
+		local RoundService = Loader.get("RoundService") :: any
 
+		local bounty: ProfileLogic.PendingBounty? = nil
+		if won then
 			local outcomeTag = outcomeTagFor(outcome.branch)
 			if outcomeTag ~= nil then
-				DataService.setPendingBounty(player, {
+				-- Both the annotation and the cast are load-bearing, and
+				-- neither is obvious: confirmed locally that luau-lsp
+				-- widens a string-literal union back to plain `string`
+				-- inside a table constructor unless the table has an
+				-- expected type, and a `{ outcomeTag: string }` is not
+				-- assignable to PendingBounty because Luau table
+				-- properties are invariant. Annotating `granted` supplies
+				-- that expected type; the cast handles the `~= nil`
+				-- refinement widening `OutcomeTag?` to `string` rather
+				-- than to `OutcomeTag`. outcomeTagFor returns one of the
+				-- three literals or nil, and nil is already excluded
+				-- here, so the cast asserts what its signature promises.
+				local granted: ProfileLogic.PendingBounty = {
 					streakTier = tierNumberByPlayerId[finalist.playerId],
-					outcomeTag = outcomeTag,
+					outcomeTag = outcomeTag :: ProfileLogic.OutcomeTag,
 					grantedAt = os.time(),
-				})
+				}
+				bounty = granted
 			else
 				warn(
 					string.format(
@@ -325,10 +343,13 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 					)
 				)
 			end
-		else
-			DataService.resetStreak(player)
-			DataService.recordRoundStat(player, "losses")
 		end
+
+		ProgressionService.applyRoundResult(player, {
+			roundId = RoundService.getRoundId(),
+			reason = ProgressionService.reasonForOutcome(outcome.branch, won),
+			bounty = bounty,
+		})
 
 		DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
 		DataService.recordRoundStat(player, "qualifications")
@@ -684,6 +705,7 @@ local function beginDecisionStudio()
 	end
 
 	local DataService = Loader.get("DataService") :: any
+	local RoundService = Loader.get("RoundService") :: any
 	for _, id in qualifierIds do
 		local player = Players:GetPlayerByUserId(id)
 		if player == nil then
@@ -697,9 +719,33 @@ local function beginDecisionStudio()
 		-- written can't leave their streak in an undefined state -
 		-- ProfileLogic.applyLeaveSequence guarantees this runs before
 		-- their ProfileStore session actually ends.
+		-- P4-1: the forfeit goes through the same one function every
+		-- other streak change does, carrying this round's id - so a
+		-- leaver whose real result was already written is absorbed as a
+		-- retry rather than double-counted, and a leaver whose result
+		-- wasn't takes exactly one recorded loss.
+		local roundId = RoundService.getRoundId()
 		DataService.setPendingRoundOutcomeResolver(player, function()
-			DataService.resetStreak(player)
-			DataService.recordRoundStat(player, "losses")
+			local ProgressionService = Loader.get("ProgressionService") :: any
+
+			-- Checked rather than assumed. computeOutcomeAndWriteProfiles
+			-- clears this resolver for every finalist whose real result
+			-- it wrote, so in the ordinary case this never fires for
+			-- someone already recorded. But "a forfeit and a real result
+			-- for the same round" is a CONTRADICTION to the ledger, not
+			-- a retry, and a contradiction asserts - so a path that can
+			-- reach here with a result already written would take down
+			-- the profile-release sequence, which is the worst possible
+			-- place to throw. One read is cheaper than that risk.
+			if ProgressionService.hasResultFor(roundId, player.UserId) then
+				return
+			end
+
+			ProgressionService.applyRoundResult(player, {
+				roundId = roundId,
+				reason = "ForfeitDisconnect",
+				bounty = nil,
+			})
 		end)
 	end
 
@@ -733,7 +779,7 @@ end
 
 local DecisionService: Loader.Service = {
 	name = "DecisionService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "TaskService", "DataService" },
+	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "TaskService", "DataService", "ProgressionService" },
 
 	debugForceOutcome = debugForceOutcome,
 

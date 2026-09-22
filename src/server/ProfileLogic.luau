@@ -41,6 +41,17 @@ export type PendingBounty = {
 	grantedAt: number, -- os.time() when computed; threat-model.md §13's idempotent-per-round grant audit trail
 }
 
+-- The three fields a round result moves, as one value (P4-1). They are
+-- written together or not at all - see DataService's progression write
+-- gate for why one atomic write beats three mutators. Structurally
+-- identical to ProgressionLogic.StreakState, which is what that module
+-- computes and this one stores; neither requires the other.
+export type ProgressionState = {
+	currentStreak: number,
+	bestStreak: number,
+	pendingBounty: PendingBounty?,
+}
+
 export type ProfileData = {
 	schemaVersion: number,
 	currentStreak: number,
