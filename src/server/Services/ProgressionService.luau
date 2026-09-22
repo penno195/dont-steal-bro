@@ -225,6 +225,19 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		if ok and titleService ~= nil then
 			(titleService :: any).refreshFor(player)
 		end
+
+		-- P4-3: a new personal best is the ONLY thing the all-time board
+		-- cares about, and this is the only place one can happen - so the
+		-- leaderboard write is issued from here rather than polled for.
+		-- Fire-and-forget: the submit spawns its own thread, because a
+		-- write can retry with backoff for tens of seconds and a round
+		-- must never wait on a leaderboard.
+		local boardOk, leaderboard = pcall(function()
+			return Loader.get("LeaderboardService")
+		end)
+		if boardOk and leaderboard ~= nil then
+			(leaderboard :: any).submitBestStreak(player, after.bestStreak)
+		end
 	end
 
 	return after

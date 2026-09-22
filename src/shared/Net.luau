@@ -615,6 +615,24 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P4-3: the all-time board, broadcast from a server-side cache that
+	-- refreshes once per server on a jittered 60-120s interval. Never
+	-- fired in response to a client asking - P4-3 forbids reading on
+	-- player demand or once per viewer, and there is no request remote
+	-- here for a client to call.
+	--
+	-- `status` is the staleness indicator, and it travels WITH the
+	-- entries rather than as its own event: a client that got the board
+	-- and missed a separate "this is old" message would present stale
+	-- numbers as current, which is worse than showing nothing.
+	LeaderboardState = {
+		name = "LeaderboardState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- P4-1: this round didn't move your streak, and here is why.
 	-- Targeted at the one player it concerns (fireClient), never
 	-- broadcast - design-decisions.md Q7 condition 1 keeps streak off

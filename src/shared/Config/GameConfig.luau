@@ -140,6 +140,44 @@ local GameConfig: Validate.GameConfig = {
 		maxRepathsPerStation = 5,
 	},
 
+	-- P4-3: the all-time leaderboard. EVERY NUMBER IN THIS BLOCK THAT
+	-- DESCRIBES A ROBLOX LIMIT MUST BE VERIFIED against current
+	-- documentation before launch - see docs/leaderboard-scale.md, which
+	-- is where that verification gets recorded. They are config rather
+	-- than constants precisely so a corrected limit is an edit here.
+	leaderboard = {
+		storeName = "AllTimeBestStreak_v1", -- versioned: a schema change means a new store, never a migration of a sorted one
+		storeScope = "global",
+		topCount = 100, -- P4-3: top 100, and also the GetSortedAsync page size, so one page is the whole board
+
+		-- P4-3: "an interval of 60 to 120 seconds", drawn per cycle
+		-- rather than fixed so servers do not synchronise.
+		refreshMinSeconds = 60,
+		refreshMaxSeconds = 120,
+		-- When the board starts being labelled stale to the UI. Longer
+		-- than refreshMax on purpose: one skipped cycle is normal and
+		-- should not cry wolf.
+		staleAfterSeconds = 300,
+
+		nameCacheTtlSeconds = 3600, -- a renamed account corrects itself within the hour
+		maxWriteAttempts = 3,
+		backoffBaseSeconds = 1,
+		backoffCapSeconds = 60,
+
+		-- PLACEHOLDER AND UNVERIFIED. The real per-server DataStore
+		-- budget is a formula involving player count, and it is the
+		-- single most important thing in this block to check - see
+		-- docs/leaderboard-scale.md. The service also consults the
+		-- engine's own GetRequestBudgetForRequestType as the hard gate,
+		-- so a wrong figure here degrades policy rather than breaking
+		-- correctness.
+		budget = {
+			perWindow = 60,
+			windowSeconds = 60,
+			softCeiling = 0.7, -- reads yield to writes past this fraction
+		},
+	},
+
 	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which
 	-- forbids any in-round tell of a player's streak and names
 	-- "nameplate" specifically - a title maps to a bestStreak threshold,

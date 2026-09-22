@@ -221,6 +221,9 @@ export type GameConfig = {
 	-- same stance raceDurationSeconds takes.
 	npc: NPCConfig,
 
+	-- P4-3: the all-time leaderboard. See LeaderboardConfig below.
+	leaderboard: LeaderboardConfig,
+
 	-- P4-2: whether a title may be shown while a round is live. False
 	-- per design-decisions.md Q7 condition 1 - see GameConfig's own note
 	-- and TitleLogic.isVisibleInState.
@@ -234,6 +237,36 @@ export type GameConfig = {
 	-- on each NPCPersonalityDef, so adding a personality stays a
 	-- one-file change (Ground Rule 2).
 	npcBrain: NPCBrainConfig,
+}
+
+-- ===== LeaderboardConfig: P4-3 ===========================================
+-- The per-server DataStore request budget, as this game's own policy.
+-- NOT a statement of Roblox's actual limits - those are a formula
+-- involving player count that must be verified against current
+-- documentation (docs/leaderboard-scale.md), and LeaderboardService
+-- consults the engine's own GetRequestBudgetForRequestType as the hard
+-- gate regardless. A wrong figure here degrades policy, not correctness.
+export type LeaderboardBudget = {
+	perWindow: number,
+	windowSeconds: number,
+	-- Fraction of the budget past which READS are refused but writes
+	-- still go through. A stale board is invisible; a dropped write is a
+	-- player's record silently not counting.
+	softCeiling: number,
+}
+
+export type LeaderboardConfig = {
+	storeName: string,
+	storeScope: string,
+	topCount: number,
+	refreshMinSeconds: number,
+	refreshMaxSeconds: number,
+	staleAfterSeconds: number,
+	nameCacheTtlSeconds: number,
+	maxWriteAttempts: number,
+	backoffBaseSeconds: number,
+	backoffCapSeconds: number,
+	budget: LeaderboardBudget,
 }
 
 -- ===== NPCBrainConfig: P3-6 ==============================================
@@ -804,6 +837,101 @@ function Validate.checkNPCPersonality(fileName: string, def: NPCPersonalityDef, 
 	end
 end
 
+-- P4-3. Same split-for-length reasoning as the NPC blocks above.
+local function checkLeaderboardConfig(leaderboard: LeaderboardConfig, issues: { Issue })
+	if leaderboard == nil then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard",
+			"the leaderboard config block is missing entirely"
+		)
+		return
+	end
+
+	if not isNonEmptyString(leaderboard.storeName) then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.storeName", "must be a non-empty string")
+	end
+	if leaderboard.topCount <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.topCount", "must be positive")
+	end
+
+	-- The refresh band is P4-3's own "60 to 120 seconds" requirement.
+	-- Checked as an ORDER rather than against those exact numbers, so
+	-- retuning stays possible, but an inverted band would silently make
+	-- every interval the same value and undo the anti-synchronisation
+	-- the jitter exists for.
+	if leaderboard.refreshMinSeconds <= 0 or leaderboard.refreshMaxSeconds < leaderboard.refreshMinSeconds then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard.refreshMinSeconds",
+			string.format(
+				"must be positive and no greater than refreshMaxSeconds (%s)",
+				tostring(leaderboard.refreshMaxSeconds)
+			)
+		)
+	end
+
+	-- Staleness must outlast a normal refresh cycle, or a board that
+	-- simply hasn't ticked yet gets labelled stale and the indicator
+	-- cries wolf until players stop reading it.
+	if leaderboard.staleAfterSeconds <= leaderboard.refreshMaxSeconds then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard.staleAfterSeconds",
+			string.format(
+				"must exceed refreshMaxSeconds (%s) - one skipped cycle is normal and must not read as stale",
+				tostring(leaderboard.refreshMaxSeconds)
+			)
+		)
+	end
+
+	if leaderboard.nameCacheTtlSeconds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.nameCacheTtlSeconds", "must be positive")
+	end
+	if leaderboard.maxWriteAttempts < 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.maxWriteAttempts", "must be at least 1")
+	end
+	if leaderboard.backoffBaseSeconds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.backoffBaseSeconds", "must be positive")
+	end
+	if leaderboard.backoffCapSeconds < leaderboard.backoffBaseSeconds then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard.backoffCapSeconds",
+			"must not be below backoffBaseSeconds"
+		)
+	end
+
+	local budget = leaderboard.budget
+	if budget == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.budget", "the budget block is missing")
+		return
+	end
+	if budget.perWindow <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.budget.perWindow", "must be positive")
+	end
+	if budget.windowSeconds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.budget.windowSeconds", "must be positive")
+	end
+	if budget.softCeiling <= 0 or budget.softCeiling > 1 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard.budget.softCeiling",
+			"must be above 0 and at most 1 - it is the fraction of the budget past which reads yield to writes"
+		)
+	end
+end
+
 function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	if config.playerCount <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "playerCount", "must be positive")
@@ -896,6 +1024,8 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 
 	checkNPCConfig(config.npc, issues)
 	checkNPCBrainConfig(config.npcBrain, issues)
+
+	checkLeaderboardConfig(config.leaderboard, issues)
 
 	if config.npcTitleNoneChance < 0 or config.npcTitleNoneChance > 1 then
 		issue(issues, "GameConfig", "GameConfig.luau", "npcTitleNoneChance", "must be between 0 and 1")
