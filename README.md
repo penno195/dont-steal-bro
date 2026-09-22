@@ -9,8 +9,8 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Phases 00–03 complete, Phase 04 underway — 31 of the tracker's 57
-tasks.** `lune run tests/run` currently passes 398 cases across 18 spec
+**Phases 00–03 complete, Phase 04 underway — 32 of the tracker's 57
+tasks.** `lune run tests/run` currently passes 433 cases across 19 spec
 files.
 
 Pre-production (Phase 00) resolved all eight open design questions
@@ -113,7 +113,24 @@ threshold. Resolved in `design-decisions.md` §7's new applied-case note:
 every state in between**, enforced server-side so a modified client has
 nothing to un-hide.
 
-**Next: P4-3**, the all-time leaderboard on OrderedDataStore.
+P4-3 built the all-time highest-streak board on OrderedDataStore
+(`LeaderboardService`, `src/server/LeaderboardLogic.luau`,
+`docs/leaderboard-scale.md`). Writes go out only on a genuine personal
+best, through `UpdateAsync` with a max comparison so a lower value can
+never overwrite a higher one. Reads happen once per server on a
+jittered 60–120s interval and never on player demand — there is no
+request remote for a client to call. A failed refresh serves the
+previous board flagged stale rather than blanking it.
+
+The scale write-up concludes the first limit is **not** the per-server
+budget (cost per server is flat in total population) but the
+universe-wide read pressure of ~3,300 servers fetching a byte-identical
+first page. The mitigation is a MemoryStore cache in front of the
+store — which P4-4 brings in anyway. **Five platform assumptions in
+that doc are flagged as unverified** and need checking against current
+Roblox documentation before launch.
+
+**Next: P4-4**, daily and weekly boards with automatic rollover.
 
 Client UI is still thin: `src/client/` has four controllers and the task
 views, and the whole of Phase 06 (theme, components, HUD, Studio UI) is
@@ -139,6 +156,7 @@ still ahead.
 | [`docs/studio-chat-notes.md`](docs/studio-chat-notes.md) | What proximity chat needs configured outside code, and what a player without voice actually experiences. |
 | [`docs/npc-notes.md`](docs/npc-notes.md) | What 5 NPCs cost a server, which knob to turn first, where bots can still distort the streak leaderboard, how the brain routes every action through the validated path, and the Studio checklist. |
 | [`docs/finale-disconnect-tests.md`](docs/finale-disconnect-tests.md) | The two-client Studio plan for the finale's six disconnect/forfeit cases — including exactly when to close a window to trigger each. |
+| [`docs/leaderboard-scale.md`](docs/leaderboard-scale.md) | What the all-time board costs at 1,000 and 20,000 concurrent players, which limit is hit first, and the five platform assumptions that must be verified before launch. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture
