@@ -9,9 +9,8 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Phases 00–02 complete. Phase 03 (Decision Studio and NPCs) is 6 of 7
-done — 28 of the tracker's 57 tasks.** `lune run tests/run` currently
-passes 314 cases across 15 spec files.
+**Phases 00–03 complete — 29 of the tracker's 57 tasks.** `lune run
+tests/run` currently passes 337 cases across 16 spec files.
 
 Pre-production (Phase 00) resolved all eight open design questions
 (`docs/design-decisions.md`) and wrote the task and power-up catalogues,
@@ -40,7 +39,8 @@ a status effect system with stacking and mercy rules (`StatusEffects`);
 and movement sanity checks that are deliberately log-only for now
 (`MovementWatch`, `docs/movement-watch-notes.md`).
 
-Phase 03 so far: the outcome resolution table and its spec (P3-1), the
+Phase 03 (the Decision Studio and NPCs) delivered: the outcome
+resolution table and its spec (P3-1), the
 Decision Studio phase machine and its secrecy guarantees — no client ever
 learns another finalist's choice before Reveal (P3-2, `DecisionService`);
 proximity text and voice chat for the negotiation (P3-3, `StudioChat`,
@@ -73,7 +73,22 @@ reaches — `PowerUpService.useFor` and `DecisionService.lockIn` are the
 only functions that can spend an item or record a choice, and neither
 has a bypass to take.
 
-**Next: P3-7** (alternates, disconnects and forfeits) closes the phase.
+P3-7 closed the phase by hardening the finale against disconnects and
+dodging (`src/server/FinaleRoster.luau`,
+`docs/finale-disconnect-tests.md`). A qualifier who leaves before the
+Studio opens is replaced by the 4th-place alternate; one who leaves
+inside it keeps their seat, forfeits personally, and has an already-
+locked choice left untouched rather than overwritten. Once the result
+is written, leaving changes nothing in either direction — it can
+neither dodge a loss nor manufacture one for a player who just won. A
+server shutdown mid-finale preserves every streak exactly as it was,
+because a player can't cause one and the streak is the whole metagame.
+
+**Next: Phase 04** — progression, economy and leaderboards. P4-1
+(`ProgressionService`) is the first task, and it is where
+`NPCService.roundEarnsStreakCredit()` gets consumed: threat-model.md §8
+requires *some* NPC-seat streak-credit threshold to ship day one.
+
 Client UI is still essentially unbuilt: `src/client/` has three
 controllers and the task views, and the whole of Phase 06 (theme,
 components, HUD, Studio UI) is ahead.
@@ -97,6 +112,7 @@ components, HUD, Studio UI) is ahead.
 | [`docs/movement-watch-notes.md`](docs/movement-watch-notes.md) | How to read the first week of movement-watch telemetry on mobile before touching a threshold — or enabling enforcement. |
 | [`docs/studio-chat-notes.md`](docs/studio-chat-notes.md) | What proximity chat needs configured outside code, and what a player without voice actually experiences. |
 | [`docs/npc-notes.md`](docs/npc-notes.md) | What 5 NPCs cost a server, which knob to turn first, where bots can still distort the streak leaderboard, how the brain routes every action through the validated path, and the Studio checklist. |
+| [`docs/finale-disconnect-tests.md`](docs/finale-disconnect-tests.md) | The two-client Studio plan for the finale's six disconnect/forfeit cases — including exactly when to close a window to trigger each. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture

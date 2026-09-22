@@ -45,12 +45,40 @@
 --
 --   Resolve: nothing new is broadcast; RoundService transitions onward.
 --
--- KNOWN GAP, NOTED HONESTLY: if a qualifier is ALREADY disconnected by
--- the time beginDecisionStudio runs (they left between the race ending
--- and the Studio starting), this file does not promote the 4th-place
--- alternate to fill their seat - that's P3-7's job ("Alternates,
--- disconnects and forfeits"). Their seat simply defaults to Share at
--- resolution, same as anyone who never locks in.
+-- ===== DISCONNECTS AND FORFEITS (P3-7) =================================
+--
+-- P3-2 left a gap here: a qualifier already gone by the time
+-- beginDecisionStudio ran kept their seat and defaulted to Share, with
+-- no alternate promoted. P3-7 closed it. Every rule now lives in
+-- FinaleRoster.luau as a pure decision (see its header for why the
+-- before/inside-the-Studio split exists at all), and this file applies
+-- them:
+--
+--   Before the Studio opens - beginDecisionStudio calls
+--   FinaleRoster.resolveStartingRoster: an absent qualifier is dropped
+--   and the 4th-place alternate takes the seat (design-decisions.md
+--   Q3). No alternate, or the alternate left too, and the finale runs
+--   with two - a real Outcomes.resolve branch (P3-1), not a degraded
+--   case. Announced via DecisionRosterChange.
+--
+--   Inside the Studio - handleQualifierLeaving calls
+--   FinaleRoster.classifyLeave. No promotion here (Q4): the seat stays,
+--   an unlocked choice becomes the default, a LOCKED choice stands
+--   untouched, and the leaver personally forfeits either way. Once the
+--   result is written, a leave changes nothing in either direction.
+--
+--   On shutdown - handleServerShutdown, registered as a BindToClose,
+--   clears the forfeit resolvers so a Roblox update push mid-finale
+--   doesn't wipe three players' streaks. See FinaleRoster.shutdownPolicy
+--   for the decision and the reasoning behind it.
+--
+-- The forfeit itself is never applied by this file directly: every
+-- qualifier gets a pending-round-outcome resolver in
+-- beginDecisionStudio, DataService fires it before ProfileStore ends
+-- their session (ProfileLogic.applyLeaveSequence), and
+-- computeOutcomeAndWriteProfiles clears it for anyone whose real result
+-- got written. That is what makes "the profile write happens before the
+-- session is released" true for every path rather than most of them.
 --
 -- ===== RESOLUTION ORDER (exact, per the task's own numbered list) ========
 -- 1. Deadline hits or all three have locked - resolveAndReveal below is
@@ -80,6 +108,8 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Outcomes = require(ReplicatedStorage.Shared.Config.Outcomes)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
+local Participants = require(ServerScriptService.Server.Participants)
+local FinaleRoster = require(ServerScriptService.Server.FinaleRoster)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 
 export type Phase = "Intro" | "Negotiate" | "Choose" | "Reveal" | "Resolve"
@@ -129,6 +159,14 @@ local qualifierIds: { number } = {}
 local choices: { [number]: Outcomes.Choice } = {}
 local locked: { [number]: boolean } = {}
 
+-- P3-7's load-bearing flag: has computeOutcomeAndWriteProfiles already
+-- committed this finale's result? Every disconnect rule turns on this
+-- rather than on the phase name, because the writes happen at the END
+-- of Choose inside the same synchronous call that enters Reveal - so
+-- for a fraction of a second "we are in Choose" and "the result is
+-- final" are both true. See FinaleRoster.classifyLeave's own comment.
+local outcomeWritten = false
+
 local pendingPhaseTimerThread: thread? = nil
 
 local function now(): number
@@ -137,6 +175,19 @@ end
 
 local function isQualifier(userId: number): boolean
 	return table.find(qualifierIds, userId) ~= nil
+end
+
+-- "Still here to take a seat" (P3-7). A human is present if their
+-- Player is still in the game; an NPC is present if it's still on the
+-- participant roster, which it is for the whole Studio - bots don't
+-- disconnect. NPCs can qualify (design-decisions.md Q5), so a finale
+-- roster check that only understood Players would drop every bot seat
+-- the moment it ran.
+local function isPresent(racerId: number): boolean
+	if Participants.isNPCId(racerId) then
+		return Participants.get(racerId) ~= nil
+	end
+	return Players:GetPlayerByUserId(racerId) ~= nil
 end
 
 local function allLocked(): boolean
@@ -229,6 +280,13 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 	end
 
 	local outcome = Outcomes.resolve(finalists)
+
+	-- Set BEFORE any profile write, not after (P3-7). From this line on
+	-- the finale's result is committed, and every disconnect and
+	-- shutdown path must treat it as final - including one that fires
+	-- part-way through the write loop below, which a yield inside
+	-- DataService could genuinely allow.
+	outcomeWritten = true
 
 	for _, finalist in finalists do
 		local player = Players:GetPlayerByUserId(finalist.playerId)
@@ -444,16 +502,109 @@ end
 -- THEIR session's own end, which may happen well before this function
 -- ever does.
 local function handleQualifierLeaving(userId: number)
-	if not isQualifier(userId) or locked[userId] then
+	if not isQualifier(userId) then
 		return
 	end
 
-	choices[userId] = GameConfig.decisionStudioDefaultChoice
-	locked[userId] = true
+	-- P3-7 cases 2-5, all four decided in one place. See
+	-- FinaleRoster.classifyLeave for why `outcomeWritten` is the input
+	-- that matters rather than the phase name.
+	local decision = FinaleRoster.classifyLeave(currentPhase, locked[userId] == true, outcomeWritten)
 
-	if currentPhase == "Choose" and allLocked() then
+	if decision.action == "AlreadyResolved" then
+		-- Case 5. Their real result was computed and written before
+		-- DecisionReveal ever went out, and computeOutcomeAndWriteProfiles
+		-- already cleared their forfeit resolver - so leaving now changes
+		-- nothing in either direction. Quitting during the reveal can't
+		-- dodge a loss, and equally can't manufacture one for someone who
+		-- just won.
+		print(string.format("DecisionService: %d left after the result was written - no change (P3-7 case 5)", userId))
+		return
+	end
+
+	if decision.action == "SubstituteDefault" then
+		-- Cases 2 and 4. design-decisions.md Q4: the leaver keeps their
+		-- seat and it votes the configured default for the others.
+		choices[userId] = GameConfig.decisionStudioDefaultChoice
+		locked[userId] = true
+	end
+	-- "KeepLockedChoice" (case 3) deliberately does nothing here: their
+	-- own submitted choice already stands in `choices`, and overwriting
+	-- it would turn a locked Steal into a Share on the way out - a
+	-- silent reversal of a decision the player already committed to.
+
+	-- The forfeit itself needs no action: every qualifier had a
+	-- pending-round-outcome resolver registered in beginDecisionStudio,
+	-- and DataService fires it before their ProfileStore session ends
+	-- (ProfileLogic.applyLeaveSequence's ordering guarantee). It is
+	-- still registered precisely because their real result has NOT been
+	-- written - computeOutcomeAndWriteProfiles is the only thing that
+	-- clears it, and it hasn't run for this finale yet.
+	if decision.forfeits then
+		Net.fireAllClients("DecisionRosterChange", {
+			reason = "Forfeited",
+			racerId = userId,
+			replacedById = nil,
+		})
+	end
+
+	if decision.mayCompleteRound and currentPhase == "Choose" and allLocked() then
 		resolveAndReveal()
 	end
+end
+
+-- ===== case 6: the server shuts down mid-finale ============================
+
+-- P3-7 case 6. FinaleRoster.shutdownPolicy holds the decision and the
+-- reasoning; this is the mechanism.
+--
+-- THE THING THIS EXISTS TO PREVENT: every qualifier is carrying a
+-- pending-round-outcome resolver that resets their streak and records a
+-- loss (registered in beginDecisionStudio for Q4's forfeit). On a
+-- shutdown, Roblox removes every player, DataService's PlayerRemoving
+-- handler releases their profile, and ProfileLogic.applyLeaveSequence
+-- dutifully runs that resolver first - so without this, a Roblox update
+-- push during a negotiation would wipe the streak of all three
+-- finalists, and it would look exactly like a bug because it is one.
+-- Clearing the resolvers turns that into the no-op it should be.
+--
+-- ORDERING: this runs as its own game:BindToClose callback. Roblox runs
+-- every registered BindToClose callback concurrently and waits for all
+-- of them, and ProfileStore registers its own (which saves every active
+-- profile with reason "Shutdown" - read directly from its source, not
+-- assumed). This one does nothing but clear table entries, with no
+-- yield anywhere in it, so it completes within its first resumption -
+-- comfortably before any DataStore round-trip in ProfileStore's
+-- callback can finish. Nothing here depends on callback ORDER, only on
+-- this one being fast and yield-free; keep it that way.
+local function handleServerShutdown()
+	local policy = FinaleRoster.shutdownPolicy(outcomeWritten)
+
+	if policy == "KeepWrittenResult" then
+		-- The result was already committed to Profile.Data, and
+		-- ProfileStore's own shutdown save persists it as-is. Nothing to
+		-- do, and nothing to undo.
+		print("DecisionService: shutdown after the result was written - the written result stands")
+		return
+	end
+
+	local DataService = Loader.get("DataService") :: any
+	local cleared = 0
+	for _, id in qualifierIds do
+		local player = Players:GetPlayerByUserId(id)
+		if player == nil then
+			continue
+		end
+		DataService.setPendingRoundOutcomeResolver(player, nil)
+		cleared += 1
+	end
+
+	print(
+		string.format(
+			"DecisionService: shutdown mid-finale - cleared %d forfeit resolver(s); every streak is preserved as it was",
+			cleared
+		)
+	)
 end
 
 -- ===== debug =================================================================
@@ -502,14 +653,27 @@ local function beginDecisionStudio()
 	local TaskService = Loader.get("TaskService") :: any
 	local qualificationResult = TaskService.getLastQualificationResult()
 
-	qualifierIds = {}
+	local rankedQualifiers: { number } = {}
+	local alternateId: number? = nil
 	if qualificationResult ~= nil then
 		for _, id in qualificationResult.qualifiers do
-			table.insert(qualifierIds, id)
+			table.insert(rankedQualifiers, id)
 		end
+		alternateId = qualificationResult.alternate
 	end
+
+	-- P3-7 case 1: a qualifier who left between the race ending and this
+	-- moment is dropped, and the 4th-place alternate takes the vacated
+	-- seat (design-decisions.md Q3). With no alternate available the
+	-- finale simply runs with whoever is left - Outcomes.resolve has a
+	-- real two-finalist branch (P3-1), so this is a supported shape, not
+	-- a degraded one.
+	local roster = FinaleRoster.resolveStartingRoster(rankedQualifiers, alternateId, isPresent)
+	qualifierIds = roster.qualifierIds
+
 	choices = {}
 	locked = {}
+	outcomeWritten = false
 	currentPhase = nil
 
 	if #qualifierIds == 0 then
@@ -540,6 +704,30 @@ local function beginDecisionStudio()
 	end
 
 	Net.fireAllClients("DecisionParticipants", { qualifierIds = qualifierIds })
+
+	-- "With a clear announcement to the others" (P3-7 case 1's own
+	-- requirement). Fired AFTER DecisionParticipants so a client already
+	-- has the roster this refers to, and separately from it so the
+	-- announcement is a distinct event a UI can react to rather than a
+	-- diff the client has to compute for itself.
+	for _, change in roster.changes do
+		Net.fireAllClients("DecisionRosterChange", {
+			reason = "Withdrawn",
+			racerId = change.droppedId,
+			replacedById = change.promotedId,
+		})
+	end
+
+	if #roster.changes > 0 then
+		print(
+			string.format(
+				"DecisionService: %d qualifier(s) left before the Studio - running with %d finalist(s)",
+				#roster.changes,
+				#qualifierIds
+			)
+		)
+	end
+
 	enterIntro()
 end
 
@@ -586,6 +774,12 @@ function DecisionService:init()
 			handleQualifierLeaving(player.UserId)
 		end
 	end)
+
+	-- P3-7 case 6. Registered unconditionally at boot rather than only
+	-- while a finale is live: a BindToClose can't be added once the
+	-- shutdown has already begun, and handleServerShutdown is a no-op
+	-- when no finale is running (empty qualifierIds).
+	game:BindToClose(handleServerShutdown)
 
 	NetGuard.on("DecisionChooseIntent", function(player: Player, payload: any)
 		handleChooseIntent(player, payload.choice)

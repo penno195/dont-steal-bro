@@ -566,6 +566,28 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P3-7: a finalist's seat changed. Two reasons, both broadcast to
+	-- everyone in the room because everyone needs to know who they're
+	-- actually negotiating with:
+	--   "Withdrawn" - they left before the Studio started, and
+	--     `replacedById` is the promoted alternate (nil = the seat is
+	--     simply gone and the finale runs smaller).
+	--   "Forfeited" - they left mid-Studio. Their seat stays and votes
+	--     the configured default (design-decisions.md Q4), so
+	--     `replacedById` is always nil here.
+	--
+	-- Carries no choice and no streak - "who is still in the room" is
+	-- visible to everyone anyway, and this remote deliberately adds
+	-- nothing to it. The secrecy audit at the top of DecisionService
+	-- covers this payload too.
+	DecisionRosterChange = {
+		name = "DecisionRosterChange",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Server -> client (broadcast): the inner phase machine's own state -
 	-- a name plus an absolute deadline, the same shape RoundState uses
 	-- and for the same reason (architecture.md §3: clients compute their
