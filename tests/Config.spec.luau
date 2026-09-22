@@ -88,6 +88,15 @@ local function validGameConfig(): Validate.GameConfig
 			periodGraceSeconds = 3600,
 			rewardTopN = 10,
 		},
+		store = {
+			purchaseIdCacheSize = 100,
+			receiptSaveRetrySeconds = 10,
+			receiptMaxWaitSeconds = 120,
+			receiptProfileWaitSeconds = 30,
+			passCacheOwnedTtlSeconds = 3600,
+			passCacheUnownedTtlSeconds = 60,
+			loadoutSlots = 3,
+		},
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
 		npcTitleTopRungsExcluded = 3,
@@ -799,5 +808,238 @@ TestRunner.describe("Validate.checkTitle (P4-2 ladder)", function()
 			Validate.checkGameConfig(config, issues)
 			TestRunner.expect(#issues > 0):toBeTruthy()
 		end
+	end)
+end)
+
+-- ===== P4-5's store catalogue ============================================
+
+local function validProduct(key: string): Validate.StoreItemDef
+	return {
+		key = key,
+		kind = "DeveloperProduct",
+		assetId = 123456,
+		enabled = true,
+		displayName = "Test Product",
+		description = "A thing you can buy.",
+		robuxPrice = 49,
+		sortOrder = 1,
+		grants = { { kind = "Currency", amount = 500 } },
+	}
+end
+
+local function runWithStore(store: { { fileName: string, def: Validate.StoreItemDef } }): { Validate.Issue }
+	return Validate.run({
+		gameConfig = validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = { { fileName = "SprintBoost.luau", def = validPowerUp("sprint-boost") } },
+		titles = { { fileName = "GotOne.luau", def = validTitle("got-one", 1) } },
+		store = store,
+	})
+end
+
+TestRunner.describe("Validate.checkStoreItem (P4-5)", function()
+	TestRunner.it("accepts a well-formed developer product", function()
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = validProduct("t") } })):toBe(0)
+	end)
+
+	TestRunner.it("treats an omitted store registry as nothing for sale, not an error", function()
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("allows a disabled entry with no Roblox asset id yet", function()
+		-- Every entry ships this way until somebody creates the product
+		-- in the Creator Dashboard.
+		local def = validProduct("t")
+		def.enabled = false
+		def.assetId = 0
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses an ENABLED entry with no asset id", function()
+		-- Otherwise the prompt opens for asset 0 in front of a player
+		-- holding their Robux.
+		local def = validProduct("t")
+		def.assetId = 0
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a product that grants nothing", function()
+		local def = validProduct("t")
+		def.grants = {}
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a game pass that grants currency or power-up stock", function()
+		-- A pass is permanent and its grants re-apply on every join, so a
+		-- consumable grant here is either a one-shot or an infinite tap.
+		for _, grant in
+			{
+				{ kind = "Currency" :: any, amount = 100 },
+				{ kind = "PowerUpStock" :: any, powerUpId = "sprint-boost", amount = 5 },
+			}
+		do
+			local def = validProduct("t")
+			def.kind = "GamePass"
+			def.grants = { grant :: any }
+			TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+		end
+	end)
+
+	TestRunner.it("accepts a game pass that grants a cosmetic", function()
+		local def = validProduct("t")
+		def.kind = "GamePass"
+		def.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a grant missing the field its own kind requires", function()
+		for _, grant in
+			{
+				{ kind = "Currency" :: any }, -- no amount
+				{ kind = "PowerUpStock" :: any, amount = 5 }, -- no powerUpId
+				{ kind = "Cosmetic" :: any }, -- no cosmeticId
+				{ kind = "Title" :: any }, -- no titleId
+			}
+		do
+			local def = validProduct("t")
+			def.grants = { grant :: any }
+			TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+		end
+	end)
+
+	TestRunner.it("refuses two entries sharing a key", function()
+		local issues = runWithStore({
+			{ fileName = "A.luau", def = validProduct("same") },
+			{ fileName = "B.luau", def = validProduct("same") },
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses two entries sharing a Roblox asset id", function()
+		-- ProcessReceipt dispatches on that number, so one product would
+		-- silently grant the other's contents.
+		local a = validProduct("a")
+		local b = validProduct("b")
+		TestRunner.expect(#runWithStore({ { fileName = "A.luau", def = a }, { fileName = "B.luau", def = b } }) > 0)
+			:toBeTruthy()
+	end)
+
+	TestRunner.it("lets several unfinished entries share asset id 0", function()
+		local a = validProduct("a")
+		local b = validProduct("b")
+		a.enabled, a.assetId = false, 0
+		b.enabled, b.assetId = false, 0
+		TestRunner.expect(#runWithStore({ { fileName = "A.luau", def = a }, { fileName = "B.luau", def = b } })):toBe(0)
+	end)
+end)
+
+TestRunner.describe("Validate.run - store cross-registry checks (P4-5)", function()
+	TestRunner.it("accepts stock of a registered, loadout-eligible power-up", function()
+		local def = validProduct("t")
+		def.grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 10 } }
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses stock of a power-up that does not exist", function()
+		local def = validProduct("t")
+		def.grants = { { kind = "PowerUpStock", powerUpId = "made-up", amount = 10 } }
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses stock of a power-up that can never be equipped", function()
+		local powerUp = validPowerUp("sprint-boost")
+		powerUp.acquisition.loadoutEligible = false
+		local def = validProduct("t")
+		def.grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 10 } }
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = { { fileName = "SprintBoost.luau", def = powerUp } },
+			titles = {},
+			store = { { fileName = "T.luau", def = def } },
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("enforces design-decisions.md Q8 from the SELLING side too", function()
+		-- checkPowerUp catches a power-up that prices itself with no free
+		-- path. This catches the same violation smuggled in through a
+		-- bundle, where the power-up's own config names no price at all
+		-- and so looks innocent.
+		local powerUp = validPowerUp("sprint-boost")
+		powerUp.acquisition.fieldPickup = false
+		powerUp.acquisition.freelyEarnable = false
+		local def = validProduct("t")
+		def.grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 10 } }
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = { { fileName = "SprintBoost.luau", def = powerUp } },
+			titles = {},
+			store = { { fileName = "T.luau", def = def } },
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a grant of a title nobody registered", function()
+		local def = validProduct("t")
+		def.grants = { { kind = "Title", titleId = "not-a-title" } }
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig - store block (P4-5)", function()
+	local function issuesFor(mutate: (Validate.StoreConfig) -> ()): number
+		local issues = {}
+		local config = validGameConfig()
+		mutate(config.store)
+		Validate.checkGameConfig(config, issues)
+		return #issues
+	end
+
+	TestRunner.it("pins the loadout cap at Q8's 3, in both directions", function()
+		TestRunner.expect(issuesFor(function(store)
+			store.loadoutSlots = 4
+		end) > 0):toBeTruthy()
+		TestRunner.expect(issuesFor(function(store)
+			store.loadoutSlots = 2
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a replay window small enough to double-grant", function()
+		TestRunner.expect(issuesFor(function(store)
+			store.purchaseIdCacheSize = 5
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a receipt handler that gives up before its first retry", function()
+		TestRunner.expect(issuesFor(function(store)
+			store.receiptMaxWaitSeconds = 5
+			store.receiptSaveRetrySeconds = 10
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an ownership cache that holds a negative answer longer than a positive one", function()
+		TestRunner.expect(issuesFor(function(store)
+			store.passCacheUnownedTtlSeconds = 7200
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("names a missing store block instead of erroring on it", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.store = nil :: any
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
 	end)
 end)

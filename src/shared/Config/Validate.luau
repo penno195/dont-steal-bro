@@ -125,6 +125,85 @@ export type TitleDef = {
 	effect: TitleEffect?, -- nil for most of the ladder; only the top tiers earn one
 }
 
+-- ===== StoreItemDef: P4-5 ================================================
+-- One file per purchasable thing, per Ground Rule 2 - adding a product
+-- is adding a src/shared/Config/Store/<Name>.luau and nothing else.
+--
+-- WHY `key` EXISTS ALONGSIDE `assetId`: the assetId is Roblox's number,
+-- and it does not exist until somebody creates the pass or product in
+-- the Creator Dashboard. Every internal reference - a profile field, a
+-- log line, a remote payload, a support ticket - uses `key` instead, so
+-- the whole catalogue can be written, validated and tested before a
+-- single asset exists, and so a product that has to be recreated (a new
+-- Roblox id for the same thing) doesn't orphan anything already stored.
+--
+-- `assetId = 0` means "not created on the Roblox side yet." That's a
+-- legal state for a DISABLED entry and an error for an enabled one -
+-- exactly the stance MapDef.enabled takes against ServerStorage.Maps.
+export type StoreProductKind = "GamePass" | "DeveloperProduct"
+export type StoreGrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title"
+
+local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct" }
+local STORE_GRANT_KINDS: { StoreGrantKind } = { "Currency", "PowerUpStock", "Cosmetic", "Title" }
+
+-- A single thing a purchase hands over. One flat type with optional
+-- fields rather than a tagged union, because Luau doesn't narrow a union
+-- through a table field cleanly enough to be worth the friction here -
+-- checkStoreItem enforces which field each kind actually requires, and
+-- StoreLogic.applyGrants reads only the field its own branch needs.
+export type StoreGrant = {
+	kind: StoreGrantKind,
+	amount: number?, -- Currency: how much. PowerUpStock: how many.
+	powerUpId: string?, -- PowerUpStock: which power-up, cross-checked against the PowerUps registry
+	cosmeticId: string?, -- Cosmetic: which item. P4-6 owns the cosmetics registry; until it exists this is an opaque id
+	titleId: string?, -- Title: which title, cross-checked against the Titles registry
+}
+
+export type StoreItemDef = {
+	key: string, -- stable internal id; never Roblox's number
+	kind: StoreProductKind,
+	assetId: number, -- Roblox game pass / developer product id; 0 = not created yet
+	enabled: boolean,
+	displayName: string,
+	description: string,
+	robuxPrice: number, -- DISPLAY ONLY - see checkStoreItem for why a grant never reads this
+	sortOrder: number,
+	grants: { StoreGrant },
+}
+
+-- ===== StoreConfig: P4-5 =================================================
+export type StoreConfig = {
+	-- How many recent PurchaseIds a profile remembers. This bounds the
+	-- receipt replay window: a purchase older than the oldest id still
+	-- held would be granted a second time if Roblox ever re-offered it.
+	-- ProfileStore's own devproducts example uses 100.
+	purchaseIdCacheSize: number,
+
+	-- How long a yielding ProcessReceipt waits between re-checking
+	-- whether the grant has actually reached the DataStore, and how long
+	-- it keeps waiting before giving up and returning NotProcessedYet
+	-- (which asks Roblox to re-offer the receipt later).
+	receiptSaveRetrySeconds: number,
+	receiptMaxWaitSeconds: number,
+
+	-- How long to wait for a profile that hasn't finished loading before
+	-- declining the receipt. Deliberately short: declining is free and
+	-- safe, because the receipt comes back. Blocking isn't.
+	receiptProfileWaitSeconds: number,
+
+	-- Game pass ownership cache. A positive answer is cached far longer
+	-- than a negative one: "owns it" almost never becomes false, while
+	-- "doesn't own it" becomes false the moment they buy it - and that
+	-- is precisely the case a player is watching impatiently.
+	passCacheOwnedTtlSeconds: number,
+	passCacheUnownedTtlSeconds: number,
+
+	-- design-decisions.md Q8, verbatim: "Loadouts are capped at 3 items
+	-- regardless of spend." LOCKED, not a placeholder - raising it means
+	-- amending Q8, not editing a number.
+	loadoutSlots: number,
+}
+
 -- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
 -- Studio phase timers are locked exactly by architecture.md §6's network
 -- trace (Intro +5s, Negotiate +45s, Choose +15s, Reveal +1s). Bounty
@@ -223,6 +302,9 @@ export type GameConfig = {
 
 	-- P4-3: the all-time leaderboard. See LeaderboardConfig below.
 	leaderboard: LeaderboardConfig,
+
+	-- P4-5: the store's own timings and caps. See StoreConfig above.
+	store: StoreConfig,
 
 	-- P4-2: whether a title may be shown while a round is live. False
 	-- per design-decisions.md Q7 condition 1 - see GameConfig's own note
@@ -597,6 +679,141 @@ function Validate.checkTitle(fileName: string, def: TitleDef, issues: { Issue })
 	end
 end
 
+-- P4-5. Per-item store checks. The cross-registry half (a PowerUpStock
+-- grant naming a power-up that exists, is loadout-eligible, and has a
+-- free acquisition path per design-decisions.md Q8) needs the whole
+-- PowerUps registry, so it lives in Validate.run below rather than here.
+--
+-- WHY `robuxPrice` IS NEVER TRUSTED FOR A GRANT, only displayed: the
+-- real price lives on the Roblox product listing, and this field is a
+-- copy of it for a store UI to render without a GetProductInfoAsync
+-- round-trip per tile. If the two ever disagree, Roblox's is the one
+-- that charged the player. Nothing in StoreService reads this to decide
+-- what to hand over - a grant is driven entirely by `grants` below,
+-- which is why a stale price here is a cosmetic bug and not a
+-- give-away-the-shop bug.
+function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { Issue })
+	if not isNonEmptyString(def.key) then
+		issue(issues, "Store", fileName, "key", "key must be a non-empty string")
+	end
+	if not isNonEmptyString(def.displayName) then
+		issue(issues, "Store", fileName, "displayName", "displayName must be a non-empty string")
+	end
+	if not isNonEmptyString(def.description) then
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"description",
+			"description must be a non-empty string - the store UI has nowhere else to get one"
+		)
+	end
+	if not inSet(def.kind, STORE_PRODUCT_KINDS) then
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"kind",
+			string.format("expected one of %s, got %s", table.concat(STORE_PRODUCT_KINDS, "/"), tostring(def.kind))
+		)
+	end
+
+	if type(def.assetId) ~= "number" or def.assetId < 0 or def.assetId % 1 ~= 0 then
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"assetId",
+			string.format("expected a non-negative integer, got %s", tostring(def.assetId))
+		)
+	elseif def.enabled and def.assetId == 0 then
+		-- The MapDef.enabled stance, applied to monetisation: an entry
+		-- may be written and validated before its Roblox asset exists,
+		-- but it may not be SOLD before then. An enabled product with no
+		-- id would prompt a purchase for asset 0 and fail in front of a
+		-- player holding their Robux.
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"assetId",
+			"enabled = true but assetId is 0 - create the pass/product in the Creator Dashboard and paste its id here, or set enabled = false"
+		)
+	end
+
+	if type(def.robuxPrice) ~= "number" or def.robuxPrice < 0 or def.robuxPrice % 1 ~= 0 then
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"robuxPrice",
+			string.format("expected a non-negative integer, got %s", tostring(def.robuxPrice))
+		)
+	end
+
+	if type(def.grants) ~= "table" or #def.grants == 0 then
+		issue(issues, "Store", fileName, "grants", "a product must grant at least one thing")
+		return
+	end
+
+	for index, grant in def.grants do
+		local field = string.format("grants[%d]", index)
+
+		if not inSet(grant.kind, STORE_GRANT_KINDS) then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				field,
+				string.format("expected one of %s, got %s", table.concat(STORE_GRANT_KINDS, "/"), tostring(grant.kind))
+			)
+			continue
+		end
+
+		-- P4-5 frames game passes as PERMANENT cosmetics and developer
+		-- products as consumables, and the split is enforced rather than
+		-- assumed. A pass that grants a consumable is one of two bugs
+		-- and there is no way to tell which from the config: either a
+		-- one-shot purchase the player can never repeat, or - if its
+		-- grants are re-applied on every join the way a pass's
+		-- permanent unlocks must be - an infinite free tap on currency
+		-- or power-up stock. Refusing the shape closes both.
+		if def.kind == "GamePass" and (grant.kind == "Currency" or grant.kind == "PowerUpStock") then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				field,
+				string.format(
+					"a GamePass cannot grant %s - a pass is permanent and its grants re-apply on every join, so a consumable grant here is either a one-shot purchase or an infinite tap. Sell consumables as a DeveloperProduct.",
+					grant.kind
+				)
+			)
+		end
+
+		if grant.kind == "Currency" then
+			if type(grant.amount) ~= "number" or (grant.amount :: number) <= 0 or (grant.amount :: number) % 1 ~= 0 then
+				issue(issues, "Store", fileName, field, "a Currency grant needs a positive integer `amount`")
+			end
+		elseif grant.kind == "PowerUpStock" then
+			if not isNonEmptyString(grant.powerUpId) then
+				issue(issues, "Store", fileName, field, "a PowerUpStock grant needs a `powerUpId`")
+			end
+			if type(grant.amount) ~= "number" or (grant.amount :: number) <= 0 or (grant.amount :: number) % 1 ~= 0 then
+				issue(issues, "Store", fileName, field, "a PowerUpStock grant needs a positive integer `amount`")
+			end
+		elseif grant.kind == "Cosmetic" then
+			if not isNonEmptyString(grant.cosmeticId) then
+				issue(issues, "Store", fileName, field, "a Cosmetic grant needs a `cosmeticId`")
+			end
+		elseif grant.kind == "Title" then
+			if not isNonEmptyString(grant.titleId) then
+				issue(issues, "Store", fileName, field, "a Title grant needs a `titleId`")
+			end
+		end
+	end
+end
+
 -- P3-5. Split out of checkGameConfig purely for length - it's called
 -- from there, not separately, so a new NPC knob can't be added without
 -- passing through this.
@@ -946,6 +1163,94 @@ local function checkLeaderboardConfig(leaderboard: LeaderboardConfig, issues: { 
 	end
 end
 
+-- P4-5. Same split as checkLeaderboardConfig above, for the same reason
+-- (length) - called from checkGameConfig, never separately.
+local function checkStoreConfig(store: StoreConfig, issues: { Issue })
+	if store == nil then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"store",
+			"the whole `store` block is missing - a config file predating P4-5"
+		)
+		return
+	end
+
+	local positiveFields: { [string]: number } = {
+		purchaseIdCacheSize = store.purchaseIdCacheSize,
+		receiptSaveRetrySeconds = store.receiptSaveRetrySeconds,
+		receiptMaxWaitSeconds = store.receiptMaxWaitSeconds,
+		receiptProfileWaitSeconds = store.receiptProfileWaitSeconds,
+		passCacheOwnedTtlSeconds = store.passCacheOwnedTtlSeconds,
+		passCacheUnownedTtlSeconds = store.passCacheUnownedTtlSeconds,
+		loadoutSlots = store.loadoutSlots,
+	}
+	for field, value in positiveFields do
+		if type(value) ~= "number" or value <= 0 then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"store." .. field,
+				string.format("must be a positive number, got %s", tostring(value))
+			)
+		end
+	end
+
+	-- A cache of 1 would "remember" only the most recent purchase, so
+	-- two purchases in quick succession could each look new to the
+	-- other's arrival order. The real floor is judgement, but a cache
+	-- that can't hold a handful of receipts isn't protecting anything.
+	if store.purchaseIdCacheSize < 10 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"store.purchaseIdCacheSize",
+			"must be at least 10 - this is the replay window, and a purchase that falls out of it would be granted twice"
+		)
+	end
+
+	if store.receiptMaxWaitSeconds <= store.receiptSaveRetrySeconds then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"store.receiptMaxWaitSeconds",
+			"must exceed store.receiptSaveRetrySeconds, or the receipt handler gives up before its first retry"
+		)
+	end
+
+	-- design-decisions.md Q8: "Loadouts are capped at 3 items regardless
+	-- of spend." Enforced at boot, not left to review, for the same
+	-- reason checkPowerUp enforces Q8's free-path rule - a monetisation
+	-- decision that only lives in a document is one a later edit can
+	-- quietly undo.
+	if store.loadoutSlots ~= 3 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"store.loadoutSlots",
+			string.format(
+				"design-decisions.md Q8 caps the loadout at 3 items regardless of spend, got %s - changing this means amending Q8, not editing a number",
+				tostring(store.loadoutSlots)
+			)
+		)
+	end
+
+	if store.passCacheUnownedTtlSeconds > store.passCacheOwnedTtlSeconds then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"store.passCacheUnownedTtlSeconds",
+			"must not exceed store.passCacheOwnedTtlSeconds - a player who just bought a pass is the one waiting on this cache, so the negative answer is the one that has to expire sooner"
+		)
+	end
+end
+
 function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	if config.playerCount <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "playerCount", "must be positive")
@@ -1040,6 +1345,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkNPCBrainConfig(config.npcBrain, issues)
 
 	checkLeaderboardConfig(config.leaderboard, issues)
+	checkStoreConfig(config.store, issues)
 
 	if config.npcTitleNoneChance < 0 or config.npcTitleNoneChance > 1 then
 		issue(issues, "GameConfig", "GameConfig.luau", "npcTitleNoneChance", "must be between 0 and 1")
@@ -1157,6 +1463,11 @@ export type RegistryInput = {
 	-- registry is "none registered," which is exactly what a repo with
 	-- no personality files has.
 	npcPersonalities: { { fileName: string, def: NPCPersonalityDef } }?,
+
+	-- P4-5. Optional for the same reason npcPersonalities is - a test
+	-- fixture or a caller predating the store passes no store registry,
+	-- which is exactly "nothing is for sale."
+	store: { { fileName: string, def: StoreItemDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -1244,6 +1555,143 @@ function Validate.run(input: RegistryInput): { Issue }
 					input.gameConfig.tasksPerPlayer
 				)
 			)
+		end
+	end
+
+	-- ===== P4-5's store cross-checks ====================================
+	local store = input.store
+	if store ~= nil then
+		for _, entry in store do
+			Validate.checkStoreItem(entry.fileName, entry.def, issues)
+		end
+
+		-- Not checkDuplicateIds: a store entry's stable id is `key`, not
+		-- `id`, precisely because it is deliberately not Roblox's number.
+		local storeKeyAt: { [string]: string } = {}
+		for _, entry in store do
+			local existing = storeKeyAt[entry.def.key]
+			if existing ~= nil then
+				issue(
+					issues,
+					"Store",
+					entry.fileName,
+					"key",
+					string.format("duplicate key %q also declared by %s", entry.def.key, existing)
+				)
+			else
+				storeKeyAt[entry.def.key] = entry.fileName
+			end
+		end
+
+		-- Two products sharing one Roblox asset id is the monetisation
+		-- equivalent of a duplicate key, and far easier to do by accident
+		-- (copy a file, change the name, forget the number). The damage
+		-- is specific: ProcessReceipt dispatches on ProductId, so the
+		-- second product would silently grant the first one's contents.
+		-- Id 0 is exempt - it means "not created yet," and every
+		-- unfinished entry legitimately shares it.
+		local assetIdAt: { [number]: string } = {}
+		for _, entry in store do
+			if entry.def.assetId == 0 then
+				continue
+			end
+			local existing = assetIdAt[entry.def.assetId]
+			if existing ~= nil then
+				issue(
+					issues,
+					"Store",
+					entry.fileName,
+					"assetId",
+					string.format(
+						"asset id %d is already claimed by %s - ProcessReceipt dispatches on this number, so one of these two products would grant the other's contents",
+						entry.def.assetId,
+						existing
+					)
+				)
+			else
+				assetIdAt[entry.def.assetId] = entry.fileName
+			end
+		end
+
+		local powerUpAt: { [string]: PowerUpDef } = {}
+		for _, entry in input.powerUps do
+			powerUpAt[entry.def.id] = entry.def
+		end
+		local knownTitleIds: { [string]: boolean } = {}
+		for _, entry in input.titles do
+			knownTitleIds[entry.def.id] = true
+		end
+
+		for _, entry in store do
+			-- `grants` is non-optional in the type, but checkStoreItem
+			-- above tolerates a config file that predates it, so this
+			-- loop checks rather than assumes - it runs over the same
+			-- registry and must not be the thing that throws.
+			if type(entry.def.grants) ~= "table" then
+				continue
+			end
+			for index, grant in entry.def.grants do
+				local field = string.format("grants[%d]", index)
+
+				if grant.kind == "PowerUpStock" then
+					local powerUp = powerUpAt[grant.powerUpId or ""]
+					if powerUp == nil then
+						issue(
+							issues,
+							"Store",
+							entry.fileName,
+							field,
+							string.format("references unregistered power-up id %q", tostring(grant.powerUpId))
+						)
+						continue
+					end
+
+					-- Stock only means anything if the item can actually
+					-- go in a loadout slot - a field-pickup-only power-up
+					-- bought in bulk is a purchase that does nothing.
+					if not powerUp.acquisition.loadoutEligible then
+						issue(
+							issues,
+							"Store",
+							entry.fileName,
+							field,
+							string.format(
+								"power-up %q is not loadoutEligible, so stock of it can never be equipped - this product would sell nothing",
+								powerUp.id
+							)
+						)
+					end
+
+					-- design-decisions.md Q8's whole rule, checked from
+					-- the selling side. checkPowerUp already refuses a
+					-- power-up whose own robuxPrice has no matching free
+					-- path; this catches the same violation arriving
+					-- through a bundle instead, where the power-up's own
+					-- config looks innocent because it names no price.
+					if not (powerUp.acquisition.fieldPickup or powerUp.acquisition.freelyEarnable) then
+						issue(
+							issues,
+							"Store",
+							entry.fileName,
+							field,
+							string.format(
+								"power-up %q has no free acquisition path - design-decisions.md Q8 forbids selling an item players cannot also earn, whether it is priced on its own config or bundled here",
+								powerUp.id
+							)
+						)
+					end
+				elseif grant.kind == "Title" then
+					if not knownTitleIds[grant.titleId or ""] then
+						issue(
+							issues,
+							"Store",
+							entry.fileName,
+							field,
+							string.format("references unregistered title id %q", tostring(grant.titleId))
+						)
+					end
+				end
+			end
 		end
 	end
 

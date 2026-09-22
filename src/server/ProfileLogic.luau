@@ -64,10 +64,30 @@ export type ProfileData = {
 	unlockedTitles: { string },
 	equippedTitle: string?,
 	stats: Stats,
+
+	-- ===== schema v2, P4-5 ==============================================
+
+	-- The PurchaseIds of recent developer product receipts, oldest
+	-- first. This is the single thing that makes a receipt replay safe:
+	-- it is written into Profile.Data in the SAME mutation that applies
+	-- the grant, so ProfileStore saves both or neither, and a receipt
+	-- Roblox re-offers after a crash or a rejoin is recognised as
+	-- already-paid rather than granted twice. Trimmed oldest-first at
+	-- GameConfig.store.purchaseIdCacheSize - see StoreLogic.recordPurchaseId.
+	purchaseIdCache: { string },
+
+	-- How many of each power-up this player owns for their pre-game
+	-- loadout (powerups.md's "Loadout slot" acquisition path), by
+	-- power-up id. Distinct from `starterPowerUps` above, which is the
+	-- <= 3 items they have SELECTED out of this stock for the next
+	-- round. Owning 40 Sprint Boosts and being able to take 3 items
+	-- into a race are different facts, and conflating them is how a
+	-- 3-item cap quietly stops being a cap.
+	powerUpStock: { [string]: number },
 	lastSeen: number, -- os.time() of last profile touch
 }
 
-local CURRENT_SCHEMA_VERSION = 1
+local CURRENT_SCHEMA_VERSION = 2
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -83,6 +103,8 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		ownedCosmetics = {},
 		equipped = {},
 		starterPowerUps = {},
+		purchaseIdCache = {},
+		powerUpStock = {},
 		unlockedTitles = {},
 		equippedTitle = nil,
 		stats = defaultStats(),
@@ -93,34 +115,62 @@ end
 -- ===== Migration chain ===================================================
 -- Keyed by the version a profile is migrating FROM. Each step is a pure
 -- function from version n to n+1 that returns a FRESH table - "never
--- mutate a profile in place without bumping the version." There's only
--- one step today (0 -> 1, schemaVersion didn't exist before this task),
--- but the chain mechanism itself is real: adding v2 later means writing
--- migrations[1] and nothing else, and ProfileLogic.migrate below walks
--- however many steps a stored profile actually needs.
+-- mutate a profile in place without bumping the version." Two steps
+-- exist now: 0 -> 1 (schemaVersion didn't exist before P1-5) and 1 -> 2
+-- (P4-5's store fields). Adding a v3 means writing migrations[2] and
+-- bumping CURRENT_SCHEMA_VERSION, and nothing else - ProfileLogic.
+-- migrate below walks however many steps a stored profile actually
+-- needs, so a profile last saved under v0 arrives at v2 in one call.
 
-local migrations: { [number]: (old: { [string]: any }) -> ProfileData } = {}
+-- A step is `any -> any`, not `any -> ProfileData`: a migration from n
+-- to n+1 produces the shape schema n+1 had AT THE TIME, which stops
+-- being ProfileData the moment a later version adds a field. Typing
+-- every step as ProfileData compiled only while there was exactly one
+-- step; P4-5's v2 is what made that visible. Only `migrate`'s final
+-- return is cast, because only the last step's output is current.
+local migrations: { [number]: (old: { [string]: any }) -> { [string]: any } } = {}
 
 -- A profile with no `schemaVersion` at all - either genuinely pre-
 -- versioning, or a raw ProfileStore template that hasn't been through
 -- Profile:Reconcile() yet. Treated identically: keep whatever v1 fields
 -- `old` already has, default the rest. Never mutates `old`.
-migrations[0] = function(old: { [string]: any }): ProfileData
-	local template = ProfileLogic.newProfileTemplate()
+migrations[0] = function(old: { [string]: any }): { [string]: any }
 	return {
 		schemaVersion = 1,
-		currentStreak = (old.currentStreak :: number?) or template.currentStreak,
-		bestStreak = (old.bestStreak :: number?) or template.bestStreak,
+		currentStreak = (old.currentStreak :: number?) or 0,
+		bestStreak = (old.bestStreak :: number?) or 0,
 		pendingBounty = old.pendingBounty :: PendingBounty?,
-		currency = (old.currency :: number?) or template.currency,
-		ownedCosmetics = (old.ownedCosmetics :: { string }?) or template.ownedCosmetics,
-		equipped = (old.equipped :: { [string]: string }?) or template.equipped,
-		starterPowerUps = (old.starterPowerUps :: { string }?) or template.starterPowerUps,
-		unlockedTitles = (old.unlockedTitles :: { string }?) or template.unlockedTitles,
+		currency = (old.currency :: number?) or 0,
+		ownedCosmetics = (old.ownedCosmetics :: { string }?) or {},
+		equipped = (old.equipped :: { [string]: string }?) or {},
+		starterPowerUps = (old.starterPowerUps :: { string }?) or {},
+		unlockedTitles = (old.unlockedTitles :: { string }?) or {},
 		equippedTitle = old.equippedTitle :: string?,
-		stats = (old.stats :: Stats?) or template.stats,
-		lastSeen = (old.lastSeen :: number?) or template.lastSeen,
+		stats = (old.stats :: Stats?) or defaultStats(),
+		lastSeen = (old.lastSeen :: number?) or 0,
 	}
+end
+
+-- v1 -> v2 (P4-5): the store's two new fields. Both are additive and
+-- both default to empty, so there is nothing to compute or reinterpret
+-- here - but the step is written out rather than left to
+-- Profile:Reconcile() for one specific reason: `purchaseIdCache` is a
+-- correctness field, not a convenience one. A v1 profile arriving with
+-- no cache must arrive with an EMPTY one rather than a nil one, because
+-- StoreLogic.classifyReceipt reads it on the very first receipt that
+-- player ever presents, and "no cache" and "cache says not yet granted"
+-- have to be the same answer.
+--
+-- Note what is deliberately NOT done: no attempt to back-fill
+-- `powerUpStock` from `starterPowerUps`. A v1 profile's selected
+-- loadout was never backed by stock (nothing granted stock before this
+-- task), so inventing some would hand every existing player free items.
+migrations[1] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 2
+	next.purchaseIdCache = (old.purchaseIdCache :: { string }?) or {}
+	next.powerUpStock = (old.powerUpStock :: { [string]: number }?) or {}
+	return next
 end
 
 -- Walks `data` forward from whatever `schemaVersion` it declares (0 if

@@ -24,6 +24,7 @@ local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local NPCPersonalities = require(ReplicatedStorage.Shared.Config.NPCPersonalities)
+local Store = require(ReplicatedStorage.Shared.Config.Store)
 
 local function formatIssues(issues: { Validate.Issue }): string
 	local lines = { string.format("ConfigValidator: %d config error(s):", #issues) }
@@ -72,6 +73,7 @@ function ConfigValidator:init()
 		powerUps = PowerUps,
 		titles = Titles,
 		npcPersonalities = NPCPersonalities,
+		store = Store,
 	})
 
 	checkBuiltMaps(Maps :: any, issues)
@@ -82,12 +84,13 @@ function ConfigValidator:init()
 
 	print(
 		string.format(
-			"ConfigValidator: %d map(s), %d task(s), %d power-up(s), %d title(s), %d NPC personality(s) all valid",
+			"ConfigValidator: %d map(s), %d task(s), %d power-up(s), %d title(s), %d NPC personality(s), %d store entry(s) all valid",
 			#Maps,
 			#Tasks,
 			#PowerUps,
 			#Titles,
-			#NPCPersonalities
+			#NPCPersonalities,
+			#Store
 		)
 	)
 end

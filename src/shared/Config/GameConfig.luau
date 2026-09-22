@@ -190,6 +190,51 @@ local GameConfig: Validate.GameConfig = {
 		rewardTopN = 10, -- PLACEHOLDER: no locked value in docs/ yet
 	},
 
+	-- P4-5: the store. Two of these are locked by a design decision and
+	-- the rest are judgement calls with real consequences, so they are
+	-- config rather than constants.
+	store = {
+		-- ProfileStore's own devproducts example uses 100. This is the
+		-- replay window: a receipt older than the oldest id still held
+		-- would be granted twice if Roblox re-offered it. 100 purchases
+		-- is far more than any player makes between two sessions.
+		purchaseIdCacheSize = 100,
+
+		-- How often a yielding ProcessReceipt re-checks whether the
+		-- grant has reached the DataStore. ProfileStore's example polls
+		-- every 10s; this matches it. Shorter would burn write budget
+		-- re-saving an already-queued profile for no gain.
+		receiptSaveRetrySeconds = 10,
+
+		-- PLACEHOLDER. When to stop waiting and return NotProcessedYet.
+		-- There is nothing lost by giving up: Roblox re-offers the
+		-- receipt, and the PurchaseId cache means the retry cannot
+		-- double-grant. Two minutes is long enough to ride out a
+		-- DataStore wobble and short enough not to pin a thread open
+		-- across a whole round.
+		receiptMaxWaitSeconds = 120,
+
+		-- PLACEHOLDER. A receipt can arrive before the buyer's profile
+		-- has finished loading (they bought during the join). Waiting
+		-- briefly is right; waiting long is not, because declining is
+		-- free and safe.
+		receiptProfileWaitSeconds = 30,
+
+		-- Game pass ownership cache. "Owns it" is stable for an hour;
+		-- "doesn't own it" for a minute, because the player who just
+		-- bought it is the one refreshing the store screen. The purchase
+		-- prompt's own completion signal invalidates the entry
+		-- immediately anyway - this TTL is the fallback for a pass
+		-- bought on the website mid-session.
+		passCacheOwnedTtlSeconds = 3600,
+		passCacheUnownedTtlSeconds = 60,
+
+		-- LOCKED by design-decisions.md Q8: "Loadouts are capped at 3
+		-- items regardless of spend." Validate.checkStoreConfig asserts
+		-- this is exactly 3 - changing it means amending Q8.
+		loadoutSlots = 3,
+	},
+
 	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which
 	-- forbids any in-round tell of a player's streak and names
 	-- "nameplate" specifically - a title maps to a bestStreak threshold,
