@@ -9,27 +9,49 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Core loop gray-box (Phase 02), foundation complete.** Pre-production
-(Phase 00) is done — all eight open design questions are resolved
-(`docs/design-decisions.md`), the task and power-up catalogues, map kit
-contract, payoff table, perf budget, and threat model are all written.
-Foundation and tooling (Phase 01, P1-1 through P1-6) is done: a working
-Rojo project with CI; a two-phase Service/Controller bootstrap loader
-(`src/shared/Loader.luau`); a typed remote layer with payload validation,
-rate limiting and violation escalation (`src/shared/Net.luau`,
-`src/server/Services/NetGuard.luau`) — the game's entire client-facing
-attack surface; a data-driven config layer with boot-time validation
-(`src/shared/Config/`, `src/server/Services/ConfigValidator.luau`); a
-player data service over ProfileStore with a versioned migration chain
-(`src/server/ProfileLogic.luau`, `src/server/Services/DataService.luau`);
-and documented testing conventions (`docs/testing-conventions.md`).
+**Phases 00–02 complete. Phase 03 (Decision Studio and NPCs) is 4 of 7
+done — 26 of the tracker's 57 tasks.** `lune run tests/run` currently
+passes 202 cases across 12 spec files.
 
-Phase 02 (the make-or-break gray-box loop) is underway: the round state
-machine (P2-1, `src/shared/RoundStates.luau`,
-`src/server/Services/RoundService.luau`) is the single source of truth
-for round phase, replicated as one small payload with per-state Signals
-other services subscribe to instead of polling. `ExampleController` is
-still a placeholder; no real controller exists yet.
+Pre-production (Phase 00) resolved all eight open design questions
+(`docs/design-decisions.md`) and wrote the task and power-up catalogues,
+map kit contract, payoff table, perf budget and threat model.
+
+Foundation and tooling (Phase 01) landed a working Rojo project with CI;
+a two-phase Service/Controller bootstrap loader (`src/shared/Loader.luau`);
+a typed remote layer with payload validation, rate limiting and violation
+escalation (`src/shared/Net.luau`, `src/server/Services/NetGuard.luau`) —
+the game's entire client-facing attack surface; a data-driven config layer
+with boot-time validation (`src/shared/Config/`,
+`src/server/Services/ConfigValidator.luau`); a player data service over
+ProfileStore with a versioned migration chain (`src/server/ProfileLogic.luau`,
+`src/server/Services/DataService.luau`); and documented testing conventions.
+
+The gray-box core loop (Phase 02) is playable end to end on the server
+side. `RoundService` is the single source of truth for round phase,
+replicated as one small payload with per-state Signals other services
+subscribe to instead of polling. On top of it: task assignment, progress
+and qualification (`TaskService`, `src/shared/Qualification.luau`); the
+three-file task framework with three working tasks — Code Playback,
+Fuse Rewire and Pressure Valve — where adding a task is adding a config,
+a handler and a view and nothing else (`docs/how-to-add-a-task.md`);
+power-up pickups, inventory and server-validated use (`PowerUpService`);
+a status effect system with stacking and mercy rules (`StatusEffects`);
+and movement sanity checks that are deliberately log-only for now
+(`MovementWatch`, `docs/movement-watch-notes.md`).
+
+Phase 03 so far: the outcome resolution table and its spec (P3-1), the
+Decision Studio phase machine and its secrecy guarantees — no client ever
+learns another finalist's choice before Reveal (P3-2, `DecisionService`);
+proximity text and voice chat for the negotiation (P3-3, `StudioChat`,
+`docs/studio-chat-notes.md`); and a gray-box Studio set builder (P3-4,
+`scripts/build-studio.luau`).
+
+**Next: P3-5, NPC fill** — spawning, pathing and simulated task timing,
+then P3-6 (NPC griefing AI and Studio personalities) and P3-7 (alternates,
+disconnects and forfeits) to close the phase. Client UI is still
+essentially unbuilt: `src/client/` has two controllers and the task views,
+and the whole of Phase 06 (theme, components, HUD, Studio UI) is ahead.
 
 ## Documents
 
@@ -45,6 +67,10 @@ still a placeholder; no real controller exists yet.
 | [`docs/perf-budget.md`](docs/perf-budget.md) | Performance budget, `StreamingEnabled` config, and the device test matrix. |
 | [`docs/threat-model.md`](docs/threat-model.md) | Exploit and streak-collusion threat model, ranked by leaderboard-credibility damage. |
 | [`docs/testing-conventions.md`](docs/testing-conventions.md) | What belongs in a pure vs. Studio-tested module, coverage expectations, and how to fake a dependency through the loader. |
+| [`docs/how-to-add-a-task.md`](docs/how-to-add-a-task.md) | The code side of a mini-task: the three-file split (config, handler, view) a task author writes against, worked through `code-playback`. |
+| [`docs/powerup-threat-notes.md`](docs/powerup-threat-notes.md) | Every way a client could try to cheat the power-up service, and what blocks each one. |
+| [`docs/movement-watch-notes.md`](docs/movement-watch-notes.md) | How to read the first week of movement-watch telemetry on mobile before touching a threshold — or enabling enforcement. |
+| [`docs/studio-chat-notes.md`](docs/studio-chat-notes.md) | What proximity chat needs configured outside code, and what a player without voice actually experiences. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture
@@ -117,9 +143,9 @@ pure-logic modules are required to make zero Roblox API calls anyway, they
 don't need Roblox emulation in the first place — `tests/TestRunner.luau`
 is a ~95-line hand-rolled runner that executes directly under Lune's real
 Luau runtime, with no third-party dependency. This was installed and run
-locally (not just researched): `lune run tests/run` now passes 50+ cases
-across `tests/Loader.spec.luau`, `Net.spec.luau`, `Config.spec.luau` and
-`ProfileLogic.spec.luau` (P1-1's original placeholder, `Example.spec.
+locally (not just researched): `lune run tests/run` passes 202 cases across
+the twelve spec files in `tests/`, and has run green from P1-6 onward
+(P1-1's original placeholder, `Example.spec.
 luau`, was deleted once a real pure-logic module had its own spec file,
 per its own header comment). See `docs/testing-conventions.md` (P1-6) for
 what belongs in a pure module versus a Studio integration test, and how
