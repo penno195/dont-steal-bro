@@ -275,6 +275,46 @@ export type StoreConfig = {
 	loadoutSlots: number,
 }
 
+-- ===== TelemetryConfig: P4-7 =============================================
+-- All PLACEHOLDER (see GameConfig.telemetry). `enabled` is the kill
+-- switch for a broken or slow analytics sink.
+export type TelemetryConfig = {
+	enabled: boolean,
+	batchSize: number,
+	flushIntervalSeconds: number,
+	perMinuteLimit: number, -- 0 = no limit
+}
+
+-- ===== MatchmakingConfig: P5-1 ===========================================
+-- Cross-server queue timings and MemoryStore names. The ORDERINGS
+-- between these (checked in checkMatchmakingConfig) are what keep
+-- the queue live. docs/matchmaking.md explains each one. Correctness
+-- (no double-booking) doesn't depend on any of these numbers.
+export type MatchmakingConfig = {
+	hubPlaceId: number, -- 0 = unset: matchmaking then runs only in Studio
+	queueMapName: string, -- SortedMap: userId -> entry, sorted by enqueue time
+	groupMapName: string, -- HashMap: groupId -> group record (the commit point)
+	recentMapName: string, -- HashMap: userId -> recent opponents
+	metaMapName: string, -- HashMap: the formation lease
+	groupSize: number, -- must equal playerCount
+	partialGroupTimeoutSeconds: number,
+	partialGroupMinPlayers: number,
+	formationTickSeconds: number,
+	queuePageSize: number, -- GetRangeAsync count per tick
+	entryTtlSeconds: number,
+	refreshIntervalSeconds: number,
+	claimCommitDeadlineSeconds: number, -- former gives up on its own claims past this
+	staleClaimRevertSeconds: number, -- owner reverts an uncommitted claim past this
+	groupRecordTtlSeconds: number,
+	leaseTtlSeconds: number,
+	departedTtlSeconds: number,
+	rematchCooldownSeconds: number,
+	recentOpponentsCap: number,
+	backoffBaseSeconds: number,
+	backoffCapSeconds: number,
+	unavailableAfterFailures: number,
+}
+
 -- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
 -- Studio phase timers are locked exactly by architecture.md §6's network
 -- trace (Intro +5s, Negotiate +45s, Choose +15s, Reveal +1s). Bounty
@@ -376,6 +416,12 @@ export type GameConfig = {
 
 	-- P4-5: the store's own timings and caps. See StoreConfig above.
 	store: StoreConfig,
+
+	-- P5-1: the cross-server queue. See MatchmakingConfig above.
+	matchmaking: MatchmakingConfig,
+
+	-- P4-7: analytics batching. See TelemetryConfig above.
+	telemetry: TelemetryConfig,
 
 	-- P4-2: whether a title may be shown while a round is live. False
 	-- per design-decisions.md Q7 condition 1 - see GameConfig's own note
@@ -756,7 +802,13 @@ end
 -- use for PowerUpStock and Title grants.
 local function checkAssetId(issues: { Issue }, fileName: string, field: string, value: any, enabled: boolean)
 	if type(value) ~= "number" or value < 0 or value % 1 ~= 0 then
-		issue(issues, "Cosmetic", fileName, field, string.format("expected a non-negative integer, got %s", tostring(value)))
+		issue(
+			issues,
+			"Cosmetic",
+			fileName,
+			field,
+			string.format("expected a non-negative integer, got %s", tostring(value))
+		)
 	elseif enabled and value == 0 then
 		issue(
 			issues,
@@ -819,7 +871,9 @@ function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: 
 		checkAssetId(issues, fileName, "animationAssetId", def.animationAssetId, def.enabled)
 	elseif def.category == "Podium" then
 		checkAssetId(issues, fileName, "podiumTextureAssetId", def.podiumTextureAssetId, def.enabled)
-		if not isNonEmptyString(def.podiumColorHex) or not string.match(def.podiumColorHex :: any, "^#%x%x%x%x%x%x$") then
+		if
+			not isNonEmptyString(def.podiumColorHex) or not string.match(def.podiumColorHex :: any, "^#%x%x%x%x%x%x$")
+		then
 			issue(
 				issues,
 				"Cosmetic",
@@ -1403,6 +1457,108 @@ local function checkStoreConfig(store: StoreConfig, issues: { Issue })
 	end
 end
 
+-- P5-1. Every ordering here protects LIVENESS, not the no-double-booking
+-- guarantee (that rests on per-key compare-and-set alone - see
+-- MatchmakingLogic.luau's header). Getting one wrong strands players or
+-- splits groups needlessly, which is why they fail at boot.
+local MEMORYSTORE_MAX_EXPIRATION_SECONDS = 3888000 -- 45 days; verify, see docs/matchmaking.md
+local MEMORYSTORE_MAX_RANGE_COUNT = 200 -- GetRangeAsync; verify, see docs/matchmaking.md
+
+local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "matchmaking." .. field, message)
+	end
+
+	if mm == nil then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"matchmaking",
+			"the matchmaking config block is missing entirely"
+		)
+		return
+	end
+
+	for _, field in { "queueMapName", "groupMapName", "recentMapName", "metaMapName" } do
+		if not isNonEmptyString((mm :: any)[field]) then
+			bad(field, "must be a non-empty string")
+		end
+	end
+	if type(mm.hubPlaceId) ~= "number" or mm.hubPlaceId < 0 then
+		bad("hubPlaceId", "must be a place id, or 0 for unset")
+	end
+
+	if mm.groupSize ~= playerCount then
+		bad("groupSize", string.format("must equal playerCount (%d) - a group is one match", playerCount))
+	end
+	if mm.partialGroupMinPlayers < 1 or mm.partialGroupMinPlayers > mm.groupSize then
+		bad("partialGroupMinPlayers", "must be between 1 and groupSize")
+	end
+	if mm.queuePageSize < mm.groupSize or mm.queuePageSize > MEMORYSTORE_MAX_RANGE_COUNT then
+		bad(
+			"queuePageSize",
+			string.format("must be between groupSize and %d (GetRangeAsync's cap)", MEMORYSTORE_MAX_RANGE_COUNT)
+		)
+	end
+
+	for _, field in
+		{
+			"partialGroupTimeoutSeconds",
+			"formationTickSeconds",
+			"entryTtlSeconds",
+			"refreshIntervalSeconds",
+			"claimCommitDeadlineSeconds",
+			"staleClaimRevertSeconds",
+			"groupRecordTtlSeconds",
+			"leaseTtlSeconds",
+			"departedTtlSeconds",
+			"rematchCooldownSeconds",
+			"backoffBaseSeconds",
+			"backoffCapSeconds",
+		}
+	do
+		local value = (mm :: any)[field]
+		if type(value) ~= "number" or value <= 0 or value > MEMORYSTORE_MAX_EXPIRATION_SECONDS then
+			bad(field, "must be positive and within MemoryStore's maximum expiration")
+		end
+	end
+
+	-- Two missed heartbeats in a row must not be enough to expire a
+	-- live player's entry.
+	if mm.refreshIntervalSeconds * 2 >= mm.entryTtlSeconds then
+		bad(
+			"refreshIntervalSeconds",
+			"must be under half of entryTtlSeconds, so one missed refresh can't drop a live entry"
+		)
+	end
+	-- The owner must not revert a claim the former could still commit.
+	if mm.claimCommitDeadlineSeconds >= mm.staleClaimRevertSeconds then
+		bad(
+			"claimCommitDeadlineSeconds",
+			"must be shorter than staleClaimRevertSeconds, or owners revert claims whose groups are about to commit"
+		)
+	end
+	-- An owner that is slow to look must still find the group record.
+	if mm.groupRecordTtlSeconds <= mm.staleClaimRevertSeconds then
+		bad("groupRecordTtlSeconds", "must outlive staleClaimRevertSeconds, or a committed group can look uncommitted")
+	end
+	-- A lease that lapses between two of the holder's own ticks would
+	-- hand formation to another server every tick.
+	if mm.leaseTtlSeconds <= mm.formationTickSeconds then
+		bad("leaseTtlSeconds", "must be longer than formationTickSeconds")
+	end
+	if mm.backoffCapSeconds < mm.backoffBaseSeconds then
+		bad("backoffCapSeconds", "must be at least backoffBaseSeconds")
+	end
+	if mm.recentOpponentsCap < mm.groupSize - 1 then
+		bad("recentOpponentsCap", "must hold at least one full group's worth of co-players (groupSize - 1)")
+	end
+	if mm.unavailableAfterFailures < 1 then
+		bad("unavailableAfterFailures", "must be at least 1")
+	end
+end
+
 function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	if config.playerCount <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "playerCount", "must be positive")
@@ -1498,6 +1654,31 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 
 	checkLeaderboardConfig(config.leaderboard, issues)
 	checkStoreConfig(config.store, issues)
+	checkMatchmakingConfig(config.matchmaking, config.playerCount, issues)
+
+	local telemetry = config.telemetry
+	if telemetry == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "telemetry", "the telemetry config block is missing entirely")
+	else
+		if type(telemetry.enabled) ~= "boolean" then
+			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.enabled", "must be a boolean")
+		end
+		if telemetry.batchSize < 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.batchSize", "must be at least 1")
+		end
+		if telemetry.flushIntervalSeconds <= 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.flushIntervalSeconds", "must be positive")
+		end
+		if telemetry.perMinuteLimit < 0 then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"telemetry.perMinuteLimit",
+				"must not be negative (0 means no limit)"
+			)
+		end
+	end
 
 	if config.npcTitleNoneChance < 0 or config.npcTitleNoneChance > 1 then
 		issue(issues, "GameConfig", "GameConfig.luau", "npcTitleNoneChance", "must be between 0 and 1")

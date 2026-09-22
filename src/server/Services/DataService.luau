@@ -180,6 +180,13 @@ local function data(player: Player): ProfileLogic.ProfileData?
 	return profile.Data :: any
 end
 
+-- P5-1: MatchmakingService won't queue a player whose profile hasn't
+-- loaded. Otherwise the hub could send someone to a match before their
+-- session lock exists here to release.
+local function isLoaded(player: Player): boolean
+	return profiles[player] ~= nil
+end
+
 local function getStreak(player: Player): number
 	local d = data(player)
 	return if d then d.currentStreak else 0
@@ -492,6 +499,7 @@ local DataService: Loader.Service = {
 	name = "DataService",
 	dependencies = {},
 	setPendingRoundOutcomeResolver = setPendingRoundOutcomeResolver,
+	isLoaded = isLoaded,
 	getStreak = getStreak,
 	getBestStreak = getBestStreak,
 	getPendingBounty = getPendingBounty,

@@ -30,5 +30,6 @@ require("./LeaderboardLogic.spec")
 require("./PeriodKeys.spec")
 require("./StoreLogic.spec")
 require("./CosmeticLogic.spec")
+require("./MatchmakingLogic.spec")
 
 TestRunner.run()

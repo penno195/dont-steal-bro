@@ -882,6 +882,39 @@ Net.Remotes = {
 		rateLimit = nil,
 		states = nil,
 	} :: RemoteDef,
+
+	-- P5-1's matchmaking remotes. Both intents are bare: everything a
+	-- queue entry holds (streak, enqueue time, who to avoid) comes from
+	-- the server's own profile and MemoryStore, never the client. No
+	-- `states` gate, because the hub has no round state.
+	-- MatchmakingService refuses both outside the hub place instead.
+	QueueJoinIntent = {
+		name = "QueueJoinIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	QueueLeaveIntent = {
+		name = "QueueLeaveIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client, sent to that player only: their own queue status
+	-- (Idle / Joining / Waiting with position, size and an estimated wait /
+	-- MatchFound / Unavailable, plus a message). Never includes who else
+	-- is queued or anyone's streak (design-decisions.md Q7).
+	QueueState = {
+		name = "QueueState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 
 -- ===== Roblox-touching helpers (never called under Lune tests) ======

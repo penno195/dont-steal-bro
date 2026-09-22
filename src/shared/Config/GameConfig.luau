@@ -235,6 +235,44 @@ local GameConfig: Validate.GameConfig = {
 		loadoutSlots = 3,
 	},
 
+	-- P5-1: cross-server matchmaking. docs/matchmaking.md explains every
+	-- number, and which MemoryStore limits they are designed against.
+	-- Validate.checkMatchmakingConfig enforces the orderings between
+	-- them, which are what keep the queue moving.
+	matchmaking = {
+		hubPlaceId = 0, -- PLACEHOLDER: set once the Hub place is published; 0 runs matchmaking in Studio only
+		-- Versioned like the leaderboard stores: a schema change means
+		-- new names, never an in-place migration of live queue state.
+		queueMapName = "MatchQueue_v1",
+		groupMapName = "MatchGroups_v1",
+		recentMapName = "RecentOpponents_v1",
+		metaMapName = "MatchmakingMeta_v1",
+
+		groupSize = 6, -- gdd.md; must equal playerCount
+		partialGroupTimeoutSeconds = 60, -- PLACEHOLDER: no locked value in docs/ yet
+		partialGroupMinPlayers = 1, -- P5-1: "with at least 1 player"
+		formationTickSeconds = 2, -- PLACEHOLDER: also the UI refresh rate and the claim-discovery latency
+		queuePageSize = 200, -- the oldest 200 waiting are the only ones who can form a group this tick
+
+		entryTtlSeconds = 90, -- a dead server's entries are gone within this
+		refreshIntervalSeconds = 20,
+		claimCommitDeadlineSeconds = 10,
+		staleClaimRevertSeconds = 45,
+		groupRecordTtlSeconds = 600,
+		leaseTtlSeconds = 6, -- 3 ticks: one slow tick doesn't hand formation away
+		departedTtlSeconds = 30,
+
+		-- architecture.md §7's collusion mitigation. PLACEHOLDER: 15 min is
+		-- roughly two rounds. Never relaxed to fill a group: a quiet
+		-- server gets NPC seats instead (MatchmakingLogic.selectGroups).
+		rematchCooldownSeconds = 900,
+		recentOpponentsCap = 30,
+
+		backoffBaseSeconds = 2,
+		backoffCapSeconds = 30,
+		unavailableAfterFailures = 3, -- consecutive failed reads before the UI says so
+	},
+
 	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which
 	-- forbids any in-round tell of a player's streak and names
 	-- "nameplate" specifically - a title maps to a bestStreak threshold,

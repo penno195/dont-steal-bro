@@ -97,6 +97,31 @@ local function validGameConfig(): Validate.GameConfig
 			passCacheUnownedTtlSeconds = 60,
 			loadoutSlots = 3,
 		},
+		matchmaking = {
+			hubPlaceId = 0,
+			queueMapName = "TestQueue",
+			groupMapName = "TestGroups",
+			recentMapName = "TestRecent",
+			metaMapName = "TestMeta",
+			groupSize = 6,
+			partialGroupTimeoutSeconds = 60,
+			partialGroupMinPlayers = 1,
+			formationTickSeconds = 2,
+			queuePageSize = 200,
+			entryTtlSeconds = 90,
+			refreshIntervalSeconds = 20,
+			claimCommitDeadlineSeconds = 10,
+			staleClaimRevertSeconds = 45,
+			groupRecordTtlSeconds = 600,
+			leaseTtlSeconds = 6,
+			departedTtlSeconds = 30,
+			rematchCooldownSeconds = 900,
+			recentOpponentsCap = 30,
+			backoffBaseSeconds = 2,
+			backoffCapSeconds = 30,
+			unavailableAfterFailures = 3,
+		},
+		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0 },
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
 		npcTitleTopRungsExcluded = 3,
@@ -1071,8 +1096,8 @@ TestRunner.describe("Validate.checkCosmeticItem (P4-6)", function()
 	end)
 
 	TestRunner.it("refuses an unrecognised category", function()
-		local def = validCosmetic("t", "Skin")
-		;(def :: any).category = "Nonsense"
+		local def = validCosmetic("t", "Skin");
+		(def :: any).category = "Nonsense"
 		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 
@@ -1089,8 +1114,8 @@ TestRunner.describe("Validate.checkCosmeticItem (P4-6)", function()
 	end)
 
 	TestRunner.it("refuses an unrecognised rarity", function()
-		local def = validCosmetic("t", "Skin")
-		;(def :: any).rarity = "Legendary"
+		local def = validCosmetic("t", "Skin");
+		(def :: any).rarity = "Legendary"
 		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 
@@ -1236,5 +1261,63 @@ TestRunner.describe("Validate.checkGameConfig - store block (P4-5)", function()
 		config.store = nil :: any
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P5-1 matchmaking)", function()
+	local function issuesWith(mutate: (any) -> ()): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		mutate(config.matchmaking)
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the valid block", function()
+		TestRunner.expect(#issuesWith(function(_mm) end)):toBe(0)
+	end)
+
+	TestRunner.it("names a missing matchmaking block instead of erroring on it", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.matchmaking = nil :: any
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a groupSize that isn't playerCount", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.groupSize = 5
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a commit deadline that isn't shorter than the stale-claim revert", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.claimCommitDeadlineSeconds = 45
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a refresh interval that one missed heartbeat could outlast", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.refreshIntervalSeconds = 45
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a group record that expires before a stale claim is reverted", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.groupRecordTtlSeconds = 30
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a lease no longer than one formation tick", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.leaseTtlSeconds = 2
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a page size above GetRangeAsync's cap", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.queuePageSize = 201
+		end) > 0):toBeTruthy()
 	end)
 end)
