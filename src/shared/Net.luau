@@ -384,6 +384,23 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P3-6: one NPC bubble-chat line, decided server-side and rendered by
+	-- NPCBubbleController. It's a broadcast rather than a server-side
+	-- call because TextChatService:DisplayBubble is a CLIENT method -
+	-- the server can decide a bubble should appear but can't make one.
+	--
+	-- Carries only {npcId, message}, and the message is always a string
+	-- the server picked out of config: a client can neither influence
+	-- what a bot says nor learn anything from it that the room can't
+	-- already see (see NPCPersonalities/init.luau's line rule).
+	NPCChatBubble = {
+		name = "NPCChatBubble",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- P2-5's task-interaction remotes - see src/server/TaskHandlers/
 	-- Types.luau for the framework these plug into. TaskInteract is the
 	-- one remote every task's client view shares to start (or restart) a

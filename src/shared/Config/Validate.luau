@@ -210,6 +210,64 @@ export type GameConfig = {
 	-- except where noted - no real telemetry exists to tune against yet,
 	-- same stance raceDurationSeconds takes.
 	npc: NPCConfig,
+
+	-- P3-6: every probability and timing the NPC brain uses, "exposed
+	-- for tuning without code changes" (the task's own requirement).
+	-- The per-personality steal probabilities are NOT here - they live
+	-- on each NPCPersonalityDef, so adding a personality stays a
+	-- one-file change (Ground Rule 2).
+	npcBrain: NPCBrainConfig,
+}
+
+-- ===== NPCBrainConfig: P3-6 ==============================================
+-- The utility AI's weights. A score is assembled as
+--   base + deficit component + situation component
+-- and the item is used when the total reaches `useThreshold` - so these
+-- are all in the same arbitrary unit, and only their RATIOS matter. See
+-- NPCBrainLogic.scoreAction for exactly where each one lands.
+export type NPCUtilityWeights = {
+	-- Floor score for an item that COULD legally be used right now.
+	-- Below useThreshold on its own, so a bot never fires purely
+	-- because it happens to be holding something.
+	baseScore: number,
+	-- How much "I am N tasks behind the leader" pushes toward using it.
+	-- The rubber-band instinct: a bot that's losing gets less patient.
+	deficitWeight: number,
+	-- Offensive items only: how much a target being close (rather than
+	-- at the edge of range) pushes toward firing now.
+	proximityWeight: number,
+	-- Self-buff items only: how much a long walk to the next station
+	-- pushes toward using it now - a Sprint Boost is worth most at the
+	-- start of a long leg, not at the end of a short one.
+	travelWeight: number,
+	-- The deficit at which deficitWeight is fully applied. Above it the
+	-- component saturates rather than growing without bound.
+	deficitSaturation: number,
+	-- The walk length at which travelWeight is fully applied, in studs.
+	travelSaturationStuds: number,
+	-- Total score at which the bot commits.
+	useThreshold: number,
+}
+
+export type NPCBrainConfig = {
+	-- How often the brain re-scores, in Hz. Deliberately far slower than
+	-- NPCService's own movement tick - a power-up decision that's a
+	-- second late is invisible, and this is the cheaper knob to turn.
+	decisionHz: number,
+	utility: NPCUtilityWeights,
+
+	-- Decision Studio timings, all as FRACTIONS of the phase window
+	-- rather than absolute seconds, so retuning studioTimers doesn't
+	-- silently push a bot's lock-in outside the Choose phase.
+	lockInEarliestFraction: number, -- never locks before this much of Choose has passed
+	lockInLatestFraction: number, -- always locked by this much (< 1, so never at the buzzer)
+	-- How many lines a bot posts across the whole Negotiate window, and
+	-- the minimum gap between two of them so a bot never spams.
+	negotiationLineCount: number,
+	minSecondsBetweenLines: number,
+	-- Probability that a bot posts a final wobble line during Choose,
+	-- after Negotiate has ended - the "last-second wobble" beat.
+	chooseWobbleChance: number,
 }
 
 -- ===== NPCConfig: architecture.md §4 =====================================
@@ -255,6 +313,28 @@ export type NPCConfig = {
 	-- stalling the round forever.
 	repathAfterStuckSeconds: number,
 	maxRepathsPerStation: number,
+}
+
+-- ===== NPCPersonalityDef: architecture.md §4 =============================
+-- One personality an NPC can be assigned for the Decision Studio (P3-6).
+-- The four line categories are not decoration: NPCBrain escalates
+-- through them as the negotiation window runs down (promises early,
+-- pressure and accusations in the middle, wobbles at the end), so a
+-- personality that dropped a category would simply go quiet during that
+-- stretch. checkNPCPersonality enforces all four are populated.
+export type NPCPersonalityLines = {
+	promises: { string },
+	pressure: { string },
+	accusations: { string },
+	wobbles: { string },
+}
+
+export type NPCPersonalityDef = {
+	id: string,
+	displayName: string,
+	stealProbability: number, -- 0-1; architecture.md §4's Greedy 0.7 / Loyal 0.2 / Chaotic 0.5
+	weight: number, -- relative draw weight when assigning one to a bot
+	lines: NPCPersonalityLines,
 }
 
 -- ===== Issues ============================================================
@@ -548,6 +628,153 @@ local function checkNPCConfig(npc: NPCConfig, issues: { Issue })
 	end
 end
 
+-- P3-6. Same split-for-length reasoning as checkNPCConfig above.
+--
+-- The one rule here that's a real invariant rather than a range check:
+-- lockInEarliestFraction < lockInLatestFraction < 1. The upper bound
+-- matters because a bot that locks in at fraction 1.0 is racing the
+-- phase deadline, and whichever of the two fires first decides whether
+-- its choice or the configured default is what counts - a coin flip
+-- between two different outcomes, decided by scheduler ordering.
+local function checkNPCBrainConfig(npcBrain: NPCBrainConfig, issues: { Issue })
+	if npcBrain == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain", "the NPC brain config block is missing entirely")
+		return
+	end
+
+	if npcBrain.decisionHz <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.decisionHz", "must be positive")
+	end
+
+	if
+		not (npcBrain.lockInEarliestFraction >= 0 and npcBrain.lockInEarliestFraction < npcBrain.lockInLatestFraction)
+	then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"npcBrain.lockInEarliestFraction",
+			string.format(
+				"must be >= 0 and below lockInLatestFraction (%s), got %s",
+				tostring(npcBrain.lockInLatestFraction),
+				tostring(npcBrain.lockInEarliestFraction)
+			)
+		)
+	end
+	if npcBrain.lockInLatestFraction >= 1 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"npcBrain.lockInLatestFraction",
+			string.format(
+				"must be below 1 - locking at the deadline itself races the phase timer for whether the bot's own choice or the default counts (got %s)",
+				tostring(npcBrain.lockInLatestFraction)
+			)
+		)
+	end
+
+	if npcBrain.negotiationLineCount < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.negotiationLineCount", "must not be negative")
+	end
+	if npcBrain.minSecondsBetweenLines < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.minSecondsBetweenLines", "must not be negative")
+	end
+	if npcBrain.chooseWobbleChance < 0 or npcBrain.chooseWobbleChance > 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.chooseWobbleChance", "must be between 0 and 1")
+	end
+
+	local utility = npcBrain.utility
+	if utility == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.utility", "the utility weight block is missing")
+		return
+	end
+
+	if utility.useThreshold <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.utility.useThreshold", "must be positive")
+	end
+	if utility.baseScore >= utility.useThreshold then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"npcBrain.utility.baseScore",
+			string.format(
+				"must be below useThreshold (%s) - at or above it, a bot fires the instant it can legally do so and the situation weights mean nothing",
+				tostring(utility.useThreshold)
+			)
+		)
+	end
+	if utility.deficitSaturation <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.utility.deficitSaturation", "must be positive")
+	end
+	if utility.travelSaturationStuds <= 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.utility.travelSaturationStuds", "must be positive")
+	end
+	for _, field in { "deficitWeight", "proximityWeight", "travelWeight" } do
+		local value = (utility :: any)[field] :: number
+		if type(value) ~= "number" or value < 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", "npcBrain.utility." .. field, "must not be negative")
+		end
+	end
+end
+
+-- P3-6. The four line categories are all required and all non-empty -
+-- NPCBrain picks a category by how far through the negotiation window
+-- it is, so an empty one is a stretch of silence, not a smaller pool.
+function Validate.checkNPCPersonality(fileName: string, def: NPCPersonalityDef, issues: { Issue })
+	if def.id == "" then
+		issue(issues, "NPCPersonality", fileName, "id", "must not be empty")
+	end
+	if def.displayName == "" then
+		issue(issues, "NPCPersonality", fileName, "displayName", "must not be empty")
+	end
+	if def.stealProbability < 0 or def.stealProbability > 1 then
+		issue(
+			issues,
+			"NPCPersonality",
+			fileName,
+			"stealProbability",
+			string.format("expected 0-1, got %s", tostring(def.stealProbability))
+		)
+	end
+	if def.weight <= 0 then
+		issue(issues, "NPCPersonality", fileName, "weight", "must be positive")
+	end
+
+	local lines = def.lines
+	if lines == nil then
+		issue(issues, "NPCPersonality", fileName, "lines", "must declare a lines block")
+		return
+	end
+
+	for _, category in { "promises", "pressure", "accusations", "wobbles" } do
+		local pool = (lines :: any)[category] :: { string }?
+		if pool == nil or #pool == 0 then
+			issue(
+				issues,
+				"NPCPersonality",
+				fileName,
+				"lines." .. category,
+				"must declare at least one line - an empty category is a silent stretch of the negotiation, not a smaller pool"
+			)
+			continue
+		end
+
+		for index, line in pool do
+			if line == "" then
+				issue(
+					issues,
+					"NPCPersonality",
+					fileName,
+					string.format("lines.%s[%d]", category, index),
+					"must not be empty"
+				)
+			end
+		end
+	end
+end
+
 function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	if config.playerCount <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "playerCount", "must be positive")
@@ -639,6 +866,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	end
 
 	checkNPCConfig(config.npc, issues)
+	checkNPCBrainConfig(config.npcBrain, issues)
 
 	for _, field in { "loadingSeconds", "introSeconds", "qualifiedSeconds", "resultsSeconds", "cleanupSeconds" } do
 		local value = (config.roundTimers :: any)[field]
@@ -744,6 +972,11 @@ export type RegistryInput = {
 	tasks: { { fileName: string, def: TaskDef } },
 	powerUps: { { fileName: string, def: PowerUpDef } },
 	titles: { { fileName: string, def: TitleDef } },
+	-- P3-6. Optional so every existing caller and test fixture that
+	-- predates NPC personalities keeps working unchanged - an omitted
+	-- registry is "none registered," which is exactly what a repo with
+	-- no personality files has.
+	npcPersonalities: { { fileName: string, def: NPCPersonalityDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -763,11 +996,18 @@ function Validate.run(input: RegistryInput): { Issue }
 	for _, entry in input.titles do
 		Validate.checkTitle(entry.fileName, entry.def, issues)
 	end
+	local npcPersonalities = input.npcPersonalities
+	if npcPersonalities ~= nil then
+		for _, entry in npcPersonalities do
+			Validate.checkNPCPersonality(entry.fileName, entry.def, issues)
+		end
+	end
 
 	checkDuplicateIds("Map", input.maps :: any, issues)
 	checkDuplicateIds("Task", input.tasks :: any, issues)
 	checkDuplicateIds("PowerUp", input.powerUps :: any, issues)
 	checkDuplicateIds("Title", input.titles :: any, issues)
+	checkDuplicateIds("NPCPersonality", (input.npcPersonalities or {}) :: any, issues)
 
 	local knownTaskIds: { [string]: boolean } = {}
 	for _, entry in input.tasks do

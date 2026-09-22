@@ -426,6 +426,27 @@ local TaskService: Loader.Service = {
 		return if state then state.assignments else nil
 	end,
 
+	-- P3-6: the brain's "how far behind am I" reading. Same numbers
+	-- getProgress gives for a Player, keyed by id so it answers for a
+	-- bot too - which it has to, since a bot needs to know how it's
+	-- doing against the whole field, itself included.
+	getProgressFor = function(racerId: number): { tasksCompleted: number, tasksAssigned: number }?
+		local state = racerStates[racerId]
+		if state == nil then
+			return nil
+		end
+		return { tasksCompleted = state.tasksCompleted, tasksAssigned = #state.assignments }
+	end,
+
+	getRacerIds = function(): { number }
+		local ids: { number } = {}
+		for racerId in racerStates do
+			table.insert(ids, racerId)
+		end
+		table.sort(ids)
+		return ids
+	end,
+
 	getTaskIdForRacer = function(racerId: number, stationId: string): string?
 		local state = racerStates[racerId]
 		if state == nil then

@@ -30,10 +30,13 @@
 -- 3. USING SOMEONE ELSE'S POWER-UP. `handleUseIntent`'s `player` argument
 --    comes from NetGuard's own authenticated RemoteEvent connection
 --    (Ground Rule 1 - never from anything in the payload), and inventory
---    is looked up as `playerStates[player]` - keyed by that same real
---    Player, never by a client-supplied id. There is no field in
---    PowerUpUseIntent's schema a payload could use to claim a different
---    identity at all.
+--    is looked up as `racerStates[racer.id]` where `racer` is resolved
+--    from that same authenticated Player - never from a client-supplied
+--    id. There is no field in PowerUpUseIntent's schema a payload could
+--    use to claim a different identity at all. P3-6 added a second
+--    caller (`useForRacer`, for NPCs) that takes an id, but it is a
+--    SERVER-side function reachable only through the loader - no remote
+--    routes to it, so a client still has no way to name its own caster.
 --
 -- 4. RANGE SPOOFING. PowerUpUseIntent's payload carries an OPTIONAL
 --    target *hint* (`targetPlayerId`) and nothing else - no position, no
@@ -103,7 +106,7 @@ type InventoryItem = {
 	acquiredAt: number,
 }
 
-type PlayerState = {
+type RacerState = {
 	inventory: { InventoryItem },
 	lastUsedAt: { [string]: number },
 }
@@ -111,7 +114,7 @@ type PlayerState = {
 local spawnPoints: { SpawnPointRecord } = {}
 local livePickups: { [SpawnPointRecord]: LivePickup } = {}
 local pendingRespawnThreads: { [SpawnPointRecord]: thread } = {}
-local playerStates: { [Player]: PlayerState } = {}
+local racerStates: { [number]: RacerState } = {}
 local pickupsFolder: Folder? = nil
 local mapRarityWeights: Validate.PowerUpRarityWeights? = nil
 
@@ -210,8 +213,13 @@ local function setAuditSink(fn: (entry: AuditEntry) -> ())
 	auditSink = fn
 end
 
+-- Takes a participant (P3-6), so a bot's use is audited in the same log
+-- and the same shape a human's is - an audit trail that only records
+-- half the field would be no use at all for balancing power-ups. The
+-- payload's field NAMES are unchanged (`playerId`/`playerName`): the
+-- log's readers predate NPCs, and a bot is just a negative id to them.
 local function audit(
-	player: Player,
+	racer: Participants.Participant,
 	powerUpId: string?,
 	targetPlayerId: number?,
 	result: "Applied" | "Rejected",
@@ -219,8 +227,8 @@ local function audit(
 )
 	local entry: AuditEntry = {
 		at = Workspace:GetServerTimeNow(),
-		playerId = player.UserId,
-		playerName = player.Name,
+		playerId = racer.id,
+		playerName = racer.displayName,
 		powerUpId = powerUpId,
 		targetPlayerId = targetPlayerId,
 		result = result,
@@ -311,8 +319,16 @@ local function scheduleRespawn(point: SpawnPointRecord)
 	end)
 end
 
-local function broadcastInventory(player: Player)
-	local state = playerStates[player]
+-- Only a human has an inventory HUD to update. An NPC's inventory is
+-- server state nobody needs told about, so this returns early for one
+-- rather than inventing a broadcast no client would consume.
+local function broadcastInventory(racer: Participants.Participant)
+	local player = racer.player
+	if player == nil then
+		return
+	end
+
+	local state = racerStates[racer.id]
 	local items = {}
 	if state ~= nil then
 		for _, item in state.inventory do
@@ -337,17 +353,22 @@ local function tryClaimPickup(point: SpawnPointRecord, live: LivePickup, hitPart
 		return
 	end
 
-	local player = Players:GetPlayerFromCharacter(character)
-	if player == nil then
+	-- P3-6: resolved through the participant roster rather than
+	-- Players:GetPlayerFromCharacter, which can only ever answer for a
+	-- human - an NPC walking over a pickup would otherwise step straight
+	-- over it, and "NPCs pick up power-ups on their route"
+	-- (architecture.md §4) would quietly never happen.
+	local racer = Participants.fromCharacter(character)
+	if racer == nil then
 		return
 	end
 
 	live.claimed = true
 
-	local state = playerStates[player]
+	local state = racerStates[racer.id]
 	if state == nil then
 		state = { inventory = {}, lastUsedAt = {} }
-		playerStates[player] = state
+		racerStates[racer.id] = state
 	end
 
 	local allowed, shouldSwap = PowerUpLogic.canPickUp(
@@ -366,7 +387,7 @@ local function tryClaimPickup(point: SpawnPointRecord, live: LivePickup, hitPart
 	end
 
 	table.insert(state.inventory, { powerUpId = live.def.id, acquiredAt = now() })
-	broadcastInventory(player)
+	broadcastInventory(racer)
 
 	destroyLivePickup(point)
 	scheduleRespawn(point)
@@ -483,13 +504,21 @@ local function resolveTarget(
 	return byId[chosenId]
 end
 
+-- Same shape as broadcastInventory: the confirmation exists to update a
+-- UI, and a bot has no UI. Its use is still audited either way, which
+-- is where an NPC's outcome is actually observable from.
 local function sendResult(
-	player: Player,
+	racer: Participants.Participant,
 	success: boolean,
 	powerUpId: string?,
 	targetPlayerId: number?,
 	reason: string?
 )
+	local player = racer.player
+	if player == nil then
+		return
+	end
+
 	Net.fireClient("PowerUpUseResult", player, {
 		success = success,
 		powerUpId = powerUpId,
@@ -498,20 +527,38 @@ local function sendResult(
 	})
 end
 
-local function handleUseIntent(player: Player, slotIndex: number?, targetPlayerId: number?)
+-- THE one validated use path, for every caster there is (P3-6).
+--
+-- "Route every use through the existing validated server path, never a
+-- shortcut" is P3-6's own requirement for NPC power-up use, and the way
+-- to actually guarantee it is to have exactly one function that can
+-- consume an inventory slot - this one. A bot enters it through
+-- `useForRacer` below and a human through `handleUseIntent`, and from
+-- this line down the two are literally the same code: the same slot
+-- check, the same cooldown check against the same server-held
+-- timestamp, the same range/cone resolution, the same effect applier,
+-- the same audit entry. There is no bot-only branch and no way to add
+-- one without editing this function, which is the point.
+--
+-- Notably this means an NPC is subject to P2-8's hard-control immunity
+-- and diminishing-returns rules on its TARGETS exactly as a player is
+-- (they live inside effectApplier), and gets nothing back for a
+-- rejected use except a log line - same as a player whose attempt
+-- missed.
+local function useFor(racer: Participants.Participant, slotIndex: number?, targetRacerId: number?)
 	local resolvedSlotIndex = slotIndex or 1
-	local state = playerStates[player]
+	local state = racerStates[racer.id]
 
 	if state == nil then
-		audit(player, nil, nil, "Rejected", "no inventory")
-		sendResult(player, false, nil, nil, "no inventory")
+		audit(racer, nil, nil, "Rejected", "no inventory")
+		sendResult(racer, false, nil, nil, "no inventory")
 		return
 	end
 
 	local item = state.inventory[resolvedSlotIndex]
 	if item == nil then
-		audit(player, nil, nil, "Rejected", "empty slot")
-		sendResult(player, false, nil, nil, "empty slot")
+		audit(racer, nil, nil, "Rejected", "empty slot")
+		sendResult(racer, false, nil, nil, "empty slot")
 		return
 	end
 
@@ -519,54 +566,91 @@ local function handleUseIntent(player: Player, slotIndex: number?, targetPlayerI
 	if def == nil then
 		-- Defensive only - can't happen for an id this service itself put
 		-- in the inventory, since it's always drawn from powerUpDefsById.
-		audit(player, item.powerUpId, nil, "Rejected", "unknown power-up id")
-		sendResult(player, false, item.powerUpId, nil, "unknown power-up id")
+		audit(racer, item.powerUpId, nil, "Rejected", "unknown power-up id")
+		sendResult(racer, false, item.powerUpId, nil, "unknown power-up id")
 		return
 	end
 
 	if PowerUpLogic.isOnCooldown(state.lastUsedAt[def.id], def.cooldownSeconds, now()) then
-		audit(player, def.id, nil, "Rejected", "on cooldown")
-		sendResult(player, false, def.id, nil, "on cooldown")
-		return
-	end
-
-	-- The caster is always a human here (this is a client remote's own
-	-- handler), but it still crosses over to a participant before
-	-- reaching the targeting and effect code, so those never see a
-	-- Player at all. P3-6's NPC power-up use enters at that same seam.
-	local casterParticipant = Participants.fromPlayer(player)
-	if casterParticipant == nil then
-		audit(player, def.id, nil, "Rejected", "caster is not on the participant roster")
-		sendResult(player, false, def.id, nil, "not in this round")
+		audit(racer, def.id, nil, "Rejected", "on cooldown")
+		sendResult(racer, false, def.id, nil, "on cooldown")
 		return
 	end
 
 	local resolvedTarget: Participants.Participant? = nil
 	if def.target == "Self" then
-		resolvedTarget = casterParticipant
+		resolvedTarget = racer
 	elseif def.target == "Area" then
 		resolvedTarget = nil -- a zone at the caster's own position, not a racer target
 	else
-		resolvedTarget = resolveTarget(casterParticipant, def, targetPlayerId)
+		resolvedTarget = resolveTarget(racer, def, targetRacerId)
 		if resolvedTarget == nil then
-			audit(player, def.id, nil, "Rejected", "no valid target")
-			sendResult(player, false, def.id, nil, "no valid target")
+			audit(racer, def.id, nil, "Rejected", "no valid target")
+			sendResult(racer, false, def.id, nil, "no valid target")
 			return
 		end
 	end
 
+	-- THE ITEM IS CONSUMED HERE, before the effect is applied and
+	-- regardless of whether it lands.
+	--
+	-- P2-7 never removed a used item from the inventory at all, which
+	-- was a bug rather than a design choice: powerups.md describes a
+	-- field pickup as "consumed on pickup, usable immediately, no
+	-- persistent ownership," and with a 1-slot inventory and the Refuse
+	-- full-inventory policy, an item that never leaves the slot means a
+	-- player picks up exactly one power-up per round, re-uses it every
+	-- cooldown forever, and can never pick up another. Found while
+	-- building P3-6, whose whole utility AI is premised on using an item
+	-- costing you the item.
+	--
+	-- Consuming BEFORE the applier, and on a blocked application too, is
+	-- the one part of this powerups.md only settles for a single case -
+	-- rule 5 (Task Scramble immunity): "the caster's power-up is
+	-- consumed with no effect." Rules 1-3 (hard-control immunity,
+	-- diminishing returns, the rolling cap) are silent on it. Treating
+	-- them the same way is the consistent reading: a use that found a
+	-- legal target has been committed, and the victim's anti-frustration
+	-- protection is meant to cost the attacker something. Revisit here
+	-- if playtesting says firing into an immunity window feels unfair
+	-- rather than punishing.
+	table.remove(state.inventory, resolvedSlotIndex)
+	state.lastUsedAt[def.id] = now()
+	broadcastInventory(racer)
+
 	local resolvedTargetId = if resolvedTarget ~= nil then resolvedTarget.id else nil
-	local applied, description = effectApplier(casterParticipant, resolvedTarget, def)
+	local applied, description = effectApplier(racer, resolvedTarget, def)
 
 	if not applied then
-		audit(player, def.id, resolvedTargetId, "Rejected", description)
-		sendResult(player, false, def.id, resolvedTargetId, description)
+		audit(racer, def.id, resolvedTargetId, "Rejected", description)
+		sendResult(racer, false, def.id, resolvedTargetId, description)
 		return
 	end
 
-	state.lastUsedAt[def.id] = now()
-	audit(player, def.id, resolvedTargetId, "Applied", description)
-	sendResult(player, true, def.id, resolvedTargetId, description)
+	audit(racer, def.id, resolvedTargetId, "Applied", description)
+	sendResult(racer, true, def.id, resolvedTargetId, description)
+end
+
+-- The client remote's entry point: authenticate the Player into a
+-- participant, then hand over to the one path above.
+local function handleUseIntent(player: Player, slotIndex: number?, targetPlayerId: number?)
+	local racer = Participants.fromPlayer(player)
+	if racer == nil then
+		warn(string.format("PowerUpService: %s used a power-up while not on the roster", player.Name))
+		return
+	end
+	useFor(racer, slotIndex, targetPlayerId)
+end
+
+-- P3-6's entry point. Takes an ID, not a participant, so NPCBrain can't
+-- hand in a fabricated roster entry - the lookup happens here, against
+-- the same registry every other caller uses.
+local function useForRacer(racerId: number, slotIndex: number?, targetRacerId: number?)
+	local racer = Participants.get(racerId)
+	if racer == nil then
+		return
+	end
+	useFor(racer, slotIndex, targetRacerId)
 end
 
 -- ===== round lifecycle ======================================================
@@ -583,7 +667,7 @@ local function beginRace()
 	for point in livePickups do
 		destroyLivePickup(point)
 	end
-	playerStates = {}
+	racerStates = {}
 
 	if pickupsFolder == nil then
 		local folder = Instance.new("Folder")
@@ -615,8 +699,37 @@ local PowerUpService: Loader.Service = {
 		return auditLog
 	end,
 
+	-- P3-6's entry point into the one validated use path - see useFor.
+	useForRacer = useForRacer,
+
+	getInventoryFor = function(racerId: number): { string }?
+		local state = racerStates[racerId]
+		if state == nil then
+			return nil
+		end
+		local ids = {}
+		for _, item in state.inventory do
+			table.insert(ids, item.powerUpId)
+		end
+		return ids
+	end,
+
+	-- Read-only, so NPCBrain can score "is this usable right now" without
+	-- firing a use to find out (which would burn the item - see useFor).
+	-- It asks the same PowerUpLogic.isOnCooldown against the same
+	-- server-held timestamp the use path checks, so the brain can never
+	-- believe something the validator would disagree with.
+	isOnCooldownFor = function(racerId: number, powerUpId: string): boolean
+		local state = racerStates[racerId]
+		local def = powerUpDefsById[powerUpId]
+		if state == nil or def == nil then
+			return false
+		end
+		return PowerUpLogic.isOnCooldown(state.lastUsedAt[powerUpId], def.cooldownSeconds, now())
+	end,
+
 	getInventory = function(player: Player): { string }?
-		local state = playerStates[player]
+		local state = racerStates[player.UserId]
 		if state == nil then
 			return nil
 		end
@@ -636,7 +749,7 @@ function PowerUpService:init()
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)
-		playerStates[player] = nil
+		racerStates[player.UserId] = nil
 	end)
 
 	local RoundService = Loader.get("RoundService") :: any

@@ -139,6 +139,50 @@ local GameConfig: Validate.GameConfig = {
 		repathAfterStuckSeconds = 1.5,
 		maxRepathsPerStation = 5,
 	},
+
+	-- P3-6: "every probability and timing exposed for tuning without
+	-- code changes" (the task's own requirement). The per-personality
+	-- steal probabilities are deliberately NOT here - they live on each
+	-- src/shared/Config/NPCPersonalities/*.luau file, so adding a
+	-- personality stays a one-file change.
+	--
+	-- All PLACEHOLDER. Every weight below is a starting shape for the
+	-- utility curve, not a tuned value - there is no telemetry yet on
+	-- when a power-up use actually pays off.
+	npcBrain = {
+		-- Far slower than npc.tickHz on purpose: a power-up decision
+		-- that lands a second late is invisible to everyone, and
+		-- re-scoring is the cheapest thing to do less often.
+		decisionHz = 2,
+
+		utility = {
+			-- Below useThreshold, so holding a usable item is the
+			-- default and something about the situation has to push it
+			-- over the line. Validation enforces that relationship.
+			baseScore = 0.3,
+			deficitWeight = 0.35,
+			proximityWeight = 0.5,
+			travelWeight = 0.4,
+			deficitSaturation = 3, -- 3 tasks behind the leader = maximum urgency
+			travelSaturationStuds = 80,
+			useThreshold = 0.6,
+		},
+
+		-- Fractions of the Choose window (15s by default), so retuning
+		-- studioTimers can't push a lock-in past the deadline. 0.25-0.8
+		-- keeps every bot's commit visibly inside the window, with a
+		-- real pause before it and real air after it.
+		lockInEarliestFraction = 0.25,
+		lockInLatestFraction = 0.8,
+
+		-- 3 lines across a 45s Negotiate is roughly one every 15s -
+		-- enough presence to read as a participant, far short of
+		-- dominating a room where two humans are also trying to talk.
+		negotiationLineCount = 3,
+		minSecondsBetweenLines = 6,
+
+		chooseWobbleChance = 0.5,
+	},
 }
 
 return GameConfig

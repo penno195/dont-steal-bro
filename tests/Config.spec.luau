@@ -55,6 +55,38 @@ local function validGameConfig(): Validate.GameConfig
 			repathAfterStuckSeconds = 1.5,
 			maxRepathsPerStation = 5,
 		},
+		npcBrain = {
+			decisionHz = 2,
+			utility = {
+				baseScore = 0.3,
+				deficitWeight = 0.35,
+				proximityWeight = 0.5,
+				travelWeight = 0.4,
+				deficitSaturation = 3,
+				travelSaturationStuds = 80,
+				useThreshold = 0.6,
+			},
+			lockInEarliestFraction = 0.25,
+			lockInLatestFraction = 0.8,
+			negotiationLineCount = 3,
+			minSecondsBetweenLines = 6,
+			chooseWobbleChance = 0.5,
+		},
+	}
+end
+
+local function validPersonality(id: string): Validate.NPCPersonalityDef
+	return {
+		id = id,
+		displayName = "Test Personality",
+		stealProbability = 0.5,
+		weight = 1,
+		lines = {
+			promises = { "share bro" },
+			pressure = { "say it now" },
+			accusations = { "its u" },
+			wobbles = { "hmm" },
+		},
 	}
 end
 
@@ -508,5 +540,158 @@ TestRunner.describe("Validate.run (cross-registry checks)", function()
 			titles = {},
 		})
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P3-6 npcBrain block)", function()
+	TestRunner.it("names a missing npcBrain block instead of erroring on it", function()
+		local issues = {}
+		local config = validGameConfig();
+		(config :: any).npcBrain = nil
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a lock-in fraction at or past the deadline", function()
+		-- A bot locking in at fraction 1.0 races the phase timer for
+		-- whether its own choice or the configured default counts.
+		for _, bad in { 1, 1.2 } do
+			local issues = {}
+			local config = validGameConfig()
+			config.npcBrain.lockInLatestFraction = bad
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
+	end)
+
+	TestRunner.it("rejects an earliest fraction that isn't below the latest", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.npcBrain.lockInEarliestFraction = 0.9
+		config.npcBrain.lockInLatestFraction = 0.8
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a baseScore that already clears useThreshold on its own", function()
+		-- At or above the threshold, a bot fires the instant it can
+		-- legally do so and every situation weight means nothing.
+		local issues = {}
+		local config = validGameConfig()
+		config.npcBrain.utility.baseScore = 0.6
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a wobble chance outside 0-1", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.npcBrain.chooseWobbleChance = 1.5
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects the remaining knobs at their boundaries", function()
+		local cases: { (config: Validate.GameConfig) -> () } = {
+			function(config)
+				config.npcBrain.decisionHz = 0
+			end,
+			function(config)
+				config.npcBrain.utility.useThreshold = 0
+			end,
+			function(config)
+				config.npcBrain.utility.deficitSaturation = 0
+			end,
+			function(config)
+				config.npcBrain.utility.travelSaturationStuds = 0
+			end,
+			function(config)
+				config.npcBrain.utility.proximityWeight = -1
+			end,
+			function(config)
+				config.npcBrain.negotiationLineCount = -1
+			end,
+			function(config)
+				config.npcBrain.minSecondsBetweenLines = -1
+			end,
+		}
+
+		for _, mutate in cases do
+			local issues = {}
+			local config = validGameConfig()
+			mutate(config)
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
+	end)
+end)
+
+TestRunner.describe("Validate.checkNPCPersonality (P3-6)", function()
+	TestRunner.it("accepts a fully populated personality", function()
+		local issues = {}
+		Validate.checkNPCPersonality("Greedy.luau", validPersonality("greedy"), issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects a steal probability outside 0-1", function()
+		local issues = {}
+		local def = validPersonality("greedy")
+		def.stealProbability = 1.5
+		Validate.checkNPCPersonality("Greedy.luau", def, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects an empty line category - a silent stretch, not a smaller pool", function()
+		for _, category in { "promises", "pressure", "accusations", "wobbles" } do
+			local issues = {}
+			local def = validPersonality("greedy");
+			(def.lines :: any)[category] = {}
+			Validate.checkNPCPersonality("Greedy.luau", def, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
+	end)
+
+	TestRunner.it("rejects an empty line inside a populated category", function()
+		local issues = {}
+		local def = validPersonality("greedy")
+		def.lines.promises = { "share bro", "" }
+		Validate.checkNPCPersonality("Greedy.luau", def, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a non-positive draw weight", function()
+		local issues = {}
+		local def = validPersonality("greedy")
+		def.weight = 0
+		Validate.checkNPCPersonality("Greedy.luau", def, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("flags two personalities declaring the same id", function()
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+			npcPersonalities = {
+				{ fileName = "Greedy.luau", def = validPersonality("greedy") },
+				{ fileName = "AlsoGreedy.luau", def = validPersonality("greedy") },
+			},
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("treats an omitted personality registry as none registered, not an error", function()
+		-- Every caller and fixture predating P3-6 passes no
+		-- npcPersonalities at all.
+		local issues = Validate.run({
+			gameConfig = validGameConfig(),
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+		})
+		TestRunner.expect(#issues):toBe(0)
 	end)
 end)

@@ -22,5 +22,6 @@ require("./MovementSanity.spec")
 require("./Outcomes.spec")
 require("./Participants.spec")
 require("./NPCLogic.spec")
+require("./NPCBrainLogic.spec")
 
 TestRunner.run()

@@ -9,9 +9,9 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Phases 00–02 complete. Phase 03 (Decision Studio and NPCs) is 5 of 7
-done — 27 of the tracker's 57 tasks.** `lune run tests/run` currently
-passes 269 cases across 14 spec files.
+**Phases 00–02 complete. Phase 03 (Decision Studio and NPCs) is 6 of 7
+done — 28 of the tracker's 57 tasks.** `lune run tests/run` currently
+passes 314 cases across 15 spec files.
 
 Pre-production (Phase 00) resolved all eight open design questions
 (`docs/design-decisions.md`) and wrote the task and power-up catalogues,
@@ -61,11 +61,22 @@ a real `UserId` for a human, a negative one for a bot — so an NPC is
 just another racer to all of them. The only surviving distinction is
 "is there a client to fire a remote at."
 
-**Next: P3-6** (NPC griefing AI and Studio personalities), then P3-7
-(alternates, disconnects and forfeits) to close the phase. Client UI is
-still essentially unbuilt: `src/client/` has two controllers and the task
-views, and the whole of Phase 06 (theme, components, HUD, Studio UI) is
-ahead.
+P3-6 gave those bots a brain (`NPCBrain`,
+`src/server/NPCBrainLogic.luau`): a utility AI that scores whether to
+spend a held power-up on the current situation, and a hidden Decision
+Studio personality (Greedy / Loyal / Chaotic, one config file each in
+`src/shared/Config/NPCPersonalities/`) that bluffs through the
+negotiation and locks in at a random point in the Choose window. What a
+bot says and what it does are independent by construction. Every bot
+action routes through the same validated server path a human's input
+reaches — `PowerUpService.useFor` and `DecisionService.lockIn` are the
+only functions that can spend an item or record a choice, and neither
+has a bypass to take.
+
+**Next: P3-7** (alternates, disconnects and forfeits) closes the phase.
+Client UI is still essentially unbuilt: `src/client/` has three
+controllers and the task views, and the whole of Phase 06 (theme,
+components, HUD, Studio UI) is ahead.
 
 ## Documents
 
@@ -85,7 +96,7 @@ ahead.
 | [`docs/powerup-threat-notes.md`](docs/powerup-threat-notes.md) | Every way a client could try to cheat the power-up service, and what blocks each one. |
 | [`docs/movement-watch-notes.md`](docs/movement-watch-notes.md) | How to read the first week of movement-watch telemetry on mobile before touching a threshold — or enabling enforcement. |
 | [`docs/studio-chat-notes.md`](docs/studio-chat-notes.md) | What proximity chat needs configured outside code, and what a player without voice actually experiences. |
-| [`docs/npc-notes.md`](docs/npc-notes.md) | What 5 NPCs cost a server, which knob to turn first, where bots can still distort the streak leaderboard, and the Studio checklist. |
+| [`docs/npc-notes.md`](docs/npc-notes.md) | What 5 NPCs cost a server, which knob to turn first, where bots can still distort the streak leaderboard, how the brain routes every action through the validated path, and the Studio checklist. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture

@@ -225,3 +225,154 @@ tags exists yet. Run this the first time a real map does, in order:
 8. **Watch for the give-up warn.** `gave up pathing to <station> after N
    recomputes - teleporting` means the map's nav graph or geometry is
    wrong. It is a map bug report, not an NPC bug.
+
+---
+
+# Part 2: the brain (P3-6)
+
+`NPCBrain.luau` adds the two behaviours P3-6 asked for on top of P3-5's
+fill: using power-ups during the race, and negotiating in the Decision
+Studio. `NPCBrainLogic.luau` holds the arithmetic (unit-tested in
+`tests/NPCBrainLogic.spec.luau`); the personalities and their lines are
+config files under `src/shared/Config/NPCPersonalities/`.
+
+## 4. "Never a shortcut", concretely
+
+P3-6 requires NPCs to "obey exactly the same cooldowns, ranges and
+immunity rules as players — route every use through the existing
+validated server path." That isn't a promise made in a comment; it's
+enforced by there being exactly one path:
+
+| What a bot wants to do | What it actually calls | What a human's input reaches |
+|---|---|---|
+| Use a power-up | `PowerUpService.useForRacer(id, slot)` | `handleUseIntent` → **the same `useFor`** |
+| Lock in a choice | `DecisionService.submitChoiceFor(id, choice)` | `handleChooseIntent` → **the same `lockIn`** |
+| Know if an item is ready | `PowerUpService.isOnCooldownFor(id, powerUpId)` | the same `PowerUpLogic.isOnCooldown`, same timestamp |
+
+`useFor` is the only function in the codebase that can consume an
+inventory slot, and `lockIn` the only one that can record a choice.
+Neither takes a "skip validation" argument, because neither has one to
+take. A bot fails where a player fails — out of range, on cooldown, into
+a hard-control immunity window — and the audit log records its attempt
+in the same shape, so power-up balance data covers the whole field
+rather than the human half of it.
+
+The one thing a bot does *not* get is a reply: `sendResult` and
+`broadcastInventory` return early when a racer has no `Player`, because
+there is no client to tell. Nothing about the decision differs.
+
+## 5. Two judgement calls worth knowing about
+
+### NPCs do not preferentially target humans
+
+P3-6's brief lists "whether a human is close ahead" as a scoring input.
+It's implemented as **whether a *racer* is close ahead**, without regard
+to whether that racer is a bot.
+
+A species-aware targeting rule would mean a human-heavy lobby is
+mechanically harder than an NPC-heavy one, for reasons no player could
+see — the exact opposite of what `threat-model.md` §8 is trying to keep
+honest, and it would make bots feel personally hostile in a game whose
+whole social premise is that betrayal is a *choice* someone made. In a
+6-seat race most racers ahead are human anyway, so the observed
+behaviour is what the brief describes; what's avoided is the *rule*
+knowing the difference. `NPCBrainLogic.Situation` documents this at the
+field.
+
+### Power-ups are now consumed on use
+
+**This is a behaviour change to P2-7, found while building P3-6.**
+`handleUseIntent` never removed a used item from the inventory — only a
+cooldown gated re-use. With `powerUpInventorySlots = 1` and the `Refuse`
+full-inventory policy, that meant a player picked up exactly one
+power-up per round, re-used it every cooldown for the rest of the race,
+and could never pick up another, because their slot never emptied.
+`powerups.md` describes a field pickup as "consumed on pickup, usable
+immediately, no persistent ownership," so this was a bug rather than a
+design choice — and the brain's entire utility score is premised on
+using an item costing you the item.
+
+The item is consumed **before** the effect resolves, and **even when the
+effect is blocked**. `powerups.md` only settles that for one case — rule
+5, Task Scramble immunity: "the caster's power-up is consumed with no
+effect" — and is silent for rules 1-3 (hard-control immunity,
+diminishing returns, the rolling cap). Treating them the same way is the
+consistent reading: a use that found a legal target has been committed,
+and a victim's anti-frustration protection is meant to cost the attacker
+something. **Revisit if playtesting says firing into an immunity window
+feels unfair rather than punishing** — it's one line in
+`PowerUpService.useFor`.
+
+## 6. The Studio: what a bot says versus what it does
+
+The two are independent by construction. The hidden choice is rolled
+**once, when Negotiate begins**, from the personality's own
+`stealProbability` (Greedy 0.7 / Loyal 0.2 / Chaotic 0.5,
+architecture.md §4). Nothing between that roll and the lock-in reads a
+line, and nothing that picks a line reads the choice. A human reading a
+bot's chatter is reading a bluff, not a tell — which is the only honest
+way to ship "lines that may or may not match what it actually does."
+
+Lines escalate with the clock rather than being drawn at random:
+promises early, pressure in the middle, accusations as it tightens,
+wobbles at the end (`NPCBrainLogic.categoryForProgress`). A line is not
+repeated inside one window if a fresh one is available — a bot saying
+the same thing twice in 45 seconds is the most obvious possible tell
+that it isn't a person.
+
+**The rule every line obeys** — *a line must never state a fact only the
+server knows* — is written out in full at the top of
+`src/shared/Config/NPCPersonalities/init.luau`. No validator can check
+it (it's a property of English), so it is a review-time rule. Read it
+before adding a line.
+
+Lock-in lands at a random point in the middle 55% of the Choose window
+(`lockInEarliestFraction` 0.25 to `lockInLatestFraction` 0.8) and
+**never at the deadline** — config validation refuses a latest fraction
+of 1.0, because a lock-in racing the phase timer is a coin flip between
+the bot's own choice and the configured default, decided by scheduler
+ordering. `NPCBrainLogic.spec.luau` sweeps every roll to prove it.
+
+## 7. Cost, on top of Part 1's numbers
+
+The brain re-scores at `npcBrain.decisionHz` (2 Hz), not at
+`npc.tickHz` (8 Hz) — a power-up decision that lands a second late is
+invisible to everyone. At 5 NPCs that is **10 decision bodies per
+second**, each one a scan of the racer roster (at most 6) and one
+distance read per racer ahead. It is comfortably the cheaper half of the
+NPC system; if a trace disagrees, `decisionHz` is the first knob and has
+no floor to respect the way `tickHz` does.
+
+Studio behaviour costs essentially nothing: a handful of `task.delay`
+threads per bot, scheduled once per phase and cancelled on exit.
+
+## 8. Studio checklist additions for P3-6
+
+Continuing from Part 1's list — these need a race actually running with
+power-up spawns loaded (`PowerUpService.debugLoadSpawnPointsFromMap`):
+
+9. **Watch a bot pick something up.** Walk a bot over a `PowerUpSpawn`
+   pickup. Before P3-6 this was impossible — `tryClaimPickup` resolved
+   the claimer through `Players:GetPlayerFromCharacter`, which can never
+   answer for an NPC. It now resolves through the participant roster.
+10. **Watch it use the thing.** `PowerUpService.getAuditLog()` records a
+    bot's use in the same shape as a player's, with the bot's negative
+    id as `playerId`. A bot holding an item and never firing usually
+    means `useThreshold` is above what any real situation scores —
+    compare against the logged score by temporarily printing it.
+11. **Confirm consumption.** After a bot (or a player) uses an item, the
+    inventory must be empty and a new pickup must be claimable. This is
+    the P2-7 fix above; it is the single most likely thing to have
+    broken something that used to "work."
+12. **Watch a negotiation.** With at least one NPC qualifier, the Studio
+    should show 3 bubbles from it across Negotiate, at a human pace,
+    none repeated. `NPCBubbleController` resolves the rig by name under
+    `Workspace.NPCs` using the `NPCRoster` broadcast — **a bubble with
+    no rig is dropped silently**, so if nothing appears, check the
+    roster arrived before checking the brain.
+13. **Confirm the bluff is a bluff.** `NPCBrain.debugGetPersonality(id)`
+    is server-side only, deliberately — a client that knew a finalist
+    was Loyal would have most of the game solved. Use it from the
+    command bar to check what a bot *was* against what it *said* across
+    a few rounds; a Greedy bot promising to share and then stealing is
+    the system working, not a bug.

@@ -384,40 +384,55 @@ end
 -- for any rejection reason. Telling a hostile client WHY its attempt
 -- failed (e.g. "already locked") is itself a small information leak this
 -- function avoids by construction.
-local function handleChooseIntent(player: Player, choice: any)
+-- The one function that can ever record a choice, for any finalist
+-- there is (P3-6 - an NPC qualifies through the normal path,
+-- design-decisions.md Q5, so it needs to be able to lock in too).
+-- `who` is only ever used to name the rejection in a log line; every
+-- actual rule below is checked against the id.
+--
+-- Returns whether the lock was accepted, so an NPC caller can tell a
+-- dropped submission from an accepted one - a human's client is
+-- deliberately told nothing either way (see below).
+local function lockIn(racerId: number, choice: any, who: string): boolean
 	if currentPhase ~= "Choose" then
-		warn(string.format("DecisionService: dropped ChooseIntent from %s - wrong phase", player.Name))
-		return
+		warn(string.format("DecisionService: dropped ChooseIntent from %s - wrong phase", who))
+		return false
 	end
-	if not isQualifier(player.UserId) then
-		warn(string.format("DecisionService: dropped ChooseIntent from %s - not a qualifier", player.Name))
-		return
+	if not isQualifier(racerId) then
+		warn(string.format("DecisionService: dropped ChooseIntent from %s - not a qualifier", who))
+		return false
 	end
 	if choice ~= "Steal" and choice ~= "Share" then
-		warn(string.format("DecisionService: dropped ChooseIntent from %s - invalid choice value", player.Name))
-		return
+		warn(string.format("DecisionService: dropped ChooseIntent from %s - invalid choice value", who))
+		return false
 	end
-	if locked[player.UserId] then
-		warn(
-			string.format(
-				"DecisionService: dropped ChooseIntent from %s - already locked (locks are final)",
-				player.Name
-			)
-		)
-		return
+	if locked[racerId] then
+		warn(string.format("DecisionService: dropped ChooseIntent from %s - already locked (locks are final)", who))
+		return false
 	end
-	-- Rate limit: already enforced by NetGuard before this handler ever
-	-- runs (Net.Remotes.DecisionChooseIntent's own rateLimit) - nothing
-	-- to re-check here.
 
-	choices[player.UserId] = choice :: Outcomes.Choice
-	locked[player.UserId] = true
+	choices[racerId] = choice :: Outcomes.Choice
+	locked[racerId] = true
 
-	Net.fireAllClients("DecisionLockedIn", { playerId = player.UserId })
+	-- Still only {playerId} - the secrecy audit at the top of this file
+	-- holds identically for a bot's lock-in. A client learning WHICH of
+	-- the finalists is an NPC is fine (they can see the rig); learning
+	-- what it picked before the reveal is not, and this payload has
+	-- never carried it.
+	Net.fireAllClients("DecisionLockedIn", { playerId = racerId })
 
 	if allLocked() then
 		resolveAndReveal()
 	end
+
+	return true
+end
+
+local function handleChooseIntent(player: Player, choice: any)
+	-- Rate limit: already enforced by NetGuard before this handler ever
+	-- runs (Net.Remotes.DecisionChooseIntent's own rateLimit) - nothing
+	-- to re-check here.
+	lockIn(player.UserId, choice, player.Name)
 end
 
 -- design-decisions.md Q4's substitution half: locks a leaving qualifier
@@ -540,6 +555,13 @@ local DecisionService: Loader.Service = {
 
 	getQualifierIds = function(): { number }
 		return table.clone(qualifierIds)
+	end,
+
+	-- P3-6's seam: an NPC locks in through the same function a human's
+	-- remote does, with the same four checks. Server-side only - no
+	-- remote routes here, so a client can't submit on a bot's behalf.
+	submitChoiceFor = function(racerId: number, choice: string, who: string): boolean
+		return lockIn(racerId, choice, who)
 	end,
 
 	onPhaseEnter = function(phase: Phase, callback: (endsAt: number?) -> ())

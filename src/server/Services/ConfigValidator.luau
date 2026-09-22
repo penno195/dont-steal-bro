@@ -1,5 +1,6 @@
 --!strict
--- Runs every registry (Maps, Tasks, PowerUps, Titles) plus GameConfig
+-- Runs every registry (Maps, Tasks, PowerUps, Titles, NPCPersonalities)
+-- plus GameConfig
 -- through Validate.luau's pure checks at server boot, and fails LOUDLY -
 -- naming the file and the exact broken field - rather than letting a
 -- typo in a config file boot a half-valid server (Ground Rule 2). Any
@@ -22,6 +23,7 @@ local Maps = require(ReplicatedStorage.Shared.Config.Maps)
 local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Titles = require(ReplicatedStorage.Shared.Config.Titles)
+local NPCPersonalities = require(ReplicatedStorage.Shared.Config.NPCPersonalities)
 
 local function formatIssues(issues: { Validate.Issue }): string
 	local lines = { string.format("ConfigValidator: %d config error(s):", #issues) }
@@ -69,6 +71,7 @@ function ConfigValidator:init()
 		tasks = Tasks,
 		powerUps = PowerUps,
 		titles = Titles,
+		npcPersonalities = NPCPersonalities,
 	})
 
 	checkBuiltMaps(Maps :: any, issues)
@@ -79,11 +82,12 @@ function ConfigValidator:init()
 
 	print(
 		string.format(
-			"ConfigValidator: %d map(s), %d task(s), %d power-up(s), %d title(s) all valid",
+			"ConfigValidator: %d map(s), %d task(s), %d power-up(s), %d title(s), %d NPC personality(s) all valid",
 			#Maps,
 			#Tasks,
 			#PowerUps,
-			#Titles
+			#Titles,
+			#NPCPersonalities
 		)
 	)
 end

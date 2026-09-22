@@ -120,6 +120,23 @@ function Participants.fromPlayer(player: Player): Participant?
 	return byId[player.UserId]
 end
 
+-- The reverse of `character`: which racer is this rig? P3-6's pickup
+-- path needs it, because a Touched event hands you a part and
+-- Players:GetPlayerFromCharacter can only answer for a human - an NPC
+-- walking over a power-up would otherwise silently never pick it up.
+function Participants.fromCharacter(character: Instance?): Participant?
+	if character == nil then
+		return nil
+	end
+	for _, id in order do
+		local participant = byId[id]
+		if participant ~= nil and participant.character == character then
+			return participant
+		end
+	end
+	return nil
+end
+
 function Participants.setCharacter(id: number, character: Model?)
 	local participant = byId[id]
 	if participant ~= nil then
