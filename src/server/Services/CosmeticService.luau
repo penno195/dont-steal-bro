@@ -111,24 +111,28 @@ local function applySkin(character: Model, def: CosmeticLogic.CosmeticDef)
 	-- captures our own previous override as if it were the player's.
 	removeSkin(character)
 
-	local shirt = character:FindFirstChildOfClass("Shirt")
+	local existingShirt = character:FindFirstChildOfClass("Shirt")
 	local originalShirtTemplate: string? = nil
-	if shirt == nil then
+	local shirt: Shirt
+	if existingShirt == nil then
 		shirt = Instance.new("Shirt")
 		shirt.Parent = character
 	else
-		originalShirtTemplate = shirt.ShirtTemplate
+		shirt = existingShirt
+		originalShirtTemplate = existingShirt.ShirtTemplate
 	end
 	shirt:SetAttribute(OWNED_ATTRIBUTE, true)
 	shirt.ShirtTemplate = string.format("rbxassetid://%d", def.shirtAssetId :: number)
 
-	local pants = character:FindFirstChildOfClass("Pants")
+	local existingPants = character:FindFirstChildOfClass("Pants")
 	local originalPantsTemplate: string? = nil
-	if pants == nil then
+	local pants: Pants
+	if existingPants == nil then
 		pants = Instance.new("Pants")
 		pants.Parent = character
 	else
-		originalPantsTemplate = pants.PantsTemplate
+		pants = existingPants
+		originalPantsTemplate = existingPants.PantsTemplate
 	end
 	pants:SetAttribute(OWNED_ATTRIBUTE, true)
 	pants.PantsTemplate = string.format("rbxassetid://%d", def.pantsAssetId :: number)
@@ -276,10 +280,13 @@ local function playEquippedEmote(player: Player): boolean
 	if humanoid == nil then
 		return false
 	end
-	local animator = humanoid:FindFirstChildOfClass("Animator")
-	if animator == nil then
+	local existingAnimator = humanoid:FindFirstChildOfClass("Animator")
+	local animator: Animator
+	if existingAnimator == nil then
 		animator = Instance.new("Animator")
 		animator.Parent = humanoid
+	else
+		animator = existingAnimator
 	end
 
 	local animation = Instance.new("Animation")

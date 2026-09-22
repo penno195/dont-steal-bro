@@ -49,6 +49,10 @@ function TestRunner.expect(value: any)
 		assert(value, string.format("expected a truthy value, got %s", tostring(value)))
 	end
 
+	function matchers.toBeFalsy(_self)
+		assert(not value, string.format("expected a falsy value, got %s", tostring(value)))
+	end
+
 	function matchers.toBeCloseTo(_self, expected: number, tolerance: number?)
 		local eps = tolerance or 1e-6
 		assert(

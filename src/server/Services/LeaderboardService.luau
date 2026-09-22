@@ -368,15 +368,18 @@ local function writePeriodBest(kind: string, userId: number, streak: number)
 	local expiry = PeriodKeys.liveExpirySeconds(kind, os.time(), config.periodGraceSeconds)
 
 	local ok = pcall(function()
-		map:UpdateAsync(tostring(userId), function(current: any): any
+		map:UpdateAsync(tostring(userId), function(current: any, _sortKey: any): (any, any)
 			local existing = tonumber(current) or 0
 			if streak <= existing then
-				-- Returning the existing value rather than nil: nil
-				-- would DELETE the entry, which on a losing race would
-				-- silently remove a player from the board.
-				return existing
+				-- nil CANCELS the update (the sorted-map guide: returning
+				-- nil stops the retries). It does not delete the entry, so
+				-- a losing race leaves the stored best untouched.
+				return nil, nil
 			end
-			return streak
+			-- A sorted-map transform returns (value, sortKey). The board
+			-- is read in sort-key order, so the streak must be returned
+			-- as BOTH; a value alone would leave the entry unsorted.
+			return streak, streak
 		end, math.floor(expiry))
 	end)
 

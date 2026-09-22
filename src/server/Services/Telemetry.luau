@@ -78,6 +78,10 @@ end
 
 -- ===== queueing and flushing ================================================
 
+-- Declared ahead of enqueue, which calls it. `Telemetry` above is the
+-- module's private state table, not the service - it has no `flush`.
+local flush: () -> ()
+
 local function enqueue(event: Event)
 	if not GameConfig.telemetry.enabled then
 		return
@@ -85,19 +89,15 @@ local function enqueue(event: Event)
 
 	table.insert(Telemetry.queue, event)
 
-	local shouldFlush = false
-	if #Telemetry.queue >= GameConfig.telemetry.batchSize then
-		shouldFlush = true
-	elseif os.time() - Telemetry.lastFlushAt >= GameConfig.telemetry.flushIntervalSeconds then
-		shouldFlush = true
-	end
-
-	if shouldFlush then
-		Telemetry.flush()
+	if
+		#Telemetry.queue >= GameConfig.telemetry.batchSize
+		or os.time() - Telemetry.lastFlushAt >= GameConfig.telemetry.flushIntervalSeconds
+	then
+		flush()
 	end
 end
 
-local function flush()
+function flush()
 	if #Telemetry.queue == 0 then
 		return
 	end
@@ -325,7 +325,13 @@ local function stealShareChoice(roundId: string, userId: number, choice: string,
 end
 
 -- Outcome branch tag for post-hoc analysis. Comes from Outcomes.luau.
-local function finaleOutcome(roundId: string, resultBranch: string, winners: { number }, losers: { number }, npcCount: number)
+local function finaleOutcome(
+	roundId: string,
+	resultBranch: string,
+	winners: { number },
+	losers: { number },
+	npcCount: number
+)
 	enqueue({
 		name = "FinaleOutcome",
 		parameters = {
