@@ -9,8 +9,8 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Phases 00–03 complete, Phase 04 underway — 33 of the tracker's 57
-tasks.** `lune run tests/run` currently passes 463 cases across 20 spec
+**Phases 00–03 complete, Phase 04 underway — 34 of the tracker's 57
+tasks.** `lune run tests/run` currently passes 537 cases across 21 spec
 files.
 
 Pre-production (Phase 00) resolved all eight open design questions
@@ -144,7 +144,61 @@ that can drift out of step with the thing it guards.
 unverified** and need checking against current Roblox documentation
 before launch. A7 is the one that would change the design.
 
-**Next: P4-5**, the store and idempotent receipt processing.
+P4-5 built the store and its receipt handling (`StoreService`,
+`src/server/StoreLogic.luau`, `src/shared/Config/Store/`,
+`docs/store-receipts.md`). Game passes are permanent cosmetics,
+developer products are consumables (currency and power-up stock), and
+the two cannot be confused: `Validate.checkStoreItem` refuses a pass
+that grants a consumable at boot, because a pass's grants re-apply on
+every join and a consumable one would be either a one-shot purchase or
+an infinite tap.
+
+The receipt path follows ProfileStore's own `PurchaseId`-caching
+pattern rather than the simpler official Roblox example. **The grant
+and the PurchaseId are written in the same `Profile.Data` mutation**,
+and `PurchaseGranted` is returned only once that write is observed in
+`Profile.LastSavedData` — so the DataStore holds both or neither, and
+there is no window where a player is charged and un-granted. Every
+other path returns `NotProcessedYet`, including an unknown ProductId:
+confirming a receipt this game has no config for would take the money
+and hand over nothing, while declining keeps the receipt alive until
+the config ships. Schema v2 adds `purchaseIdCache` and `powerUpStock`,
+with a real v1 → v2 migration step rather than leaving the cache to
+`Reconcile()` — a nil cache and an empty one have to mean the same
+thing on a player's very first receipt.
+
+`DataService` grew a second claimed write gate alongside P4-1's, and
+for the same reason: receipt handling genuinely cannot work through
+narrow accessors (it needs `IsActive`, `Save` and `LastSavedData` —
+durability facts, not data), so the handle is handed out once, to
+StoreService, and a second claimant errors at boot.
+
+The task also enforced **design-decisions.md Q8 from the selling side**,
+which nothing did before: `checkPowerUp` already refused a power-up
+that priced itself with no free acquisition path, but a *bundle* of
+such a power-up slipped through, because the power-up's own config
+names no price and looks innocent. `Validate.run` now refuses that too.
+The 3-item loadout cap is pinned at exactly 3 by config validation, so
+raising it means amending Q8 rather than editing a number.
+
+`docs/store-receipts.md` carries the eight-case Studio test plan (built
+on a Studio-only, remote-less `debugSimulateReceipt` seam, because a
+real Studio purchase gives no control over the PurchaseId), eight more
+flagged platform assumptions, and a plain pay-to-win verdict: the
+mechanical vector is closed structurally, but **the economy numbers —
+all PLACEHOLDER — are what actually decide whether Q8's rule holds**,
+and a bought loadout is not "convenience" in a game whose whole
+metagame is a streak that resets on one loss.
+
+**One seam is deliberately left unwired.** `consumeLoadoutFor` is the
+only place stock is ever decremented and it is written and tested, but
+nothing calls it: `powerups.md` describes both a 3-item pre-game
+loadout and a 1-slot in-round pickup inventory and never says how they
+coexist, and three items do not fit in one slot. That is a design call,
+not an implementation detail — see `docs/store-receipts.md` §5.
+
+**Next: P4-6**, the cosmetics pipeline and equip application.
+
 
 Client UI is still thin: `src/client/` has four controllers and the task
 views, and the whole of Phase 06 (theme, components, HUD, Studio UI) is
@@ -171,6 +225,7 @@ still ahead.
 | [`docs/npc-notes.md`](docs/npc-notes.md) | What 5 NPCs cost a server, which knob to turn first, where bots can still distort the streak leaderboard, how the brain routes every action through the validated path, and the Studio checklist. |
 | [`docs/finale-disconnect-tests.md`](docs/finale-disconnect-tests.md) | The two-client Studio plan for the finale's six disconnect/forfeit cases — including exactly when to close a window to trigger each. |
 | [`docs/leaderboard-scale.md`](docs/leaderboard-scale.md) | What the boards cost at 1,000 and 20,000 concurrent players, which limit is hit first, the UTC timezone policy for daily/weekly periods, and the nine platform assumptions that must be verified before launch. |
+| [`docs/store-receipts.md`](docs/store-receipts.md) | The receipt guarantee and every ordering that could break it, the eight-case Studio test plan, and a plain pay-to-win verdict on selling starting power-ups in a streak game. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture

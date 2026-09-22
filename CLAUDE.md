@@ -58,3 +58,30 @@ time and are easy to misremember or hallucinate. Verify API names, signatures
 and current recommended patterns rather than recalling them from training
 data — especially for `TeleportService`, `MemoryStoreService`, `ProfileStore`,
 `TextChatService`, and the Audio API.
+
+Two local sources of truth beat guessing, and both are already in the repo:
+`globalTypes.d.luau` (the pinned Roblox type definitions) and
+`ServerPackages/_Index/**/profilestore/docs/` (ProfileStore's own guides).
+
+## Keeping sessions cheap
+
+Files here are deliberately comment-dense — `Validate.luau` is 64KB, a
+typical service ~30KB — so every read and write costs 2–3x a terser
+codebase. Context is re-sent every turn, so cost grows with
+(context size × turns). That makes session hygiene a real constraint,
+not a nicety:
+
+- **One tracker task per session**, then `/clear`. A P-task is the
+  natural boundary. If a task is large, split at its own seams
+  (config+validation → service+tests → docs) and clear between.
+- **Never `grep` `globalTypes.d.luau` bare.** Line 1 is a single 13KB
+  metadata blob naming every Roblox class and service, so nearly any
+  service name matches it and dumps 13KB into context. Use
+  `awk '/^declare extern type X/,/^end/' globalTypes.d.luau` instead.
+- **Don't `sed -i` a file already read or written via the Read/Write
+  tools** — the harness re-dumps the whole file into context on an
+  out-of-band change. Use `Edit` for those; keep `sed`/`awk` for files
+  only ever touched through Bash.
+- **Read line ranges**, not whole files, past ~300 lines.
+- Don't stage edits through scratchpad files and `cat` them into place;
+  that pays for the content twice.
