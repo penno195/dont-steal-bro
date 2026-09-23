@@ -88,6 +88,7 @@ export type Store = {
 	reveal: () -> DecisionLogic.Reveal?,
 	personal: () -> DecisionLogic.Personal?,
 	chat: () -> DecisionLogic.Rect?, -- Roblox's chat window, screen pixels
+	keyboard: (() -> number?)?, -- on-screen keyboard's top edge, screen pixels; nil when closed
 	press: (choice: Choice) -> (),
 	release: (choice: Choice) -> (),
 	dismiss: () -> (),
@@ -107,6 +108,7 @@ local HEAD_W = 76
 local CHOICE_W = 164
 local CHOICE_H = 96
 local CHAT_MAX_FRACTION = 0.3
+local KEYBOARD_MAX_FRACTION = 0.6 -- a phone keyboard is ~40-50% of portrait height
 local SLIDE_OFF = 24 -- px a thumb may drift off a hold button before it counts as letting go
 
 local STEAL_ACTION = "DecisionStudioSteal"
@@ -1049,8 +1051,20 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			local usable = { x = 0, y = Theme.spacing.sm, width = g.width, height = g.height }
 			return DecisionLogic.chatInset(local_, usable, Theme.spacing.sm, CHAT_MAX_FRACTION)
 		end)
+		local keyboard = store.keyboard
+		local lift = derive(function()
+			local g = guiRect()
+			local kbTop = if keyboard then keyboard() else nil
+			local usable = { x = 0, y = 0, width = g.width, height = g.height }
+			return DecisionLogic.keyboardLift(
+				if kbTop then kbTop - g.y else nil,
+				usable,
+				Theme.spacing.md,
+				KEYBOARD_MAX_FRACTION
+			)
+		end)
 		effect(function()
-			local margin = Theme.spacing.md
+			local margin = lift()
 			if portrait() then
 				info.AnchorPoint = Vector2.new(0.5, 0)
 				info.Position = UDim2.new(0.5, 0, 0, top())

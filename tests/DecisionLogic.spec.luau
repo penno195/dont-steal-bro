@@ -293,3 +293,21 @@ describe("DecisionLogic.chatInset", function()
 		expect(DecisionLogic.chatInset({ x = 0, y = 50, width = 300, height = 600 }, usable, 8, 0.45)):toBe(400)
 	end)
 end)
+
+describe("DecisionLogic.keyboardLift", function()
+	local usable = { x = 0, y = 0, width = 400, height = 800 }
+
+	it("keeps the plain margin with no keyboard, or one below the screen", function()
+		expect(DecisionLogic.keyboardLift(nil, usable, 16, 0.6)):toBe(16)
+		expect(DecisionLogic.keyboardLift(800, usable, 16, 0.6)):toBe(16)
+	end)
+
+	it("lifts the stack clear of the keyboard's top edge", function()
+		expect(DecisionLogic.keyboardLift(450, usable, 16, 0.6)):toBe(366)
+		expect(DecisionLogic.keyboardLift(795, usable, 16, 0.6)):toBe(21)
+	end)
+
+	it("caps the lift so the stack stays on screen", function()
+		expect(DecisionLogic.keyboardLift(100, usable, 16, 0.6)):toBe(480)
+	end)
+end)

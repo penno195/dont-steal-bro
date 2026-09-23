@@ -25,6 +25,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextChatService = game:GetService("TextChatService")
+local UserInputService = game:GetService("UserInputService")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
@@ -59,6 +60,7 @@ local acked = source(false)
 local reveal = source(nil :: DecisionLogic.Reveal?)
 local personal = source(nil :: DecisionLogic.Personal?)
 local chat = source(nil :: DecisionLogic.Rect?)
+local keyboard = source(nil :: number?)
 
 local ids: { number } = {}
 local reputations: { [number]: DecisionLogic.Reputation } = {}
@@ -192,6 +194,7 @@ local store: DecisionStudio.Store = {
 	reveal = reveal,
 	personal = personal,
 	chat = chat,
+	keyboard = keyboard,
 	press = press,
 	release = release,
 	dismiss = hide,
@@ -223,6 +226,21 @@ local function watchChat()
 	config:GetPropertyChangedSignal("AbsolutePosition"):Connect(read)
 	config:GetPropertyChangedSignal("AbsoluteSize"):Connect(read)
 	config:GetPropertyChangedSignal("Enabled"):Connect(read)
+	read()
+end
+
+-- The on-screen keyboard's top edge, so the hold buttons can ride above
+-- it (P6-7). Screen pixels, like the chat window's rect.
+local function watchKeyboard()
+	local function read()
+		if not UserInputService.OnScreenKeyboardVisible then
+			keyboard(nil)
+			return
+		end
+		keyboard(UserInputService.OnScreenKeyboardPosition.Y)
+	end
+	UserInputService:GetPropertyChangedSignal("OnScreenKeyboardVisible"):Connect(read)
+	UserInputService:GetPropertyChangedSignal("OnScreenKeyboardPosition"):Connect(read)
 	read()
 end
 
@@ -307,6 +325,7 @@ end
 
 function DecisionStudioController:start()
 	task.spawn(watchChat)
+	watchKeyboard()
 end
 
 return DecisionStudioController

@@ -9,7 +9,8 @@
 -- LAYOUT, FOR ONE THUMB IN PORTRAIT: a bottom sheet over a dimmed
 -- screen. The ballot is at most 4 full-width cards stacked vertically,
 -- each one big tap target in the lower half of the screen. No camera,
--- no scrolling, no second thumb. Each card: thumbnail, map name, live
+-- no second thumb, and no scrolling in portrait (a landscape phone is
+-- too short for four cards, so there the list scrolls). Each card: thumbnail, map name, live
 -- count, and the avatars of whoever voted for it.
 --
 -- THE REVEAL: an outright winner gets a gold border and "WINNER". A tie
@@ -28,8 +29,8 @@ local TweenService = game:GetService("TweenService")
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Maps = require(ReplicatedStorage.Shared.Config.Maps)
-
-local localPlayer = Players.LocalPlayer
+local Theme = require(script.Parent.Parent.UI.Theme)
+local UIScaleController = require(script.Parent.UIScaleController)
 
 local COLORS = {
 	dim = Color3.fromRGB(0, 0, 0),
@@ -57,6 +58,7 @@ type Card = {
 
 type Board = {
 	gui: ScreenGui,
+	dimGui: ScreenGui,
 	groupId: string,
 	title: TextLabel,
 	timer: TextLabel,
@@ -121,7 +123,7 @@ local function corner(parent: Instance, radius: number)
 	c.Parent = parent
 end
 
-local function buildCard(list: Frame, mapId: string, index: number): Card
+local function buildCard(list: ScrollingFrame, mapId: string, index: number): Card
 	local def = mapDef(mapId)
 	local button = Instance.new("TextButton")
 	button.Name = mapId
@@ -188,24 +190,34 @@ local function buildCard(list: Frame, mapId: string, index: number): Card
 end
 
 local function buildBoard(state: any): Board
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "MapVoteBoard"
-	gui.ResetOnSpawn = false
-	gui.IgnoreGuiInset = true
-	gui.DisplayOrder = 20
+	-- P6-7: the dim is full-bleed so it covers the notch strip; the sheet
+	-- is on a safe-area screen so the last card never sits under the
+	-- home indicator or the Roblox controls.
+	local dimGui = UIScaleController.createScreen("MapVoteDim", {
+		displayOrder = Theme.displayOrder.panel,
+		fullBleed = true,
+	})
+	local gui = UIScaleController.createScreen("MapVoteBoard", { displayOrder = Theme.displayOrder.panel })
 
 	local dim = Instance.new("Frame")
 	dim.Size = UDim2.fromScale(1, 1)
 	dim.BackgroundColor3 = COLORS.dim
 	dim.BackgroundTransparency = 0.45
-	dim.Parent = gui
+	dim.Parent = dimGui
 
+	-- Four cards need ~510 px, more than a landscape phone's usable
+	-- height. Cap the sheet at the screen and let the list scroll;
+	-- in portrait it never reaches the cap, so nothing scrolls there.
 	local count = #state.cards
 	local sheetHeight = 96 + count * (CARD_HEIGHT + 10) + 24
 	local sheet = Instance.new("Frame")
 	sheet.AnchorPoint = Vector2.new(0.5, 1)
 	sheet.Position = UDim2.fromScale(0.5, 1)
-	sheet.Size = UDim2.new(1, 0, 0, sheetHeight)
+	local function fitSheet()
+		sheet.Size = UDim2.new(1, 0, 0, math.min(sheetHeight, gui.AbsoluteSize.Y))
+	end
+	fitSheet()
+	gui:GetPropertyChangedSignal("AbsoluteSize"):Connect(fitSheet)
 	sheet.BackgroundColor3 = COLORS.sheet
 	corner(sheet, 20)
 	local maxWidth = Instance.new("UISizeConstraint")
@@ -232,10 +244,15 @@ local function buildBoard(state: any): Board
 		Position = UDim2.fromOffset(16, 56),
 	})
 
-	local list = Instance.new("Frame")
+	local list = Instance.new("ScrollingFrame")
 	list.BackgroundTransparency = 1
+	list.BorderSizePixel = 0
 	list.Position = UDim2.fromOffset(16, 88)
 	list.Size = UDim2.new(1, -32, 1, -100)
+	list.ScrollingDirection = Enum.ScrollingDirection.Y
+	list.ScrollBarThickness = 4
+	list.CanvasSize = UDim2.new()
+	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	local layout = Instance.new("UIListLayout")
 	layout.Padding = UDim.new(0, 10)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -249,9 +266,9 @@ local function buildBoard(state: any): Board
 		table.insert(order, card.mapId)
 	end
 
-	gui.Parent = localPlayer:WaitForChild("PlayerGui")
 	return {
 		gui = gui,
+		dimGui = dimGui,
 		groupId = state.groupId,
 		title = title,
 		timer = timer,
@@ -368,6 +385,7 @@ end
 local function close()
 	if board ~= nil then
 		board.gui:Destroy()
+		board.dimGui:Destroy()
 		board = nil
 	end
 end
@@ -402,7 +420,7 @@ end
 
 local VoteBoardController: Loader.Controller = {
 	name = "VoteBoardController",
-	dependencies = {},
+	dependencies = { "UIScaleController" },
 }
 
 function VoteBoardController:init()

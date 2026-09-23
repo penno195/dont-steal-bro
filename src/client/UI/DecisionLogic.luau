@@ -410,4 +410,19 @@ function DecisionLogic.chatInset(chat: Rect?, usable: Rect, gap: number, maxFrac
 	return math.min(wanted, usable.y + usable.height * maxFraction)
 end
 
+-- P6-7: the bottom margin for the decide stack. A player still typing
+-- when Choose opens has the on-screen keyboard over the bottom half of
+-- a portrait phone, which is exactly where the hold buttons sit, so the
+-- stack rides up above it. `keyboardTop` is the keyboard's top edge in
+-- the same space as `usable` (nil when it's closed); the lift is capped
+-- at maxFraction of the height so the stack never leaves the screen.
+function DecisionLogic.keyboardLift(keyboardTop: number?, usable: Rect, margin: number, maxFraction: number): number
+	local bottom = usable.y + usable.height
+	if keyboardTop == nil or keyboardTop >= bottom then
+		return margin
+	end
+	local wanted = bottom - keyboardTop + margin
+	return math.clamp(wanted, margin, math.max(margin, usable.height * maxFraction))
+end
+
 return DecisionLogic

@@ -23,12 +23,11 @@
 -- anchored low-center with margin on every side, so a drag never needs
 -- to approach a screen edge.
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage.Shared.Net)
 local Types = require(script.Parent.Types)
-
-local LocalPlayer = Players.LocalPlayer
+local Theme = require(script.Parent.Parent.UI.Theme)
+local UIScaleController = require(script.Parent.Parent.Controllers.UIScaleController)
 
 type Challenge = {
 	fuseIds: { string },
@@ -147,18 +146,16 @@ local function makeDraggable(fuseId: string, button: TextButton)
 end
 
 local function buildGui(): ScreenGui
-	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "FuseRewireView"
-	gui.ResetOnSpawn = false
+	-- P6-7: on the safe-area screen and anchored to its bottom edge, so
+	-- the tray stays on a landscape phone. Input positions and
+	-- AbsolutePosition then share the space InputAdapters.pointOf uses.
+	local gui = UIScaleController.createScreen("FuseRewireView", { displayOrder = Theme.displayOrder.panel + 1 })
 	gui.Enabled = false
-	gui.IgnoreGuiInset = true
 
 	local frame = Instance.new("Frame")
 	frame.Name = "Root"
-	frame.AnchorPoint = Vector2.new(0.5, 0.5)
-	frame.Position = UDim2.fromScale(0.5, 0.68)
+	frame.AnchorPoint = Vector2.new(0.5, 1)
+	frame.Position = UDim2.new(0.5, 0, 1, -Theme.spacing.md)
 	frame.Size = UDim2.fromOffset(320, 260)
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 	frame.BackgroundTransparency = 0.1
@@ -217,8 +214,6 @@ local function buildGui(): ScreenGui
 		local button = makeHitArea(tray, fuseId, tostring(index))
 		makeDraggable(fuseId, button)
 	end
-
-	gui.Parent = playerGui
 
 	statusLabel = status
 	slotFrames = slots_

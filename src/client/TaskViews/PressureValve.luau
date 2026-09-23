@@ -12,12 +12,11 @@
 -- server handler's own header comment on why this stays a client-side
 -- approximation) - never authoritative over pass/fail.
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Net = require(ReplicatedStorage.Shared.Net)
 local Types = require(script.Parent.Types)
-
-local LocalPlayer = Players.LocalPlayer
+local Theme = require(script.Parent.Parent.UI.Theme)
+local UIScaleController = require(script.Parent.Parent.Controllers.UIScaleController)
 
 type Challenge = {
 	meterFillSeconds: number,
@@ -30,18 +29,15 @@ local activeStationId: string? = nil
 local gaugeThread: thread? = nil
 
 local function buildGui(): ScreenGui
-	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "PressureValveView"
-	gui.ResetOnSpawn = false
+	-- P6-7: on the safe-area screen and anchored to its bottom edge. The
+	-- old centre-at-72% put the tap zone ~50 px off a landscape phone.
+	local gui = UIScaleController.createScreen("PressureValveView", { displayOrder = Theme.displayOrder.panel + 1 })
 	gui.Enabled = false
-	gui.IgnoreGuiInset = true
 
 	local frame = Instance.new("Frame")
 	frame.Name = "Root"
-	frame.AnchorPoint = Vector2.new(0.5, 0.5)
-	frame.Position = UDim2.fromScale(0.5, 0.72)
+	frame.AnchorPoint = Vector2.new(0.5, 1)
+	frame.Position = UDim2.new(0.5, 0, 1, -Theme.spacing.md)
 	frame.Size = UDim2.fromOffset(260, 320)
 	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 	frame.BackgroundTransparency = 0.1
@@ -120,8 +116,6 @@ local function buildGui(): ScreenGui
 		end
 		Net.fireServer("TapSubmit", { stationId = activeStationId })
 	end)
-
-	gui.Parent = playerGui
 
 	statusLabel = status
 	gaugeFill = fill

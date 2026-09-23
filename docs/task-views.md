@@ -151,4 +151,5 @@ in portrait before building more tasks on the base:
 Their camera freeze now goes through `InputLock`, and the controller's
 guards close them like any other view. Move them onto the base (with
 `InputAdapters.Tap` and `InputAdapters.Drag`) when they're next touched.
-Until then they don't get the sheet, the header or the layout audit.
+Until then they don't get the sheet or the header. P6-7 did move them onto
+`createScreen` safe-area screens, bottom-anchored (`docs/mobile-audit.md` #3–4).
