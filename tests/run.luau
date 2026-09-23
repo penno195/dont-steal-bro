@@ -41,5 +41,6 @@ require("./TaskViewLogic.spec")
 require("./DecisionLogic.spec")
 require("./MenuScreens.spec")
 require("./Onboarding.spec")
+require("./MapCheck.spec")
 
 TestRunner.run()
