@@ -71,6 +71,22 @@ TestRunner.describe("TeleportLogic.classifyFailure", function()
 	end)
 end)
 
+TestRunner.describe("TeleportLogic.buildHint", function()
+	-- P5-5: TeleportData is the only thing that travels from hub to
+	-- match. If it only ever holds these four fields, no practice effect,
+	-- item or cooldown can ride along into a round.
+	TestRunner.it("carries only the version, group, map and NPC seats", function()
+		local hint = TeleportLogic.buildHint(PSID, "Lab", 3) :: any
+		local allowed = { v = true, groupId = true, mapId = true, npcSlots = true }
+		local count = 0
+		for key in hint do
+			TestRunner.expect(allowed[key]):toBe(true)
+			count += 1
+		end
+		TestRunner.expect(count):toBe(4)
+	end)
+end)
+
 TestRunner.describe("TeleportLogic.checkHint", function()
 	TestRunner.it("accepts an honest hint", function()
 		local hint = TeleportLogic.buildHint(PSID, "Lab", 3)

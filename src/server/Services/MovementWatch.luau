@@ -58,10 +58,12 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local MovementSanity = require(ReplicatedStorage.Shared.MovementSanity)
+local EffectContext = require(ServerScriptService.Server.EffectContext)
 
 export type SanityEvent = {
 	at: number,
@@ -180,7 +182,11 @@ local function sample(player: Player, nowValue: number, inRace: boolean)
 		return
 	end
 
-	if track.suppressNextSample or not inRace or track.lastPosition == nil then
+	-- P5-5: the practice area is exempt. A hub never enters Race, so
+	-- this is belt and braces, but knockback and speed buffs are the
+	-- whole point there, so it must never be scored even if one did.
+	local exempt = EffectContext.inPracticeArea(player.UserId)
+	if track.suppressNextSample or not inRace or exempt or track.lastPosition == nil then
 		track.suppressNextSample = false
 		track.lastPosition = root.Position
 		track.lastSampleAt = nowValue

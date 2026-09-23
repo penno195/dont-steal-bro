@@ -13,6 +13,10 @@
 -- wires into once it exists; until then, a use that passes every
 -- validation check just logs "no effect resolver wired in yet."
 --
+-- P5-5: the hub practice area runs THIS service, not a copy, under
+-- EffectContext's practice flag. See EffectContext.luau for why, and
+-- for the complete list of what the flag changes.
+--
 -- ===== EVERY WAY A CLIENT COULD TRY TO CHEAT THIS, AND WHAT BLOCKS IT ====
 --
 -- 1. INFINITE USE. Blocked by `PowerUpLogic.isOnCooldown`, checked
@@ -74,6 +78,7 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
 local Participants = require(ServerScriptService.Server.Participants)
+local EffectContext = require(ServerScriptService.Server.EffectContext)
 
 local powerUpDefsById: { [string]: Validate.PowerUpDef } = {}
 for _, entry in PowerUps do
@@ -225,6 +230,11 @@ local function audit(
 	result: "Applied" | "Rejected",
 	reason: string?
 )
+	-- P5-5: the audit feeds balancing, and hub practice isn't a round.
+	if not EffectContext.recordsStats() then
+		return
+	end
+
 	local entry: AuditEntry = {
 		at = Workspace:GetServerTimeNow(),
 		playerId = racer.id,
@@ -362,6 +372,10 @@ local function tryClaimPickup(point: SpawnPointRecord, live: LivePickup, hitPart
 	if racer == nil then
 		return
 	end
+	-- P5-5: in practice, only someone inside the practice area.
+	if not EffectContext.mayAct(racer.id) then
+		return
+	end
 
 	live.claimed = true
 
@@ -449,7 +463,7 @@ local function resolveTarget(
 
 	if def.target == "Aimed" and explicitTargetId ~= nil then
 		local explicitTarget = Participants.get(explicitTargetId)
-		if explicitTarget == nil or explicitTarget.id == caster.id then
+		if explicitTarget == nil or explicitTarget.id == caster.id or not EffectContext.mayAct(explicitTarget.id) then
 			return nil
 		end
 		local targetRoot = characterRoot(explicitTarget.character)
@@ -474,7 +488,7 @@ local function resolveTarget(
 	local candidates: { PowerUpLogic.TargetCandidate } = {}
 	local byId: { [number]: Participants.Participant } = {}
 	for _, other in Participants.all() do
-		if other.id == caster.id then
+		if other.id == caster.id or not EffectContext.mayAct(other.id) then
 			continue
 		end
 		local otherRoot = characterRoot(other.character)
@@ -548,6 +562,15 @@ end
 local function useFor(racer: Participants.Participant, slotIndex: number?, targetRacerId: number?)
 	local resolvedSlotIndex = slotIndex or 1
 	local state = racerStates[racer.id]
+
+	-- P5-5: always true in a round. In practice this is what stops an
+	-- item carried out of the practice area, or fired from the queue
+	-- pad's no-effect zone.
+	if not EffectContext.mayAct(racer.id) then
+		audit(racer, nil, nil, "Rejected", "outside the practice area")
+		sendResult(racer, false, nil, nil, "outside the practice area")
+		return
+	end
 
 	if state == nil then
 		audit(racer, nil, nil, "Rejected", "no inventory")
@@ -655,7 +678,9 @@ end
 
 -- ===== round lifecycle ======================================================
 
-local function beginRace()
+-- Clears every pickup, timer and inventory, then spawns at every spawn
+-- point. A round runs it on Race; PracticeService runs it once at boot.
+local function startPickups()
 	-- Idempotent reset - a real server only ever runs one round
 	-- (architecture.md), but Studio's debug interface can replay Race
 	-- repeatedly on the same server (see TaskHandlerService.luau's
@@ -677,12 +702,31 @@ local function beginRace()
 	end
 
 	if #spawnPoints == 0 then
-		warn("PowerUpService: no spawn points set (no map loaded) - skipping power-up spawns for this race")
+		warn("PowerUpService: no spawn points set (no map or practice area) - skipping power-up spawns")
 		return
 	end
 
 	for _, point in spawnPoints do
 		spawnAt(point)
+	end
+end
+
+local function beginRace()
+	EffectContext.assertRound("PowerUpService.beginRace")
+	startPickups()
+end
+
+-- P5-5: empties one participant's held items, e.g. on leaving the
+-- practice area, so nothing is carried out and used elsewhere.
+local function clearInventoryFor(racerId: number)
+	local state = racerStates[racerId]
+	if state == nil or #state.inventory == 0 then
+		return
+	end
+	state.inventory = {}
+	local racer = Participants.get(racerId)
+	if racer ~= nil then
+		broadcastInventory(racer)
 	end
 end
 
@@ -701,6 +745,10 @@ local PowerUpService: Loader.Service = {
 
 	-- P3-6's entry point into the one validated use path - see useFor.
 	useForRacer = useForRacer,
+
+	-- P5-5: PracticeService runs the same pickup lifecycle in the hub.
+	startPickups = startPickups,
+	clearInventoryFor = clearInventoryFor,
 
 	getInventoryFor = function(racerId: number): { string }?
 		local state = racerStates[racerId]

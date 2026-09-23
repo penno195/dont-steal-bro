@@ -587,6 +587,13 @@ local function isQueued(player: Player): boolean
 	return tickets[player] ~= nil
 end
 
+-- P5-5: claimed into a group and voting or travelling. True until the
+-- player leaves, or a failed teleport requeues them.
+local function isDeparting(player: Player): boolean
+	local ticket = tickets[player]
+	return ticket ~= nil and ticket.status == "Departing"
+end
+
 -- P5-2 installs the reservation here. Called by the former once per
 -- group it is about to claim; returning nil skips that group this tick.
 local function setDestinationProvider(provider: DestinationProvider?)
@@ -607,6 +614,7 @@ local MatchmakingService: Loader.Service = {
 	setDestinationProvider = setDestinationProvider,
 	requeue = requeue,
 	isQueued = isQueued,
+	isDeparting = isDeparting,
 	notify = notify,
 }
 

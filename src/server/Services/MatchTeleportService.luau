@@ -215,6 +215,12 @@ local function onGroupDeparted(players: { Player }, group: GroupRecord)
 		return
 	end
 
+	-- P5-5: a player frozen in the practice area when their match is
+	-- ready is thawed now and travels anyway. Their Departing ticket
+	-- keeps practice off them from here on.
+	local PracticeService = Loader.get("PracticeService") :: any
+	PracticeService.release(players)
+
 	-- P5-3: the group votes on its map first. This yields until the vote
 	-- locks (or gives up on the provisional map) and the winner has been
 	-- revealed. The winner is already in the group record by then, which

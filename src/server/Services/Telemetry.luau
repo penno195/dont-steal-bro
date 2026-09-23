@@ -17,10 +17,12 @@
 -- say what is sane, but it's there to add without touching code.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 local Analytics = game:GetService("AnalyticsService")
 
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
+local EffectContext = require(ServerScriptService.Server.EffectContext)
 
 export type Event = {
 	name: string,
@@ -289,8 +291,12 @@ local function mapPlayed(roundId: string, mapId: string, playerCount: number)
 	})
 end
 
--- Power-up use and outcome.
+-- Power-up use and outcome. Never from hub practice (P5-5): a practice
+-- scuffle would skew real power-up balance data.
 local function powerUpUsed(roundId: string, userId: number, powerUpId: string, targetId: number?, succeeded: boolean)
+	if not EffectContext.recordsStats() then
+		return
+	end
 	if not checkRateLimit("PowerUpUsed", userId) then
 		return
 	end

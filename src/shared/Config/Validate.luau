@@ -341,6 +341,18 @@ export type VoteConfig = {
 	recentDecay: number,
 }
 
+-- P5-5: the hub practice area, which runs the real power-up and status
+-- effect services under EffectContext's practice flag. The first three
+-- fields are EffectContext.PracticeRules.
+export type PracticeConfig = {
+	durationScale: number, -- 0-1 multiplier on every effect's duration
+	maxEffectSeconds: number, -- ceiling on any one effect after scaling
+	maxActiveEffects: number, -- per player, at once (a refresh doesn't count)
+	itemSpawnRarities: { string }, -- cycled over HubPracticeItemSpawn parts, sorted by name
+	respawnMultipliers: PowerUpRarityWeights, -- on GameConfig.powerUpRotationTimers
+	zoneCheckSeconds: number, -- how often zone exits are noticed and effects cleared
+}
+
 -- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
 -- Studio phase timers are locked exactly by architecture.md §6's network
 -- trace (Intro +5s, Negotiate +45s, Choose +15s, Reveal +1s). Bounty
@@ -451,6 +463,9 @@ export type GameConfig = {
 
 	-- P5-3: the hub map vote. See VoteConfig above.
 	vote: VoteConfig,
+
+	-- P5-5: the hub practice area. See PracticeConfig above.
+	practice: PracticeConfig,
 
 	-- P4-7: analytics batching. See TelemetryConfig above.
 	telemetry: TelemetryConfig,
@@ -1652,6 +1667,54 @@ end
 -- P5-3. Like teleport's, these protect liveness and the ballot's shape;
 -- nothing here can let a player vote twice or change a locked result
 -- (that rests on VoteLogic's compare-and-set transforms).
+local function checkPracticeConfig(pc: PracticeConfig, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "practice." .. field, message)
+	end
+
+	if pc == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "practice", "the practice config block is missing entirely")
+		return
+	end
+
+	if type(pc.durationScale) ~= "number" or pc.durationScale <= 0 or pc.durationScale > 1 then
+		bad("durationScale", "must be above 0 and at most 1 - practice effects are never longer than real ones")
+	end
+	if type(pc.maxEffectSeconds) ~= "number" or pc.maxEffectSeconds <= 0 then
+		bad("maxEffectSeconds", "must be positive")
+	end
+	if type(pc.maxActiveEffects) ~= "number" or pc.maxActiveEffects < 1 or pc.maxActiveEffects % 1 ~= 0 then
+		bad("maxActiveEffects", "must be a whole number, at least 1")
+	end
+	-- Leaving the area or reaching the queue pad clears effects on the
+	-- next check, so a slow check is a frozen player walking onto the pad.
+	if type(pc.zoneCheckSeconds) ~= "number" or pc.zoneCheckSeconds <= 0 or pc.zoneCheckSeconds > 1 then
+		bad("zoneCheckSeconds", "must be above 0 and at most 1")
+	end
+
+	if type(pc.itemSpawnRarities) ~= "table" or #pc.itemSpawnRarities == 0 then
+		bad("itemSpawnRarities", "must list at least one rarity")
+	else
+		for i, rarity in pc.itemSpawnRarities do
+			if rarity ~= "Common" and rarity ~= "Uncommon" and rarity ~= "Rare" then
+				bad(
+					string.format("itemSpawnRarities[%d]", i),
+					string.format('expected "Common", "Uncommon" or "Rare", got %s', tostring(rarity))
+				)
+			end
+		end
+	end
+
+	for _, rarity in { "Common", "Uncommon", "Rare" } do
+		local multiplier = if type(pc.respawnMultipliers) == "table"
+			then (pc.respawnMultipliers :: any)[rarity]
+			else nil
+		if type(multiplier) ~= "number" or multiplier <= 0 then
+			bad("respawnMultipliers." .. rarity, "must be positive")
+		end
+	end
+end
+
 local function checkVoteConfig(vc: VoteConfig, mm: MatchmakingConfig?, tp: TeleportConfig?, issues: { Issue })
 	local function bad(field: string, message: string)
 		issue(issues, "GameConfig", "GameConfig.luau", "vote." .. field, message)
@@ -1828,6 +1891,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkMatchmakingConfig(config.matchmaking, config.playerCount, issues)
 	checkTeleportConfig(config.teleport, config.matchmaking, issues)
 	checkVoteConfig(config.vote, config.matchmaking, config.teleport, issues)
+	checkPracticeConfig(config.practice, issues)
 
 	local telemetry = config.telemetry
 	if telemetry == nil then

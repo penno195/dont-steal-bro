@@ -309,6 +309,18 @@ local GameConfig: Validate.GameConfig = {
 		recentDecay = 0.5, -- PLACEHOLDER: two rounds ago counts half as much as last round
 	},
 
+	-- P5-5: the hub practice area. Same items, same rules as a round,
+	-- except these. All PLACEHOLDER, to tune in playtest: the aim is fun
+	-- for a few seconds, never annoying for long.
+	practice = {
+		durationScale = 0.5, -- a 2.5s Freeze lands as 1.25s
+		maxEffectSeconds = 2, -- nothing lasts longer than this, whatever the item
+		maxActiveEffects = 1, -- one effect per player at a time
+		itemSpawnRarities = { "Common", "Uncommon", "Rare" }, -- so every tier shows up to try
+		respawnMultipliers = { Common = 0.25, Uncommon = 0.25, Rare = 0.25 }, -- 4x faster than a round
+		zoneCheckSeconds = 0.2,
+	},
+
 	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which
 	-- forbids any in-round tell of a player's streak and names
 	-- "nameplate" specifically - a title maps to a bestStreak threshold,

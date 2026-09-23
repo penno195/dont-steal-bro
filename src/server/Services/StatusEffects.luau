@@ -27,6 +27,10 @@
 -- thing a bot lacks is a client to replicate to, which is the single
 -- `if participant.player ~= nil` in `replicate` - and no rule,
 -- stacking decision or immunity window branches on it.
+--
+-- P5-5: the hub practice area runs this same service under
+-- EffectContext's practice flag (shorter durations, a lower cap, a
+-- zone gate). See EffectContext.luau for why it isn't a copy.
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -40,6 +44,7 @@ local RoundStates = require(ReplicatedStorage.Shared.RoundStates)
 local StatusEffectResolver = require(ReplicatedStorage.Shared.StatusEffectResolver)
 local StatusEffectDefs = require(ServerScriptService.Server.Services.StatusEffectDefs)
 local Participants = require(ServerScriptService.Server.Participants)
+local EffectContext = require(ServerScriptService.Server.EffectContext)
 
 -- Roblox defaults - PLACEHOLDER, same stance every unverified number in
 -- this repo takes (see GameConfig.luau): no locked baseline movement
@@ -183,15 +188,39 @@ end
 -- ===== applying an effect ===================================================
 
 local function applyEffect(targetId: number, def: StatusEffectResolver.EffectDef, casterId: number?): (boolean, string)
+	-- P5-5: the last line of defence for the practice area. PowerUpService
+	-- already filters targets, but an Area item lands on its caster, and
+	-- nothing may land on anyone outside the practice area. Always true
+	-- in a round.
+	if not EffectContext.mayAct(targetId) then
+		return false, "target is outside the practice area"
+	end
+
 	pruneExpired(targetId)
 	local state = ensureState(targetId)
 
+	-- P5-5: the practice cap is checked before the hard-control gate,
+	-- which records every application it sees - a capped-out attempt
+	-- must not eat into the victim's diminishing-returns history.
+	local refreshes = false
+	for _, effect in state.activeEffects do
+		if effect.def.id == def.id then
+			refreshes = true
+			break
+		end
+	end
+	if not EffectContext.admits(#state.activeEffects, refreshes) then
+		return false, "practice effect cap reached"
+	end
+
 	local effectiveDef = def
-	local effectiveDuration = def.durationSeconds
+	-- Unchanged in a round. Shortened in practice, BEFORE the hard-control
+	-- rules see it, so their disable-time bookkeeping matches what lands.
+	local effectiveDuration = EffectContext.effectDuration(def.durationSeconds)
 
 	if def.category == "HardControl" then
 		local decision =
-			StatusEffectResolver.decideHardControlApplication(state.hardControlHistory, now(), def.durationSeconds)
+			StatusEffectResolver.decideHardControlApplication(state.hardControlHistory, now(), effectiveDuration)
 		state.hardControlHistory = decision.updatedHistory
 
 		if not decision.allowed then
@@ -208,7 +237,7 @@ local function applyEffect(targetId: number, def: StatusEffectResolver.EffectDef
 				return false, "rolling hard-control cap reached and no soft fallback is defined for this effect"
 			end
 			effectiveDef = fallbackDef
-			effectiveDuration = fallbackDef.durationSeconds
+			effectiveDuration = EffectContext.effectDuration(fallbackDef.durationSeconds)
 		else
 			effectiveDuration = decision.effectiveDurationSeconds
 		end

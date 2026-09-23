@@ -33,5 +33,6 @@ require("./CosmeticLogic.spec")
 require("./MatchmakingLogic.spec")
 require("./TeleportLogic.spec")
 require("./VoteLogic.spec")
+require("./EffectContext.spec")
 
 TestRunner.run()

@@ -142,6 +142,14 @@ local function validGameConfig(): Validate.GameConfig
 			recentFloorWeight = 0.2,
 			recentDecay = 0.5,
 		},
+		practice = {
+			durationScale = 0.5,
+			maxEffectSeconds = 2,
+			maxActiveEffects = 1,
+			itemSpawnRarities = { "Common", "Uncommon", "Rare" },
+			respawnMultipliers = { Common = 0.25, Uncommon = 0.25, Rare = 0.25 },
+			zoneCheckSeconds = 0.2,
+		},
 		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0 },
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
@@ -1472,5 +1480,69 @@ TestRunner.describe("Validate.checkGameConfig (P5-3 vote)", function()
 		TestRunner.expect(#issuesWith(function(_vc, mm)
 			mm.groupRecordTtlSeconds = 135
 		end)):toBe(1)
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P5-5 practice)", function()
+	local function issuesWith(mutate: (any) -> ()): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		mutate(config.practice)
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the valid block", function()
+		TestRunner.expect(#issuesWith(function(_pc) end)):toBe(0)
+	end)
+
+	TestRunner.it("names a missing practice block instead of erroring on it", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.practice = nil :: any
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("never lets practice effects outlast real ones", function()
+		for _, scale in { 0, -0.5, 1.5 } do
+			TestRunner.expect(#issuesWith(function(pc)
+				pc.durationScale = scale
+			end)):toBe(1)
+		end
+		TestRunner.expect(#issuesWith(function(pc)
+			pc.durationScale = 1
+		end)):toBe(0)
+	end)
+
+	TestRunner.it("needs a whole, positive effect cap", function()
+		for _, cap in { 0, 1.5, -1 } do
+			TestRunner.expect(#issuesWith(function(pc)
+				pc.maxActiveEffects = cap
+			end)):toBe(1)
+		end
+	end)
+
+	TestRunner.it("keeps the zone check fast enough to clear before the pad", function()
+		for _, seconds in { 0, 2 } do
+			TestRunner.expect(#issuesWith(function(pc)
+				pc.zoneCheckSeconds = seconds
+			end)):toBe(1)
+		end
+	end)
+
+	TestRunner.it("rejects an empty or unknown spawn rarity list", function()
+		TestRunner.expect(#issuesWith(function(pc)
+			pc.itemSpawnRarities = {}
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(pc)
+			pc.itemSpawnRarities = { "Common", "Legendary" }
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("needs a positive respawn multiplier for every rarity", function()
+		TestRunner.expect(#issuesWith(function(pc)
+			pc.respawnMultipliers = { Common = 0.25, Uncommon = 0 }
+		end)):toBe(2)
 	end)
 end)
