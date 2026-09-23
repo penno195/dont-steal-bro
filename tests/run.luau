@@ -37,5 +37,6 @@ require("./EffectContext.spec")
 require("./Theme.spec")
 require("./ComponentLogic.spec")
 require("./HudLogic.spec")
+require("./TaskViewLogic.spec")
 
 TestRunner.run()

@@ -53,12 +53,17 @@ type Session = {
 	handler: Types.TaskHandler<any, any, any>,
 	ctx: Types.TaskContext,
 	state: any,
+	-- Per-player counter (P6-4), sent with TaskChallenge and echoed by
+	-- TaskAbort/TaskEnded, so a message about an old attempt can never
+	-- end a newer one on either side, whatever order remotes land in.
+	attempt: number,
 }
 
 -- One attempt at a time per player - matches CLAUDE.md's mobile-first,
 -- one-thumb-at-a-time reality; nothing about this framework needs a
 -- player to have two tasks in flight simultaneously.
 local activeSessions: { [Player]: Session } = {}
+local attemptCounters: { [Player]: number } = {}
 
 local function now(): number
 	return Workspace:GetServerTimeNow()
@@ -81,13 +86,20 @@ end
 -- old one, a player leaving. Safe to call with no active session (a
 -- no-op), so every call site below can call it unconditionally rather
 -- than each having to re-check first.
-local function endSession(player: Player)
+--
+-- `notify` tells the client its view is dead (TaskEnded). Every ending
+-- the client didn't cause or can't already see passes true; success
+-- (TaskResult says it), an abort (the client asked) and a leave don't.
+local function endSession(player: Player, notify: boolean?)
 	local session = activeSessions[player]
 	if session == nil then
 		return
 	end
 	session.handler.cleanup(session.ctx, session.state)
 	activeSessions[player] = nil
+	if notify and player.Parent ~= nil then
+		Net.fireClient("TaskEnded", player, { attempt = session.attempt })
+	end
 end
 
 local function beginInteraction(player: Player, stationId: string)
@@ -97,8 +109,9 @@ local function beginInteraction(player: Player, stationId: string)
 	-- whatever this player's previous attempt was - "including when the
 	-- player... is frozen by a power-up mid-task" only ever actually
 	-- matters if walking away and starting something else also cleans up
-	-- correctly, which this covers the same way.
-	endSession(player)
+	-- correctly, which this covers the same way. Notified: if this new
+	-- request fails the checks below, no challenge replaces the old view.
+	endSession(player, true)
 
 	if not TaskService.isAssignedAndIncomplete(player, stationId) then
 		return
@@ -136,10 +149,16 @@ local function beginInteraction(player: Player, stationId: string)
 	}
 
 	local challenge, state = handler.start(ctx)
-	activeSessions[player] = { taskId = taskId, handler = handler, ctx = ctx, state = state }
+	local attempt = (attemptCounters[player] or 0) + 1
+	attemptCounters[player] = attempt
+	activeSessions[player] = { taskId = taskId, handler = handler, ctx = ctx, state = state, attempt = attempt }
 
 	-- Targeted at this one player - see this file's own header comment.
-	Net.fireClient("TaskChallenge", player, { stationId = stationId, taskId = taskId, challenge = challenge })
+	Net.fireClient(
+		"TaskChallenge",
+		player,
+		{ stationId = stationId, taskId = taskId, challenge = challenge, attempt = attempt }
+	)
 end
 
 -- The shared entry point every per-task submission remote (KeypadDigitSubmit
@@ -159,7 +178,7 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 	-- handler author to remember. A handler's validate() is never even
 	-- called if any of these fail.
 	if not TaskService.isAssignedAndIncomplete(player, stationId) then
-		endSession(player)
+		endSession(player, true)
 		return
 	end
 
@@ -225,8 +244,18 @@ function TaskHandlerService:init()
 		handleSubmission(player, payload.stationId, { fuseId = payload.fuseId, slotId = payload.slotId })
 	end)
 
+	-- The task view's close/abort path (P6-4). Only ends the attempt the
+	-- client is looking at: an abort for an older one is stale and dropped.
+	NetGuard.on("TaskAbort", function(player: Player, payload: any)
+		local session = activeSessions[player]
+		if session ~= nil and session.attempt == payload.attempt then
+			endSession(player)
+		end
+	end)
+
 	Players.PlayerRemoving:Connect(function(player: Player)
 		endSession(player)
+		attemptCounters[player] = nil
 	end)
 
 	-- A real server only ever runs one round (architecture.md - Cleanup
@@ -240,7 +269,7 @@ function TaskHandlerService:init()
 	local RoundService = Loader.get("RoundService") :: any
 	RoundService.onEnter("Race", function()
 		for player in activeSessions do
-			endSession(player)
+			endSession(player, true)
 		end
 	end)
 end

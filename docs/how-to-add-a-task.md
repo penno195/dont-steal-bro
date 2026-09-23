@@ -79,33 +79,34 @@ sign the abstraction has a hole, not a sign of thoroughness.
 
 ## The client contract
 
+**Build the client view on `src/client/UI/TaskViewBase.luau`** — the
+step-by-step guide is [`docs/task-views.md`](task-views.md). The base
+implements the raw contract below for you; you only write a `build`.
+
 `src/client/TaskViews/Types.luau` mirrors the server shape on purpose:
 
 ```lua
 export type TaskView = {
 	taskId: string,
-	show: (stationId: string, challenge: any) -> (),
+	show: (stationId: string, challenge: any, session: Session) -> (),
 	onResult: (stationId: string, success: boolean) -> (),
 	hide: (stationId: string) -> (),
 }
 ```
 
 `show` builds/opens your UI from the `challenge` a `TaskChallenge` event
-delivered. `onResult` reacts to a `TaskResult` for a submission your view
-itself fired — a `false` result means "still open, try again," only
-`true` ends the attempt. `hide` tears the UI down for any other reason
-the attempt ended (walked away, a different station superseded it).
+delivered; `session.close()` is the abort path. `onResult` reacts to a
+`TaskResult` for a submission your view itself fired — a `false` result
+means "still open, try again," only `true` ends the attempt. `hide` tears
+the UI down for any other reason the attempt ended — the close button,
+death, being knocked out of range, the race ending, a different station
+superseding it, or the server's `TaskEnded`. `TaskStationController`
+decides all of those (P6-4), for every view.
 
-**A view fires its own submission remote directly** (`code-playback`'s
-view fires `KeypadDigitSubmit`) — `TaskStationController.luau` (the
-client-side dispatcher) never needs to know your submission shape, only
-which view to hand a `TaskChallenge` to by `taskId`.
-
-Today's views are plain Roblox Instances (`ScreenGui`/`Frame`/
-`TextButton`), not a UI framework — `architecture.md`'s framework choice
-(React-lua/Fusion/Vide) is still an open "week 1" decision, unmade as of
-this doc. If it gets locked in later, only the *inside* of a view file
-changes; the `TaskView` contract itself doesn't care how the UI is built.
+**A view fires its own submission remote** (`code-playback`'s view fires
+`KeypadDigitSubmit`, through `ctx.submit`) — `TaskStationController.luau`
+(the client-side dispatcher) never needs to know your submission shape,
+only which view to hand a `TaskChallenge` to by `taskId`.
 
 ## When you need a fourth file
 

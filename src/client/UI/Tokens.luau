@@ -169,6 +169,29 @@ Tokens.displayOrder = table.freeze({
 	debug = 100,
 })
 
+-- Task views (P6-4, docs/task-views.md). Reference pixels unless noted.
+Tokens.taskView = table.freeze({
+	-- No interactive element closer than this to the usable rect's edge:
+	-- a thumb resting on a phone's bezel curve registers there, and a
+	-- drag that reaches it is about to leave the screen.
+	edgeMargin = 24,
+	-- A usable rect whose short axis is under this, or any touch device,
+	-- gets the full-screen sheet; bigger screens get a window.
+	windowMinShortAxis = 600,
+	windowSize = table.freeze({ width = 520, height = 560 }),
+	-- Pointer travel below this is a tap, not a drag (finger jitter).
+	dragSlop = 8,
+	-- A held pointer with no event for this long is treated as lost:
+	-- a finger that slid off the glass sometimes never sends InputEnded.
+	dragStaleSeconds = 1.5,
+	-- Stick deflection under this is noise from a worn thumbstick.
+	stickDeadzone = 0.2,
+	-- The base aborts when the character is this far from the station.
+	-- The server's own check is 12 studs; the extra 2 keeps a player
+	-- shuffling on the boundary from being thrown out mid-attempt.
+	leaveRangeStuds = 14,
+})
+
 -- Motion, in seconds. P6-2's components collapse these to 0 when
 -- reduced motion is on.
 Tokens.motion = table.freeze({

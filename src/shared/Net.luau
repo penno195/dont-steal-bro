@@ -453,6 +453,30 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P6-4's abort path: the player closed the task view, or the view
+	-- closed itself (walked/knocked out of range, died). Ends the
+	-- server session so nothing is left half-open. Carries the attempt
+	-- number from TaskChallenge so a late abort can't end a newer attempt.
+	-- Not limited to Race: aborting is always harmless.
+	TaskAbort = {
+		name = "TaskAbort",
+		direction = "ServerIntent",
+		schema = Net.struct({ attempt = Net.number({ min = 0, max = 2 ^ 31, integer = true }) }),
+		rateLimit = { capacity = 5, refillPerSecond = 1 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> one client: the server ended an attempt for a reason other
+	-- than success (task reassigned, a Race restart), so the view closes
+	-- instead of taking input nobody is listening to. `{ attempt }`.
+	TaskEnded = {
+		name = "TaskEnded",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- CodePlayback's (the P2-5 reference task) own submission remote: one
 	-- digit tap per call, against the server's privately-held code - see
 	-- src/server/TaskHandlers/CodePlayback.luau. Generous rate limit

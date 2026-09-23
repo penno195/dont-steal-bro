@@ -1,210 +1,163 @@
 --!strict
+--# selene: allow(mixed_table) -- Vide props + children, see UI/Components/Base.luau
 -- The client half of the P2-5 reference task (tasks-catalogue.md #9,
 -- `code-playback`) - see src/server/TaskHandlers/CodePlayback.luau for
 -- the server half and src/shared/Config/Tasks/CodePlayback.luau for the
--- shared definition. Plain Roblox Instances, not a UI framework -
--- architecture.md's UI framework choice (React-lua/Fusion/Vide) is still
--- an open decision (see its own "Decisions to lock in week 1" table),
--- and this task shouldn't make that call unilaterally on the way to
--- proving the task-framework contract works end to end. If the team
--- locks in a framework later, only this file's internals need to
--- change - the TaskView contract (Types.luau) it implements doesn't
--- care how the UI is built.
+-- shared definition.
 --
--- Root frame is anchored low-center (Position Y 0.72) rather than
--- centered - CLAUDE.md's mobile-first, one-thumb constraint means a
--- player's thumb lives in the lower half of a portrait phone screen, not
--- the middle.
+-- P6-4 rebuilt this on UI/TaskViewBase as the proof that the base
+-- carries the shared decisions: everything that isn't specific to "watch
+-- a code, then type it" - the sheet/window, the input lock, close and
+-- abort, the timer, the status line, the edge margin - is gone from this
+-- file. What's left is the task: flash the digits, then a Sequence
+-- keypad (UI/InputAdapters) that reports each press to the server.
+-- docs/task-views.md walks through this file as its worked example.
+--
+-- Layout: the digit display on top (read, not touched), the keypad at
+-- the bottom of the play area where a one-handed thumb lives.
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Net = require(ReplicatedStorage.Shared.Net)
 
-local LocalPlayer = Players.LocalPlayer
+local vide = require(ReplicatedStorage.Packages.Vide)
+
+local Base = require(script.Parent.Parent.UI.Components.Base)
+local ComponentLogic = require(script.Parent.Parent.UI.Components.ComponentLogic)
+local Env = require(script.Parent.Parent.UI.Components.Env)
+local InputAdapters = require(script.Parent.Parent.UI.InputAdapters)
+local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
+local Theme = require(script.Parent.Parent.UI.Theme)
+
+local create = vide.create
+local derive = vide.derive
+local source = vide.source
 
 type Challenge = {
 	code: { number },
 	displaySeconds: number,
 }
 
-local screenGui: ScreenGui? = nil
-local promptLabel: TextLabel? = nil
-local statusLabel: TextLabel? = nil
-local keypadFrame: Frame? = nil
-local activeStationId: string? = nil
-local flashThread: thread? = nil
+local KEY_SIZE = Vector2.new(88, 72)
+local DISPLAY_HEIGHT = Theme.spacing.xxxl + Theme.spacing.lg
 
-local function buildGui(): ScreenGui
-	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
-
-	local gui = Instance.new("ScreenGui")
-	gui.Name = "CodePlaybackView"
-	gui.ResetOnSpawn = false
-	gui.Enabled = false
-	gui.IgnoreGuiInset = true
-
-	local frame = Instance.new("Frame")
-	frame.Name = "Root"
-	frame.AnchorPoint = Vector2.new(0.5, 0.5)
-	frame.Position = UDim2.fromScale(0.5, 0.72)
-	frame.Size = UDim2.fromOffset(280, 220)
-	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-	frame.BackgroundTransparency = 0.1
-	frame.Parent = gui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 12)
-	corner.Parent = frame
-
-	local prompt = Instance.new("TextLabel")
-	prompt.Name = "Prompt"
-	prompt.Size = UDim2.new(1, 0, 0, 40)
-	prompt.Position = UDim2.fromOffset(0, 8)
-	prompt.BackgroundTransparency = 1
-	prompt.TextColor3 = Color3.new(1, 1, 1)
-	prompt.TextScaled = true
-	prompt.Font = Enum.Font.GothamBold
-	prompt.Text = ""
-	prompt.Parent = frame
-
-	local status = Instance.new("TextLabel")
-	status.Name = "Status"
-	status.Size = UDim2.new(1, 0, 0, 24)
-	status.Position = UDim2.fromOffset(0, 48)
-	status.BackgroundTransparency = 1
-	status.TextColor3 = Color3.fromRGB(200, 200, 200)
-	status.TextScaled = true
-	status.Font = Enum.Font.Gotham
-	status.Text = ""
-	status.Parent = frame
-
-	local keypad = Instance.new("Frame")
-	keypad.Name = "Keypad"
-	keypad.Size = UDim2.new(1, -16, 1, -84)
-	keypad.Position = UDim2.fromOffset(8, 76)
-	keypad.BackgroundTransparency = 1
-	keypad.Visible = false
-	keypad.Parent = frame
-
-	local layout = Instance.new("UIGridLayout")
-	layout.CellSize = UDim2.fromScale(0.31, 0.31)
-	layout.CellPadding = UDim2.fromScale(0.03, 0.03)
-	layout.SortOrder = Enum.SortOrder.LayoutOrder
-	layout.Parent = keypad
-
-	for digit = 0, 9 do
-		local button = Instance.new("TextButton")
-		button.Name = string.format("Digit_%d", digit)
-		button.Text = tostring(digit)
-		button.LayoutOrder = digit
-		button.TextScaled = true
-		button.Font = Enum.Font.GothamBold
-		button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-		button.TextColor3 = Color3.new(1, 1, 1)
-		button.AutoButtonColor = true
-		button.Parent = keypad
-
-		local buttonCorner = Instance.new("UICorner")
-		buttonCorner.CornerRadius = UDim.new(0, 8)
-		buttonCorner.Parent = button
-
-		-- Server is the only source of truth for whether this digit was
-		-- right - this button does nothing but report the tap.
-		button.Activated:Connect(function()
-			if activeStationId == nil then
-				return
-			end
-			Net.fireServer("KeypadDigitSubmit", { stationId = activeStationId, digit = digit })
-		end)
-	end
-
-	gui.Parent = playerGui
-
-	promptLabel = prompt
-	statusLabel = status
-	keypadFrame = keypad
-
-	return gui
-end
-
-local function ensureGui(): ScreenGui
-	if screenGui == nil then
-		screenGui = buildGui()
-	end
-	return screenGui :: ScreenGui
-end
-
-local function cancelFlash()
-	if flashThread ~= nil then
-		task.cancel(flashThread)
-		flashThread = nil
-	end
-end
-
-local function show(stationId: string, challenge: any)
-	local typedChallenge = challenge :: Challenge
-	local gui = ensureGui()
-	local prompt = promptLabel :: TextLabel
-	local status = statusLabel :: TextLabel
-	local keypad = keypadFrame :: Frame
-
-	activeStationId = stationId
-	gui.Enabled = true
-	keypad.Visible = false
-	status.Text = ""
-
-	cancelFlash()
-	flashThread = task.spawn(function()
-		local perDigitSeconds = typedChallenge.displaySeconds / math.max(1, #typedChallenge.code)
-		for _, digit in typedChallenge.code do
-			prompt.Text = tostring(digit)
-			task.wait(perDigitSeconds)
-		end
-		prompt.Text = "Enter the code"
-		keypad.Visible = true
-		flashThread = nil
-	end)
-end
-
-local function onResult(stationId: string, success: boolean)
-	if activeStationId ~= stationId or statusLabel == nil then
-		return
-	end
-
-	if success then
-		statusLabel.Text = "Done!"
-		task.delay(0.6, function()
-			if screenGui ~= nil then
-				screenGui.Enabled = false
-			end
-		end)
-	else
-		-- Can't tell from `success` alone whether that digit was right
-		-- (just not the LAST one yet) or actually wrong (progress reset)
-		-- - TaskResult only ever carries the whole attempt's outcome, not
-		-- per-digit feedback (see Types.luau's own TaskHandler doc
-		-- comment on validate's return shape). Never claims "wrong" on a
-		-- digit that might have been correct.
-		statusLabel.Text = "Keep going"
-	end
-end
-
-local function hide(stationId: string)
-	if activeStationId ~= stationId then
-		return
-	end
-	cancelFlash()
-	if screenGui ~= nil then
-		screenGui.Enabled = false
-	end
-	activeStationId = nil
-end
-
-local CodePlaybackView = {
-	taskId = "code-playback",
-	show = show,
-	onResult = onResult,
-	hide = hide,
+-- Phone-keypad order: 1-9, then 0 alone on the last row.
+local DIGIT_KEYS: { Enum.KeyCode } = {
+	Enum.KeyCode.Zero,
+	Enum.KeyCode.One,
+	Enum.KeyCode.Two,
+	Enum.KeyCode.Three,
+	Enum.KeyCode.Four,
+	Enum.KeyCode.Five,
+	Enum.KeyCode.Six,
+	Enum.KeyCode.Seven,
+	Enum.KeyCode.Eight,
+	Enum.KeyCode.Nine,
 }
+local KEYS: { InputAdapters.SequenceKey } = {}
+for _, digit in { 1, 2, 3, 4, 5, 6, 7, 8, 9, 0 } do
+	table.insert(KEYS, { id = tostring(digit), label = tostring(digit), keyCode = DIGIT_KEYS[digit + 1] })
+end
 
-return CodePlaybackView
+local function keyVisual(key: InputAdapters.SequenceKey, state: Base.Source<Base.State>): { Instance }
+	local style = derive(function()
+		return ComponentLogic.variantStyle("secondary", state())
+	end)
+	return {
+		create("Frame")({
+			Name = "Surface",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = Env.animate(function(): Color3
+				return Theme.color[style().fill]
+			end, Theme.motion.fast),
+			Base.corner(Theme.radius.md),
+			Base.text("headline", {
+				Size = UDim2.fromScale(1, 1),
+				Text = key.label,
+				TextColor3 = function()
+					return Theme.color[style().ink]
+				end,
+			}),
+		}),
+	}
+end
+
+return TaskViewBase.define({
+	taskId = "code-playback",
+	title = "Code Playback",
+
+	build = function(ctx)
+		local challenge = ctx.challenge :: Challenge
+		local display = source("")
+		local entering = source(false)
+
+		-- Flash each digit, then open the keypad. Cancelled with the view:
+		-- the thread checks `alive` rather than being task.cancel'd, so a
+		-- close mid-wait can't leave a half-written source behind.
+		local alive = true
+		vide.cleanup(function()
+			alive = false
+		end)
+		ctx.setStatus("Watch", "Active")
+		task.spawn(function()
+			local perDigit = challenge.displaySeconds / math.max(1, #challenge.code)
+			for _, digit in challenge.code do
+				if not alive then
+					return
+				end
+				display(tostring(digit))
+				task.wait(perDigit)
+			end
+			if alive then
+				display("")
+				entering(true)
+				ctx.setStatus("Enter the code")
+			end
+		end)
+
+		local lastPressed = source("")
+
+		return {
+			Base.text("display", {
+				Name = "CodeDisplay",
+				Size = UDim2.new(1, 0, 0, DISPLAY_HEIGHT),
+				-- While entering, echoes the last key pressed so a player sees
+				-- the press registered without hearing it. Not a running
+				-- code: the client can't know if a wrong digit reset progress.
+				Text = function()
+					return if entering() then lastPressed() else display()
+				end,
+				TextColor3 = function()
+					return if entering() then Theme.color.inkMuted else Theme.color.ink
+				end,
+			}) :: Instance,
+			(function()
+				local grid = InputAdapters.Sequence({
+					keys = KEYS,
+					columns = 3,
+					keySize = KEY_SIZE,
+					disabled = function()
+						return not entering()
+					end,
+					onPress = function(id: string)
+						-- The server alone knows whether that digit was right.
+						ctx.submit("KeypadDigitSubmit", { digit = tonumber(id) })
+						lastPressed(id)
+						ctx.cue("Active")
+					end,
+					visual = function(key, state)
+						return keyVisual(key, state)
+					end,
+				})
+				grid.AnchorPoint = Vector2.new(0.5, 1)
+				grid.Position = UDim2.fromScale(0.5, 1)
+				return grid :: Instance
+			end)(),
+		}
+	end,
+
+	-- A non-final result can't say whether that digit was right but not
+	-- the last, or wrong (progress reset) - TaskResult carries only the
+	-- whole attempt's outcome. So it never claims "wrong".
+	onProgress = function(ctx)
+		ctx.setStatus("Keep going", "Active")
+	end,
+})

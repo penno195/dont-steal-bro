@@ -11,17 +11,27 @@
 -- luau firing KeypadDigitSubmit) - the controller never needs to know
 -- what that shape is, only which view to dispatch to by taskId.
 
-local Workspace = game:GetService("Workspace")
+local InputLock = require(script.Parent.Parent.UI.InputLock)
 
 local Types = {}
+
+-- Handed to show() by TaskStationController (P6-4). `close` abandons
+-- the attempt: it hides this view (via hide) and tells the server
+-- (TaskAbort). Safe to call more than once, and a no-op once the
+-- attempt has ended some other way.
+export type Session = {
+	attempt: number,
+	close: () -> (),
+}
 
 export type TaskView = {
 	taskId: string,
 
 	-- The server sent a TaskChallenge for this taskId - build/open the
 	-- UI and render `challenge` (whatever shape that task's own handler
-	-- chose to send).
-	show: (stationId: string, challenge: any) -> (),
+	-- chose to send). `session` is how the view ends its own attempt
+	-- (the close button) - see Session below.
+	show: (stationId: string, challenge: any, session: Session) -> (),
 
 	-- The server responded to a submission this view itself fired. Must
 	-- handle being called again for the SAME attempt after a fail (the
@@ -36,28 +46,19 @@ export type TaskView = {
 	hide: (stationId: string) -> (),
 }
 
--- Shared by any view whose interaction (drag, precise tapping) would
--- otherwise fight with the default camera-rotate gesture on the same
--- touch input - P2-6's own requirement: "camera input frozen while the
--- view is open." Scriptable hands the camera fully to script control
--- (so the default rotate-on-drag behavior stops responding) without
--- moving it - leaving CurrentCamera.CFrame exactly where it was is what
--- "frozen," not "hidden" or "reset," actually means here. Custom hands
--- it back to the default player camera script. A view calls freezeCamera
--- from show() and unfreezeCamera from both onResult's success branch and
--- hide() - see PressureValve.luau/FuseRewire.luau.
+-- Kept for the views not yet on TaskViewBase (PressureValve, FuseRewire;
+-- see docs/task-views.md "Migrating"). Both now go through UI/InputLock,
+-- which also freezes character input and restores the camera to what it
+-- was rather than forcing Custom - see its header. A view built on
+-- TaskViewBase never calls these: the base locks and unlocks for it.
+local LEGACY_TOKEN = table.freeze({})
+
 function Types.freezeCamera()
-	local camera = Workspace.CurrentCamera
-	if camera ~= nil then
-		camera.CameraType = Enum.CameraType.Scriptable
-	end
+	InputLock.acquire(LEGACY_TOKEN)
 end
 
 function Types.unfreezeCamera()
-	local camera = Workspace.CurrentCamera
-	if camera ~= nil then
-		camera.CameraType = Enum.CameraType.Custom
-	end
+	InputLock.release(LEGACY_TOKEN)
 end
 
 return Types
