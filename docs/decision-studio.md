@@ -225,7 +225,8 @@ and the revealed cards.
 
 ## Open items handed on
 
-- **P6-6:** gate the results screen on `DecisionStudioController.isActive()`.
+- ~~**P6-6:** gate the results screen on `DecisionStudioController.isActive()`.~~
+  Done: `MenuController` waits on it before opening Results.
 - **Server:** ~~defer `ProgressionStreakSkipped` until after the reveal~~ (done in P6-6, as `RoundRecap`), and
   consider dropping `bountyVU` from `DecisionReveal` (see the secrecy audit).
 - **Q1 `RewardTables`:** the per-player item reveal belongs in the result panel.

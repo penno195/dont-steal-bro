@@ -95,6 +95,12 @@ local scaleValue = observable(1)
 local rectValue = observable({ x = 0, y = 0, width = 0, height = 0 } :: Layout.Rect)
 local inputValue = observable(UserInputService.PreferredInput)
 
+-- The player's HUD-scale setting (SettingsLogic.hudScale, P6-6), applied
+-- on top of the computed scale. SettingsLogic keeps it >= 1, so every
+-- touch target still renders at >= 44pt; it's clamped again here so a
+-- caller that skipped the sanitiser can't shrink them either.
+local userMultiplier = 1
+
 -- The usable rect in absolute screen pixels. GetInsetArea gives the
 -- CoreUISafeInsets region directly - the same one a ScreenGui with
 -- ScreenInsets = CoreUISafeInsets lays out in. Falls back to the
@@ -121,7 +127,7 @@ local function recompute()
 	if not sameRect(rect, rectValue.get()) then
 		rectValue.set(rect)
 	end
-	scaleValue.set(Layout.computeScale(rect.width, rect.height, Tokens.scale))
+	scaleValue.set(Layout.computeScale(rect.width, rect.height, Tokens.scale) * userMultiplier)
 end
 
 local UIScaleController: Loader.Controller = {
@@ -135,6 +141,16 @@ end
 
 function UIScaleController.observeScale(fn: (number) -> ()): () -> ()
 	return scaleValue.observe(fn)
+end
+
+-- Sets the player's HUD-scale multiplier (SettingsController) and
+-- recomputes. Never below 1: see `userMultiplier`.
+function UIScaleController.setUserMultiplier(multiplier: number)
+	local clamped = math.max(1, multiplier)
+	if clamped ~= userMultiplier then
+		userMultiplier = clamped
+		recompute()
+	end
 end
 
 -- The usable rect for layout code: absolute screen pixels, clear of

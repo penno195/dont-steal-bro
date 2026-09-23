@@ -91,8 +91,8 @@ takes dark ink (5.24:1), because white on it is only 3.49:1.
 
 ## Open items handed on
 
-- **Settings store.** No persisted player settings exist yet. Whatever owns
-  them should call `Env.setReducedMotion`.
+- ~~**Settings store.**~~ Done in P6-6: `SettingsController` calls
+  `Env.setReducedMotion` and sets `Env.colorBlindMode` (docs/menu-screens.md).
 - **Icon art.** Fill in `image`/`rect` per key in `Icons.luau`. No component
   needs to change.
 - **One modal at a time.** A second `Modal.open` replaces the first.

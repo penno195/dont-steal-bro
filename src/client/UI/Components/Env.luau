@@ -29,10 +29,9 @@ UIScaleController.observeInputMode(Env.inputMode)
 
 -- REDUCED MOTION. Two inputs, either one turns it on:
 --   - the OS/Roblox accessibility toggle (GuiService.ReducedMotionEnabled)
---   - the player's own in-game setting. There is no settings store yet
---     (nothing persists player preferences), so this is a plain source
---     for that store to write when it exists: `Env.setReducedMotion`.
---     Until then it's false and the Roblox toggle alone decides.
+--   - the player's own in-game setting, written by SettingsController
+--     (P6-6) through `Env.setReducedMotion`. It can only add to the
+--     Roblox toggle, never switch it off.
 local systemReduced = vide.source(GuiService.ReducedMotionEnabled)
 GuiService:GetPropertyChangedSignal("ReducedMotionEnabled"):Connect(function()
 	systemReduced(GuiService.ReducedMotionEnabled)
@@ -46,6 +45,13 @@ end
 function Env.setReducedMotion(on: boolean)
 	playerReduced(on)
 end
+
+-- COLOUR-BLIND MODE (the player's setting, via SettingsController).
+-- Every state already has a non-colour cue (docs/components.md), so
+-- this adds cues rather than repainting: a screen that reads it shows
+-- the text label next to a colour-only accent it would otherwise leave
+-- to the icon.
+Env.colorBlindMode = vide.source(false)
 
 -- Seconds for a motion token (Theme.motion.fast/base/slow), 0 under
 -- reduced motion. Reads a source, so call it inside a derive/effect to

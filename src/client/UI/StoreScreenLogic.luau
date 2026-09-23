@@ -166,6 +166,21 @@ function StoreScreenLogic.equipTargets(item: Item, state: StoreState): { EquipTa
 	return out
 end
 
+-- The equip slot a cosmetic category lives in - what StoreEquipIntent's
+-- `slot` must be. A copy of server/CosmeticLogic's map (the client can't
+-- require a ServerScriptService module); tests/MenuScreens.spec checks
+-- the two agree for every category, so they can't drift silently.
+local SLOT_FOR_CATEGORY: { [string]: string } = {
+	Skin = "skin",
+	Trail = "trail",
+	Emote = "emote",
+	Podium = "podium",
+}
+
+function StoreScreenLogic.slotFor(category: string): string?
+	return SLOT_FOR_CATEGORY[category]
+end
+
 -- One tab's items, sorted by config sortOrder then key (so two items
 -- with the same order still land in a stable place across refreshes).
 function StoreScreenLogic.itemsIn(items: { Item }, category: Category): { Item }

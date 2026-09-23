@@ -4,6 +4,7 @@
 -- screens themselves are reviewed on device (docs/menu-screens.md).
 
 local BoardLogic = require("../src/client/UI/BoardLogic")
+local CosmeticLogic = require("../src/server/CosmeticLogic")
 local Net = require("../src/shared/Net")
 local ProgressionLogic = require("../src/server/ProgressionLogic")
 local ResultsLogic = require("../src/client/UI/ResultsLogic")
@@ -154,6 +155,14 @@ describe("StoreScreenLogic catalogue", function()
 
 	it("never marks a consumable as owned", function()
 		expect(StoreScreenLogic.itemState(coins, state({ ownedPasses = { "coins" } }))):toBe("Buyable")
+	end)
+
+	-- The client's slot map is a copy of the server's; an equip sent to
+	-- a slot the server doesn't recognise would silently do nothing.
+	it("uses the same equip slot as the server for every cosmetic category", function()
+		for _, category in { "Skin", "Trail", "Emote", "Podium", "NotACategory" } do
+			expect(StoreScreenLogic.slotFor(category)):toBe(CosmeticLogic.slotFor(category))
+		end
 	end)
 end)
 
