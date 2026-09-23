@@ -36,5 +36,6 @@ require("./VoteLogic.spec")
 require("./EffectContext.spec")
 require("./Theme.spec")
 require("./ComponentLogic.spec")
+require("./HudLogic.spec")
 
 TestRunner.run()

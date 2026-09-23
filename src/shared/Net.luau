@@ -369,6 +369,21 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P6-3: a player's OWN route - {stationId, taskId, completed} per
+	-- assigned station, in assigned order - for the race HUD's task list
+	-- and nearest-objective arrow. Targeted (fireClient), never
+	-- broadcast: TaskProgress above is deliberately counts-only, and
+	-- handing everyone every route would let a modified client predict
+	-- where each rival is heading next. Fired at race start and on each
+	-- of that player's own completions.
+	TaskAssignmentState = {
+		name = "TaskAssignmentState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- P3-5: the round's NPC roster - {id, displayName} per bot, broadcast
 	-- once they've been spawned. It exists because every id-carrying
 	-- payload above (TaskProgress's `playerId`, the qualification

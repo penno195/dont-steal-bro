@@ -42,6 +42,8 @@ local Tokens = require(script.Parent.Parent.UI.Tokens)
 local HARNESS_ATTRIBUTE = "UILayoutHarness"
 -- Same, for the component gallery (P6-2, docs/components.md).
 local GALLERY_ATTRIBUTE = "UIComponentGallery"
+-- Same, for the race HUD on scripted fake data (P6-3, docs/race-hud.md).
+local RACE_HUD_ATTRIBUTE = "UIRaceHUDPreview"
 
 type Observable<T> = {
 	get: () -> T,
@@ -245,6 +247,7 @@ function UIScaleController:start()
 	local debugScreens: { [string]: ModuleScript } = {
 		[HARNESS_ATTRIBUTE] = screens.LayoutHarness,
 		[GALLERY_ATTRIBUTE] = screens.ComponentGallery,
+		[RACE_HUD_ATTRIBUTE] = screens.RaceHUDPreview,
 	}
 	for attribute, module in debugScreens do
 		local unmount: (() -> ())? = nil

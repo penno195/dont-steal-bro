@@ -41,6 +41,15 @@ local ICONS: { [string]: Icon } = {
 	trophy = { glyph = "🏆" },
 	bolt = { glyph = "⚡" }, -- power-ups
 	flame = { glyph = "🔥" }, -- streak
+
+	-- Race HUD (P6-3). Status effect icons are keyed by category, so a
+	-- new effect in an existing category needs no new art.
+	arrow = { glyph = "▲" }, -- objective compass; rotated, so it must point up
+	down = { glyph = "▼" }, -- below the qualification line
+	pending = { glyph = "○" }, -- task not done yet
+	slow = { glyph = "🐌" }, -- Movement debuff
+	eye = { glyph = "👁" }, -- Vision debuff
+	boost = { glyph = "⏩" }, -- any buff
 }
 
 local Icons = {}

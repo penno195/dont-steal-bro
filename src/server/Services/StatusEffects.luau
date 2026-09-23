@@ -138,7 +138,15 @@ local function replicate(racerId: number, state: RacerState)
 		for _, effect in state.activeEffects do
 			table.insert(
 				ownPayload,
-				{ id = effect.def.id, category = effect.def.category, expiresAt = effect.expiresAt }
+				-- `kind` (P6-3): the HUD's screen-edge warning is for
+				-- debuffs only, and a Movement category alone can't
+				-- tell a Slow Field from your own Sprint Boost.
+				{
+					id = effect.def.id,
+					category = effect.def.category,
+					kind = effect.def.kind,
+					expiresAt = effect.expiresAt,
+				}
 			)
 		end
 		Net.fireClient("StatusEffectsChanged", player, { effects = ownPayload })

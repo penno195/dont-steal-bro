@@ -170,6 +170,28 @@ local function broadcastProgress()
 	Net.fireAllClients("TaskProgress", { progress = progress })
 end
 
+-- P6-3: one racer's own route, to that racer only (see Net.luau's
+-- TaskAssignmentState for why this is never broadcast). An NPC has no
+-- HUD, so it returns early for one, like PowerUpService's inventory.
+local function sendAssignment(racerId: number)
+	local state = racerStates[racerId]
+	local participant = Participants.get(racerId)
+	local player = if participant ~= nil then participant.player else nil
+	if state == nil or player == nil then
+		return
+	end
+
+	local route = {}
+	for _, assignment in state.assignments do
+		table.insert(route, {
+			stationId = assignment.stationId,
+			taskId = assignment.taskId,
+			completed = state.completed[assignment.stationId] == true,
+		})
+	end
+	Net.fireClient("TaskAssignmentState", player, { assignments = route })
+end
+
 -- The first not-yet-completed station in a player's own assigned order -
 -- "their next station," for the distance tie-break. nil once they've
 -- completed everything (nothing left to travel to).
@@ -296,6 +318,9 @@ local function beginRace()
 	end
 
 	broadcastProgress()
+	for racerId in racerStates do
+		sendAssignment(racerId)
+	end
 	print(
 		string.format(
 			"TaskService: assigned tasks to %d racer(s) (%d human, %d NPC) - seed %d, capacity %d",
@@ -343,6 +368,7 @@ local function recordCompletionFor(racerId: number, stationId: string, durationS
 	stationOccupancy[stationId] = math.max(0, (stationOccupancy[stationId] or 0) - 1)
 
 	broadcastProgress()
+	sendAssignment(racerId)
 	completed:Fire(racerId, stationId, taskId, durationSeconds)
 
 	if state.tasksCompleted >= #state.assignments then
