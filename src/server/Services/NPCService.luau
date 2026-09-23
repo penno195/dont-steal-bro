@@ -774,8 +774,16 @@ end
 -- architecture.md §4: derived on THIS server from who is actually here,
 -- after a grace window, and never from TeleportData (threat-model.md §5
 -- - the hint isn't even plumbed in; see NPCLogic.deriveFillCount).
+-- P5-2: on a real match server, MatchTeleportService's arrival gate has
+-- already waited out this grace window before requesting Loading, and
+-- turned late arrivals away since. It says so here instead of the
+-- window being served twice. Studio's debug path still waits.
+local graceAlreadyServed = false
+
 local function fillSeats()
-	task.wait(GameConfig.npc.fillGraceSeconds)
+	if not graceAlreadyServed then
+		task.wait(GameConfig.npc.fillGraceSeconds)
+	end
 
 	roundSeed = math.floor(now() * 1000)
 
@@ -807,6 +815,10 @@ local NPCService: Loader.Service = {
 	setSpawnPoints = setSpawnPoints,
 	setMapDifficultyModifier = setMapDifficultyModifier,
 	debugLoadFromMap = debugLoadFromMap,
+
+	markArrivalGraceServed = function()
+		graceAlreadyServed = true
+	end,
 
 	getNPCSeatCount = function(): number
 		return Participants.countNPCs()

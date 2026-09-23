@@ -67,6 +67,21 @@ export type GroupRecord = {
 	npcSlots: number,
 	formedAt: number,
 	formedBy: string,
+	-- P5-2: where the group is going. Set when the former reserved a
+	-- match server before claiming (groupId is then that server's
+	-- PrivateServerId). Nil in Studio, where nothing can be reserved.
+	-- Only servers read MemoryStore, so the access code never reaches a
+	-- client from here.
+	accessCode: string?,
+	mapId: string?,
+}
+
+-- P5-2's reserved destination, handed to the former by
+-- MatchmakingService's destination provider.
+export type Destination = {
+	groupId: string,
+	accessCode: string,
+	mapId: string?,
 }
 
 export type FormedGroup = {
@@ -168,6 +183,8 @@ function MatchmakingLogic.decodeGroup(raw: any): GroupRecord?
 		npcSlots = raw.npcSlots,
 		formedAt = if isFiniteNumber(raw.formedAt) then raw.formedAt else 0,
 		formedBy = if type(raw.formedBy) == "string" then raw.formedBy else "",
+		accessCode = if type(raw.accessCode) == "string" then raw.accessCode else nil,
+		mapId = if type(raw.mapId) == "string" then raw.mapId else nil,
 	}
 end
 
@@ -204,7 +221,8 @@ function MatchmakingLogic.newGroupRecord(
 	members: { Entry },
 	npcSlots: number,
 	formedAt: number,
-	formedBy: string
+	formedBy: string,
+	destination: Destination?
 ): GroupRecord
 	local ids: { number } = {}
 	for _, entry in members do
@@ -217,6 +235,8 @@ function MatchmakingLogic.newGroupRecord(
 		npcSlots = npcSlots,
 		formedAt = formedAt,
 		formedBy = formedBy,
+		accessCode = if destination then destination.accessCode else nil,
+		mapId = if destination then destination.mapId else nil,
 	}
 end
 

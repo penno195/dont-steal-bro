@@ -31,5 +31,6 @@ require("./PeriodKeys.spec")
 require("./StoreLogic.spec")
 require("./CosmeticLogic.spec")
 require("./MatchmakingLogic.spec")
+require("./TeleportLogic.spec")
 
 TestRunner.run()

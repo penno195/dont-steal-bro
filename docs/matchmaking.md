@@ -215,3 +215,6 @@ is Phase 5's exit criterion and needs P5-2's teleport.
   player's place.
 - `DataService.isLoaded(player)` gates joining, so nobody can be sent
   to a match before their session lock exists on the hub.
+- `MatchmakingService.setDestinationProvider(fn)`, added by P5-2: the
+  former reserves the match server before claiming anyone, and the
+  access code and map go into the group record. See `docs/teleport.md`.

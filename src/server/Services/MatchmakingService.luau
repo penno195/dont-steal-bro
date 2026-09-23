@@ -31,6 +31,14 @@
 -- P5-2 replaces with the reserved-server teleport. If a teleport fails,
 -- P5-2 calls `requeue(player, enqueuedAt)` and the player goes back in
 -- line at their original place.
+--
+-- A group can span several hub servers, and only the server that
+-- reserves a match server learns its access code. So the FORMER
+-- reserves, through `setDestinationProvider`, before it claims anyone,
+-- and the code travels in the group record. Every owner then teleports
+-- its own players to the same place. The reserved server's
+-- PrivateServerId becomes the group id, which is how the match server
+-- finds its own record without trusting TeleportData.
 
 local Players = game:GetService("Players")
 local MemoryStoreService = game:GetService("MemoryStoreService")
@@ -115,6 +123,17 @@ local function defaultDepartureHandler(players: { Player }, group: GroupRecord)
 end
 
 local departureHandler: DepartureHandler = defaultDepartureHandler
+
+-- Nil in Studio and until P5-2's service installs one: groups then get a
+-- GUID id and no destination, which is P5-1's behaviour.
+export type DestinationProvider = () -> MatchmakingLogic.Destination?
+local destinationProvider: DestinationProvider? = nil
+
+-- When teleporting is configured, a group formed without a destination
+-- would have nowhere to go. P5-2's service installs the provider in its
+-- own start(), which runs after this service's tick loop is already
+-- going, so formation waits for it rather than racing it.
+local destinationRequired = GameConfig.teleport.matchPlaceId ~= 0 and not RunService:IsStudio()
 
 -- ===== MemoryStore wrappers ================================================
 
@@ -235,7 +254,21 @@ end
 -- ===== forming a group (lease holder only) ================================
 
 local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
-	local groupId = HttpService:GenerateGUID(false)
+	-- Reserve BEFORE claiming: if it fails nobody has been touched, and if
+	-- a claim fails later the reserved server is simply never used (it
+	-- doesn't start until someone teleports to it). The yield happens
+	-- before `started`, so it doesn't eat into the commit deadline.
+	local destination: MatchmakingLogic.Destination? = nil
+	if destinationProvider == nil and destinationRequired then
+		return false
+	end
+	if destinationProvider ~= nil then
+		destination = destinationProvider()
+		if destination == nil then
+			return false
+		end
+	end
+	local groupId = if destination then destination.groupId else HttpService:GenerateGUID(false)
 	local started = os.clock()
 	local attempted: { number } = {}
 
@@ -254,7 +287,8 @@ local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
 	-- A former that stalled past its deadline gives up rather than
 	-- committing claims the owners may already be reverting.
 	if allClaimed and os.clock() - started < config.claimCommitDeadlineSeconds then
-		local record = MatchmakingLogic.newGroupRecord(groupId, group.members, group.npcSlots, now(), myJobId)
+		local record =
+			MatchmakingLogic.newGroupRecord(groupId, group.members, group.npcSlots, now(), myJobId, destination)
 		-- THE COMMIT POINT. One write to one fresh key: the group exists
 		-- or it doesn't.
 		local ok = pcall(function()
@@ -456,7 +490,9 @@ end
 
 -- ===== intents ============================================================
 
-local function joinQueue(player: Player, preservedEnqueuedAt: number?)
+-- `message` explains a requeue (P5-2's failed teleport) and rides on the
+-- Joining and Waiting states so the client can show why they're back.
+local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: string?)
 	if not active then
 		sendState(player, { status = "Unavailable", message = "Matchmaking isn't available on this server." })
 		return
@@ -474,7 +510,7 @@ local function joinQueue(player: Player, preservedEnqueuedAt: number?)
 
 	local ticket: Ticket = { status = "Joining", enqueuedAt = preservedEnqueuedAt or now(), claimSeen = nil }
 	tickets[player] = ticket
-	sendState(player, { status = "Joining" })
+	sendState(player, { status = "Joining", message = message })
 
 	local ok = writeFreshEntry(player, ticket)
 	if tickets[player] ~= ticket then
@@ -486,7 +522,7 @@ local function joinQueue(player: Player, preservedEnqueuedAt: number?)
 		return
 	end
 	ticket.status = "Waiting"
-	sendState(player, { status = "Waiting" })
+	sendState(player, { status = "Waiting", message = message })
 end
 
 local function leaveQueue(player: Player, fromIntent: boolean)
@@ -527,17 +563,29 @@ end
 -- P5-2's teleport-failed path: back in line at the original place.
 -- The Departing ticket still remembers that place, so the caller
 -- needn't pass it.
-local function requeue(player: Player, enqueuedAt: number?)
+local function requeue(player: Player, enqueuedAt: number?, message: string?)
 	local ticket = tickets[player]
 	if ticket ~= nil and ticket.status == "Departing" then
 		enqueuedAt = enqueuedAt or ticket.enqueuedAt
 		tickets[player] = nil
 	end
-	task.spawn(joinQueue, player, enqueuedAt)
+	task.spawn(joinQueue, player, enqueuedAt, message)
 end
 
 local function isQueued(player: Player): boolean
 	return tickets[player] ~= nil
+end
+
+-- P5-2 installs the reservation here. Called by the former once per
+-- group it is about to claim; returning nil skips that group this tick.
+local function setDestinationProvider(provider: DestinationProvider?)
+	destinationProvider = provider
+end
+
+-- P5-2's status messages while a Departing player travels. Kept here so
+-- the one QueueState remote has a single owner.
+local function notify(player: Player, status: string, message: string?)
+	sendState(player, { status = status, message = message })
 end
 
 local MatchmakingService: Loader.Service = {
@@ -545,8 +593,10 @@ local MatchmakingService: Loader.Service = {
 	dependencies = { "NetGuard", "ConfigValidator", "DataService" },
 
 	setDepartureHandler = setDepartureHandler,
+	setDestinationProvider = setDestinationProvider,
 	requeue = requeue,
 	isQueued = isQueued,
+	notify = notify,
 }
 
 function MatchmakingService:init()

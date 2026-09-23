@@ -315,6 +315,18 @@ export type MatchmakingConfig = {
 	unavailableAfterFailures: number,
 }
 
+-- ===== TeleportConfig: P5-2 ==============================================
+-- Hub-to-match travel. docs/teleport.md explains each number.
+export type TeleportConfig = {
+	matchPlaceId: number, -- 0 = unset: teleporting is disabled
+	maxAttempts: number, -- per player, including the first
+	retryBaseSeconds: number,
+	retryCapSeconds: number,
+	travelWatchdogSeconds: number,
+	profileLoadGraceSeconds: number,
+	manifestReadAttempts: number,
+}
+
 -- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
 -- Studio phase timers are locked exactly by architecture.md §6's network
 -- trace (Intro +5s, Negotiate +45s, Choose +15s, Reveal +1s). Bounty
@@ -419,6 +431,9 @@ export type GameConfig = {
 
 	-- P5-1: the cross-server queue. See MatchmakingConfig above.
 	matchmaking: MatchmakingConfig,
+
+	-- P5-2: hub-to-match teleport. See TeleportConfig above.
+	teleport: TeleportConfig,
 
 	-- P4-7: analytics batching. See TelemetryConfig above.
 	telemetry: TelemetryConfig,
@@ -1559,6 +1574,64 @@ local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number
 	end
 end
 
+-- P5-2. Like matchmaking's, these protect liveness: a bad value strands
+-- or bounces players, it can't let anyone into the wrong match.
+local function checkTeleportConfig(tp: TeleportConfig, mm: MatchmakingConfig?, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "teleport." .. field, message)
+	end
+
+	if tp == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "teleport", "the teleport config block is missing entirely")
+		return
+	end
+	local issuesBefore = #issues
+
+	if type(tp.matchPlaceId) ~= "number" or tp.matchPlaceId < 0 then
+		bad("matchPlaceId", "must be a place id, or 0 for unset")
+	elseif mm ~= nil and tp.matchPlaceId ~= 0 and tp.matchPlaceId == mm.hubPlaceId then
+		bad("matchPlaceId", "must differ from matchmaking.hubPlaceId - the hub would teleport players to itself")
+	end
+
+	for _, field in { "maxAttempts", "manifestReadAttempts" } do
+		local value = (tp :: any)[field]
+		if type(value) ~= "number" or value < 1 or value > 10 or value % 1 ~= 0 then
+			bad(field, "must be a whole number from 1 to 10")
+		end
+	end
+	for _, field in { "retryBaseSeconds", "retryCapSeconds", "travelWatchdogSeconds" } do
+		local value = (tp :: any)[field]
+		if type(value) ~= "number" or value <= 0 then
+			bad(field, "must be positive")
+		end
+	end
+	if type(tp.profileLoadGraceSeconds) ~= "number" or tp.profileLoadGraceSeconds < 0 then
+		bad("profileLoadGraceSeconds", "must be zero or positive")
+	end
+	if #issues > issuesBefore then
+		return -- the orderings below would compare garbage
+	end
+	if tp.retryCapSeconds < tp.retryBaseSeconds then
+		bad("retryCapSeconds", "must be at least retryBaseSeconds")
+	end
+
+	-- The match server boots when its FIRST player arrives, which can be
+	-- as late as that player's last attempt. The group record must still
+	-- be there for it to read, or the server runs without a manifest.
+	if mm ~= nil then
+		local worstTravel = tp.maxAttempts * (tp.travelWatchdogSeconds + tp.retryCapSeconds)
+		if mm.groupRecordTtlSeconds <= worstTravel then
+			bad(
+				"maxAttempts",
+				string.format(
+					"maxAttempts x (travelWatchdogSeconds + retryCapSeconds) = %ds must be under matchmaking.groupRecordTtlSeconds, or the match server can boot after its group record expired",
+					worstTravel
+				)
+			)
+		end
+	end
+end
+
 function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	if config.playerCount <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "playerCount", "must be positive")
@@ -1655,6 +1728,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkLeaderboardConfig(config.leaderboard, issues)
 	checkStoreConfig(config.store, issues)
 	checkMatchmakingConfig(config.matchmaking, config.playerCount, issues)
+	checkTeleportConfig(config.teleport, config.matchmaking, issues)
 
 	local telemetry = config.telemetry
 	if telemetry == nil then

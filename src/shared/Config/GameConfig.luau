@@ -273,6 +273,24 @@ local GameConfig: Validate.GameConfig = {
 		unavailableAfterFailures = 3, -- consecutive failed reads before the UI says so
 	},
 
+	-- P5-2: hub-to-match teleport. docs/teleport.md explains each number.
+	-- The arrival grace window is npc.fillGraceSeconds (architecture.md
+	-- §4's ~10s), not a second knob here: it's the same window.
+	teleport = {
+		matchPlaceId = 0, -- PLACEHOLDER: set once the Match place is published; 0 disables teleporting
+		maxAttempts = 4, -- PLACEHOLDER: per player, including the first
+		retryBaseSeconds = 1, -- PLACEHOLDER
+		retryCapSeconds = 8, -- PLACEHOLDER
+		-- PLACEHOLDER: a player still on the hub this long after an attempt,
+		-- with no TeleportInitFailed, counts as a failed attempt.
+		travelWatchdogSeconds = 20,
+		-- PLACEHOLDER: extra wait for a profile still session-locked by the
+		-- hub. ProfileStore steals a stuck lock at 40s (SESSION_STEAL), so
+		-- this covers the normal release, not a dead hub.
+		profileLoadGraceSeconds = 15,
+		manifestReadAttempts = 4, -- match server's reads of its own group record
+	},
+
 	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which
 	-- forbids any in-round tell of a player's streak and names
 	-- "nameplate" specifically - a title maps to a bestStreak threshold,

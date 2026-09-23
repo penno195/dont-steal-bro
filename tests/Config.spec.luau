@@ -121,6 +121,15 @@ local function validGameConfig(): Validate.GameConfig
 			backoffCapSeconds = 30,
 			unavailableAfterFailures = 3,
 		},
+		teleport = {
+			matchPlaceId = 0,
+			maxAttempts = 4,
+			retryBaseSeconds = 1,
+			retryCapSeconds = 8,
+			travelWatchdogSeconds = 20,
+			profileLoadGraceSeconds = 15,
+			manifestReadAttempts = 4,
+		},
 		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0 },
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
@@ -1319,5 +1328,65 @@ TestRunner.describe("Validate.checkGameConfig (P5-1 matchmaking)", function()
 		TestRunner.expect(#issuesWith(function(mm)
 			mm.queuePageSize = 201
 		end) > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P5-2 teleport)", function()
+	local function issuesWith(mutate: (any, any) -> ()): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		mutate(config.teleport, config.matchmaking)
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the valid block", function()
+		TestRunner.expect(#issuesWith(function(_tp, _mm) end)):toBe(0)
+	end)
+
+	TestRunner.it("names a missing teleport block instead of erroring on it", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.teleport = nil :: any
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("rejects a match place that is the hub place", function()
+		TestRunner.expect(#issuesWith(function(tp, mm)
+			mm.hubPlaceId = 123
+			tp.matchPlaceId = 123
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects a fractional or zero attempt count", function()
+		TestRunner.expect(#issuesWith(function(tp, _mm)
+			tp.maxAttempts = 2.5
+		end) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith(function(tp, _mm)
+			tp.manifestReadAttempts = 0
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a retry cap below the base", function()
+		TestRunner.expect(#issuesWith(function(tp, _mm)
+			tp.retryCapSeconds = 0.5
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("reports a non-number field once, without comparing it", function()
+		TestRunner.expect(#issuesWith(function(tp, _mm)
+			tp.retryCapSeconds = "8"
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects worst-case travel that outlives the group record", function()
+		-- 4 x (140 + 8) = 592 is still under 600; 4 x (143 + 8) = 604 isn't.
+		TestRunner.expect(#issuesWith(function(tp, _mm)
+			tp.travelWatchdogSeconds = 140
+		end)):toBe(0)
+		TestRunner.expect(#issuesWith(function(tp, _mm)
+			tp.travelWatchdogSeconds = 143
+		end)):toBe(1)
 	end)
 end)

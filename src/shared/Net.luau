@@ -906,7 +906,7 @@ Net.Remotes = {
 
 	-- Server -> client, sent to that player only: their own queue status
 	-- (Idle / Joining / Waiting with position, size and an estimated wait /
-	-- MatchFound / Unavailable, plus a message). Never includes who else
+	-- MatchFound / Travelling (P5-2) / Unavailable, plus a message). Never includes who else
 	-- is queued or anyone's streak (design-decisions.md Q7).
 	QueueState = {
 		name = "QueueState",
