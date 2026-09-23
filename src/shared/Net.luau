@@ -777,6 +777,19 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- P6-5: server -> ONE finalist (fireClient): their own streak before
+	-- and after this finale, so the result screen can name the streak
+	-- that just died. Targeted because it is a streak number (Q7
+	-- condition 1), and fired only AFTER DecisionReveal because "you
+	-- won" plus your own choice is enough to work out the others'.
+	DecisionPersonalResult = {
+		name = "DecisionPersonalResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: RoundService's DebugForceRoundState's own
 	-- pattern, verbatim - no `states` gate (a debug override has to work
 	-- from any phase), the real gate is inside DecisionService's own

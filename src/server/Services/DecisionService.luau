@@ -22,7 +22,9 @@
 -- ever carries a choice. A client cannot dump what was never sent to it.
 --
 --   Intro / Negotiate: the client has received DecisionParticipants (the
---   3 qualifier ids) and DecisionPhaseChanged (phase name + deadline).
+--   3 qualifier ids, plus each one's lifetime steal/share counts for the
+--   P6-5 reputation line - past rounds only, and never a streak) and
+--   DecisionPhaseChanged (phase name + deadline).
 --   No choice exists server-side yet at all (`choices` is empty) - there
 --   is nothing to leak because nothing has been decided.
 --
@@ -41,7 +43,9 @@
 --   outcome. This is the FIRST and ONLY point any choice data ever
 --   reaches a client, and it's deliberate - the reveal IS the point of
 --   the mechanic. Everything before this phase is the boundary that
---   actually matters.
+--   actually matters. Right after it, each human finalist alone gets
+--   DecisionPersonalResult (their own streak before/after, P6-5) -
+--   after, because "you won" plus your own choice implies the others'.
 --
 --   Resolve: nothing new is broadcast; RoundService transitions onward.
 --
@@ -166,6 +170,14 @@ local locked: { [number]: boolean } = {}
 -- for a fraction of a second "we are in Choose" and "the result is
 -- final" are both true. See FinaleRoster.classifyLeave's own comment.
 local outcomeWritten = false
+
+-- P6-5: each human finalist's own before/after streak, captured inside
+-- computeOutcomeAndWriteProfiles and held here until enterReveal has
+-- broadcast DecisionReveal. Sending it any earlier would tell a client
+-- whether it won - and so, with its own choice, what the others picked
+-- - before the reveal packet, which is the one thing this file forbids.
+type PersonalResult = { streakBefore: number, streakAfter: number, won: boolean }
+local personalResults: { [number]: PersonalResult } = {}
 
 local pendingPhaseTimerThread: thread? = nil
 
@@ -345,11 +357,17 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			end
 		end
 
-		ProgressionService.applyRoundResult(player, {
+		local streakBefore = DataService.getStreak(player)
+		local after = ProgressionService.applyRoundResult(player, {
 			roundId = RoundService.getRoundId(),
 			reason = ProgressionService.reasonForOutcome(outcome.branch, won),
 			bounty = bounty,
 		})
+		personalResults[finalist.playerId] = {
+			streakBefore = streakBefore,
+			streakAfter = after.currentStreak,
+			won = won,
+		}
 
 		DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
 		DataService.recordRoundStat(player, "qualifications")
@@ -403,6 +421,16 @@ enterReveal = function(outcome: Outcomes.OutcomeResult)
 		outcome = outcome,
 		revealAt = now() + REVEAL_ANIMATION_LEAD_SECONDS,
 	})
+
+	-- P6-5: strictly AFTER the broadcast above - see personalResults.
+	-- Targeted, never broadcast: a streak number reaching anyone but its
+	-- owner is design-decisions.md Q7 condition 1's leak.
+	for id, result in personalResults do
+		local player = Players:GetPlayerByUserId(id)
+		if player ~= nil then
+			Net.fireClient("DecisionPersonalResult", player, result)
+		end
+	end
 
 	pendingPhaseTimerThread = task.delay(duration, function()
 		pendingPhaseTimerThread = nil
@@ -694,6 +722,7 @@ local function beginDecisionStudio()
 
 	choices = {}
 	locked = {}
+	personalResults = {}
 	outcomeWritten = false
 	currentPhase = nil
 
@@ -749,7 +778,25 @@ local function beginDecisionStudio()
 		end)
 	end
 
-	Net.fireAllClients("DecisionParticipants", { qualifierIds = qualifierIds })
+	-- P6-5 / design-decisions.md Q5: every finalist's lifetime steal/share
+	-- counts, for the Studio's reputation line. Sent here and nowhere else
+	-- (Q5's scope, resolved in P6-5: "Studio room only", never a public
+	-- profile stat). A list, not a map keyed by id - a RemoteEvent turns
+	-- non-sequential number keys into strings. An NPC or an absent
+	-- player sends 0/0, which reads exactly like a first-timer's, so the
+	-- line never becomes an NPC detector.
+	local reputation: { { playerId: number, steals: number, shares: number } } = {}
+	for _, id in qualifierIds do
+		local player = Players:GetPlayerByUserId(id)
+		local stats = if player ~= nil then DataService.getStats(player) else nil
+		table.insert(reputation, {
+			playerId = id,
+			steals = if stats ~= nil then stats.steals else 0,
+			shares = if stats ~= nil then stats.shares else 0,
+		})
+	end
+
+	Net.fireAllClients("DecisionParticipants", { qualifierIds = qualifierIds, reputation = reputation })
 
 	-- "With a clear announcement to the others" (P3-7 case 1's own
 	-- requirement). Fired AFTER DecisionParticipants so a client already

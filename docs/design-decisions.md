@@ -150,6 +150,13 @@ streak-hiding rule in Q7 (steal/share history is not the same signal as
 streak, but should be reviewed under the same "does this let someone target
 a specific player" lens).
 
+**Open detail resolved (P6-5, 2026-09-23): Studio room only.** Reputation
+is sent in `DecisionParticipants`, to the people in the Studio, while it
+runs. It is not a public profile stat, and no hub or leaderboard surface
+shows it. It is lifetime `steals`/`shares` counts from the profile, and
+an NPC sends 0/0, which reads the same as a first-timer. Making it public
+later would need its own review under Q7.
+
 **Reversal cost:** Cheap — additive UI and a counter field; doesn't touch
 resolution logic.
 
@@ -234,6 +241,18 @@ number.
 amending this decision, not just the flag** — condition 1 is load-bearing
 for the harsh reset rule, and Q7 itself says the decision needs revisiting
 if streak-hiding leaks rather than that a leak is acceptable.
+
+### Applied case: the Decision Studio intro (P6-5)
+
+P6-5's task prompt asked for the Studio intro to show each finalist's
+title and current win streak "so players can use it to bluff." Decided
+with the project owner (2026-09-23): **condition 1 holds, and the intro
+shows Q5's steal/share reputation instead.** Reputation is a behavioural
+record, the information a bluffer actually needs. Streak is a stake size,
+which tells everyone who most needs the win. Titles stay suppressed as
+above. A finalist's own streak reaches only that finalist, and only after
+the reveal (`DecisionPersonalResult`, targeted), so the result screen can
+name the streak that just ended. See `docs/decision-studio.md`.
 
 ## 8. Are starting power-ups sold for Robux?
 

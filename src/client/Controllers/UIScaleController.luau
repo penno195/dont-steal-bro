@@ -44,6 +44,8 @@ local HARNESS_ATTRIBUTE = "UILayoutHarness"
 local GALLERY_ATTRIBUTE = "UIComponentGallery"
 -- Same, for the race HUD on scripted fake data (P6-3, docs/race-hud.md).
 local RACE_HUD_ATTRIBUTE = "UIRaceHUDPreview"
+-- Same, for the Decision Studio (P6-5, docs/decision-studio.md).
+local STUDIO_ATTRIBUTE = "UIDecisionStudioPreview"
 
 type Observable<T> = {
 	get: () -> T,
@@ -248,6 +250,7 @@ function UIScaleController:start()
 		[HARNESS_ATTRIBUTE] = screens.LayoutHarness,
 		[GALLERY_ATTRIBUTE] = screens.ComponentGallery,
 		[RACE_HUD_ATTRIBUTE] = screens.RaceHUDPreview,
+		[STUDIO_ATTRIBUTE] = screens.DecisionStudioPreview,
 	}
 	for attribute, module in debugScreens do
 		local unmount: (() -> ())? = nil
