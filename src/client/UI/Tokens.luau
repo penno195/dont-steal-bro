@@ -96,6 +96,13 @@ Tokens.color = table.freeze({
 	inkMuted = "#A9B1C2",
 	inkOnLight = "#12151C",
 	brand = "#8B5CF6",
+	-- Button fills (P6-2). `brand` can't carry a label: it measures 4.23:1
+	-- with white and 4.31:1 with dark ink, under AA either way. `primary`
+	-- is brand darkened just enough to clear AA with white (5.10:1).
+	-- Danger takes dark ink for the same reason (white on it is 3.49:1).
+	primary = "#7C4DEB",
+	onPrimary = "#FFFFFF",
+	onDanger = "#12151C",
 	danger = "#F0524F",
 	warning = "#FFC53D",
 	success = "#3CCB7F",

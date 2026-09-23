@@ -146,10 +146,11 @@ same way.
   the repo sets `ScreenOrientation`. Roblox phones default to landscape. The
   zones and scale handle both, but which one the game ships in is an owner
   decision.
-- **Reduced motion.** `GuiService.ReducedMotionEnabled` exists (in the pinned
-  types) for P6-2's reduced-motion setting to read or combine with.
-- **Icon atlas.** Icon art (the atlas the Steal/Share icon keys point to)
-  belongs to P6-2.
+- **Reduced motion.** *Done in P6-2:* `Components/Env.luau` combines
+  `GuiService.ReducedMotionEnabled` with a player setting.
+- **Icon atlas.** *Partly done in P6-2:* `Components/Icons.luau` is the
+  key registry, but it uses glyph stand-ins because no art exists yet.
+  See `docs/components.md`.
 
 ## Sources
 

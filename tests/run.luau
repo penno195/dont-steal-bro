@@ -35,5 +35,6 @@ require("./TeleportLogic.spec")
 require("./VoteLogic.spec")
 require("./EffectContext.spec")
 require("./Theme.spec")
+require("./ComponentLogic.spec")
 
 TestRunner.run()

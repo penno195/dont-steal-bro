@@ -40,6 +40,8 @@ local Tokens = require(script.Parent.Parent.UI.Tokens)
 -- server) to show the layout harness on every client. Harmless if a
 -- client sets it locally: it only draws debug overlays for that client.
 local HARNESS_ATTRIBUTE = "UILayoutHarness"
+-- Same, for the component gallery (P6-2, docs/components.md).
+local GALLERY_ATTRIBUTE = "UIComponentGallery"
 
 type Observable<T> = {
 	get: () -> T,
@@ -236,21 +238,28 @@ function UIScaleController:init()
 end
 
 function UIScaleController:start()
-	-- Required here, not at the top, so the harness's code isn't loaded
-	-- on a normal client that never shows it.
-	local unmount: (() -> ())? = nil
-	local function sync()
-		local wanted = ReplicatedStorage:GetAttribute(HARNESS_ATTRIBUTE) == true
-		if wanted and unmount == nil then
-			local LayoutHarness = require(script.Parent.Parent.UI.Screens.LayoutHarness) :: any
-			unmount = LayoutHarness.mount(UIScaleController)
-		elseif not wanted and unmount ~= nil then
-			unmount()
-			unmount = nil
+	-- Each debug screen toggles on its own ReplicatedStorage attribute.
+	-- Required on first show, not at the top, so their code isn't loaded
+	-- on a normal client that never shows them.
+	local screens = script.Parent.Parent.UI.Screens
+	local debugScreens: { [string]: ModuleScript } = {
+		[HARNESS_ATTRIBUTE] = screens.LayoutHarness,
+		[GALLERY_ATTRIBUTE] = screens.ComponentGallery,
+	}
+	for attribute, module in debugScreens do
+		local unmount: (() -> ())? = nil
+		local function sync()
+			local wanted = ReplicatedStorage:GetAttribute(attribute) == true
+			if wanted and unmount == nil then
+				unmount = (require(module) :: any).mount(UIScaleController)
+			elseif not wanted and unmount ~= nil then
+				unmount()
+				unmount = nil
+			end
 		end
+		ReplicatedStorage:GetAttributeChangedSignal(attribute):Connect(sync)
+		sync()
 	end
-	ReplicatedStorage:GetAttributeChangedSignal(HARNESS_ATTRIBUTE):Connect(sync)
-	sync()
 end
 
 return UIScaleController

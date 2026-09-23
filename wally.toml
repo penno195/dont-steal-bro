@@ -11,6 +11,13 @@ realm = "shared"
 # instance itself crosses the client/server boundary.
 Signal = "sleitnick/signal@2.0.3"
 
+# Vide — fine-grained reactive UI library (chosen in P6-2 over React-lua,
+# Fusion and plain Instance.new). Its source()/effect() model maps directly
+# onto UIScaleController's observe(fn) -> disconnect surface, and it
+# type-checks cleanly under --!strict. Shared realm only because Wally has
+# no client-only realm; nothing on the server requires it.
+Vide = "centau/vide@0.4.1"
+
 [server-dependencies]
 # ProfileStore — session-locked DataStore wrapper (successor to
 # ProfileService). Server-only realm on purpose: player-data persistence
