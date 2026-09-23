@@ -17,6 +17,7 @@
 -- is still one-handed and saves every screen a second layout.
 --
 -- Close is also gamepad B / Escape, bound while the screen is up.
+-- On a gamepad, focus enters the screen when it opens (UI/Focus.luau).
 
 local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25,6 +26,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
+local Focus = require(script.Parent.Parent.Focus)
 local Layout = require(script.Parent.Parent.Layout)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -170,7 +172,12 @@ function MenuShell.mount(controller: any, props: Props): () -> ()
 		end)
 	end)
 
+	-- Gamepad focus starts on the body's first element. While the body
+	-- is still loading, that's Close, the only selectable thing on screen.
+	local exitFocus = Focus.enter(gui)
+
 	return function()
+		exitFocus()
 		destroy()
 		gui:Destroy()
 	end

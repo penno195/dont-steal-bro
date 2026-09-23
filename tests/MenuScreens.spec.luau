@@ -35,6 +35,22 @@ describe("SettingsLogic.sanitize", function()
 		expect(SettingsLogic.sanitize({ hudScale = 5 }).hudScale):toBe(SettingsLogic.HUD_SCALE_MAX)
 	end)
 
+	it("lets Roblox's text size raise the HUD scale but never lower it", function()
+		expect(SettingsLogic.effectiveHudScale(1, "Medium")):toBe(1)
+		expect(SettingsLogic.effectiveHudScale(1, "Larger")):toBe(SettingsLogic.SYSTEM_TEXT_SCALE.Larger)
+		-- The player's own larger choice wins over a smaller system one.
+		expect(SettingsLogic.effectiveHudScale(1.25, "Large")):toBe(1.25)
+		-- An enum item added after this was written counts as Medium.
+		expect(SettingsLogic.effectiveHudScale(1, "Gigantic")):toBe(1)
+	end)
+
+	it("keeps every system text scale inside the audited HUD bounds", function()
+		for name, scale in SettingsLogic.SYSTEM_TEXT_SCALE do
+			expect(scale >= SettingsLogic.HUD_SCALE_MIN and scale <= SettingsLogic.HUD_SCALE_MAX):toBe(true)
+			expect(SettingsLogic.effectiveHudScale(SettingsLogic.HUD_SCALE_MAX, name)):toBe(SettingsLogic.HUD_SCALE_MAX)
+		end
+	end)
+
 	it("drops unknown keys and wrong types", function()
 		local s: any = SettingsLogic.sanitize({ voiceEnabled = "yes", admin = true })
 		expect(s.voiceEnabled):toBe(true)

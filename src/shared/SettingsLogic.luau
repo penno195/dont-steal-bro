@@ -36,6 +36,31 @@ SettingsLogic.HUD_SCALE_MAX = 1.3
 SettingsLogic.HUD_SCALE_STEP = 0.05
 SettingsLogic.VOLUME_STEP = 0.05
 
+-- TEXT SCALING (P6-8). Roblox's own accessibility setting
+-- (GuiService.PreferredTextSize) raises the HUD scale the same way
+-- Roblox's reduced-motion toggle raises ours: it can only add to the
+-- player's choice, never lower it. It goes through the HUD scale rather
+-- than the type sizes because every label is TextScaled inside a fixed
+-- box - a bigger MaxTextSize does nothing to text that already fills its
+-- box, and a bigger MinTextSize just clips it. Scaling the whole UI
+-- grows the boxes with the text, so nothing overflows. Capped at
+-- HUD_SCALE_MAX, the largest scale every screen was laid out for.
+-- Keyed by Enum.PreferredTextSize names; unknown names (a future
+-- enum item) count as Medium.
+SettingsLogic.SYSTEM_TEXT_SCALE = table.freeze({
+	Medium = 1,
+	Large = 1.1,
+	Larger = 1.2,
+	Largest = 1.3,
+} :: { [string]: number })
+
+-- The multiplier UIScaleController applies: the larger of the player's
+-- HUD size and Roblox's text size, within the HUD scale bounds.
+function SettingsLogic.effectiveHudScale(playerScale: number, systemTextSize: string): number
+	local system = SettingsLogic.SYSTEM_TEXT_SCALE[systemTextSize] or 1
+	return math.clamp(math.max(playerScale, system), SettingsLogic.HUD_SCALE_MIN, SettingsLogic.HUD_SCALE_MAX)
+end
+
 function SettingsLogic.defaults(): PlayerSettings
 	return {
 		reducedMotion = false,

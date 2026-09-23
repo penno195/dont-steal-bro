@@ -69,8 +69,11 @@ local function CountdownRing(props: Props): Frame
 	end)
 	-- A beat on each whole second while critical. Suppressed under
 	-- reduced motion, where colour and the "!" suffix carry it instead.
+	-- That has to be an explicit check: Env.animate only drops the
+	-- spring, so a target that alternates would still jump 8% every
+	-- second - a hard flicker, worse than the smooth beat (P6-8).
 	local pulse = Env.animate(function(): number
-		if urgency() ~= "critical" then
+		if urgency() ~= "critical" or Env.reducedMotion() then
 			return 1
 		end
 		return if math.ceil(props.secondsLeft()) % 2 == 0 then 1.08 else 1

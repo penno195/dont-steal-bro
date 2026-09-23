@@ -53,6 +53,23 @@ end
 -- to the icon.
 Env.colorBlindMode = vide.source(false)
 
+-- For code outside any Vide scope (plain-Instance controllers such as
+-- NametagController): calls `fn` with `read()` now and again whenever it
+-- changes. Returns the disconnect.
+function Env.observe<T>(read: () -> T, fn: (T) -> ()): () -> ()
+	local destroy = vide.root(function()
+		vide.effect(function()
+			local value = read()
+			-- Untracked, so a source `fn` happens to read doesn't also
+			-- re-run it.
+			vide.untrack(function()
+				fn(value)
+			end)
+		end)
+	end)
+	return destroy
+end
+
 -- Seconds for a motion token (Theme.motion.fast/base/slow), 0 under
 -- reduced motion. Reads a source, so call it inside a derive/effect to
 -- track changes.

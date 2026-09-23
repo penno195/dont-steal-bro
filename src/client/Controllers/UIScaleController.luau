@@ -33,6 +33,7 @@ local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
+local SettingsLogic = require(ReplicatedStorage.Shared.SettingsLogic)
 local Layout = require(script.Parent.Parent.UI.Layout)
 local Tokens = require(script.Parent.Parent.UI.Tokens)
 
@@ -101,6 +102,13 @@ local inputValue = observable(UserInputService.PreferredInput)
 -- caller that skipped the sanitiser can't shrink them either.
 local userMultiplier = 1
 
+-- Roblox's own text-size setting (GuiService.PreferredTextSize). It can
+-- raise the multiplier but never lower it (P6-8). See
+-- SettingsLogic.SYSTEM_TEXT_SCALE for why text scales through here.
+local function systemTextSize(): string
+	return GuiService.PreferredTextSize.Name
+end
+
 -- The usable rect in absolute screen pixels. GetInsetArea gives the
 -- CoreUISafeInsets region directly - the same one a ScreenGui with
 -- ScreenInsets = CoreUISafeInsets lays out in. Falls back to the
@@ -127,7 +135,8 @@ local function recompute()
 	if not sameRect(rect, rectValue.get()) then
 		rectValue.set(rect)
 	end
-	scaleValue.set(Layout.computeScale(rect.width, rect.height, Tokens.scale) * userMultiplier)
+	local multiplier = SettingsLogic.effectiveHudScale(userMultiplier, systemTextSize())
+	scaleValue.set(Layout.computeScale(rect.width, rect.height, Tokens.scale) * multiplier)
 end
 
 local UIScaleController: Loader.Controller = {
@@ -251,6 +260,7 @@ function UIScaleController:init()
 	-- resizing, or the OS reporting new safe-zone offsets on rotation.
 	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(recompute)
 	GuiService.SafeZoneOffsetsChanged:Connect(recompute)
+	GuiService:GetPropertyChangedSignal("PreferredTextSize"):Connect(recompute)
 
 	UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(function()
 		inputValue.set(UserInputService.PreferredInput)

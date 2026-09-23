@@ -40,6 +40,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 
 local Base = require(script.Parent.Components.Base)
 local Env = require(script.Parent.Components.Env)
+local Focus = require(script.Parent.Focus)
 local IconButton = require(script.Parent.Components.IconButton)
 local Icons = require(script.Parent.Components.Icons)
 local InputLock = require(script.Parent.InputLock)
@@ -142,18 +143,6 @@ local function audit(taskId: string, screen: ScreenGui, root: GuiObject)
 			end
 		end
 	end
-end
-
-local function firstSelectable(root: Instance): GuiObject?
-	local best: GuiObject? = nil
-	for _, d in root:GetDescendants() do
-		if d:IsA("GuiObject") and d.Selectable and d.Visible then
-			if best == nil or d.SelectionOrder < best.SelectionOrder then
-				best = d
-			end
-		end
-	end
-	return best
 end
 
 local function open(spec: Spec, stationId: string, challenge: any, session: TaskViewTypes.Session): Attempt
@@ -437,7 +426,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			return
 		end
 		if UIScaleController.getInputMode() == Enum.PreferredInput.Gamepad then
-			GuiService.SelectedObject = firstSelectable(areaOut)
+			GuiService.SelectedObject = Focus.firstSelectable(areaOut)
 		end
 		if RunService:IsStudio() then
 			-- Two frames: one for layout, one for the enter UIScale to settle.

@@ -211,9 +211,32 @@ local function placementCard(standing: () -> HudLogic.Standing?): Frame
 				Padding = UDim.new(0, Theme.spacing.xxs),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
-			iconFor(function()
-				return LINE_STYLE[line()].icon
-			end, LINE_ICONS, 16, lineColor),
+			-- Colour-blind mode swaps the icon for a word (P6-8): the icon's
+			-- shape is enough to tell the states apart, but a word needs
+			-- no learning.
+			switch(function(): string
+				return if Env.colorBlindMode() then "word" else LINE_STYLE[line()].icon
+			end)((function()
+				local map: { [string]: () -> Instance } = {
+					word = function()
+						return Base.text("label", {
+							Name = "LineWord",
+							LayoutOrder = 1,
+							Size = UDim2.fromOffset(40, 20),
+							TextColor3 = lineColor,
+							Text = function()
+								return HudLogic.lineWord(line())
+							end,
+						})
+					end,
+				}
+				for _, k in LINE_ICONS do
+					map[k] = function()
+						return Icons.view(k, 16, lineColor)
+					end
+				end
+				return map
+			end)()),
 			Base.text("label", {
 				Name = "Gap",
 				LayoutOrder = 2,

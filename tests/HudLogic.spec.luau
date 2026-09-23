@@ -85,6 +85,17 @@ describe("HudLogic labels", function()
 		expect(state({ 5, 4, 3, 2, 1, 0 }, 4)):toBe("out")
 		expect(HudLogic.lineState(nil)):toBe("none")
 	end)
+
+	it("gives every line state a distinct colour-blind word", function()
+		local seen: { [string]: boolean } = {}
+		for _, s in { "safe", "edge", "out" } :: { HudLogic.LineState } do
+			local word = HudLogic.lineWord(s)
+			expect(#word > 0):toBe(true)
+			expect(seen[word]):toBe(nil)
+			seen[word] = true
+		end
+		expect(HudLogic.lineWord("none")):toBe("")
+	end)
 end)
 
 describe("HudLogic time", function()

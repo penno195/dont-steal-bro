@@ -38,3 +38,10 @@ Use the LayoutHarness viewports, or a real phone.
       still visible.
 - [ ] **Longest realistic list:** scroll it on a low-end Android phone
       with no dropped frames.
+- [ ] **Reduced motion:** any repeating or alternating animation checks
+      `Env.reducedMotion()` itself (`Env.animate` alone makes an
+      alternating target *snap*, which is worse). See `accessibility.md`.
+- [ ] **Colour:** every state shown by colour also differs in shape,
+      icon, word or stroke weight.
+- [ ] **Gamepad:** the screen calls `Focus.enter` (or mounts through
+      `MenuShell`), so the D-pad works the moment it opens.

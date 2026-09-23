@@ -125,6 +125,16 @@ function HudLogic.lineState(standing: Standing?): LineState
 	return "safe"
 end
 
+-- Colour-blind mode's word for each line state (P6-8), shown in place
+-- of the icon. Short enough to sit beside the gap in the placement pill.
+-- Takes a plain string because a Vide derive widens the LineState
+-- literals to string.
+local LINE_WORD: { [string]: string } = { safe = "IN", edge = "EDGE", out = "OUT", none = "" }
+
+function HudLogic.lineWord(state: string): string
+	return LINE_WORD[state] or ""
+end
+
 -- TASKS ----------------------------------------------------------------
 
 -- Takes any rows with a `completed` field (the HUD's task rows carry a

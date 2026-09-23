@@ -55,6 +55,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local Env = require(script.Parent.Parent.UI.Components.Env)
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -104,7 +105,10 @@ local function applyEffect(label: TextLabel, effect: string?)
 		return
 	end
 
-	if effect == "Glow" then
+	-- Reduced motion (P6-8): the two looping effects fall back to the
+	-- static glow, so the tag still reads as special without blinking
+	-- or cycling colour on every screen it's visible on.
+	if effect == "Glow" or Env.reducedMotion() then
 		-- Static, no tween at all: a brighter stroke reads as a glow at
 		-- nametag size and costs nothing to animate, because it doesn't.
 		label.TextStrokeTransparency = 0.2
@@ -314,6 +318,12 @@ function NametagController:init()
 		-- the unlock moment observable in Studio until there is one,
 		-- rather than the event silently going nowhere.
 		print(string.format("Title unlocked: %s (streak %d)", payload.title.displayName, payload.minStreak))
+	end)
+
+	-- Rebuilt when reduced motion flips, so Pulse and Rainbow tags stop
+	-- (or start) straight away rather than at the next respawn.
+	Env.observe(Env.reducedMotion, function()
+		refreshAllNametags()
 	end)
 
 	-- Re-applied on respawn: a fresh character has no nametag, and

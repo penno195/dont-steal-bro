@@ -29,19 +29,31 @@ local TweenService = game:GetService("TweenService")
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Maps = require(ReplicatedStorage.Shared.Config.Maps)
+local Env = require(script.Parent.Parent.UI.Components.Env)
+local Focus = require(script.Parent.Parent.UI.Focus)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local UIScaleController = require(script.Parent.UIScaleController)
 
+-- Theme colours (P6-8, mobile-audit #8), so the board follows the
+-- palette tests/Theme.spec.luau checks. Colour is never the only cue:
+-- each highlight also has its own stroke weight and a tag with a symbol
+-- and a word (HIGHLIGHT below).
 local COLORS = {
-	dim = Color3.fromRGB(0, 0, 0),
-	sheet = Color3.fromRGB(28, 30, 38),
-	card = Color3.fromRGB(44, 47, 58),
-	text = Color3.fromRGB(240, 240, 245),
-	muted = Color3.fromRGB(165, 168, 180),
-	mine = Color3.fromRGB(80, 170, 255), -- the card you voted for
-	winner = Color3.fromRGB(255, 200, 60),
-	tie = Color3.fromRGB(190, 110, 255), -- the random tie-break, never gold
-	warning = Color3.fromRGB(255, 120, 90),
+	dim = Theme.color.scrim,
+	sheet = Theme.color.surface,
+	card = Theme.color.surfaceRaised,
+	text = Theme.color.ink,
+	muted = Theme.color.inkMuted,
+	warning = Theme.color.warning,
+}
+
+type Highlight = { color: Color3, thickness: number, tag: string }
+local HIGHLIGHT: { [string]: Highlight } = {
+	mine = { color = Theme.color.ink, thickness = 2, tag = "✓ Your vote" },
+	-- The random tie-break is never gold, and never the winner's weight.
+	tie = { color = Theme.color.brand, thickness = 3, tag = "Tied" },
+	random = { color = Theme.color.brand, thickness = 5, tag = "🎲 Random pick" },
+	winner = { color = Theme.color.warning, thickness = 5, tag = "★ WINNER" },
 }
 
 local CARD_HEIGHT = 88
@@ -66,6 +78,7 @@ type Board = {
 	cards: { [string]: Card },
 	order: { string },
 	revealed: boolean,
+	exitFocus: () -> (),
 }
 
 local board: Board? = nil
@@ -128,6 +141,7 @@ local function buildCard(list: ScrollingFrame, mapId: string, index: number): Ca
 	local button = Instance.new("TextButton")
 	button.Name = mapId
 	button.LayoutOrder = index
+	button.SelectionOrder = index
 	button.Size = UDim2.new(1, 0, 0, CARD_HEIGHT)
 	button.BackgroundColor3 = COLORS.card
 	button.AutoButtonColor = true
@@ -276,14 +290,22 @@ local function buildBoard(state: any): Board
 		cards = cards,
 		order = order,
 		revealed = false,
+		-- Gamepad: focus starts on the first card (SelectionOrder = index).
+		exitFocus = Focus.enter(gui),
 	}
 end
 
-local function setHighlight(card: Card, color: Color3?)
-	card.stroke.Transparency = if color then 0 else 1
-	if color then
-		card.stroke.Color = color
+local function setHighlight(card: Card, highlight: Highlight?)
+	card.stroke.Transparency = if highlight then 0 else 1
+	if highlight then
+		card.stroke.Color = highlight.color
+		card.stroke.Thickness = highlight.thickness
 	end
+end
+
+local function setTag(card: Card, highlight: Highlight?)
+	card.tag.Text = if highlight then highlight.tag else ""
+	card.tag.TextColor3 = if highlight then highlight.color else COLORS.muted
 end
 
 local function renderVotes(current: Board, state: any)
@@ -310,8 +332,9 @@ local function renderVotes(current: Board, state: any)
 			avatar.Parent = card.avatars
 		end
 		if not current.revealed then
-			setHighlight(card, if state.myVote == entry.mapId then COLORS.mine else nil)
-			card.tag.Text = if state.myVote == entry.mapId then "Your vote" else ""
+			local mine = if state.myVote == entry.mapId then HIGHLIGHT.mine else nil
+			setHighlight(card, mine)
+			setTag(card, mine)
 		end
 	end
 end
@@ -319,7 +342,15 @@ end
 -- Cycles a highlight over the tied cards only, slowing down, and
 -- lands on the winner the server already chose. About 2s, inside the
 -- server's revealSeconds.
+--
+-- Skipped under reduced motion (P6-8): at its fastest it switches cards
+-- 20 times a second, which is flashing. Nothing is lost, because the
+-- banner and the "Tied" tags already say the pick was random among the
+-- tied maps. The roulette only dramatises that.
 local function playTieRoulette(current: Board, tied: { string }, winner: string)
+	if Env.reducedMotion() then
+		return
+	end
 	local steps = 12
 	local winnerIndex = table.find(tied, winner) or 1
 	-- Start so the last step lands exactly on the winner.
@@ -330,7 +361,7 @@ local function playTieRoulette(current: Board, tied: { string }, winner: string)
 		end
 		local mapId = tied[((startIndex - 1 + step) % #tied) + 1]
 		for _, id in tied do
-			setHighlight(current.cards[id], if id == mapId then COLORS.tie else nil)
+			setHighlight(current.cards[id], if id == mapId then HIGHLIGHT.tie else nil)
 		end
 		task.wait(0.05 + step * 0.02)
 	end
@@ -341,7 +372,7 @@ local function reveal(current: Board, state: any)
 	current.timer.Text = ""
 	for _, card in current.cards do
 		card.button.AutoButtonColor = false
-		card.tag.Text = ""
+		setTag(card, nil)
 		setHighlight(card, nil)
 	end
 
@@ -352,16 +383,20 @@ local function reveal(current: Board, state: any)
 	if state.fallback then
 		current.title.Text = "Heading to " .. name
 		current.banner.TextColor3 = COLORS.warning
-		current.banner.Text = "We couldn't count the votes this time, so the map was picked for you."
+		current.banner.Text = "⚠ We couldn't count the votes this time, so the map was picked for you."
 	elseif state.randomTieBreak then
 		current.title.Text = "It's a tie!"
-		current.banner.TextColor3 = COLORS.tie
+		current.banner.TextColor3 = HIGHLIGHT.tie.color
 		current.banner.Text = "🎲 TIE - PICKED AT RANDOM between the tied maps"
 		for _, id in state.tied do
 			local card = current.cards[id]
 			if card then
-				card.tag.Text = "Tied"
-				card.tag.TextColor3 = COLORS.tie
+				setTag(card, HIGHLIGHT.tie)
+				-- Under reduced motion there's no roulette, so the tied
+				-- cards hold a static highlight instead.
+				if Env.reducedMotion() then
+					setHighlight(card, HIGHLIGHT.tie)
+				end
 			end
 		end
 		playTieRoulette(current, state.tied, state.winner)
@@ -373,17 +408,22 @@ local function reveal(current: Board, state: any)
 	if board ~= current or winnerCard == nil then
 		return
 	end
-	local finalColor = if state.randomTieBreak then COLORS.tie else COLORS.winner
-	setHighlight(winnerCard, finalColor)
-	winnerCard.tag.Text = if state.randomTieBreak then "🎲 Random pick" else "WINNER"
-	winnerCard.tag.TextColor3 = finalColor
-	TweenService:Create(winnerCard.button, TweenInfo.new(0.25, Enum.EasingStyle.Back), {
-		BackgroundColor3 = finalColor:Lerp(COLORS.card, 0.7),
-	}):Play()
+	local final = if state.randomTieBreak then HIGHLIGHT.random else HIGHLIGHT.winner
+	setHighlight(winnerCard, final)
+	setTag(winnerCard, final)
+	local tint = final.color:Lerp(COLORS.card, 0.7)
+	if Env.reducedMotion() then
+		winnerCard.button.BackgroundColor3 = tint
+	else
+		TweenService:Create(winnerCard.button, TweenInfo.new(0.25, Enum.EasingStyle.Back), {
+			BackgroundColor3 = tint,
+		}):Play()
+	end
 end
 
 local function close()
 	if board ~= nil then
+		board.exitFocus()
 		board.gui:Destroy()
 		board.dimGui:Destroy()
 		board = nil

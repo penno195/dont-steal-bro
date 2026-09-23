@@ -263,7 +263,7 @@ local function body(store: Store, height: () -> number): { Instance }
 			toggleRow("Colour-blind mode", flag("colorBlindMode"), flip("colorBlindMode"), 7),
 			hint("Adds labels wherever colour shows a state.", 8),
 			stepperRow(
-				"HUD size",
+				"Text and HUD size",
 				number("hudScale"),
 				percent,
 				SettingsLogic.HUD_SCALE_MIN,
@@ -272,9 +272,10 @@ local function body(store: Store, height: () -> number): { Instance }
 				set("hudScale"),
 				9
 			),
+			hint("Roblox's own text size setting also makes this bigger.", 10),
 			create("Frame")({
 				Name = "ResetSlot",
-				LayoutOrder = 10,
+				LayoutOrder = 11,
 				Size = UDim2.fromOffset(MenuShell.INNER, Theme.touch.primaryHeight + Theme.spacing.lg),
 				BackgroundTransparency = 1,
 				C.Button({
