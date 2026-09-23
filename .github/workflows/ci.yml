@@ -26,10 +26,10 @@ jobs:
         run: wally install
 
       - name: Lint (Selene)
-        run: selene src
+        run: selene src plugin
 
       - name: Format check (StyLua)
-        run: stylua --check src
+        run: stylua --check src plugin
 
       # luau-lsp's own `analyze` subcommand, not the standalone
       # `luau-analyze-rojo` tool build-plan.html's prompt originally
@@ -50,6 +50,14 @@ jobs:
 
       - name: Type check (luau-lsp analyze)
         run: luau-lsp analyze --sourcemap=sourcemap.json --definitions=globalTypes.d.luau src
+
+      # The map validator (P7-1) ships as a Studio plugin, not inside the
+      # place, so it's its own Rojo project and needs its own sourcemap
+      # for `script.Parent.MapCheck` to resolve.
+      - name: Type check map validator plugin (luau-lsp analyze)
+        run: |
+          rojo sourcemap plugin.project.json -o plugin-sourcemap.json
+          luau-lsp analyze --sourcemap=plugin-sourcemap.json --definitions=globalTypes.d.luau plugin
 
       # Pure-logic tests only (Outcomes, pricing, ranking, tie-breaks,
       # streak maths - Ground Rule 4). Roblox-API-touching code is tested

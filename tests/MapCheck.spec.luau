@@ -358,6 +358,27 @@ describe("MapCheck reachability", function()
 		ctx.unreachableIds = { f:find("Station3").id }
 		expectRule(run(f, ctx), "unreachable", "error")
 	end)
+
+	it("probes every spawn against every station and power-up pad", function()
+		local starts, targets = MapCheck.reachabilityProbes(validMap():snapshot())
+		expect(#starts):toBe(6)
+		expect(#targets):toBe(12 + 8)
+	end)
+
+	it("probes a trigger at its centre and a solid pad above its top face", function()
+		local f = newFixture()
+		local trigger = f:part("Trigger", v(0, 2, 0), v(4, 4, 4))
+		local pad = f:part("Pad", v(0, 1, 0), v(4, 2, 4), { collide = true })
+		local tilted = f:part("Tilted", v(0, 1, 0), v(2, 6, 2), { collide = true })
+		-- Laid on its side: its 6-stud axis now points along world X,
+		-- so its world-Y half-extent is 1, not 3.
+		local b = tilted.box :: MapCheck.Box
+		b.right, b.up = v(0, -1, 0), v(1, 0, 0)
+
+		expect((MapCheck.probePoint(trigger) :: Vec3).y):toBeCloseTo(2)
+		expect((MapCheck.probePoint(pad) :: Vec3).y):toBeCloseTo(1 + 1 + 3)
+		expect((MapCheck.probePoint(tilted) :: Vec3).y):toBeCloseTo(1 + 1 + 3)
+	end)
 end)
 
 describe("MapCheck navigation", function()

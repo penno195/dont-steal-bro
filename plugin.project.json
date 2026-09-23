@@ -1,0 +1,6 @@
+{
+	"name": "MapValidator",
+	"tree": {
+		"$path": "plugin/MapValidator"
+	}
+}

@@ -927,6 +927,63 @@ local function checkReachability(c: Collector, snapshot: MapSnapshot, ctx: Conte
 	end
 end
 
+-- ----- Reachability probes (for the plugin) ----------------------------------
+--
+-- The plugin owns the PathfindingService calls, but which points it
+-- paths between is geometry, so it lives here where the spec can pin it.
+
+-- The same agent NPCService:computePath uses. A path this agent can't
+-- walk is a station an NPC can't reach either, and R15 players are
+-- no bigger.
+MapCheck.PATH_AGENT = table.freeze({ AgentRadius = 2, AgentHeight = 5, AgentCanJump = true })
+
+-- A standing character's root sits about this far above its feet.
+local PROBE_HEIGHT = 3
+
+export type Probe = { id: number, point: Vec3 }
+
+-- Where a character would stand to use a part. A collidable part (a
+-- pad, a console) is stood on or next to, so the probe goes above its
+-- top face - pathing to its centre would fail as FailFinishNotEmpty.
+-- A non-collidable one (a trigger volume, a marker) is walked into, so
+-- the probe is its centre, which is also what NPCService paths to.
+-- World-Y half-extent rather than size.y/2, so a rotated part's top is
+-- still found.
+function MapCheck.probePoint(node: Node): Vec3?
+	local b = node.box
+	if b == nil then
+		return nil
+	end
+	if not node.canCollide then
+		return b.center
+	end
+	local halfY = (math.abs(b.right.y) * b.size.x + math.abs(b.up.y) * b.size.y + math.abs(b.back.y) * b.size.z) / 2
+	return { x = b.center.x, y = b.center.y + halfY + PROBE_HEIGHT, z = b.center.z }
+end
+
+-- Every SpawnPoint as a start; every TaskStation and PowerUpSpawn as a
+-- target. The plugin paths every start to every target, and a target
+-- any start misses goes into Context.unreachableIds.
+function MapCheck.reachabilityProbes(snapshot: MapSnapshot): ({ Probe }, { Probe })
+	local starts: { Probe } = {}
+	local targets: { Probe } = {}
+	for _, node in snapshot.nodes do
+		if not node.isA.BasePart then
+			continue
+		end
+		local point = MapCheck.probePoint(node)
+		if point == nil then
+			continue
+		end
+		if hasTag(node, "SpawnPoint") then
+			table.insert(starts, { id = node.id, point = point })
+		elseif hasTag(node, "TaskStation") or hasTag(node, "PowerUpSpawn") then
+			table.insert(targets, { id = node.id, point = point })
+		end
+	end
+	return starts, targets
+end
+
 -- ----- Bounds ----------------------------------------------------------------
 
 local function isVolume(node: Node): boolean
