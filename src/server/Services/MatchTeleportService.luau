@@ -106,9 +106,11 @@ local function matchmaking(): any
 	return Loader.get("MatchmakingService")
 end
 
--- P5-3 replaces this with the vote. Until then: uniform over enabled
--- maps, or nil when none is registered yet (the match server then
--- falls back the same way).
+-- The destination's map, used only when there is no vote: a ballot
+-- needs at least two enabled maps (VoteLogic.drawBallot), and when one
+-- is drawn its provisional map overrides this one in the record.
+-- Uniform over enabled maps, or nil when none is registered yet (the
+-- match server then falls back the same way).
 local function pickMap(): string?
 	local ids = enabledMapIds()
 	if #ids == 0 then
@@ -213,10 +215,16 @@ local function onGroupDeparted(players: { Player }, group: GroupRecord)
 		return
 	end
 
+	-- P5-3: the group votes on its map first. This yields until the vote
+	-- locks (or gives up on the provisional map) and the winner has been
+	-- revealed. The winner is already in the group record by then, which
+	-- is what the match server actually loads.
+	local mapId = (Loader.get("VoteService") :: any).runVote(players, group) :: string?
+
 	local options = Instance.new("TeleportOptions")
 	options.ReservedServerAccessCode = group.accessCode :: string
 	-- A cosmetic hint, never trusted on arrival - see TeleportLogic's header.
-	options:SetTeleportData(TeleportLogic.buildHint(group.groupId, group.mapId, group.npcSlots) :: any)
+	options:SetTeleportData(TeleportLogic.buildHint(group.groupId, mapId, group.npcSlots) :: any)
 
 	local Telemetry = Loader.get("Telemetry") :: any
 	local going: { Player } = {}

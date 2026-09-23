@@ -915,6 +915,33 @@ Net.Remotes = {
 		rateLimit = nil,
 		states = nil,
 	} :: RemoteDef,
+
+	-- P5-3's map vote. The client names only a map id. Which group,
+	-- which ballot and whose vote it is all come from the server's own
+	-- record of the sender (VoteService), so a vote for another group,
+	-- another player or an off-ballot map has nothing to attach to. The
+	-- bucket allows changing your mind a few times without letting a
+	-- client hammer MemoryStore with compare-and-sets.
+	MapVoteIntent = {
+		name = "MapVoteIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ mapId = Net.string({ minLength = 1, maxLength = 64 }) }),
+		rateLimit = { capacity = 4, refillPerSecond = 1 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client, sent to one group member at a time: the board
+	-- (VoteLogic.BoardState - map ids, counts, voter userIds from their
+	-- own group, seconds left, their own vote, and once locked the winner
+	-- and whether a tie was broken at random), or `{ closed = true }` to
+	-- take the board down. Never the access code, never a streak.
+	MapVoteState = {
+		name = "MapVoteState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
 } :: { [string]: RemoteDef }
 
 -- ===== Roblox-touching helpers (never called under Lune tests) ======

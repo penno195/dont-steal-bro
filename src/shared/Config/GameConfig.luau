@@ -291,6 +291,24 @@ local GameConfig: Validate.GameConfig = {
 		manifestReadAttempts = 4, -- match server's reads of its own group record
 	},
 
+	-- P5-3: the map vote a formed group holds on the hub before it
+	-- travels. docs/voting.md explains each number.
+	vote = {
+		ballotSize = 4, -- P5-3: "3 to 4 ... never all 11"
+		voteSeconds = 15, -- PLACEHOLDER: locks early once every member has voted
+		revealSeconds = 3, -- PLACEHOLDER: the winner (or the tie roulette) on screen before travel
+		pollSeconds = 1, -- each owner server's read of the group record while voting
+		-- PLACEHOLDER: how long past the deadline an owner keeps trying to
+		-- lock or read the result before travelling on the former's
+		-- provisional map (a MemoryStore outage).
+		lockGraceSeconds = 5,
+		recentMapName = "RecentMaps_v1",
+		recentMapsCap = 3, -- rounds of history per player
+		recentMapsTtlSeconds = 21600, -- PLACEHOLDER: 6h; "recent" means this session, roughly
+		recentFloorWeight = 0.2, -- PLACEHOLDER: a map everyone just played is drawn 1/5 as often
+		recentDecay = 0.5, -- PLACEHOLDER: two rounds ago counts half as much as last round
+	},
+
 	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which
 	-- forbids any in-round tell of a player's streak and names
 	-- "nameplate" specifically - a title maps to a bestStreak threshold,

@@ -106,14 +106,17 @@ local function sendState(player: Player, payload: { [string]: any })
 end
 
 local function defaultDepartureHandler(players: { Player }, group: GroupRecord)
-	-- Until P5-2 lands there is nowhere to send anyone. Say so honestly
-	-- and put the player back at Idle rather than on a loading screen.
+	-- Studio, or a place with teleporting unset: there is nowhere to send
+	-- anyone. Still hold P5-3's vote, so it can be tested here, then say
+	-- so honestly rather than leave anyone on a loading screen.
+	local mapId = (Loader.get("VoteService") :: any).runVote(players, group)
 	warn(
 		string.format(
-			"MatchmakingService: group %s formed (%d humans, %d NPC slots) but no departure handler is set",
+			"MatchmakingService: group %s formed (%d humans, %d NPC slots, map %s) but no departure handler is set",
 			group.groupId,
 			#group.members,
-			group.npcSlots
+			group.npcSlots,
+			tostring(mapId)
 		)
 	)
 	for _, player in players do
@@ -269,6 +272,11 @@ local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
 		end
 	end
 	local groupId = if destination then destination.groupId else HttpService:GenerateGUID(false)
+	-- P5-3: the ballot goes into the record at commit, weighted by the
+	-- members' recent maps, which their entries already carry. Drawn
+	-- here rather than by the destination provider so the vote also
+	-- runs in Studio, where nothing is reserved.
+	local ballot = (Loader.get("VoteService") :: any).drawBallot(group.members) :: MatchmakingLogic.Ballot
 	local started = os.clock()
 	local attempted: { number } = {}
 
@@ -288,7 +296,7 @@ local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
 	-- committing claims the owners may already be reverting.
 	if allClaimed and os.clock() - started < config.claimCommitDeadlineSeconds then
 		local record =
-			MatchmakingLogic.newGroupRecord(groupId, group.members, group.npcSlots, now(), myJobId, destination)
+			MatchmakingLogic.newGroupRecord(groupId, group.members, group.npcSlots, now(), myJobId, destination, ballot)
 		-- THE COMMIT POINT. One write to one fresh key: the group exists
 		-- or it doesn't.
 		local ok = pcall(function()
@@ -456,7 +464,10 @@ local function writeFreshEntry(player: Player, ticket: Ticket): boolean
 		myJobId,
 		ticket.enqueuedAt,
 		DataService.getStreak(player),
-		fetchRecent(player.UserId)
+		fetchRecent(player.UserId),
+		-- P5-3: best-effort, like the avoid list. A failed read only
+		-- means this player's history doesn't weight the ballot.
+		(Loader.get("VoteService") :: any).fetchRecentMaps(player.UserId)
 	)
 	local ok = casEntry(player.UserId, function(current: Entry?): Entry?
 		return MatchmakingLogic.join(current, fresh)

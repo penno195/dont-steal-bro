@@ -327,6 +327,20 @@ export type TeleportConfig = {
 	manifestReadAttempts: number,
 }
 
+-- P5-3: the hub map vote. See docs/voting.md.
+export type VoteConfig = {
+	ballotSize: number,
+	voteSeconds: number,
+	revealSeconds: number,
+	pollSeconds: number,
+	lockGraceSeconds: number,
+	recentMapName: string,
+	recentMapsCap: number,
+	recentMapsTtlSeconds: number,
+	recentFloorWeight: number,
+	recentDecay: number,
+}
+
 -- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
 -- Studio phase timers are locked exactly by architecture.md §6's network
 -- trace (Intro +5s, Negotiate +45s, Choose +15s, Reveal +1s). Bounty
@@ -434,6 +448,9 @@ export type GameConfig = {
 
 	-- P5-2: hub-to-match teleport. See TeleportConfig above.
 	teleport: TeleportConfig,
+
+	-- P5-3: the hub map vote. See VoteConfig above.
+	vote: VoteConfig,
 
 	-- P4-7: analytics batching. See TelemetryConfig above.
 	telemetry: TelemetryConfig,
@@ -1632,6 +1649,87 @@ local function checkTeleportConfig(tp: TeleportConfig, mm: MatchmakingConfig?, i
 	end
 end
 
+-- P5-3. Like teleport's, these protect liveness and the ballot's shape;
+-- nothing here can let a player vote twice or change a locked result
+-- (that rests on VoteLogic's compare-and-set transforms).
+local function checkVoteConfig(vc: VoteConfig, mm: MatchmakingConfig?, tp: TeleportConfig?, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "vote." .. field, message)
+	end
+
+	if vc == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "vote", "the vote config block is missing entirely")
+		return
+	end
+	local issuesBefore = #issues
+
+	if type(vc.ballotSize) ~= "number" or vc.ballotSize < 3 or vc.ballotSize > 4 or vc.ballotSize % 1 ~= 0 then
+		bad("ballotSize", "must be 3 or 4 - more is miserable to choose from on a phone (P5-3)")
+	end
+	if
+		type(vc.recentMapsCap) ~= "number"
+		or vc.recentMapsCap < 1
+		or vc.recentMapsCap > 10
+		or vc.recentMapsCap % 1 ~= 0
+	then
+		bad("recentMapsCap", "must be a whole number from 1 to 10")
+	end
+	for _, field in { "voteSeconds", "revealSeconds", "pollSeconds", "lockGraceSeconds" } do
+		local value = (vc :: any)[field]
+		if type(value) ~= "number" or value <= 0 then
+			bad(field, "must be positive")
+		end
+	end
+	if
+		type(vc.recentMapsTtlSeconds) ~= "number"
+		or vc.recentMapsTtlSeconds < 1
+		or vc.recentMapsTtlSeconds > MEMORYSTORE_MAX_EXPIRATION_SECONDS
+	then
+		bad("recentMapsTtlSeconds", "must be from 1 to the MemoryStore expiration limit")
+	end
+	if type(vc.recentFloorWeight) ~= "number" or vc.recentFloorWeight <= 0 or vc.recentFloorWeight > 1 then
+		bad("recentFloorWeight", "must be above 0 (0 would ban a recent map outright) and at most 1")
+	end
+	if type(vc.recentDecay) ~= "number" or vc.recentDecay < 0 or vc.recentDecay > 1 then
+		bad("recentDecay", "must be from 0 to 1")
+	end
+	if type(vc.recentMapName) ~= "string" or vc.recentMapName == "" then
+		bad("recentMapName", "must be a non-empty MemoryStore name")
+	elseif mm ~= nil then
+		for _, other in { mm.queueMapName, mm.groupMapName, mm.recentMapName, mm.metaMapName } do
+			if vc.recentMapName == other then
+				bad("recentMapName", "must not share a name with a matchmaking MemoryStore structure")
+			end
+		end
+	end
+	if #issues > issuesBefore then
+		return -- the orderings below would compare garbage
+	end
+
+	if vc.pollSeconds >= vc.voteSeconds then
+		bad("pollSeconds", "must be under voteSeconds, or players never see a live count")
+	end
+
+	-- The group record carries the vote AND is the match server's
+	-- manifest, read when the first player arrives. It must outlast the
+	-- whole vote plus the slowest possible travel.
+	if mm ~= nil and tp ~= nil then
+		local worst = vc.voteSeconds
+			+ vc.lockGraceSeconds
+			+ vc.revealSeconds
+			+ tp.maxAttempts * (tp.travelWatchdogSeconds + tp.retryCapSeconds)
+		if mm.groupRecordTtlSeconds <= worst then
+			bad(
+				"voteSeconds",
+				string.format(
+					"voteSeconds + lockGraceSeconds + revealSeconds + the worst teleport retry chain = %ds must be under matchmaking.groupRecordTtlSeconds, or the match server can boot after its group record expired",
+					worst
+				)
+			)
+		end
+	end
+end
+
 function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	if config.playerCount <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "playerCount", "must be positive")
@@ -1729,6 +1827,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkStoreConfig(config.store, issues)
 	checkMatchmakingConfig(config.matchmaking, config.playerCount, issues)
 	checkTeleportConfig(config.teleport, config.matchmaking, issues)
+	checkVoteConfig(config.vote, config.matchmaking, config.teleport, issues)
 
 	local telemetry = config.telemetry
 	if telemetry == nil then

@@ -184,10 +184,11 @@ each field:
 - **Map loading.** No service loads a map yet (TaskService and
   PowerUpService already document the gap). The chosen map is exposed
   as `MatchTeleportService.getMapId()` for whatever loads it.
-- **Voting (P5-3).** `pickMap` is a uniform random stand-in, called by
-  the former. Because the map must be in the record before any owner
-  teleports, P5-3's vote has to finish before formation commits, or
-  write the result into the record before departure.
+- **Voting (P5-3), since landed.** The departure handler runs
+  `VoteService.runVote` before teleporting, and the winner is written
+  into the group record before anyone departs. `pickMap` only remains
+  for groups with nothing to vote on (fewer than two enabled maps). See
+  `docs/voting.md`.
 - **Match → hub return after Results.** That is part of the Phase 5
   gate, but not of this prompt.
 - **Queue UI.** The client has no QueueState consumer yet. The new

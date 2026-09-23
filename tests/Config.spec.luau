@@ -130,6 +130,18 @@ local function validGameConfig(): Validate.GameConfig
 			profileLoadGraceSeconds = 15,
 			manifestReadAttempts = 4,
 		},
+		vote = {
+			ballotSize = 4,
+			voteSeconds = 15,
+			revealSeconds = 3,
+			pollSeconds = 1,
+			lockGraceSeconds = 5,
+			recentMapName = "RecentMaps_v1",
+			recentMapsCap = 3,
+			recentMapsTtlSeconds = 21600,
+			recentFloorWeight = 0.2,
+			recentDecay = 0.5,
+		},
 		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0 },
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
@@ -1382,11 +1394,83 @@ TestRunner.describe("Validate.checkGameConfig (P5-2 teleport)", function()
 
 	TestRunner.it("rejects worst-case travel that outlives the group record", function()
 		-- 4 x (140 + 8) = 592 is still under 600; 4 x (143 + 8) = 604 isn't.
-		TestRunner.expect(#issuesWith(function(tp, _mm)
-			tp.travelWatchdogSeconds = 140
+		-- P5-3's vote runs before travel and has its own, longer chain
+		-- (checked in its own block below), so only look at teleport's.
+		local function teleportIssues(watchdog: number): number
+			local count = 0
+			local issues = issuesWith(function(tp, _mm)
+				tp.travelWatchdogSeconds = watchdog
+			end)
+			for _, found in issues do
+				if found.field == "teleport.maxAttempts" then
+					count += 1
+				end
+			end
+			return count
+		end
+		TestRunner.expect(teleportIssues(140)):toBe(0)
+		TestRunner.expect(teleportIssues(143)):toBe(1)
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P5-3 vote)", function()
+	local function issuesWith(mutate: (any, any) -> ()): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		mutate(config.vote, config.matchmaking)
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the valid block", function()
+		TestRunner.expect(#issuesWith(function(_vc, _mm) end)):toBe(0)
+	end)
+
+	TestRunner.it("names a missing vote block instead of erroring on it", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.vote = nil :: any
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("holds the ballot to 3 or 4 maps", function()
+		for _, size in { 2, 5, 11, 3.5 } do
+			TestRunner.expect(#issuesWith(function(vc, _mm)
+				vc.ballotSize = size
+			end)):toBe(1)
+		end
+		TestRunner.expect(#issuesWith(function(vc, _mm)
+			vc.ballotSize = 3
 		end)):toBe(0)
-		TestRunner.expect(#issuesWith(function(tp, _mm)
-			tp.travelWatchdogSeconds = 143
+	end)
+
+	TestRunner.it("rejects a floor weight of 0, which would ban recent maps outright", function()
+		TestRunner.expect(#issuesWith(function(vc, _mm)
+			vc.recentFloorWeight = 0
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects a recent-maps store that collides with a matchmaking one", function()
+		TestRunner.expect(#issuesWith(function(vc, mm)
+			vc.recentMapName = mm.groupMapName
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects a poll interval that leaves no live count", function()
+		TestRunner.expect(#issuesWith(function(vc, _mm)
+			vc.pollSeconds = 15
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects a vote plus worst-case travel that outlives the group record", function()
+		-- Travel is 4 x (20 + 8) = 112; vote + grace + reveal = 23 -> 135.
+		TestRunner.expect(#issuesWith(function(_vc, mm)
+			mm.groupRecordTtlSeconds = 136
+			mm.staleClaimRevertSeconds = 45
+		end)):toBe(0)
+		TestRunner.expect(#issuesWith(function(_vc, mm)
+			mm.groupRecordTtlSeconds = 135
 		end)):toBe(1)
 	end)
 end)

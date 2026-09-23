@@ -32,5 +32,6 @@ require("./StoreLogic.spec")
 require("./CosmeticLogic.spec")
 require("./MatchmakingLogic.spec")
 require("./TeleportLogic.spec")
+require("./VoteLogic.spec")
 
 TestRunner.run()

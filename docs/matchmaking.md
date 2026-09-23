@@ -28,9 +28,10 @@ wrapper). Config: `GameConfig.matchmaking`.
 | Structure | Key | Value | TTL |
 |---|---|---|---|
 | SortedMap `MatchQueue_v1` | userId | `Entry` (state, owner jobId, enqueuedAt, streak, avoid list, groupId) — **sort key = enqueuedAt** | `entryTtlSeconds`, refreshed by the owner |
-| HashMap `MatchGroups_v1` | groupId (GUID) | `GroupRecord` (members, npcSlots) — **the commit point** | `groupRecordTtlSeconds` |
+| HashMap `MatchGroups_v1` | groupId (GUID) | `GroupRecord` (members, npcSlots; P5-3 adds ballot, votes, result) — **the commit point** | `groupRecordTtlSeconds` |
 | HashMap `RecentOpponents_v1` | userId | recent co-players + expiry | `rematchCooldownSeconds` |
 | HashMap `MatchmakingMeta_v1` | `formationLease` | `{ holder = jobId }` | `leaseTtlSeconds` |
+| HashMap `RecentMaps_v1` (P5-3, `GameConfig.vote`) | userId | last few maps played, newest first | `vote.recentMapsTtlSeconds` |
 
 ## Why a player can't be double-booked
 

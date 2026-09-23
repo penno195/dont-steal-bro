@@ -58,7 +58,20 @@ export type Entry = {
 	avoid: { AvoidRecord },
 	state: EntryState,
 	groupId: string?,
+	-- P5-3: the maps this player played most recently, newest first,
+	-- read from RecentMaps_v1 at join. The former down-weights them when
+	-- it draws the group's ballot (VoteLogic.drawBallot).
+	recentMaps: { string },
 }
+
+-- P5-3: one player's map vote. A list of these rather than a
+-- { [userId]: mapId } map, for the same JSON reason as AvoidRecord.
+export type VoteRecord = { u: number, m: string }
+
+-- P5-3: written once, by whichever owner server locks the vote first
+-- (VoteLogic.lock). `tied` lists every map that shared the top count;
+-- more than one means the winner was drawn at random among them.
+export type VoteResult = { winner: string, tied: { string } }
 
 export type GroupRecord = {
 	v: number,
@@ -73,7 +86,16 @@ export type GroupRecord = {
 	-- Only servers read MemoryStore, so the access code never reaches a
 	-- client from here.
 	accessCode: string?,
+	-- The map the match server loads. Until the vote locks, this is the
+	-- former's provisional pick from the ballot, so a vote that never
+	-- locks (a MemoryStore outage) still leaves a valid map here.
+	-- VoteLogic.lock overwrites it with the winner.
 	mapId: string?,
+	-- P5-3's vote. `ballot` is empty when there was nothing to choose
+	-- between (fewer than two enabled maps), and the vote is skipped.
+	ballot: { string },
+	votes: { VoteRecord },
+	result: VoteResult?,
 }
 
 -- P5-2's reserved destination, handed to the former by
@@ -82,6 +104,13 @@ export type Destination = {
 	groupId: string,
 	accessCode: string,
 	mapId: string?,
+}
+
+-- P5-3: the ballot the former draws for a group (VoteService.drawBallot),
+-- and its provisional map, which overrides the destination's.
+export type Ballot = {
+	maps: { string },
+	provisionalMapId: string?,
 }
 
 export type FormedGroup = {
@@ -159,7 +188,48 @@ function MatchmakingLogic.decodeEntry(raw: any): Entry?
 		avoid = decodeAvoid(raw.avoid),
 		state = raw.state :: EntryState,
 		groupId = raw.groupId,
+		recentMaps = MatchmakingLogic.decodeStrings(raw.recentMaps),
 	}
+end
+
+-- A list of strings, dropping anything that isn't one. Capped, because
+-- a record written by a newer or broken build mustn't balloon a
+-- transform.
+function MatchmakingLogic.decodeStrings(raw: any): { string }
+	local out: { string } = {}
+	if type(raw) ~= "table" then
+		return out
+	end
+	for _, value in raw do
+		if type(value) == "string" and #out < 32 then
+			table.insert(out, value)
+		end
+	end
+	return out
+end
+
+local function decodeVotes(raw: any): { VoteRecord }
+	local out: { VoteRecord } = {}
+	if type(raw) ~= "table" then
+		return out
+	end
+	for _, record in raw do
+		if type(record) == "table" and isFiniteNumber(record.u) and type(record.m) == "string" then
+			table.insert(out, { u = record.u, m = record.m })
+		end
+	end
+	return out
+end
+
+local function decodeResult(raw: any): VoteResult?
+	if type(raw) ~= "table" or type(raw.winner) ~= "string" then
+		return nil
+	end
+	local tied = MatchmakingLogic.decodeStrings(raw.tied)
+	if #tied == 0 then
+		tied = { raw.winner }
+	end
+	return { winner = raw.winner, tied = tied }
 end
 
 function MatchmakingLogic.decodeGroup(raw: any): GroupRecord?
@@ -185,6 +255,9 @@ function MatchmakingLogic.decodeGroup(raw: any): GroupRecord?
 		formedBy = if type(raw.formedBy) == "string" then raw.formedBy else "",
 		accessCode = if type(raw.accessCode) == "string" then raw.accessCode else nil,
 		mapId = if type(raw.mapId) == "string" then raw.mapId else nil,
+		ballot = MatchmakingLogic.decodeStrings(raw.ballot),
+		votes = decodeVotes(raw.votes),
+		result = decodeResult(raw.result),
 	}
 end
 
@@ -202,7 +275,8 @@ function MatchmakingLogic.newEntry(
 	jobId: string,
 	enqueuedAt: number,
 	streak: number,
-	avoid: { AvoidRecord }
+	avoid: { AvoidRecord },
+	recentMaps: { string }?
 ): Entry
 	return {
 		v = MatchmakingLogic.SCHEMA_VERSION,
@@ -213,6 +287,7 @@ function MatchmakingLogic.newEntry(
 		avoid = avoid,
 		state = "Waiting",
 		groupId = nil,
+		recentMaps = recentMaps or {},
 	}
 end
 
@@ -222,7 +297,8 @@ function MatchmakingLogic.newGroupRecord(
 	npcSlots: number,
 	formedAt: number,
 	formedBy: string,
-	destination: Destination?
+	destination: Destination?,
+	ballot: Ballot?
 ): GroupRecord
 	local ids: { number } = {}
 	for _, entry in members do
@@ -236,7 +312,13 @@ function MatchmakingLogic.newGroupRecord(
 		formedAt = formedAt,
 		formedBy = formedBy,
 		accessCode = if destination then destination.accessCode else nil,
-		mapId = if destination then destination.mapId else nil,
+		mapId = if ballot and ballot.provisionalMapId
+			then ballot.provisionalMapId
+			elseif destination then destination.mapId
+			else nil,
+		ballot = if ballot then table.clone(ballot.maps) else {},
+		votes = {},
+		result = nil,
 	}
 end
 
