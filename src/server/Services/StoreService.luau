@@ -842,21 +842,15 @@ function StoreService:init()
 end
 
 function StoreService:start()
-	local function onPlayer(player: Player)
-		task.spawn(function()
-			-- Both calls tolerate a profile that hasn't loaded yet (they
-			-- return early), and PlayerAdded fires again for nobody - so
-			-- rather than guess at load timing here, this runs once and
-			-- the store screen's own open triggers a fresh pushState.
-			syncPasses(player)
-			pushState(player)
-		end)
-	end
-
-	for _, player in Players:GetPlayers() do
-		onPlayer(player)
-	end
-	Players.PlayerAdded:Connect(onPlayer)
+	-- On profile LOAD, not PlayerAdded: pushing on join raced the load
+	-- and sent empty defaults, and nothing re-pushed until some unrelated
+	-- write happened to (P6-6's store screen found it). onLoaded runs
+	-- already-loaded players immediately, so no separate catch-up loop.
+	local DataService = Loader.get("DataService") :: any
+	DataService.onLoaded(function(player: Player)
+		syncPasses(player)
+		pushState(player)
+	end)
 end
 
 return StoreService

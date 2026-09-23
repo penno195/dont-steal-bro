@@ -85,9 +85,18 @@ export type ProfileData = {
 	-- 3-item cap quietly stops being a cap.
 	powerUpStock: { [string]: number },
 	lastSeen: number, -- os.time() of last profile touch
+
+	-- ===== schema v3, P6-6 ==============================================
+
+	-- The settings screen's preferences. Stored raw and typed loosely on
+	-- purpose: SettingsLogic (src/shared) owns the shape and sanitises
+	-- on every read, so this module stays require-free and a value from
+	-- an older client can never reach the UI out of bounds. Empty means
+	-- "all defaults".
+	settings: { [string]: any },
 }
 
-local CURRENT_SCHEMA_VERSION = 2
+local CURRENT_SCHEMA_VERSION = 3
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -105,6 +114,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		starterPowerUps = {},
 		purchaseIdCache = {},
 		powerUpStock = {},
+		settings = {},
 		unlockedTitles = {},
 		equippedTitle = nil,
 		stats = defaultStats(),
@@ -116,9 +126,10 @@ end
 -- Keyed by the version a profile is migrating FROM. Each step is a pure
 -- function from version n to n+1 that returns a FRESH table - "never
 -- mutate a profile in place without bumping the version." Two steps
--- exist now: 0 -> 1 (schemaVersion didn't exist before P1-5) and 1 -> 2
--- (P4-5's store fields). Adding a v3 means writing migrations[2] and
--- bumping CURRENT_SCHEMA_VERSION, and nothing else - ProfileLogic.
+-- exist now: 0 -> 1 (schemaVersion didn't exist before P1-5), 1 -> 2
+-- (P4-5's store fields) and 2 -> 3 (P6-6's settings). Adding a v4 means
+-- writing migrations[3] and bumping CURRENT_SCHEMA_VERSION, and nothing
+-- else - ProfileLogic.
 -- migrate below walks however many steps a stored profile actually
 -- needs, so a profile last saved under v0 arrives at v2 in one call.
 
@@ -170,6 +181,16 @@ migrations[1] = function(old: { [string]: any }): { [string]: any }
 	next.schemaVersion = 2
 	next.purchaseIdCache = (old.purchaseIdCache :: { string }?) or {}
 	next.powerUpStock = (old.powerUpStock :: { [string]: number }?) or {}
+	return next
+end
+
+-- v2 -> v3 (P6-6): an empty settings table, which SettingsLogic reads as
+-- all defaults. Nothing to infer - no earlier version stored any
+-- preference.
+migrations[2] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 3
+	next.settings = (old.settings :: { [string]: any }?) or {}
 	return next
 end
 

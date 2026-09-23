@@ -685,19 +685,24 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
-	-- P4-1: this round didn't move your streak, and here is why.
-	-- Targeted at the one player it concerns (fireClient), never
-	-- broadcast - design-decisions.md Q7 condition 1 keeps streak off
-	-- every in-round surface, and telling the whole server that someone
-	-- just failed to gain a streak leaks the same signal by implication.
+	-- P6-6: what this round did to YOUR streak and bounty - the results
+	-- screen's data. Targeted at its owner (fireClient), never broadcast:
+	-- it carries streak numbers, design-decisions.md Q7 condition 1.
 	--
-	-- threat-model.md §8 requires this to exist: an NPC-heavy round
-	-- earns no streak credit, and "needs an explicit 'queue too thin for
-	-- streak credit right now' message, not silent non-progression."
-	-- Carries the seat count and the threshold so a results screen can
-	-- say something specific rather than something vague.
-	ProgressionStreakSkipped = {
-		name = "ProgressionStreakSkipped",
+	-- Fired on ENTERING Results, never from the progression write
+	-- itself. For a finalist that write happens just before
+	-- DecisionReveal, and `reason` says whether you won - which, with
+	-- your own choice, gives away the others' early (the leak P6-5's
+	-- audit found in the old ProgressionStreakSkipped remote this one
+	-- replaces).
+	--
+	-- `streakCredited = false` is threat-model.md §8's required
+	-- explanation: an NPC-heavy round earns no streak credit and "needs
+	-- an explicit 'queue too thin for streak credit right now' message,
+	-- not silent non-progression." It carries the seat count and the
+	-- threshold so the screen can say something specific.
+	RoundRecap = {
+		name = "RoundRecap",
 		direction = "ServerBroadcast",
 		schema = nil,
 		rateLimit = nil,
@@ -989,6 +994,41 @@ Net.Remotes = {
 	-- take the board down. Never the access code, never a streak.
 	MapVoteState = {
 		name = "MapVoteState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- ===== P6-6's settings remotes =======================================
+	--
+	-- Client -> server: change some preferences. Every field optional, so
+	-- a slider sends one field and a reset sends them all. The schema
+	-- checks only TYPES; bounds and step snapping are
+	-- SettingsLogic.apply's, server-side, so the ranges live in one
+	-- place both sides read. No `states` gate: changing volume mid-race
+	-- is legitimate, and nothing here is competitive. The rate limit
+	-- allows a slider drag, which the client already throttles.
+	SettingsIntent = {
+		name = "SettingsIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			reducedMotion = Net.optional(Net.boolean()),
+			musicVolume = Net.optional(Net.number({ min = 0, max = 1 })),
+			sfxVolume = Net.optional(Net.number({ min = 0, max = 1 })),
+			voiceEnabled = Net.optional(Net.boolean()),
+			hudScale = Net.optional(Net.number({ min = 0.5, max = 2 })),
+			colorBlindMode = Net.optional(Net.boolean()),
+		}),
+		rateLimit = { capacity = 8, refillPerSecond = 2 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted): this player's saved settings, sent on
+	-- profile load and after every accepted change. The owner only,
+	-- though nothing in it is sensitive: nobody else has a use for it.
+	SettingsState = {
+		name = "SettingsState",
 		direction = "ServerBroadcast",
 		schema = nil,
 		rateLimit = nil,

@@ -13,7 +13,7 @@ local ProfileLogic = require("../src/server/ProfileLogic")
 TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 	TestRunner.it("fills every v1 field with defaults for a completely empty old profile", function()
 		local migrated = ProfileLogic.migrate({})
-		TestRunner.expect(migrated.schemaVersion):toBe(2)
+		TestRunner.expect(migrated.schemaVersion):toBe(3)
 		TestRunner.expect(migrated.currentStreak):toBe(0)
 		TestRunner.expect(migrated.bestStreak):toBe(0)
 		TestRunner.expect(migrated.currency):toBe(0)
@@ -27,7 +27,7 @@ TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 			bestStreak = 12,
 			currency = 250,
 		})
-		TestRunner.expect(migrated.schemaVersion):toBe(2)
+		TestRunner.expect(migrated.schemaVersion):toBe(3)
 		TestRunner.expect(migrated.currentStreak):toBe(7)
 		TestRunner.expect(migrated.bestStreak):toBe(12)
 		TestRunner.expect(migrated.currency):toBe(250)
@@ -38,7 +38,21 @@ TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 		template.currentStreak = 4
 		local migrated = ProfileLogic.migrate(template :: any)
 		TestRunner.expect(migrated.currentStreak):toBe(4)
-		TestRunner.expect(migrated.schemaVersion):toBe(2)
+		TestRunner.expect(migrated.schemaVersion):toBe(3)
+	end)
+
+	TestRunner.it("gives a v2 profile an empty settings table and keeps its store fields", function()
+		local migrated = ProfileLogic.migrate({
+			schemaVersion = 2,
+			currentStreak = 5,
+			purchaseIdCache = { "a" },
+			powerUpStock = { SprintBoost = 2 },
+		})
+		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(next(migrated.settings)):toBe(nil)
+		TestRunner.expect(migrated.currentStreak):toBe(5)
+		TestRunner.expect(migrated.purchaseIdCache[1]):toBe("a")
+		TestRunner.expect(migrated.powerUpStock.SprintBoost):toBe(2)
 	end)
 
 	TestRunner.it("never mutates the table passed in", function()

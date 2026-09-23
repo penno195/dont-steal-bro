@@ -188,15 +188,14 @@ against a full memory dump of it:
   Q7's applied case permits for titles, but a modified client can still
   read it. Consider trimming it from the payload server-side (a one-line
   change, and nothing on the client needs it).
-- **Found, not fixed: `ProgressionStreakSkipped` fires before the reveal.**
+- **Fixed in P6-6: `ProgressionStreakSkipped` fired before the reveal.**
   `ProgressionService.applyRoundResult` fires it during
   `computeOutcomeAndWriteProfiles`, which runs about 0.2 s before
   `DecisionReveal` in an NPC-heavy round. Its `reason` says whether you won,
   and with your own choice that implies the others' choices. It has no
   strategic value, because every choice is already locked and irreversible
-  by then. But it is the one pre-reveal channel. The fix is to defer that
-  notice until after `enterReveal`, which is ProgressionService's change to
-  make, not this task's.
+  by then. But it was the one pre-reveal channel. P6-6 removed the remote:
+  its notice now travels in `RoundRecap`, sent on entering Results.
 
 ## Device review
 
@@ -227,6 +226,6 @@ and the revealed cards.
 ## Open items handed on
 
 - **P6-6:** gate the results screen on `DecisionStudioController.isActive()`.
-- **Server:** defer `ProgressionStreakSkipped` until after the reveal, and
+- **Server:** ~~defer `ProgressionStreakSkipped` until after the reveal~~ (done in P6-6, as `RoundRecap`), and
   consider dropping `bountyVU` from `DecisionReveal` (see the secrecy audit).
 - **Q1 `RewardTables`:** the per-player item reveal belongs in the result panel.

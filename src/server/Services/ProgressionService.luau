@@ -63,6 +63,10 @@ export type RoundResult = {
 type LedgerEntry = {
 	reason: ReasonCode,
 	after: ProgressionLogic.StreakState,
+	-- P6-6: kept for the RoundRecap sent on entering Results, which
+	-- can't be sent from the write itself (see sendRecaps).
+	before: ProgressionLogic.StreakState,
+	credited: boolean,
 }
 
 -- The idempotency ledger: "<roundId>|<userId>" -> what was recorded.
@@ -181,7 +185,7 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	-- double-count. A failed write is a lost result; a double-counted
 	-- one is a corrupted streak, and of the two, the second is far
 	-- worse for a leaderboard nobody can audit.
-	ledger[key] = { reason = result.reason, after = after }
+	ledger[key] = { reason = result.reason, after = after, before = before, credited = credited }
 
 	local write = writeProgressionState
 	if write == nil then
@@ -192,20 +196,11 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
 
-	if not credited then
-		-- threat-model.md §8's own cost note: an NPC-heavy round that
-		-- doesn't move the streak "needs an explicit 'queue too thin for
-		-- streak credit right now' message, not silent
-		-- non-progression." A player who wins and sees their streak
-		-- unchanged with no explanation will read it as the game
-		-- eating their win, and they'd be right to.
-		Net.fireClient("ProgressionStreakSkipped", player, {
-			roundId = result.roundId,
-			reason = result.reason,
-			npcSeatCount = npcSeatCount(),
-			threshold = GameConfig.npcSeatStreakCreditThreshold,
-		})
-	end
+	-- No client message here. threat-model.md §8's "explicit message,
+	-- not silent non-progression" for an uncredited round now travels in
+	-- the RoundRecap, sent on entering Results (sendRecaps below). It
+	-- used to be fired right here, which for a finalist is just BEFORE
+	-- DecisionReveal - and `reason` told them whether they'd won.
 
 	-- "One auditable function that logs the before state, the after
 	-- state, and the reason code" (P4-1's own requirement). Every
@@ -298,6 +293,39 @@ local function sweepNonQualifiers()
 	end
 end
 
+-- P6-6: every human still here gets their own RoundRecap (Net.luau's
+-- note on it). Runs after sweepNonQualifiers, so everyone who raced has
+-- a ledger entry by now, and after DecisionReveal, because Results is
+-- only entered once the reveal is over - so a finalist learns nothing
+-- here the reveal hasn't already shown them. A player with no entry
+-- (joined mid-round, never raced) gets nothing, and the results screen
+-- treats that as "you were watching".
+local function sendRecaps()
+	local roundId = currentRoundId()
+	local seats = npcSeatCount()
+	for _, participant in Participants.humans() do
+		local player = participant.player
+		local entry = ledger[ledgerKey(roundId, participant.id)]
+		if player == nil or player.Parent == nil or entry == nil then
+			continue
+		end
+		Net.fireClient("RoundRecap", player, {
+			roundId = roundId,
+			reason = entry.reason,
+			streakBefore = entry.before.currentStreak,
+			streakAfter = entry.after.currentStreak,
+			bestStreakBefore = entry.before.bestStreak,
+			bestStreakAfter = entry.after.bestStreak,
+			-- Q1's item-package reference (streak tier x outcome tier) -
+			-- the lookup to actual items is RewardTables', not yet built.
+			bounty = entry.after.pendingBounty,
+			streakCredited = entry.credited,
+			npcSeatCount = seats,
+			npcSeatThreshold = GameConfig.npcSeatStreakCreditThreshold,
+		})
+	end
+end
+
 -- ===== service =============================================================
 
 local ProgressionService: Loader.Service = {
@@ -324,6 +352,7 @@ function ProgressionService:init()
 	local RoundService = Loader.get("RoundService") :: any
 	RoundService.onEnter("Results", function()
 		sweepNonQualifiers()
+		sendRecaps()
 	end)
 
 	-- The ledger is per-round state, not per-server: clearing it on

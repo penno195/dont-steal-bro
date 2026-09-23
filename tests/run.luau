@@ -39,5 +39,6 @@ require("./ComponentLogic.spec")
 require("./HudLogic.spec")
 require("./TaskViewLogic.spec")
 require("./DecisionLogic.spec")
+require("./MenuScreens.spec")
 
 TestRunner.run()

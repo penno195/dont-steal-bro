@@ -49,8 +49,17 @@ local PlayerStore = ProfileStoreLib.New(STORE_NAME, ProfileLogic.newProfileTempl
 -- No service outside this one touches a raw profile table - everything
 -- below is private, and DataService only ever exposes narrow typed
 -- getters/setters further down.
+local SettingsLogic = require(ReplicatedStorage.Shared.SettingsLogic)
+
 local profiles: { [Player]: any } = {}
 local pendingRoundOutcomeResolvers: { [Player]: () -> () } = {}
+
+-- P6-6: called once per player, the moment their profile is usable.
+-- Before this existed, services pushed a player's state on PlayerAdded,
+-- which races the load and pushes empty defaults - a store screen that
+-- opens on 0 currency and nothing owned until some unrelated write
+-- happens to push again.
+local loadedCallbacks: { (Player) -> () } = {}
 
 ProfileStoreLib.OnError:Connect(function(message: string, storeName: string, profileKey: string)
 	warn(string.format("DataService: ProfileStore error on %s/%s: %s", storeName, profileKey, message))
@@ -137,6 +146,19 @@ local function loadProfile(player: Player)
 	end
 
 	profiles[player] = profile
+
+	for _, callback in loadedCallbacks do
+		task.spawn(callback, player)
+	end
+end
+
+-- Registers `callback` for every future load, and runs it now for any
+-- player already loaded, so the order services init in can't matter.
+local function onLoaded(callback: (Player) -> ())
+	table.insert(loadedCallbacks, callback)
+	for player in profiles do
+		task.spawn(callback, player)
+	end
 end
 
 local function releaseProfile(player: Player)
@@ -495,11 +517,32 @@ local function setEquippedTitle(player: Player, titleId: string?): boolean
 	return true
 end
 
+-- P6-6: always a complete, in-bounds value - sanitised on read, so a
+-- stored table from an older build can't reach anyone out of bounds.
+local function getSettings(player: Player): SettingsLogic.PlayerSettings
+	local d = data(player)
+	return SettingsLogic.sanitize(if d then d.settings else nil)
+end
+
+-- Takes an already-sanitised value (SettingsService builds it with
+-- SettingsLogic.apply). Returns false if the profile isn't loaded.
+local function setSettings(player: Player, settings: SettingsLogic.PlayerSettings): boolean
+	local d = data(player)
+	if d == nil then
+		return false
+	end
+	d.settings = table.clone(settings :: any)
+	return true
+end
+
 local DataService: Loader.Service = {
 	name = "DataService",
 	dependencies = {},
 	setPendingRoundOutcomeResolver = setPendingRoundOutcomeResolver,
 	isLoaded = isLoaded,
+	onLoaded = onLoaded,
+	getSettings = getSettings,
+	setSettings = setSettings,
 	getStreak = getStreak,
 	getBestStreak = getBestStreak,
 	getPendingBounty = getPendingBounty,
