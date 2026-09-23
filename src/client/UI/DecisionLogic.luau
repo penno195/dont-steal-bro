@@ -221,6 +221,75 @@ local PRIZE_LABEL: { [Prize]: string } = table.freeze({
 })
 DecisionLogic.PRIZE_LABEL = PRIZE_LABEL
 
+-- THE EXPLAINER (P6-8, docs/onboarding.md). The "How it works" sheet
+-- walks the four ways a table can go, one line each, written for a
+-- 12-year-old's first read. Every prize in it comes from prizeFor, so
+-- the words can't drift from the rules: retune Outcomes and the sheet
+-- follows. A player who misreads the finale feels cheated rather than
+-- outplayed, so this is the one screen that must never be wrong.
+export type ExplainerRow = { stealers: number, headline: string, detail: string }
+
+local COUNT_PHRASE: { [number]: string } = { [1] = "One person steals", [2] = "Two people steal" }
+
+-- Takes a plain string: prizeFor's literals widen to string once they're
+-- stored in a local.
+local function prizePhrase(prize: string, plural: boolean): string
+	local verb = if plural then "get" else "gets"
+	if prize == "Nothing" then
+		return verb .. " nothing"
+	end
+	return string.format("%s %s %s prize", verb, if prize == "Big" then "the" else "a", PRIZE_LABEL[prize :: Prize])
+end
+
+function DecisionLogic.explainerRows(seats: number): { ExplainerRow }
+	if seats <= 1 then
+		local only = DecisionLogic.prizeFor("Share", 0, 1)
+		return {
+			{
+				stealers = 0,
+				headline = "Just you",
+				detail = "You " .. prizePhrase(only, true) .. ", whatever you pick.",
+			},
+		}
+	end
+	local rows: { ExplainerRow } = {}
+	for stealers = 0, seats do
+		local sharers = seats - stealers
+		local stealPrize = DecisionLogic.prizeFor("Steal", math.max(stealers - 1, 0), seats)
+		local sharePrize = DecisionLogic.prizeFor("Share", stealers, seats)
+		local headline, detail
+		if stealers == 0 then
+			headline, detail = "Everyone shares", "Everyone " .. prizePhrase(sharePrize, false) .. "."
+		elseif sharers == 0 then
+			headline, detail = "Everyone steals", "Everyone " .. prizePhrase(stealPrize, false) .. "."
+		else
+			headline = COUNT_PHRASE[stealers] or string.format("%d people steal", stealers)
+			local stealLine = (if stealers == 1 then "The stealer " else "The stealers ")
+				.. prizePhrase(stealPrize, stealers > 1)
+				.. "."
+			local shareLine = (if sharers == 1 then "The one who shared " else "The sharers ")
+				.. prizePhrase(sharePrize, sharers > 1)
+				.. "."
+			-- Whoever got something reads first.
+			detail = if sharePrize ~= "Nothing" and stealPrize == "Nothing"
+				then shareLine .. " " .. stealLine
+				else stealLine .. " " .. shareLine
+		end
+		table.insert(rows, { stealers = stealers, headline = headline, detail = detail })
+	end
+	return rows
+end
+
+-- The rest of the sheet: how picking works, the one-line lesson, and
+-- what it does to your streak (design-decisions.md Q7: any prize is a
+-- win, nothing is a loss).
+DecisionLogic.EXPLAINER = table.freeze({
+	title = "Steal or Share?",
+	secret = "Everyone picks in secret. All the picks are shown at the same time.",
+	lesson = "Stealing only works if you're the only one who does it.",
+	streak = "Get a prize and your streak goes up. Get nothing and it goes back to 0.",
+})
+
 -- The prize a winner took, from the branch alone. Mirrors
 -- DecisionService.outcomeTagFor, so it names the same package the
 -- server granted.

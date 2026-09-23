@@ -54,6 +54,11 @@ export type Props = {
 	-- Shows a close button, and lets B / tap-outside dismiss.
 	dismissible: boolean?,
 	onDismiss: (() -> ())?,
+	-- Richer content than `body` can hold (P6-8's payoff explainer):
+	-- built inside the modal's Vide scope and placed between the body
+	-- and the actions. Its width is Modal.CONTENT_WIDTH, and it sizes
+	-- its own height.
+	content: (() -> Instance)?,
 }
 
 -- The reference phone's width minus a gutter each side, so the card
@@ -62,6 +67,8 @@ local CARD_WIDTH = 360 - 2 * Theme.spacing.lg
 local ACTION_WIDTH = CARD_WIDTH - 2 * Theme.spacing.lg
 
 local Modal = {}
+
+Modal.CONTENT_WIDTH = ACTION_WIDTH
 
 function Modal.card(props: Props): Frame
 	local children: { Instance } = {
@@ -76,6 +83,11 @@ function Modal.card(props: Props): Frame
 			TextYAlignment = Enum.TextYAlignment.Top,
 		}),
 	}
+	if props.content then
+		local content = props.content() :: GuiObject
+		content.LayoutOrder = 2
+		table.insert(children, content)
+	end
 	for i, action in props.actions do
 		table.insert(
 			children,

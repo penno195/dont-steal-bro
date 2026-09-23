@@ -273,9 +273,11 @@ local function body(store: Store, height: () -> number): { Instance }
 				9
 			),
 			hint("Roblox's own text size setting also makes this bigger.", 10),
+			toggleRow("Beginner tips", flag("tips"), flip("tips"), 11),
+			hint("Shows the tips again during your next round.", 12),
 			create("Frame")({
 				Name = "ResetSlot",
-				LayoutOrder = 11,
+				LayoutOrder = 13,
 				Size = UDim2.fromOffset(MenuShell.INNER, Theme.touch.primaryHeight + Theme.spacing.lg),
 				BackgroundTransparency = 1,
 				C.Button({

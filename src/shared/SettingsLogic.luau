@@ -23,6 +23,12 @@ export type PlayerSettings = {
 	voiceEnabled: boolean, -- the player's own mic in the Studio; hearing others is Roblox's setting, not ours
 	hudScale: number, -- multiplier on UIScaleController's computed scale
 	colorBlindMode: boolean,
+	-- First-round tips (P6-8, docs/onboarding.md). On for a new player;
+	-- OnboardingController switches it off after the first full round,
+	-- and the Settings toggle switches it back on to replay them. A
+	-- stored profile from before this field gets the default, so every
+	-- existing player sees the tips once.
+	tips: boolean,
 }
 
 -- HUD scale only goes UP from the computed scale. The computed scale is
@@ -69,6 +75,7 @@ function SettingsLogic.defaults(): PlayerSettings
 		voiceEnabled = true,
 		hudScale = 1,
 		colorBlindMode = false,
+		tips = true,
 	}
 end
 
@@ -108,6 +115,7 @@ local function sanitizeOver(raw: any, d: PlayerSettings): PlayerSettings
 			d.hudScale
 		),
 		colorBlindMode = bool(raw.colorBlindMode, d.colorBlindMode),
+		tips = bool(raw.tips, d.tips),
 	}
 end
 

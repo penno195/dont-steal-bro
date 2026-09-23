@@ -40,6 +40,7 @@ local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
 local Layout = require(script.Parent.Parent.Layout)
+local PayoffExplainer = require(script.Parent.PayoffExplainer)
 local Theme = require(script.Parent.Parent.Theme)
 
 local create = vide.create
@@ -105,6 +106,7 @@ local RING = 56
 local HEADER_H = 64
 local ROW_H = 44
 local HEAD_W = 76
+local HEADING_H = 28 -- the payoff table's heading row, with its (i)
 local CHOICE_W = 164
 local CHOICE_H = 96
 local CHAT_MAX_FRACTION = 0.3
@@ -511,13 +513,33 @@ local function payoffTable(seats: () -> number, order: number): Frame
 			Padding = UDim.new(0, Theme.spacing.xs),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
-		Base.text("caption", {
-			Name = "Heading",
+		create("Frame")({
+			Name = "HeadingRow",
 			LayoutOrder = 0,
-			Size = UDim2.new(1, 0, 0, Theme.type.caption.size + Theme.spacing.xxs),
-			Text = "WHAT YOU GET, IF THE OTHERS…",
-			TextColor3 = Theme.color.inkMuted,
-			TextXAlignment = Enum.TextXAlignment.Left,
+			BackgroundTransparency = 1,
+			Size = UDim2.new(1, 0, 0, HEADING_H),
+			Base.text("caption", {
+				Name = "Heading",
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.fromScale(0, 0.5),
+				Size = UDim2.new(1, -HEADING_H, 0, Theme.type.caption.size + Theme.spacing.xxs),
+				Text = "WHAT YOU GET, IF THE OTHERS…",
+				TextColor3 = Theme.color.inkMuted,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+			-- "How it works" (P6-8). A ghost button, so its 44-pt hit area
+			-- can overhang the short heading row without covering the
+			-- table: nothing under it is tappable.
+			C.IconButton({
+				icon = "info",
+				label = "How it works",
+				onActivate = function()
+					PayoffExplainer.open(seats())
+				end,
+				order = 900,
+				anchorPoint = Vector2.new(1, 0.5),
+				position = UDim2.fromScale(1, 0.5),
+			}) :: any,
 		}),
 		indexes(rows, function(row: () -> DecisionLogic.PayoffRow, i: number)
 			local headSize = Vector2.new(HEAD_W, ROW_H)

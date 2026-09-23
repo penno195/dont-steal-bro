@@ -1019,6 +1019,7 @@ Net.Remotes = {
 			voiceEnabled = Net.optional(Net.boolean()),
 			hudScale = Net.optional(Net.number({ min = 0.5, max = 2 })),
 			colorBlindMode = Net.optional(Net.boolean()),
+			tips = Net.optional(Net.boolean()),
 		}),
 		rateLimit = { capacity = 8, refillPerSecond = 2 },
 		states = nil,

@@ -40,5 +40,6 @@ require("./HudLogic.spec")
 require("./TaskViewLogic.spec")
 require("./DecisionLogic.spec")
 require("./MenuScreens.spec")
+require("./Onboarding.spec")
 
 TestRunner.run()
