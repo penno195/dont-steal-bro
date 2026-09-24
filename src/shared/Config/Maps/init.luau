@@ -1,9 +1,9 @@
 --!strict
--- Auto-collects every sibling map definition file. Empty for now - maps
--- are built by hand in Studio (CLAUDE.md) and this repo doesn't have one
--- yet; add a MapDef file here once P0-5's builder's checklist has been
--- run against a real map. Add an 11th (or 1st) map the same way as a
--- task: one file, nothing else to touch (Ground Rule 2).
+-- Auto-collects every sibling map definition file (P7-3: all 11, wave 1
+-- enabled). Maps are built by hand in Studio (CLAUDE.md); ConfigValidator
+-- fails boot if an enabled one has no model in ServerStorage.Maps. Add a
+-- 12th map the same way as a task: one file, nothing else to touch
+-- (Ground Rule 2).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Registry = require(ReplicatedStorage.Shared.Config.Registry)
