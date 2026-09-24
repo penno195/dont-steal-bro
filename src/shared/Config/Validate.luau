@@ -41,6 +41,18 @@ export type PowerUpRarityWeights = {
 -- against the live .rbxl is P7-1's job, a separate Studio validator
 -- plugin this module has no access to. Kept in sync with map-kit-
 -- spec.md's type block; update both together.
+-- P7-6. How this map draws the world-space marker on your stations
+-- (docs/station-readability.md). nil = the defaults in
+-- client/UI/StationMarkerLogic.luau. Only set it for a theme where the
+-- default reads poorly. Colours are "#RRGGBB" strings so Lune can load
+-- this, the same as lighting presets.
+export type StationMarkerDef = {
+	beam: boolean, -- the light shaft; off where it clips low ceilings or fights a landmark
+	pad: boolean, -- the glowing floor ring
+	beamHeight: number, -- studs, see STATION_MARKER_BEAM_HEIGHT_*
+	tint: string?, -- nil = the theme's brand colour
+}
+
 export type MapDef = {
 	id: string,
 	displayName: string,
@@ -54,7 +66,15 @@ export type MapDef = {
 	enabled: boolean,
 	taskStationCount: number, -- see note above
 	powerUpRarityWeightMultipliers: PowerUpRarityWeights?, -- P2-7: nil = {1,1,1}, no change from GameConfig.powerUpRotationTimers' base respawn seconds - see PowerUpService.luau's own header comment for why "per-map rarity weights" lands here rather than as a map-kit-spec.md tag/attribute
+	stationMarker: StationMarkerDef?, -- P7-6: nil = default marker
 }
+
+-- The shaft has to clear the tallest walkway dressing (~4 studs) to read
+-- over clutter. It must also stop short of the ~16-stud floor spacing in
+-- wave1-briefs.md, or a ground-floor shaft pokes up through the floor
+-- above and marks a spot where there's no station.
+Validate.STATION_MARKER_BEAM_HEIGHT_MIN = 4
+Validate.STATION_MARKER_BEAM_HEIGHT_MAX = 14
 
 -- P7-5. One file per preset in Config/LightingPresets/; a MapDef's
 -- `lightingPreset` names one by `id`. Colours are "#RRGGBB" strings, not
@@ -770,6 +790,39 @@ function Validate.checkMap(fileName: string, def: MapDef, issues: { Issue })
 					string.format("must be a positive number, got %s", tostring(multiplier))
 				)
 			end
+		end
+	end
+
+	local marker = def.stationMarker
+	if marker ~= nil then
+		local height = marker.beamHeight
+		if
+			type(height) ~= "number"
+			or height < Validate.STATION_MARKER_BEAM_HEIGHT_MIN
+			or height > Validate.STATION_MARKER_BEAM_HEIGHT_MAX
+		then
+			issue(
+				issues,
+				"Map",
+				fileName,
+				"stationMarker.beamHeight",
+				string.format(
+					"expected %d-%d studs, got %s",
+					Validate.STATION_MARKER_BEAM_HEIGHT_MIN,
+					Validate.STATION_MARKER_BEAM_HEIGHT_MAX,
+					tostring(height)
+				)
+			)
+		end
+		local tint = marker.tint
+		if tint ~= nil and (type(tint) ~= "string" or string.match(tint, "^#%x%x%x%x%x%x$") == nil) then
+			issue(
+				issues,
+				"Map",
+				fileName,
+				"stationMarker.tint",
+				string.format('expected a "#RRGGBB" colour, got %s', tostring(tint))
+			)
 		end
 	end
 end

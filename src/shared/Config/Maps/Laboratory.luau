@@ -25,6 +25,17 @@ local Laboratory: Validate.MapDef = {
 	waveNumber = 1,
 	enabled = false, -- wave 1: set true once built in ServerStorage.Maps
 	taskStationCount = 12, -- PLACEHOLDER: spec floor; update to the real built count
+	-- P7-6. This is the only preset with bloom, and Neon blooms, so the
+	-- pads would glow as a dozen halos around the containment core (the
+	-- landmark players navigate by). The pad is off. The shaft is warm so
+	-- it can't be mistaken for the core's cool glow. Starting values:
+	-- confirm them in the readability playtest.
+	stationMarker = {
+		beam = true,
+		pad = false,
+		beamHeight = 12,
+		tint = "#FFB86B",
+	},
 }
 
 return Laboratory

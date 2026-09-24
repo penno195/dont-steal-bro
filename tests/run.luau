@@ -43,5 +43,7 @@ require("./MenuScreens.spec")
 require("./Onboarding.spec")
 require("./MapCheck.spec")
 require("./LightingLogic.spec")
+require("./StationOccupants.spec")
+require("./StationMarkerLogic.spec")
 
 TestRunner.run()

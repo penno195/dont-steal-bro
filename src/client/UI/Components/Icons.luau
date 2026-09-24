@@ -50,6 +50,9 @@ local ICONS: { [string]: Icon } = {
 	slow = { glyph = "🐌" }, -- Movement debuff
 	eye = { glyph = "👁" }, -- Vision debuff
 	boost = { glyph = "⏩" }, -- any buff
+
+	-- Station markers (P7-6).
+	rival = { glyph = "👤" }, -- a rival is working at this station
 }
 
 local Icons = {}

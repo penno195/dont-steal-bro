@@ -52,6 +52,7 @@ local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Participants = require(ServerScriptService.Server.Participants)
 local NPCLogic = require(ServerScriptService.Server.NPCLogic)
+local StationOccupancy = require(ServerScriptService.Server.StationOccupancy)
 
 local taskDefsById: { [string]: Validate.TaskDef } = {}
 for _, entry in Tasks do
@@ -414,6 +415,7 @@ local function despawnNPC(record: NPCRecord)
 	local TaskService = Loader.get("TaskService") :: any
 	TaskService.removeRacer(record.id)
 
+	StationOccupancy.leave(record.id)
 	Participants.unregister(record.id)
 	npcs[record.id] = nil
 	record.model:Destroy()
@@ -564,6 +566,11 @@ local function beginWorking(record: NPCRecord, stationId: string)
 	record.phase = "Working"
 	record.workEndsAt = now() + sample.seconds
 	record.humanoid:Move(Vector3.zero)
+	-- A bot at a station is a rival there, the same as a human.
+	local station = TaskService.getStationPart(stationId) :: BasePart?
+	if station ~= nil then
+		StationOccupancy.enter(record.id, station)
+	end
 end
 
 local function chooseNextStation(record: NPCRecord)
@@ -725,6 +732,7 @@ local function tickNPC(record: NPCRecord, nowValue: number)
 		if endsAt ~= nil and nowValue >= endsAt and stationId ~= nil then
 			local TaskService = Loader.get("TaskService") :: any
 			TaskService.recordCompletionFor(record.id, stationId)
+			StationOccupancy.leave(record.id)
 			record.targetStationId = nil
 			record.workEndsAt = nil
 			record.phase = "Idle"

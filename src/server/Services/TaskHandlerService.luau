@@ -37,6 +37,7 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
+local StationOccupancy = require(ServerScriptService.Server.StationOccupancy)
 local Types = require(ServerScriptService.Server.TaskHandlers.Types)
 local handlers = require(ServerScriptService.Server.TaskHandlers) :: { [string]: Types.TaskHandler<any, any, any> }
 
@@ -100,6 +101,7 @@ local function endSession(player: Player, notify: boolean?)
 	if notify and player.Parent ~= nil then
 		Net.fireClient("TaskEnded", player, { attempt = session.attempt })
 	end
+	StationOccupancy.leave(player.UserId)
 end
 
 local function beginInteraction(player: Player, stationId: string)
@@ -159,6 +161,7 @@ local function beginInteraction(player: Player, stationId: string)
 		player,
 		{ stationId = stationId, taskId = taskId, challenge = challenge, attempt = attempt }
 	)
+	StationOccupancy.enter(player.UserId, stationPart)
 end
 
 -- The shared entry point every per-task submission remote (KeypadDigitSubmit
@@ -271,6 +274,7 @@ function TaskHandlerService:init()
 		for player in activeSessions do
 			endSession(player, true)
 		end
+		StationOccupancy.clear()
 	end)
 end
 

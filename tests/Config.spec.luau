@@ -314,6 +314,30 @@ TestRunner.describe("Validate.checkMap", function()
 		Validate.checkMap("M.luau", map, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
 	end)
+
+	TestRunner.it("accepts a stationMarker inside the limits", function()
+		local issues = {}
+		local map = validMap("m", { "pressure-valve" })
+		map.stationMarker = { beam = true, pad = false, beamHeight = 12, tint = "#FFB86B" }
+		Validate.checkMap("M.luau", map, issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects a station beam tall enough to poke through the floor above", function()
+		local issues = {}
+		local map = validMap("m", { "pressure-valve" })
+		map.stationMarker = { beam = true, pad = true, beamHeight = Validate.STATION_MARKER_BEAM_HEIGHT_MAX + 1 }
+		Validate.checkMap("M.luau", map, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("rejects a stationMarker tint that isn't #RRGGBB", function()
+		local issues = {}
+		local map = validMap("m", { "pressure-valve" })
+		map.stationMarker = { beam = true, pad = true, beamHeight = 12, tint = "violet" }
+		Validate.checkMap("M.luau", map, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
 end)
 
 TestRunner.describe("Validate.checkPowerUp (design-decisions.md Q8)", function()

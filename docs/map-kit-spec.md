@@ -57,6 +57,9 @@ untagged map dressing — only the interact point itself carries the tag.
     from the catalogue (e.g. `"pressure-valve,vent-purge"`) this station
     is allowed to run. Multiple ids let `TaskService` vary which task
     appears here across rounds for replay variety.
+  - **Reserved, don't author:** `Occupants`. The server writes it at
+    runtime to say who is working at the station (P7-6,
+    `station-readability.md`).
 - **Count:** 12–24. The floor of 12 matches the level-design brief's
   minimum for laying out 6 players' personal task lists without
   bottlenecking everyone into the same 3–4 stations; the ceiling is a
@@ -216,6 +219,7 @@ export type MapDef = {
 	waveNumber: 1 | 2 | 3,
 	enabled: boolean, -- false = built but not yet live
 	taskStationCount: number, -- 12–24; see note below
+	stationMarker: StationMarkerDef?, -- P7-6; nil = default marker, see station-readability.md §4
 }
 ```
 
