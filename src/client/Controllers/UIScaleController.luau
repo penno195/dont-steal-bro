@@ -257,9 +257,10 @@ function UIScaleController:init()
 	watchCamera()
 
 	-- Insets can move without the viewport changing: the top bar
-	-- resizing, or the OS reporting new safe-zone offsets on rotation.
+	-- resizing. (GuiService.SafeZoneOffsetsChanged is RobloxScript-only
+	-- and throws if connected; rotation already changes ViewportSize,
+	-- which watchCamera covers.)
 	GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(recompute)
-	GuiService.SafeZoneOffsetsChanged:Connect(recompute)
 	GuiService:GetPropertyChangedSignal("PreferredTextSize"):Connect(recompute)
 
 	UserInputService:GetPropertyChangedSignal("PreferredInput"):Connect(function()

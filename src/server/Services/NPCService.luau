@@ -739,10 +739,15 @@ local function startTicking()
 
 	local interval = 1 / GameConfig.npc.tickHz
 	tickThread = task.spawn(function()
+		local me = coroutine.running()
 		while true do
 			task.wait(interval)
 			local nowValue = now()
 			for _, record in npcs do
+				-- stopTicking can run from INSIDE this loop (see there).
+				if tickThread ~= me then
+					return
+				end
 				-- One bot erroring must not stop every other bot's tick.
 				-- The message is captured through the handler's upvalue
 				-- rather than xpcall's second return, for the reason
@@ -761,11 +766,15 @@ local function startTicking()
 	end)
 end
 
+-- Found in Studio: a bot finishing the race ends Race from inside its own
+-- tick, so this runs on the tick thread's stack, and task.cancel throws
+-- on a thread that isn't suspended. Clearing tickThread is what stops
+-- the loop then; it checks before each bot and returns.
 local function stopTicking()
 	local thread = tickThread
-	if thread ~= nil then
+	tickThread = nil
+	if thread ~= nil and coroutine.status(thread) == "suspended" then
 		task.cancel(thread)
-		tickThread = nil
 	end
 end
 
@@ -799,7 +808,7 @@ local function fillSeats()
 		string.format(
 			"NPCService: %d human(s) after a %.0fs grace window - spawned %d NPC(s)",
 			humansPresent,
-			GameConfig.npc.fillGraceSeconds,
+			if graceAlreadyServed then 0 else GameConfig.npc.fillGraceSeconds,
 			Participants.countNPCs()
 		)
 	)

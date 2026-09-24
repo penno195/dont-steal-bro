@@ -62,8 +62,14 @@ local weighting: VoteLogic.Weighting = {
 	decay = config.recentDecay,
 }
 
-local groupMap = MemoryStoreService:GetHashMap(matchmakingConfig.groupMapName)
-local recentMapsMap = MemoryStoreService:GetHashMap(config.recentMapName)
+-- Nil in a never-published place, where MemoryStoreService throws. Every
+-- use below is already inside a pcall, so a nil map reads as a failed
+-- call rather than taking the server down at require time.
+local groupMap: MemoryStoreHashMap, recentMapsMap: MemoryStoreHashMap = nil :: any, nil :: any
+pcall(function()
+	groupMap = MemoryStoreService:GetHashMap(matchmakingConfig.groupMapName)
+	recentMapsMap = MemoryStoreService:GetHashMap(config.recentMapName)
+end)
 
 -- Roblox's Random: the tie-break and the ballot draw. VoteLogic takes it
 -- as a parameter so the specs can pass a seeded stand-in.

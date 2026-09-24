@@ -88,10 +88,18 @@ local LEASE_KEY = "formationLease"
 -- game.JobId is "" in Studio, and every Studio server would share it.
 local myJobId: string = if game.JobId ~= "" then game.JobId else "studio-" .. HttpService:GenerateGUID(false)
 
-local queueMap = MemoryStoreService:GetSortedMap(config.queueMapName)
-local groupMap = MemoryStoreService:GetHashMap(config.groupMapName)
-local recentMap = MemoryStoreService:GetHashMap(config.recentMapName)
-local metaMap = MemoryStoreService:GetHashMap(config.metaMapName)
+-- MemoryStoreService throws in a place that has never been published,
+-- and throwing here would take the whole server down with it. init()
+-- turns matchmaking off instead when the lookups fail.
+local queueMap: MemoryStoreSortedMap = nil :: any
+local groupMap: MemoryStoreHashMap, recentMap: MemoryStoreHashMap, metaMap: MemoryStoreHashMap =
+	nil :: any, nil :: any, nil :: any
+local memoryStoreOk, memoryStoreErr = pcall(function()
+	queueMap = MemoryStoreService:GetSortedMap(config.queueMapName)
+	groupMap = MemoryStoreService:GetHashMap(config.groupMapName)
+	recentMap = MemoryStoreService:GetHashMap(config.recentMapName)
+	metaMap = MemoryStoreService:GetHashMap(config.metaMapName)
+end)
 
 local active = false
 local tickets: { [Player]: Ticket } = {}
@@ -626,6 +634,10 @@ function MatchmakingService:init()
 		active = RunService:IsStudio()
 	else
 		active = game.PlaceId == config.hubPlaceId
+	end
+	if active and not memoryStoreOk then
+		warn("MatchmakingService: MemoryStore unavailable, queue disabled - " .. tostring(memoryStoreErr))
+		active = false
 	end
 
 	local NetGuard = Loader.get("NetGuard") :: any

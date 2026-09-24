@@ -61,11 +61,7 @@ local function isPlayerSpeaking(userId: number): boolean
 	return device.Active
 end
 
-local function onTextBoxChanged(inputBar: ChatInputBarConfiguration, textBox: TextBox)
-	if textBox.Text == "" then
-		return
-	end
-
+local function sendTypingIfNegotiating(inputBar: ChatInputBarConfiguration)
 	-- Declared non-optional in Roblox's own type defs even though it can
 	-- genuinely be unset at runtime (no channel targeted yet) - cast to
 	-- the honest optional type rather than comparing the declared type
@@ -99,12 +95,28 @@ function StudioChatController:init()
 	-- (WaitForChild applies); its own `TextBox` is a PROPERTY, not a
 	-- child, so it's read directly, not waited for the same way -
 	-- confirmed present as soon as the config instance itself is.
+	--
+	-- Found in Studio: TextBox is nil under Roblox's default chat UI - it
+	-- is only set when a game supplies its own input box. Then the
+	-- fallback is IsFocused: a focused bar counts as typing, re-sent on
+	-- the throttle so the indicator doesn't go stale mid-message.
 	local inputBar = TextChatService:WaitForChild("ChatInputBarConfiguration") :: ChatInputBarConfiguration
-	local textBox = inputBar.TextBox
+	local textBox = inputBar.TextBox :: TextBox?
 
-	textBox:GetPropertyChangedSignal("Text"):Connect(function()
-		onTextBoxChanged(inputBar, textBox)
-	end)
+	if textBox ~= nil then
+		textBox:GetPropertyChangedSignal("Text"):Connect(function()
+			if textBox.Text ~= "" then
+				sendTypingIfNegotiating(inputBar)
+			end
+		end)
+	else
+		inputBar:GetPropertyChangedSignal("IsFocused"):Connect(function()
+			while inputBar.IsFocused do
+				sendTypingIfNegotiating(inputBar)
+				task.wait(TYPING_SEND_THROTTLE_SECONDS)
+			end
+		end)
+	end
 
 	Net.onClientEvent("StudioChatTypingStatus", function(payload: any)
 		if payload.playerId == LocalPlayer.UserId then
