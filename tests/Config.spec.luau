@@ -150,6 +150,7 @@ local function validGameConfig(): Validate.GameConfig
 			respawnMultipliers = { Common = 0.25, Uncommon = 0.25, Rare = 0.25 },
 			zoneCheckSeconds = 0.2,
 		},
+		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
 		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0 },
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
@@ -1479,6 +1480,48 @@ TestRunner.describe("Validate.checkGameConfig (P5-3 vote)", function()
 		end)):toBe(0)
 		TestRunner.expect(#issuesWith(function(_vc, mm)
 			mm.groupRecordTtlSeconds = 135
+		end)):toBe(1)
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (studio test mode)", function()
+	local function issuesWith(mutate: (any) -> ()): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		mutate(config.studioTest)
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the valid block", function()
+		TestRunner.expect(#issuesWith(function(_st) end)):toBe(0)
+	end)
+
+	TestRunner.it("names a missing studioTest block instead of erroring on it", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.studioTest = nil :: any
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("keeps minHumans a whole number within the player count", function()
+		for _, count in { 0, 7, 1.5 } do
+			TestRunner.expect(#issuesWith(function(st)
+				st.minHumans = count
+			end)):toBe(1)
+		end
+		TestRunner.expect(#issuesWith(function(st)
+			st.minHumans = 6
+		end)):toBe(0)
+	end)
+
+	TestRunner.it("rejects an empty mapId and a negative delay", function()
+		TestRunner.expect(#issuesWith(function(st)
+			st.mapId = ""
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(st)
+			st.startDelaySeconds = -1
 		end)):toBe(1)
 	end)
 end)

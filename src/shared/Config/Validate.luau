@@ -353,6 +353,14 @@ export type PracticeConfig = {
 	zoneCheckSeconds: number, -- how often zone exits are noticed and effects cleared
 }
 
+-- StudioTestService: Studio-only auto-start. See GameConfig.studioTest.
+export type StudioTestConfig = {
+	enabled: boolean,
+	mapId: string, -- model name in ServerStorage.Maps
+	minHumans: number, -- 1..playerCount
+	startDelaySeconds: number,
+}
+
 -- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
 -- Studio phase timers are locked exactly by architecture.md §6's network
 -- trace (Intro +5s, Negotiate +45s, Choose +15s, Reveal +1s). Bounty
@@ -466,6 +474,9 @@ export type GameConfig = {
 
 	-- P5-5: the hub practice area. See PracticeConfig above.
 	practice: PracticeConfig,
+
+	-- Studio test mode. See StudioTestConfig above.
+	studioTest: StudioTestConfig,
 
 	-- P4-7: analytics batching. See TelemetryConfig above.
 	telemetry: TelemetryConfig,
@@ -1715,6 +1726,32 @@ local function checkPracticeConfig(pc: PracticeConfig, issues: { Issue })
 	end
 end
 
+-- Only shape is checked here. Whether `mapId` names a real model needs
+-- the Instance tree, so StudioTestService warns about that at runtime.
+local function checkStudioTestConfig(st: StudioTestConfig, playerCount: number, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "studioTest." .. field, message)
+	end
+
+	if st == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "studioTest", "the studioTest config block is missing entirely")
+		return
+	end
+
+	if type(st.enabled) ~= "boolean" then
+		bad("enabled", "must be a boolean")
+	end
+	if not isNonEmptyString(st.mapId) then
+		bad("mapId", "must be a non-empty string")
+	end
+	if type(st.minHumans) ~= "number" or st.minHumans < 1 or st.minHumans > playerCount or st.minHumans % 1 ~= 0 then
+		bad("minHumans", string.format("must be a whole number from 1 to playerCount (%s)", tostring(playerCount)))
+	end
+	if type(st.startDelaySeconds) ~= "number" or st.startDelaySeconds < 0 then
+		bad("startDelaySeconds", "must be zero or more")
+	end
+end
+
 local function checkVoteConfig(vc: VoteConfig, mm: MatchmakingConfig?, tp: TeleportConfig?, issues: { Issue })
 	local function bad(field: string, message: string)
 		issue(issues, "GameConfig", "GameConfig.luau", "vote." .. field, message)
@@ -1892,6 +1929,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkTeleportConfig(config.teleport, config.matchmaking, issues)
 	checkVoteConfig(config.vote, config.matchmaking, config.teleport, issues)
 	checkPracticeConfig(config.practice, issues)
+	checkStudioTestConfig(config.studioTest, config.playerCount, issues)
 
 	local telemetry = config.telemetry
 	if telemetry == nil then

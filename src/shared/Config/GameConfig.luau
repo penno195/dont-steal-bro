@@ -321,6 +321,17 @@ local GameConfig: Validate.GameConfig = {
 		zoneCheckSeconds = 0.2,
 	},
 
+	-- Studio test mode (StudioTestService). Never runs outside Studio.
+	-- Pressing Play loads `mapId` from ServerStorage.Maps and starts a
+	-- round once `minHumans` have loaded, NPCs filling the rest. Set
+	-- enabled = false to test the hub/queue in Studio instead.
+	studioTest = {
+		enabled = true,
+		mapId = "GrayBoxTest", -- any model name in ServerStorage.Maps, enabled or not
+		minHumans = 1,
+		startDelaySeconds = 3, -- after minHumans is reached, so a second test client can join
+	},
+
 	-- P4-2. LOCKED false by design-decisions.md Q7 condition 1, which
 	-- forbids any in-round tell of a player's streak and names
 	-- "nameplate" specifically - a title maps to a bestStreak threshold,

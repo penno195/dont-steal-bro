@@ -185,7 +185,10 @@ tags exists yet. Run this the first time a real map does, in order:
    `ConnectedNodeIds` (map-kit-spec.md), and the graph must be a single
    connected component. `scripts/build-graybox.luau` already produces a
    conforming set for `GrayBoxTest`.
-3. **Load it**, from the server's own command bar — the same route
+3. **Load it.** Studio test mode (`GameConfig.studioTest`,
+   `StudioTestService`) now does all of this step on Play, cloning into
+   `Workspace` included. The manual route below is only for when test
+   mode is off. From the server's own command bar — the same route
    `powerup-threat-notes.md` uses, through the loader rather than by
    requiring the service directly:
    ```lua

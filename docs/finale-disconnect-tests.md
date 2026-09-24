@@ -17,7 +17,10 @@ no round can reach the Studio in Studio. Run it the first time one can.
 ## Setup, once
 
 1. Open the place, **Test → Clients and Servers → 2 players**, Start.
-2. On the **server** command bar, load a map and force the round along:
+2. Studio test mode (`GameConfig.studioTest`) loads `GrayBoxTest` and
+   starts the round by itself. Set its `minHumans = 2` for this test so
+   the round waits for both clients. With test mode off, do it by hand
+   from the **server** command bar:
    ```lua
    local Loader = require(game.ReplicatedStorage.Shared.Loader)
    local map = game.ServerStorage.Maps.GrayBoxTest:Clone()
