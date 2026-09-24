@@ -353,6 +353,9 @@ end
 -- writing for the same player at once safe, exactly as on the all-time
 -- board.
 local function writePeriodBest(kind: string, userId: number, streak: number)
+	if not Loader.get("LiveConfig").flags().leaderboardWritesEnabled then
+		return -- P8-5 kill switch: nothing recorded, so a later write retries
+	end
 	local periodKey = PeriodKeys.keyFor(kind, os.time())
 	local writeKey = periodWriteKey(kind, periodKey, userId)
 
@@ -644,6 +647,9 @@ end
 -- SetAsync would be the bug here: last-writer-wins, and the loser of
 -- that race is a player's real record.
 local function writeBest(userId: number, bestStreak: number): boolean
+	if not Loader.get("LiveConfig").flags().leaderboardWritesEnabled then
+		return false -- P8-5 kill switch: lastWrittenBest untouched, so it retries later
+	end
 	local liveStore = store
 	if liveStore == nil then
 		return false
@@ -777,7 +783,7 @@ end
 
 local LeaderboardService: Loader.Service = {
 	name = "LeaderboardService",
-	dependencies = { "NetGuard", "ConfigValidator" },
+	dependencies = { "NetGuard", "ConfigValidator", "LiveConfig" },
 
 	submitBestStreak = submitBestStreak,
 	submitPeriodStreak = submitPeriodStreak,

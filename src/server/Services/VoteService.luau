@@ -99,7 +99,7 @@ end
 local function enabledMapIds(): { string }
 	local ids: { string } = {}
 	for _, entry in Maps do
-		if entry.def.enabled then
+		if entry.def.enabled and Loader.get("LiveConfig").isMapEnabled(entry.def.id) then
 			table.insert(ids, entry.def.id)
 		end
 	end
@@ -296,7 +296,7 @@ end
 
 local VoteService: Loader.Service = {
 	name = "VoteService",
-	dependencies = { "NetGuard", "ConfigValidator" },
+	dependencies = { "NetGuard", "ConfigValidator", "LiveConfig" },
 
 	-- The former's ballot for a group about to be claimed. Never yields.
 	drawBallot = function(members: { Entry }): MatchmakingLogic.Ballot

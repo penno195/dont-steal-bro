@@ -456,7 +456,9 @@ local function tick()
 	end
 	dispatch(pending)
 
-	if tryHoldLease() then
+	-- P8-5 kill switch: no new groups form, but owned entries above are
+	-- still serviced, so a group formed before the switch still departs.
+	if Loader.get("LiveConfig").flags().matchmakingEnabled and tryHoldLease() then
 		for _, group in MatchmakingLogic.selectGroups(entries, now(), logicConfig) do
 			formGroup(group)
 		end
@@ -519,6 +521,10 @@ local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: 
 	local existing = tickets[player]
 	if existing ~= nil then
 		sendState(player, { status = existing.status })
+		return
+	end
+	if not Loader.get("LiveConfig").flags().matchmakingEnabled then
+		sendState(player, { status = "Unavailable", message = "Matchmaking is paused for a moment. Try again soon." })
 		return
 	end
 	local DataService = Loader.get("DataService") :: any
@@ -616,7 +622,7 @@ end
 
 local MatchmakingService: Loader.Service = {
 	name = "MatchmakingService",
-	dependencies = { "NetGuard", "ConfigValidator", "DataService" },
+	dependencies = { "NetGuard", "ConfigValidator", "DataService", "LiveConfig" },
 
 	setDepartureHandler = setDepartureHandler,
 	setDestinationProvider = setDestinationProvider,

@@ -299,6 +299,9 @@ local function eligiblePool(point: SpawnPointRecord): { Validate.PowerUpDef }
 		if def.rarity ~= point.rarity then
 			continue
 		end
+		if not Loader.get("LiveConfig").isPowerUpEnabled(def.id) then
+			continue -- P8-5: switched off by live ops
+		end
 		if point.allowedPowerUpIds ~= nil and #point.allowedPowerUpIds > 0 then
 			if table.find(point.allowedPowerUpIds, def.id) == nil then
 				continue
@@ -639,6 +642,14 @@ local function useFor(racer: Participants.Participant, slotIndex: number?, targe
 		return
 	end
 
+	-- P8-5: switched off by live ops after it was picked up. Refused, not
+	-- consumed - the item stays in the slot in case it comes back on.
+	if not Loader.get("LiveConfig").isPowerUpEnabled(def.id) then
+		audit(racer, def.id, nil, "Rejected", "disabled by live ops")
+		sendResult(racer, false, def.id, nil, "temporarily disabled")
+		return
+	end
+
 	if PowerUpLogic.isOnCooldown(state.lastUsedAt[def.id], def.cooldownSeconds, now()) then
 		audit(racer, def.id, nil, "Rejected", "on cooldown")
 		sendResult(racer, false, def.id, nil, "on cooldown")
@@ -789,7 +800,7 @@ end
 
 local PowerUpService: Loader.Service = {
 	name = "PowerUpService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService" },
+	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "LiveConfig" },
 
 	setSpawnPoints = setSpawnPoints,
 	debugLoadSpawnPointsFromMap = debugLoadSpawnPointsFromMap,

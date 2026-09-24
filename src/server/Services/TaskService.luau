@@ -151,11 +151,31 @@ local function debugSetNextSeed(seed: number)
 	nextSeedOverride = seed
 end
 
-local function capacityForRoster(playerCount: number): number
-	if #stationPool == 0 then
+local function capacityForRoster(playerCount: number, pool: { TaskAssignment.StationInfo }): number
+	if #pool == 0 then
 		return 0
 	end
-	return math.ceil((playerCount * GameConfig.tasksPerPlayer) / #stationPool) + CAPACITY_HEADROOM
+	return math.ceil((playerCount * GameConfig.tasksPerPlayer) / #pool) + CAPACITY_HEADROOM
+end
+
+-- P8-5: the map's stations minus any task live ops has switched off. A
+-- station left with nothing to offer drops out entirely. Read once per
+-- race - a task disabled mid-race stays on the boards already dealt.
+local function enabledStationPool(): { TaskAssignment.StationInfo }
+	local LiveConfig = Loader.get("LiveConfig")
+	local pool: { TaskAssignment.StationInfo } = {}
+	for _, station in stationPool do
+		local accepted: { string } = {}
+		for _, taskId in station.acceptedTaskIds do
+			if LiveConfig.isTaskEnabled(taskId) then
+				table.insert(accepted, taskId)
+			end
+		end
+		if #accepted > 0 then
+			table.insert(pool, { stationId = station.stationId, acceptedTaskIds = accepted })
+		end
+	end
+	return pool
 end
 
 -- The payload field is still called `playerId` (the client contract
@@ -301,8 +321,9 @@ local function beginRace()
 	local seed = nextSeedOverride or math.floor(now() * 1000)
 	nextSeedOverride = nil
 
-	local capacity = capacityForRoster(#racerIds)
-	local assignmentsByRacerId = TaskAssignment.assign(seed, stationPool, racerIds, GameConfig.tasksPerPlayer, capacity)
+	local pool = enabledStationPool()
+	local capacity = capacityForRoster(#racerIds, pool)
+	local assignmentsByRacerId = TaskAssignment.assign(seed, pool, racerIds, GameConfig.tasksPerPlayer, capacity)
 
 	for racerId, assignments in assignmentsByRacerId do
 		racerStates[racerId] = {
@@ -429,7 +450,7 @@ end
 
 local TaskService: Loader.Service = {
 	name = "TaskService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService" },
+	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "LiveConfig" },
 
 	setStations = setStations,
 	debugLoadStationsFromMap = debugLoadStationsFromMap,

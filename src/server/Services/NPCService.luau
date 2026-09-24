@@ -806,6 +806,11 @@ local function fillSeats()
 
 	local humansPresent = Participants.countHumans()
 	local fillCount = NPCLogic.deriveFillCount(humansPresent, GameConfig.playerCount)
+	if not Loader.get("LiveConfig").flags().npcFillEnabled then
+		-- P8-5 switch: the round runs short-handed, and a race with fewer
+		-- than 3 finishers already has its rule (design-decisions.md §2).
+		fillCount = 0
+	end
 
 	for index = 1, fillCount do
 		spawnNPC(index + humansPresent)
@@ -826,7 +831,7 @@ end
 
 local NPCService: Loader.Service = {
 	name = "NPCService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "TaskService" },
+	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "TaskService", "LiveConfig" },
 
 	setNavNodes = setNavNodes,
 	setSpawnPoints = setSpawnPoints,

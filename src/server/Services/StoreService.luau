@@ -342,6 +342,13 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 		return notYet
 	end
 
+	-- P8-5 kill switch (also forced off by read-only mode). Deferring is
+	-- safe: Roblox keeps the receipt and offers it again later, so a
+	-- purchase made just before the switch is granted once it is back on.
+	if not Loader.get("LiveConfig").flags().storeEnabled then
+		return notYet
+	end
+
 	-- PurchaseId is documented as a string, but it is read through an
 	-- `any` and it is the key this entire design hangs on - so it is
 	-- normalised rather than assumed. tostring on a number id still
@@ -597,6 +604,12 @@ local function handlePurchaseIntent(player: Player, key: string)
 		return
 	end
 
+	-- P8-5 kill switch: no new prompts while the store is off.
+	if not Loader.get("LiveConfig").flags().storeEnabled then
+		sendPurchaseResult(player, key, "Unavailable", "The store is closed right now. Try again later.")
+		return
+	end
+
 	if def.kind == "GamePass" and ownsPass(player, def.assetId) then
 		sendPurchaseResult(player, key, "AlreadyOwned", "You already own this.")
 		return
@@ -795,7 +808,7 @@ end
 
 local StoreService: Loader.Service = {
 	name = "StoreService",
-	dependencies = { "NetGuard", "ConfigValidator", "DataService", "CosmeticService" },
+	dependencies = { "NetGuard", "ConfigValidator", "DataService", "CosmeticService", "LiveConfig" },
 
 	ownsPass = ownsPass,
 	consumeLoadoutFor = consumeLoadoutFor,

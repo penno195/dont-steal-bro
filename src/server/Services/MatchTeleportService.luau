@@ -75,7 +75,7 @@ local rng = Random.new()
 local function enabledMapIds(): { string }
 	local ids: { string } = {}
 	for _, entry in Maps do
-		if entry.def.enabled then
+		if entry.def.enabled and Loader.get("LiveConfig").isMapEnabled(entry.def.id) then
 			table.insert(ids, entry.def.id)
 		end
 	end
@@ -477,6 +477,7 @@ local MatchTeleportService: Loader.Service = {
 	dependencies = {
 		"ConfigValidator",
 		"DataService",
+		"LiveConfig",
 		"MatchmakingService",
 		"RoundService",
 		"NPCService",

@@ -202,6 +202,19 @@ local function data(player: Player): ProfileLogic.ProfileData?
 	return profile.Data :: any
 end
 
+-- P8-5: every SETTER reads through this, never data(). In live-ops
+-- read-only mode (docs/live-ops.md) it answers "not loaded", so each
+-- setter takes the no-op path it already has for an unloaded profile and
+-- nothing in any profile changes. ProfileStore still autosaves and
+-- releases sessions - that rewrites the same data and keeps session
+-- locks healthy, and stopping it would strand every player's lock.
+local function writable(player: Player): ProfileLogic.ProfileData?
+	if Loader.get("LiveConfig").flags().readOnly then
+		return nil
+	end
+	return data(player)
+end
+
 -- P5-1: MatchmakingService won't queue a player whose profile hasn't
 -- loaded. Otherwise the hub could send someone to a match before their
 -- session lock exists here to release.
@@ -259,7 +272,7 @@ export type ProgressionWriter = (player: Player, state: ProfileLogic.Progression
 local progressionWriterClaimedBy: string? = nil
 
 local function writeProgressionState(player: Player, state: ProfileLogic.ProgressionState)
-	local d = data(player)
+	local d = writable(player)
 	if d == nil then
 		return
 	end
@@ -426,7 +439,7 @@ end
 -- is an item the player will be handed and never paid for. Both callers
 -- (a slot change, and spending the loadout at round start) move both.
 local function setLoadoutAndStock(player: Player, loadout: { string }, stock: { [string]: number })
-	local d = data(player)
+	local d = writable(player)
 	if d == nil then
 		return
 	end
@@ -438,7 +451,7 @@ end
 -- stance setEquippedTitle takes, and for the same reason: nothing
 -- upstream of a setter (a UI remote) should be trusted to have checked.
 local function setEquippedCosmetic(player: Player, slot: string, itemId: string?): boolean
-	local d = data(player)
+	local d = writable(player)
 	if d == nil then
 		return false
 	end
@@ -460,7 +473,7 @@ local function getCurrency(player: Player): number
 end
 
 local function addCurrency(player: Player, amount: number)
-	local d = data(player)
+	local d = writable(player)
 	if d ~= nil then
 		d.currency = math.max(0, d.currency + amount)
 	end
@@ -478,7 +491,7 @@ local function recordRoundStat(
 	player: Player,
 	statName: "roundsPlayed" | "qualifications" | "steals" | "shares" | "wins" | "losses"
 )
-	local d = data(player)
+	local d = writable(player)
 	if d ~= nil then
 		d.stats[statName] += 1
 	end
@@ -491,7 +504,7 @@ end
 
 -- Never revoked (gdd.md §3) - only ever appends.
 local function unlockTitle(player: Player, titleId: string)
-	local d = data(player)
+	local d = writable(player)
 	if d ~= nil and table.find(d.unlockedTitles, titleId) == nil then
 		table.insert(d.unlockedTitles, titleId)
 	end
@@ -506,7 +519,7 @@ end
 -- invariant this setter itself enforces, since nothing upstream of it
 -- (a UI remote) should be trusted to have checked.
 local function setEquippedTitle(player: Player, titleId: string?): boolean
-	local d = data(player)
+	local d = writable(player)
 	if d == nil then
 		return false
 	end
@@ -527,7 +540,7 @@ end
 -- Takes an already-sanitised value (SettingsService builds it with
 -- SettingsLogic.apply). Returns false if the profile isn't loaded.
 local function setSettings(player: Player, settings: SettingsLogic.PlayerSettings): boolean
-	local d = data(player)
+	local d = writable(player)
 	if d == nil then
 		return false
 	end
@@ -537,7 +550,7 @@ end
 
 local DataService: Loader.Service = {
 	name = "DataService",
-	dependencies = {},
+	dependencies = { "LiveConfig" },
 	setPendingRoundOutcomeResolver = setPendingRoundOutcomeResolver,
 	isLoaded = isLoaded,
 	onLoaded = onLoaded,
