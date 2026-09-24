@@ -19,8 +19,8 @@
 --   colorBlindMode -> Env.colorBlindMode
 --   musicVolume,
 --   sfxVolume      -> the "Music" and "SFX" SoundGroups in SoundService.
---                     Audio isn't built yet; whatever plays sound must
---                     route it through these two groups.
+--                     AudioController (P8-3) routes every Sound through
+--                     one of them; ducking is on the Sound, not the group.
 --   voiceEnabled   -> Muted on the player's own AudioDeviceInput, the
 --                     mic the Decision Studio uses (StudioChatController).
 

@@ -38,6 +38,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Clock = require(ReplicatedStorage.Shared.Clock)
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
+local Feel = require(script.Parent.Parent.Components.Feel)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
 local Layout = require(script.Parent.Parent.Layout)
 local PayoffExplainer = require(script.Parent.PayoffExplainer)
@@ -952,10 +953,12 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			return stage() == "Choose"
 		end)
 
-		-- Seats + header.
+		-- Seats + header. Titles carries the outcome banner, so it's what
+		-- the reveal punches (FeelController, P8-3).
 		local header = hrow("Header", 2, HEADER_H, GAP, {
 			create("Frame")({
 				Name = "Titles",
+				Feel.scale("Reveal"),
 				LayoutOrder = 1,
 				BackgroundTransparency = 1,
 				Size = UDim2.fromOffset(COLUMN - RING - GAP, HEADER_H),
@@ -1031,6 +1034,7 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			buttons.Visible = store.isFinalist() and (s == "Intro" or s == "Negotiate" or s == "Choose")
 		end)
 		local locked = lockedCard(store, 3)
+		Feel.attach(locked, "Locked") -- punches on your lock-in (P8-3)
 		effect(function()
 			locked.Visible = store.isFinalist() and store.confirm().state == "Locked" and stage() ~= "Reveal"
 		end)

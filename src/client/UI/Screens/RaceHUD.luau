@@ -39,6 +39,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Clock = require(ReplicatedStorage.Shared.Clock)
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
+local Feel = require(script.Parent.Parent.Components.Feel)
 local HudLogic = require(script.Parent.Parent.HudLogic)
 local Layout = require(script.Parent.Parent.Layout)
 local Theme = require(script.Parent.Parent.Theme)
@@ -187,7 +188,8 @@ local function placementCard(standing: () -> HudLogic.Standing?): Frame
 	local lineColor = function(): Color3
 		return Theme.color[LINE_STYLE[line()].color]
 	end
-	return card("Placement", 1, UDim2.fromOffset(PILL, RING), {
+	-- Punches when you qualify (FeelController, P8-3).
+	local placement = card("Placement", 1, UDim2.fromOffset(PILL, RING), {
 		Base.text("headline", {
 			Name = "Place",
 			Size = UDim2.fromScale(1, 0.6),
@@ -249,6 +251,8 @@ local function placementCard(standing: () -> HudLogic.Standing?): Frame
 			}),
 		}),
 	})
+	Feel.attach(placement, "Placement")
+	return placement
 end
 
 local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean): Frame
@@ -371,8 +375,9 @@ local function taskRow(entry: () -> TaskRow, index: number): Frame
 	}) :: Frame
 end
 
+-- Punches on each of your own task completions (FeelController, P8-3).
 local function taskBar(done: () -> number, total: () -> number, width: number, order: number): GuiObject
-	return C.ProgressBar({
+	local bar = C.ProgressBar({
 		value = function()
 			local t = total()
 			return if t > 0 then done() / t else 0
@@ -385,6 +390,8 @@ local function taskBar(done: () -> number, total: () -> number, width: number, o
 		width = width,
 		layoutOrder = order,
 	})
+	Feel.attach(bar, "Tasks")
+	return bar
 end
 
 -- POWER-UP -------------------------------------------------------------

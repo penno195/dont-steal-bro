@@ -45,5 +45,7 @@ require("./MapCheck.spec")
 require("./LightingLogic.spec")
 require("./StationOccupants.spec")
 require("./StationMarkerLogic.spec")
+require("./AudioLogic.spec")
+require("./FeelLogic.spec")
 
 TestRunner.run()
