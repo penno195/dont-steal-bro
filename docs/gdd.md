@@ -5,8 +5,8 @@ still open; task **P0-1** in the build plan resolves them and produces v2.
 Until then, treat anything in section 7 as undecided, not as a gap to fill in
 with an assumption.
 
-**Title:** *Don't Steal Bro!* — named 19 Sep 2026. Task P9-1 now validates it
-for store search and truncation rather than generating options.
+**Title:** *Don't Steal Bro!* — named 19 Sep 2026. Validated for store search
+and truncation by P9-1 — see `store-page.md`.
 
 **Genre:** Competitive mini-task race with social deduction and PVP griefing.
 
