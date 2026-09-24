@@ -421,3 +421,18 @@ TestRunner.describe("StoreLogic.answerReplay (P8-1)", function()
 		TestRunner.expect(StoreLogic.answerReplay({}, "p1", false)):toBe("Decline")
 	end)
 end)
+
+TestRunner.describe("StoreLogic.passSyncDelay (P8-1 F5)", function()
+	TestRunner.it("syncs immediately the first time", function()
+		TestRunner.expect(StoreLogic.passSyncDelay(nil, 100, 10)):toBe(0)
+	end)
+
+	TestRunner.it("defers, never drops, a sync inside the cooldown", function()
+		TestRunner.expect(StoreLogic.passSyncDelay(100, 103, 10)):toBe(7)
+	end)
+
+	TestRunner.it("syncs immediately once the cooldown has passed", function()
+		TestRunner.expect(StoreLogic.passSyncDelay(100, 110, 10)):toBe(0)
+		TestRunner.expect(StoreLogic.passSyncDelay(100, 500, 10)):toBe(0)
+	end)
+end)

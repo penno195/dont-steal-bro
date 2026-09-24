@@ -53,7 +53,7 @@ is dropped after one token-bucket check and, at most, one throttled report.
 | `MapVoteIntent` | group member with a live ballot / any | Casts a vote through a CAS on the group record | dropped | 4 burst, 1/s | One vote, changeable. See F7 for quota cost |
 | `SettingsIntent` | any / any | Patches their own settings. Bounds come from the schema | dropped | 8 burst, 2/s | Their own settings |
 | `DebugForceRoundState` | Studio or `DEVELOPER_USER_IDS` (empty) / any | Forces a state transition | dropped | 3 burst, 0.2/s | **Nothing in live.** Refused and logged. See F6 |
-| `DecisionDebugForceOutcome` | Studio or `DEBUG_USER_IDS` (empty) / any | Forces a finale branch | dropped | 3 burst, 0.2/s | **Nothing in live.** See F6 |
+| `DecisionDebugForceOutcome` | Studio only / any | Forces a finale branch | dropped | 3 burst, 0.2/s | **Nothing in live.** See F6 |
 | every `ServerBroadcast` (30) | nobody | — | dropped: no schema | dropped (F2b) | Nothing |
 
 Server-driven inputs that are not remotes:
@@ -87,10 +87,10 @@ Scores run 1–5 on each axis.
 | F1 | Receipt save confirmation never matched, and a replay confirmed unsaved grants | 3 | 5 | **15** | **Fixed** |
 | F2 | Junk payloads bypassed the rate limiter, and every rejection was an unthrottled `warn` with an unbounded payload walk | 5 | 3 | **15** | **Fixed** |
 | F3 | Power-up pickups trusted client-reported `Touched` at any distance | 5 | 2 | **10** | **Fixed** |
-| F4 | NetGuard's flag hook is never wired, so repeated violations lead nowhere | 5 | 2 | **10** | **Needs your decision** |
-| F5 | Spoofed `PromptGamePassPurchaseFinished` busts the pass cache, costing one `UserOwnsGamePassAsync` per pass per spoof | 2 | 2 | 4 | Open (low) |
-| F6 | Debug remotes write real finale results for allow-listed IDs in live servers | 1 | 4 | 4 | Open (low); lists are empty |
-| F7 | `MapVoteIntent` costs one MemoryStore `UpdateAsync` per accepted call, including "Unchanged" votes | 3 | 1 | 3 | Open (low) |
+| F4 | NetGuard's flag hook is never wired, so repeated violations lead nowhere | 5 | 2 | **10** | **Fixed** (kick on malformed traffic) |
+| F5 | Spoofed `PromptGamePassPurchaseFinished` busts the pass cache, costing one `UserOwnsGamePassAsync` per pass per spoof | 2 | 2 | 4 | **Fixed** |
+| F6 | Debug remotes write real finale results for allow-listed IDs in live servers | 1 | 4 | 4 | **Fixed** (forced finale is Studio-only) |
+| F7 | `MapVoteIntent` costs one MemoryStore `UpdateAsync` per accepted call, including "Unchanged" votes | 3 | 1 | 3 | **Fixed** |
 | F8 | During a MemoryStore outage, the map comes from client-carried `TeleportData` (enabled maps only) | 1 | 1 | 1 | Accepted |
 | F9 | NPC chat lines come from per-personality pools in replicated config, so a player can infer an NPC's steal *probability* (not its choice) | 3 | 0.3 | ~1 | Accepted, by design |
 
@@ -167,35 +167,57 @@ distance against `PICKUP_REACH_STUDS = 10` through the pure
 
 **Test:** `PowerUpLogic.isWithinPickupReach (P8-1)`.
 
-### F4: Violations are counted but never acted on (needs your decision)
+### F4: Violations were counted but never acted on (fixed)
 
 `NetGuard.setFlagHandler` is never called, so a flagged player only
-produces a `warn`. The two design docs disagree about what should happen:
+produced a `warn`. `threat-model.md` §1 says repeated violations
+"escalate to a kick", while NetGuard's header said it never kicks.
 
-- `threat-model.md` §1 says repeated violations "escalate to a kick".
-- `NetGuard.luau`'s header says NetGuard deliberately never kicks, and
-  leaves that to a moderation system reading the flag hook.
+**Fix:** NetGuard now kicks on **malformed traffic only**: 5 calls within
+10s that fail their schema or hit a server-to-client remote. Client and
+server always run the same place version, so the real client never
+produces either. Every client send was checked: all go to intent remotes,
+and settings values are clamped by `SettingsLogic.apply` inside the
+schema bounds. Wrong-state and over-rate calls still only flag, because a
+legitimate player can trip them: a tap in flight as the race ends, or a
+very fast masher.
 
-I did **not** wire a kick. Kicking real players is a policy call, and
-wrong-state and rate-limit rejections do happen legitimately: a tap in
-flight when the race ends, or a very fast masher. A narrow option that is
-safe on false positives: **kick on N schema violations only**. A real
-client built from the same place version never sends a malformed payload.
+**Test:** the window-and-threshold logic is `Net.recordViolation`, already
+covered in `tests/Net.spec.luau`. The kick itself needs the Studio check
+in §6.
 
-### F5–F7: Open, low
+### F5: Spoofed game-pass signal amplification (fixed)
 
-- **F5:** throttle the cache-bust in `PromptGamePassPurchaseFinished` to one
-  per player per ~10s. The worst case today is burning the server's
-  ownership-check budget, so other players' passes briefly read as the
-  cached (or false) value. Only live perks are affected; nothing
-  persisted is.
-- **F6:** keep `DEVELOPER_USER_IDS`/`DEBUG_USER_IDS` empty in shipped
-  builds. If they are ever populated, gate the forced finale so it skips
-  `computeOutcomeAndWriteProfiles`, or tag its writes, so an allow-listed
-  (or compromised) dev account can't mint real streaks.
-- **F7:** skip the `UpdateAsync` when `VoteLogic.castVote` would return
-  "Unchanged" against the locally cached `session.record`. The current
-  cost is about 1 req/s per voter.
+`PromptGamePassPurchaseFinished` can be spoofed, and each signal busted the
+ownership cache and triggered a sync, costing one `UserOwnsGamePassAsync`
+per pass.
+
+**Fix:** syncs are coalesced to at most one per player per 10s. The pure
+`StoreLogic.passSyncDelay` defers a sync inside the cooldown and never drops
+it, so a real purchase right after a spoof is still picked up. The cache is
+busted only when the sync runs, for every pass id that arrived meanwhile.
+
+**Test:** `StoreLogic.passSyncDelay (P8-1 F5)`.
+
+### F6: Forced finale outcome in live servers (fixed)
+
+A forced branch runs the real `computeOutcomeAndWriteProfiles`, so an
+allow-listed (or stolen) dev account could mint real streaks. Skipping the
+writes isn't safe: each qualifier's pending-outcome resolver would then
+record a forfeit, and reset their streak, when they left.
+
+**Fix:** `DecisionDebugForceOutcome` is now **Studio-only**, and the unused
+`DEBUG_USER_IDS` allow-list is removed. `DebugForceRoundState` keeps its
+live allow-list (still empty), because a forced transition decides no
+finale outcome by itself.
+
+### F7: MemoryStore write per vote (fixed)
+
+**Fix:** `VoteService.onVoteIntent` now runs `VoteLogic.castVote` against the
+cached `session.record` first. Every refusal (not a member, not on the
+ballot, locked, unchanged) returns without a MemoryStore request. Votes
+that pass still go through the live CAS. `castVote` is already covered in
+`tests/VoteLogic.spec.luau`.
 
 ## 5. What can't be fixed server-side: detection and reversal
 
@@ -210,13 +232,17 @@ client built from the same place version never sends a malformed payload.
 These can't be run headlessly because they bind to Roblox instances:
 
 1. **F2:** in a Studio server, run
-   `for i = 1, 5000 do Remotes.TapSubmit:FireServer("junk") end` from the
-   client command bar. Expect at most 10 NetGuard warns, then about 1/s,
-   each with a "+N similar suppressed" suffix. Expect no "invocation queue
-   exhausted" warning when the same loop fires `Remotes.RoundState`.
-2. **F3:** during a race, fire `firetouchinterest`-style touches, or move a
+   `for i = 1, 5000 do Remotes.TapSubmit:FireServer({ stationId = "x" }) end`
+   from the client command bar. The payload is well-formed, so there's no
+   kick. Expect at most 10 NetGuard warns, then about 1/s, each with a
+   "+N similar suppressed" suffix.
+2. **F4:** run `for i = 1, 5 do Remotes.TapSubmit:FireServer("junk") end`.
+   Expect a kick with the "sent data this game doesn't accept" message.
+   Rejoin and repeat with `Remotes.RoundState` in place of `TapSubmit`:
+   expect the same kick, and no "invocation queue exhausted" warning.
+3. **F3:** during a race, fire `firetouchinterest`-style touches, or move a
    pickup 50 studs from the character on the server. Expect no inventory
    change.
-3. **F1:** set `receiptMaxWaitSeconds` to 0 and buy a dev product in Studio.
+4. **F1:** set `receiptMaxWaitSeconds` to 0 and buy a dev product in Studio.
    Expect the first attempt to decline, the retry to wait for a save, and
    "already granted and saved" in the log only after it lands.

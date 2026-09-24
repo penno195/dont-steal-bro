@@ -259,6 +259,19 @@ local function onVoteIntent(player: Player, payload: { mapId: string })
 	if session == nil or session.done or session.record.result ~= nil then
 		return
 	end
+	-- Pre-check against the cached record before paying for an UpdateAsync
+	-- (P8-1 F7). Every refusal castVote can give - not a member, not on
+	-- the ballot, locked, or the same vote again - is already knowable
+	-- from the copy this server holds, so a spammed or repeated vote no
+	-- longer costs a MemoryStore request. The CAS below still re-checks
+	-- against the live record for anything that passes.
+	local _localVotes, localRefusal = VoteLogic.castVote(session.record, player.UserId, payload.mapId)
+	if localRefusal ~= nil then
+		if localRefusal ~= "Unchanged" and localRefusal ~= "Locked" then
+			warn(string.format("VoteService: vote from %d refused (%s)", player.UserId, localRefusal))
+		end
+		return
+	end
 	local refusal: string? = nil
 	local ok, written = casRecord(session.groupId, function(current: GroupRecord): GroupRecord?
 		local votes, reason = VoteLogic.castVote(current, player.UserId, payload.mapId)

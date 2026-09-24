@@ -409,6 +409,20 @@ function StoreLogic.isOwnershipFresh(
 	return (now - checkedAt) < ttl
 end
 
+-- How long to wait before re-checking pass ownership after a
+-- PromptGamePassPurchaseFinished (P8-1 F5). That signal can be spoofed by
+-- the client, and every sync costs one UserOwnsGamePassAsync per pass -
+-- a web call with a server-wide budget. So syncs are at most one per
+-- `cooldownSeconds` per player: 0 means "sync now", anything else means
+-- "sync once this many seconds from now". Deferred, never dropped, so a
+-- real purchase that lands just after a spoof is still picked up.
+function StoreLogic.passSyncDelay(lastSyncAt: number?, now: number, cooldownSeconds: number): number
+	if lastSyncAt == nil then
+		return 0
+	end
+	return math.max(0, cooldownSeconds - (now - lastSyncAt))
+end
+
 -- ===== equip state ========================================================
 
 -- May this player equip `itemId` into `slot`? Ownership is the only

@@ -26,11 +26,15 @@
 --   - Anything read from TeleportData. Never trusted here or anywhere
 --     else - it's a hint only (threat-model.md §5).
 --
--- Rejections never throw and never kick from inside this module - see
--- Net.recordViolation's doc comment for why escalation is log, then
--- throttle (the rate limiter itself), then flag-for-review, with the
--- actual kick decision left to whatever moderation system reads the
--- flag hook.
+-- Rejections never throw. Escalation is log, then throttle (the rate
+-- limiter itself), then flag-for-review through the flag hook - see
+-- Net.recordViolation's doc comment. The ONE thing this module kicks
+-- for is repeated MALFORMED traffic (P8-1 F4): a payload that fails its
+-- schema, or any call on a server-to-client remote. Client and server
+-- always run the same place version, so the real client never produces
+-- either - unlike a wrong-state or over-rate call, which a legitimate
+-- player can trip (a tap in flight as the race ends, a fast masher) and
+-- which therefore only ever flag, never kick.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -44,6 +48,13 @@ local Net = require(ReplicatedStorage.Shared.Net)
 -- their own unvalidated numbers.
 local ESCALATION_THRESHOLD = 5
 local ESCALATION_WINDOW_SECONDS = 10
+
+-- This many malformed calls within this many seconds is a kick (see the
+-- header). Tighter than a flag would warrant only because a false
+-- positive here requires a client that isn't ours.
+local MALFORMED_KICK_THRESHOLD = 5
+local MALFORMED_KICK_WINDOW_SECONDS = 10
+local MALFORMED_KICK_MESSAGE = "Disconnected: your client sent data this game doesn't accept."
 
 export type Report = {
 	player: Player,
@@ -90,6 +101,7 @@ end
 local handlers: { [string]: (player: Player, payload: any) -> () } = {}
 local limiterStates: { [Player]: { [string]: Net.RateLimiterState } } = {}
 local violationTrackers: { [Player]: Net.ViolationTracker } = {}
+local malformedTrackers: { [Player]: Net.ViolationTracker } = {}
 local roundStateProvider: RoundStateProvider = function()
 	return nil
 end
@@ -168,6 +180,32 @@ local function recordViolation(player: Player, remoteName: string)
 	end
 end
 
+-- Malformed traffic only - see the header for why this, and nothing
+-- else, kicks. Also counts toward the ordinary flag signal above.
+local function recordMalformed(player: Player, remoteName: string)
+	recordViolation(player, remoteName)
+
+	local tracker = malformedTrackers[player]
+	if tracker == nil then
+		tracker = Net.newViolationTracker(os.clock())
+		malformedTrackers[player] = tracker
+	end
+
+	if Net.recordViolation(tracker, os.clock(), MALFORMED_KICK_WINDOW_SECONDS, MALFORMED_KICK_THRESHOLD) then
+		warn(
+			string.format(
+				"NetGuard: kicking %s (%d) - %d malformed calls within %ds, last on %s",
+				player.Name,
+				player.UserId,
+				tracker.count,
+				MALFORMED_KICK_WINDOW_SECONDS,
+				remoteName
+			)
+		)
+		player:Kick(MALFORMED_KICK_MESSAGE)
+	end
+end
+
 local function getRateLimiterState(player: Player, def: Net.RemoteDef): Net.RateLimiterState
 	local perPlayer = limiterStates[player]
 	if perPlayer == nil then
@@ -204,6 +242,7 @@ local function handleServerEvent(def: Net.RemoteDef, player: Player, payload: an
 	local schema = def.schema
 	if schema == nil then
 		report(player, def.name, payload, "remote declares no schema - dropped by default")
+		recordMalformed(player, def.name)
 		return
 	end
 
@@ -217,7 +256,7 @@ local function handleServerEvent(def: Net.RemoteDef, player: Player, payload: an
 	local shapeOk, _typedPayload, shapeErr = schema.validate(payload)
 	if not shapeOk then
 		report(player, def.name, payload, string.format("invalid payload: %s", shapeErr or "unknown"))
-		recordViolation(player, def.name)
+		recordMalformed(player, def.name)
 		return
 	end
 
@@ -265,6 +304,7 @@ function NetGuard:init()
 	Players.PlayerRemoving:Connect(function(player: Player)
 		limiterStates[player] = nil
 		violationTrackers[player] = nil
+		malformedTrackers[player] = nil
 		reportLimiters[player] = nil
 		suppressedReports[player] = nil
 	end)

@@ -114,6 +114,13 @@ local receiptHandleFor: ((player: Player) -> any?)? = nil
 type OwnershipEntry = { owned: boolean, checkedAt: number }
 local ownership: { [Player]: { [number]: OwnershipEntry } } = {}
 
+-- P8-1 F5: at most one purchase-finished pass sync per player per this
+-- many seconds (see StoreLogic.passSyncDelay). Pass ids from signals that
+-- arrive while one is pending are merged into it, never dropped.
+local PASS_SYNC_COOLDOWN_SECONDS = 10
+local lastPassSyncAt: { [Player]: number } = {}
+local pendingPassSync: { [Player]: { [number]: boolean } } = {}
+
 -- Every grant this server has made, newest last. In memory only: the
 -- durable record is the profile itself plus Roblox's own transaction
 -- history. This exists so a live server can be asked "what did you hand
@@ -842,14 +849,33 @@ function StoreService:init()
 	-- purchase is precisely the bug this task exists to avoid.
 	MarketplaceService.PromptGamePassPurchaseFinished:Connect(
 		function(player: Player, gamePassId: number, wasPurchased: boolean)
-			local perPlayer = ownership[player]
-			if perPlayer ~= nil then
-				perPlayer[gamePassId] = nil
-			end
 			if not wasPurchased then
 				return
 			end
-			task.spawn(function()
+			-- Spoofable (P8-1 F5), so coalesced and throttled rather than
+			-- acted on per signal. The cache is only busted when the sync
+			-- actually runs - busting it per signal is what let a spoof
+			-- loop turn into one web call per pass per spoof.
+			local pending = pendingPassSync[player]
+			if pending ~= nil then
+				pending[gamePassId] = true
+				return
+			end
+			pending = { [gamePassId] = true }
+			pendingPassSync[player] = pending
+			local delay = StoreLogic.passSyncDelay(lastPassSyncAt[player], now(), PASS_SYNC_COOLDOWN_SECONDS)
+			task.delay(delay, function()
+				pendingPassSync[player] = nil
+				if player.Parent ~= Players then
+					return
+				end
+				lastPassSyncAt[player] = now()
+				local perPlayer = ownership[player]
+				if perPlayer ~= nil then
+					for passId in pending :: { [number]: boolean } do
+						perPlayer[passId] = nil
+					end
+				end
 				syncPasses(player)
 				pushState(player)
 			end)
@@ -858,6 +884,8 @@ function StoreService:init()
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		ownership[player] = nil
+		lastPassSyncAt[player] = nil
+		pendingPassSync[player] = nil
 	end)
 end
 

@@ -119,10 +119,6 @@ local Signal = require(ReplicatedStorage.Packages.Signal)
 export type Phase = "Intro" | "Negotiate" | "Choose" | "Reveal" | "Resolve"
 export type OutcomeBranch = "SoleSteal" | "LoneShare" | "AllShare" | "AllSteal"
 
--- PLACEHOLDER: no real developer UserIds configured yet - same stance
--- RoundService.luau's own identical placeholder takes.
-local DEBUG_USER_IDS: { number } = {}
-
 -- Lets another service (P3-3's StudioChat, P3-4+) react to a phase
 -- starting/ending without polling getPhase() - same Signal-per-state
 -- pattern RoundService.luau already established, and created eagerly at
@@ -231,14 +227,15 @@ local function broadcastPhase(phase: Phase, endsAt: number?)
 	enterSignals[phase]:Fire(endsAt)
 end
 
-local function isDebugAuthorized(player: Player?): boolean
-	if RunService:IsStudio() then
-		return true
-	end
-	if player == nil then
-		return false
-	end
-	return table.find(DEBUG_USER_IDS, player.UserId) ~= nil
+-- STUDIO ONLY, with no live allow-list (P8-1 F6). A forced branch runs
+-- the real computeOutcomeAndWriteProfiles, so in a live server it would
+-- mint real streaks and bounties for whoever holds the debug right - an
+-- insider (or a stolen dev account) writing the leaderboard. Skipping
+-- the writes instead isn't safe: each qualifier's pending-outcome
+-- resolver would then record a forfeit when they leave. So this hook
+-- simply doesn't exist outside Studio.
+local function isDebugAuthorized(_player: Player?): boolean
+	return RunService:IsStudio()
 end
 
 -- Maps an Outcomes.luau branch name to ProfileLogic's OutcomeTag
