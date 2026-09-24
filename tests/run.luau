@@ -42,5 +42,6 @@ require("./DecisionLogic.spec")
 require("./MenuScreens.spec")
 require("./Onboarding.spec")
 require("./MapCheck.spec")
+require("./LightingLogic.spec")
 
 TestRunner.run()

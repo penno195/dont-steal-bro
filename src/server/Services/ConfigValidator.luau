@@ -26,6 +26,7 @@ local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local NPCPersonalities = require(ReplicatedStorage.Shared.Config.NPCPersonalities)
 local Store = require(ReplicatedStorage.Shared.Config.Store)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local LightingPresets = require(ReplicatedStorage.Shared.Config.LightingPresets)
 
 local function formatIssues(issues: { Validate.Issue }): string
 	local lines = { string.format("ConfigValidator: %d config error(s):", #issues) }
@@ -76,6 +77,7 @@ function ConfigValidator:init()
 		npcPersonalities = NPCPersonalities,
 		store = Store,
 		cosmetics = Cosmetics,
+		lightingPresets = LightingPresets,
 	})
 
 	checkBuiltMaps(Maps :: any, issues)
@@ -86,14 +88,15 @@ function ConfigValidator:init()
 
 	print(
 		string.format(
-			"ConfigValidator: %d map(s), %d task(s), %d power-up(s), %d title(s), %d NPC personality(s), %d store entry(s), %d cosmetic(s) all valid",
+			"ConfigValidator: %d map(s), %d task(s), %d power-up(s), %d title(s), %d NPC personality(s), %d store entry(s), %d cosmetic(s), %d lighting preset(s) all valid",
 			#Maps,
 			#Tasks,
 			#PowerUps,
 			#Titles,
 			#NPCPersonalities,
 			#Store,
-			#Cosmetics
+			#Cosmetics,
+			#LightingPresets
 		)
 	)
 end

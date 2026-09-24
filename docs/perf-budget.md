@@ -98,7 +98,7 @@ Verified against Roblox's current streaming documentation
 |---|---|---|
 | `Workspace.StreamingEnabled` | `true` | Required baseline — the memory ceiling in §1 isn't achievable across 11 dense maps without it. |
 | `Workspace.StreamingMinRadius` | Keep the default, `64` | Roblox's own guidance: the default maximizes how much the engine can scale down for low-end devices — no reason to raise it for a 6-player map. |
-| `Workspace.StreamingTargetRadius` | Tighten well below the default `1024`, likely 200–300 | A compact 6-player race map doesn't need a 1024-stud buffer; the real number should come from the first gray-box map's actual footprint (P7-4), not be guessed here. |
+| `Workspace.StreamingTargetRadius` | Tighten well below the default `1024`: **`256`** as the starting value (P7-5) | A compact 6-player race map doesn't need a 1024-stud buffer. 256 comes from the wave-1 footprints (220–300 studs); re-measure it on the first gray-box. See `lighting-and-streaming.md` §1. |
 | `Workspace.ModelStreamingBehavior` | `Improved` over `Legacy` | The newer nonatomic-model streaming behavior; verify the specific differences against current docs before relying on this beyond "prefer the improved one." |
 | `Workspace.StreamOutBehavior` | Keep the default, `LowMemory` | Given the tight memory ceiling in §1, unloading proactively is the safer default over `Opportunistic`'s smoother-but-heavier tradeoff — worth an A/B test once there's real telemetry, not a settled decision. |
 | `Workspace.StreamingIntegrityMode` | `PauseOutsideLoadedArea` | This is the actual "pause mode" the brief asked for. Matters for more than smoothness here — a player interacting with a `TaskStation` in a not-yet-loaded region is a correctness bug (Ground Rule 1), not just visual pop-in, since the server must never let gameplay proceed against content the client hasn't actually received. |
@@ -106,9 +106,16 @@ Verified against Roblox's current streaming documentation
 
 ### Per-instance `ModelStreamingMode`, mapped to `map-kit-spec.md`'s tags
 
-Every gameplay-critical tagged instance from the map kit contract needs an
-explicit `Model.ModelStreamingMode` — leaving it on the default
-(`Nonatomic`) risks a round interacting with half-loaded geometry:
+> **Superseded by P7-5** (`lighting-and-streaming.md` §2). The server
+> always holds the whole map, because streaming only affects clients. So
+> only tags that *clients* read need a streaming mode, and today that is
+> just `TaskStation`: its anchor is Persistent and its dressing Atomic.
+> `MapStreaming.prepare` applies this at load. The rows below that mark
+> server-only tags (`NavNode`, `KillZone`, `SpawnPoint`, `Studio*`)
+> Persistent would spend client memory for nothing. The table is kept
+> for history.
+
+The original P0-6 proposal:
 
 | Tag (from `map-kit-spec.md`) | `ModelStreamingMode` | Why |
 |---|---|---|

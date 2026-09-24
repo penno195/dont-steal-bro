@@ -287,6 +287,11 @@ before it goes into a map, in order:
    stream out from under a player mid-round. If you're not sure whether
    a piece of gameplay-critical geometry counts, mark it `Persistent` and
    flag it for the streaming pass to confirm rather than guessing.
+   **Update (P7-5):** the streaming pass is done, and builders set
+   nothing. The map loader makes `TaskStation` anchors Persistent and
+   their dressing Atomic automatically. The other tags are read only by
+   the server, which always has the whole map. See
+   `lighting-and-streaming.md` §2.
 
 8. **Performance numbers are out of scope here.** Poly count, texture
    size, and draw call budgets are P0-6's job. This checklist gets a

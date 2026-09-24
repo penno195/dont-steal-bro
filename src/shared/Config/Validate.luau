@@ -56,6 +56,51 @@ export type MapDef = {
 	powerUpRarityWeightMultipliers: PowerUpRarityWeights?, -- P2-7: nil = {1,1,1}, no change from GameConfig.powerUpRotationTimers' base respawn seconds - see PowerUpService.luau's own header comment for why "per-map rarity weights" lands here rather than as a map-kit-spec.md tag/attribute
 }
 
+-- P7-5. One file per preset in Config/LightingPresets/; a MapDef's
+-- `lightingPreset` names one by `id`. Colours are "#RRGGBB" strings, not
+-- Color3, so this module stays loadable by Lune. Every Lighting field is
+-- required: LightingService writes all of them on every apply, so nothing
+-- from the previous map's preset can survive into the next one.
+--
+-- No `technology` field: Lighting.Technology is deprecated and not
+-- scriptable (set once in Studio). LightingStyle plus
+-- PrioritizeLightingQuality replace it and can be written from a script.
+-- docs/lighting-and-streaming.md has the reasoning and the per-effect
+-- mobile cost behind each preset.
+export type LightingStyleName = "Soft" | "Realistic"
+
+export type ColorCorrectionDef = {
+	brightness: number,
+	contrast: number,
+	saturation: number,
+	tintColor: string,
+}
+
+export type BloomDef = {
+	intensity: number,
+	size: number,
+	threshold: number,
+}
+
+export type LightingPresetDef = {
+	id: string,
+	lightingStyle: LightingStyleName,
+	prioritizeLightingQuality: boolean,
+	globalShadows: boolean,
+	ambient: string,
+	outdoorAmbient: string,
+	brightness: number,
+	clockTime: number, -- 0-24
+	environmentDiffuseScale: number, -- 0-1
+	environmentSpecularScale: number, -- 0-1
+	exposureCompensation: number,
+	fogColor: string,
+	fogStart: number,
+	fogEnd: number,
+	colorCorrection: ColorCorrectionDef?, -- nil = no ColorCorrectionEffect at all
+	bloom: BloomDef?, -- nil = no BloomEffect at all
+}
+
 -- ===== TaskDef: docs/tasks-catalogue.md =================================
 export type TaskVerb = "Tap" | "Hold" | "Drag" | "Sequence" | "Timing" | "Aim"
 
@@ -725,6 +770,128 @@ function Validate.checkMap(fileName: string, def: MapDef, issues: { Issue })
 					string.format("must be a positive number, got %s", tostring(multiplier))
 				)
 			end
+		end
+	end
+end
+
+-- Readability guards for lighting presets (P7-5). These are design limits,
+-- not engine limits, and they are stricter than the engine's. A preset
+-- that trips one would look moody and play badly.
+--
+-- Fog must not start before the longest sightline wave1-briefs.md §1.5
+-- allows (~120 studs). Otherwise an overtake the layout was built to
+-- show would be hidden in haze.
+Validate.LIGHTING_MIN_FOG_START_STUDS = 120
+-- The brightest channel of Ambient/OutdoorAmbient must reach at least
+-- this. It keeps the shaded side of a station off black on a dim phone
+-- screen at low brightness.
+Validate.LIGHTING_MIN_AMBIENT_CHANNEL = 64
+-- Heavy grading hurts colour-blind readability (accessibility.md) and
+-- fights P7-6's station highlight, so grading stays a light touch.
+Validate.LIGHTING_MAX_GRADE = 0.3
+-- Bloom may only catch emissive surfaces (Neon, lights), never ordinary
+-- lit geometry. A lower threshold washes out station props.
+Validate.LIGHTING_MIN_BLOOM_THRESHOLD = 1
+
+-- The brightest of a "#RRGGBB" colour's three channels (0-255), or nil
+-- if the string is malformed.
+local function brightestHexChannel(value: any): number?
+	if type(value) ~= "string" or string.match(value, "^#%x%x%x%x%x%x$") == nil then
+		return nil
+	end
+	local hex = value :: string
+	return math.max(
+		tonumber(string.sub(hex, 2, 3), 16) :: number,
+		tonumber(string.sub(hex, 4, 5), 16) :: number,
+		tonumber(string.sub(hex, 6, 7), 16) :: number
+	)
+end
+
+function Validate.checkLightingPreset(fileName: string, def: LightingPresetDef, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "LightingPreset", fileName, field, message)
+	end
+	local function range(field: string, value: any, min: number, max: number)
+		if type(value) ~= "number" or value < min or value > max then
+			bad(field, string.format("expected %s-%s, got %s", tostring(min), tostring(max), tostring(value)))
+		end
+	end
+	local function color(field: string, value: any): number?
+		local brightest = brightestHexChannel(value)
+		if brightest == nil then
+			bad(field, string.format('expected a "#RRGGBB" colour, got %s', tostring(value)))
+		end
+		return brightest
+	end
+
+	if not isNonEmptyString(def.id) then
+		bad("id", "id must be a non-empty string")
+	end
+	if def.lightingStyle ~= "Soft" and def.lightingStyle ~= "Realistic" then
+		bad("lightingStyle", string.format('expected "Soft" or "Realistic", got %s', tostring(def.lightingStyle)))
+	end
+	for _, field in { "prioritizeLightingQuality", "globalShadows" } do
+		if type((def :: any)[field]) ~= "boolean" then
+			bad(field, "must be a boolean")
+		end
+	end
+
+	for _, field in { "ambient", "outdoorAmbient" } do
+		local brightest = color(field, (def :: any)[field])
+		if brightest ~= nil and brightest < Validate.LIGHTING_MIN_AMBIENT_CHANNEL then
+			bad(
+				field,
+				string.format(
+					"too dark to read a station in shadow: brightest channel must be at least %d",
+					Validate.LIGHTING_MIN_AMBIENT_CHANNEL
+				)
+			)
+		end
+	end
+	color("fogColor", def.fogColor)
+
+	range("brightness", def.brightness, 0, 5)
+	range("clockTime", def.clockTime, 0, 24)
+	range("environmentDiffuseScale", def.environmentDiffuseScale, 0, 1)
+	range("environmentSpecularScale", def.environmentSpecularScale, 0, 1)
+	range("exposureCompensation", def.exposureCompensation, -1, 1)
+
+	if type(def.fogStart) ~= "number" or def.fogStart < Validate.LIGHTING_MIN_FOG_START_STUDS then
+		bad(
+			"fogStart",
+			string.format(
+				"must be at least %d studs (the longest designed sightline), got %s",
+				Validate.LIGHTING_MIN_FOG_START_STUDS,
+				tostring(def.fogStart)
+			)
+		)
+	end
+	if type(def.fogEnd) ~= "number" or type(def.fogStart) ~= "number" or def.fogEnd <= def.fogStart then
+		bad("fogEnd", "must be greater than fogStart")
+	end
+
+	local grade = def.colorCorrection
+	if grade ~= nil then
+		local max = Validate.LIGHTING_MAX_GRADE
+		range("colorCorrection.brightness", grade.brightness, -max, max)
+		range("colorCorrection.contrast", grade.contrast, -max, max)
+		range("colorCorrection.saturation", grade.saturation, -max, max)
+		color("colorCorrection.tintColor", grade.tintColor)
+	end
+
+	local bloom = def.bloom
+	if bloom ~= nil then
+		range("bloom.intensity", bloom.intensity, 0, 1)
+		range("bloom.size", bloom.size, 0, 56)
+		if type(bloom.threshold) ~= "number" or bloom.threshold < Validate.LIGHTING_MIN_BLOOM_THRESHOLD then
+			bad(
+				"bloom.threshold",
+				string.format(
+					"must be at least %d so only emissive surfaces bloom, got %s",
+					Validate.LIGHTING_MIN_BLOOM_THRESHOLD,
+					tostring(bloom.threshold)
+				)
+			)
 		end
 	end
 end
@@ -2082,6 +2249,12 @@ export type RegistryInput = {
 	-- "every Cosmetic grant's id stays opaque," the stance StoreGrant's
 	-- own comment already documents.
 	cosmetics: { { fileName: string, def: CosmeticDef } }?,
+
+	-- P7-5. Optional for the same reason. When it is passed, every
+	-- ENABLED map must name a registered preset. A disabled map may still
+	-- carry a placeholder name, because wave 2/3 maps are lit when they
+	-- are built.
+	lightingPresets: { { fileName: string, def: LightingPresetDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -2143,6 +2316,28 @@ function Validate.run(input: RegistryInput): { Issue }
 		titleByStreak[entry.def.minStreak] = entry.def.id
 	end
 	checkDuplicateIds("NPCPersonality", (input.npcPersonalities or {}) :: any, issues)
+
+	local lightingPresets = input.lightingPresets
+	if lightingPresets ~= nil then
+		local knownPresets: { [string]: boolean } = {}
+		for _, entry in lightingPresets do
+			Validate.checkLightingPreset(entry.fileName, entry.def, issues)
+			knownPresets[entry.def.id] = true
+		end
+		checkDuplicateIds("LightingPreset", lightingPresets :: any, issues)
+
+		for _, entry in input.maps do
+			if entry.def.enabled and not knownPresets[entry.def.lightingPreset] then
+				issue(
+					issues,
+					"Map",
+					entry.fileName,
+					"lightingPreset",
+					string.format("references unregistered lighting preset %q", tostring(entry.def.lightingPreset))
+				)
+			end
+		end
+	end
 
 	local knownTaskIds: { [string]: boolean } = {}
 	for _, entry in input.tasks do

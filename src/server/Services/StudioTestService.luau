@@ -12,8 +12,9 @@
 --   2. Hands the map to the services that take one through their
 --      Studio-only loaders: TaskService stations, NPCService nav nodes
 --      and spawns, PowerUpService spawns. If a MapDef shares the map's
---      id, its NPC difficulty and rarity weights apply too - enabled or
---      not, so an unreleased map can be tested.
+--      id, its NPC difficulty, rarity weights and lighting preset apply
+--      too - enabled or not, so an unreleased map can be tested. The
+--      clone gets MapStreaming.prepare before it is parented.
 --   3. Requests Loading. Humans are moved to spawn points 1..n; NPCService
 --      already seats bots from n+1 up, so the two never share a pad.
 --
@@ -25,12 +26,14 @@ local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local ServerScriptService = game:GetService("ServerScriptService")
 local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Maps = require(ReplicatedStorage.Shared.Config.Maps)
+local MapStreaming = require(ServerScriptService.Server.MapStreaming)
 
 local POLL_SECONDS = 0.5
 local SPAWN_HEIGHT = Vector3.new(0, 4, 0) -- matches NPCService.chooseSpawnCFrame
@@ -42,6 +45,9 @@ local function findMap(mapId: string): Instance?
 	local existing = Workspace:FindFirstChild(mapId)
 	if existing ~= nil then
 		print(string.format("StudioTestService: using workspace.%s as it stands", mapId))
+		-- Already parented, so clients may briefly see default streaming
+		-- modes. That's harmless in a Studio test session.
+		MapStreaming.prepare(existing)
 		return existing
 	end
 
@@ -51,6 +57,7 @@ local function findMap(mapId: string): Instance?
 		return nil
 	end
 	local map = source:Clone()
+	MapStreaming.prepare(map)
 	map.Parent = Workspace
 	return map
 end
@@ -77,6 +84,9 @@ local function applyMapDef(mapId: string)
 			local PowerUpService = Loader.get("PowerUpService") :: any
 			NPCService.setMapDifficultyModifier(entry.def.npcDifficultyModifier)
 			PowerUpService.setMapRarityWeights(entry.def.powerUpRarityWeightMultipliers)
+			-- LightingService restores the place's lighting on Cleanup.
+			local LightingService = Loader.get("LightingService") :: any
+			LightingService.apply(entry.def.lightingPreset)
 			return
 		end
 	end
@@ -102,11 +112,16 @@ local function placeHumans()
 		return a.UserId < b.UserId
 	end)
 	for index, player in humans do
-		local character = player.Character
-		if character ~= nil then
-			local point = spawnPoints[((index - 1) % #spawnPoints) + 1]
-			character:PivotTo(point.CFrame + SPAWN_HEIGHT)
-		end
+		local point = spawnPoints[((index - 1) % #spawnPoints) + 1]
+		-- One thread per player, because streamAround yields and no player
+		-- should wait on another's stream.
+		task.spawn(function()
+			MapStreaming.streamAround(player, point.Position)
+			local character = player.Character
+			if character ~= nil then
+				character:PivotTo(point.CFrame + SPAWN_HEIGHT)
+			end
+		end)
 	end
 end
 
@@ -148,7 +163,15 @@ end
 
 local StudioTestService: Loader.Service = {
 	name = "StudioTestService",
-	dependencies = { "ConfigValidator", "DataService", "RoundService", "TaskService", "NPCService", "PowerUpService" },
+	dependencies = {
+		"ConfigValidator",
+		"DataService",
+		"RoundService",
+		"TaskService",
+		"NPCService",
+		"PowerUpService",
+		"LightingService",
+	},
 }
 
 function StudioTestService:init()

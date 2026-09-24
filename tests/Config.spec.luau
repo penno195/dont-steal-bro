@@ -1589,3 +1589,129 @@ TestRunner.describe("Validate.checkGameConfig (P5-5 practice)", function()
 		end)):toBe(2)
 	end)
 end)
+
+local function validPreset(id: string): Validate.LightingPresetDef
+	return {
+		id = id,
+		lightingStyle = "Soft",
+		prioritizeLightingQuality = false,
+		globalShadows = true,
+		ambient = "#8C8C96",
+		outdoorAmbient = "#A0A0AA",
+		brightness = 2,
+		clockTime = 14,
+		environmentDiffuseScale = 1,
+		environmentSpecularScale = 0.5,
+		exposureCompensation = 0,
+		fogColor = "#C8D8E8",
+		fogStart = 400,
+		fogEnd = 2000,
+		colorCorrection = { brightness = 0, contrast = 0.1, saturation = 0, tintColor = "#FFFFFF" },
+		bloom = { intensity = 0.4, size = 24, threshold = 1.2 },
+	}
+end
+
+TestRunner.describe("Validate.checkLightingPreset (P7-5)", function()
+	local function issuesWith(mutate: (Validate.LightingPresetDef) -> ()): { Validate.Issue }
+		local issues = {}
+		local preset = validPreset("p")
+		mutate(preset)
+		Validate.checkLightingPreset("P.luau", preset, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts a valid preset, with or without post effects", function()
+		TestRunner.expect(#issuesWith(function() end)):toBe(0)
+		TestRunner.expect(#issuesWith(function(p)
+			p.colorCorrection = nil
+			p.bloom = nil
+		end)):toBe(0)
+	end)
+
+	TestRunner.it("rejects malformed colours", function()
+		for _, bad in { "8C8C96", "#8C8C9", "#GGGGGG", "red" } do
+			TestRunner.expect(#issuesWith(function(p)
+				p.fogColor = bad
+			end)):toBe(1)
+		end
+	end)
+
+	TestRunner.it("rejects ambient too dark to read a station in shadow", function()
+		TestRunner.expect(#issuesWith(function(p)
+			p.ambient = "#303030"
+		end)):toBe(1)
+		-- One bright channel is enough: a saturated tint still lights stations.
+		TestRunner.expect(#issuesWith(function(p)
+			p.outdoorAmbient = "#102040"
+		end)):toBe(0)
+	end)
+
+	TestRunner.it("keeps fog clear of the longest designed sightline", function()
+		TestRunner.expect(#issuesWith(function(p)
+			p.fogStart = 80
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(p)
+			p.fogStart = 500
+			p.fogEnd = 500
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("caps colour grading and keeps bloom off ordinary geometry", function()
+		TestRunner.expect(#issuesWith(function(p)
+			(p.colorCorrection :: Validate.ColorCorrectionDef).saturation = -0.8
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(p)
+			(p.bloom :: Validate.BloomDef).threshold = 0.5
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects an unknown lighting style", function()
+		TestRunner.expect(#issuesWith(function(p)
+			(p :: any).lightingStyle = "Future"
+		end)):toBe(1)
+	end)
+end)
+
+TestRunner.describe("Validate.run lighting preset cross-checks (P7-5)", function()
+	local function runWith(map: Validate.MapDef, presets: { { fileName: string, def: Validate.LightingPresetDef } })
+		return Validate.run({
+			gameConfig = validGameConfig(),
+			maps = { { fileName = "TestMap.luau", def = map } },
+			tasks = { { fileName = "PressureValve.luau", def = validTask("pressure-valve") } },
+			powerUps = { { fileName = "TestPowerUp.luau", def = validPowerUp("test-powerup") } },
+			titles = { { fileName = "TestTitle.luau", def = validTitle("test-title", 0) } },
+			lightingPresets = presets,
+		})
+	end
+
+	TestRunner.it("passes when an enabled map names a registered preset", function()
+		local map = validMap("test-map", { "pressure-valve" })
+		map.lightingPreset = "Test"
+		TestRunner.expect(#runWith(map, { { fileName = "Test.luau", def = validPreset("Test") } })):toBe(0)
+	end)
+
+	TestRunner.it("fails an enabled map whose preset is unregistered", function()
+		local map = validMap("test-map", { "pressure-valve" })
+		map.lightingPreset = "Missing"
+		local issues = runWith(map, { { fileName = "Test.luau", def = validPreset("Test") } })
+		TestRunner.expect(#issues):toBe(1)
+		TestRunner.expect(issues[1].field):toBe("lightingPreset")
+	end)
+
+	TestRunner.it("lets a disabled map keep a placeholder preset name", function()
+		local map = validMap("test-map", { "pressure-valve" })
+		map.lightingPreset = "NotLitYet"
+		map.enabled = false
+		TestRunner.expect(#runWith(map, {})):toBe(0)
+	end)
+
+	TestRunner.it("rejects two presets with the same id", function()
+		local map = validMap("test-map", { "pressure-valve" })
+		map.lightingPreset = "Test"
+		local issues = runWith(map, {
+			{ fileName = "A.luau", def = validPreset("Test") },
+			{ fileName = "B.luau", def = validPreset("Test") },
+		})
+		TestRunner.expect(#issues):toBe(1)
+	end)
+end)
