@@ -65,6 +65,7 @@ type Card = {
 	stroke: UIStroke,
 	count: TextLabel,
 	avatars: Frame,
+	avatarSlots: { ImageLabel },
 	tag: TextLabel,
 }
 
@@ -189,6 +190,22 @@ local function buildCard(list: ScrollingFrame, mapId: string, index: number): Ca
 	row.FillDirection = Enum.FillDirection.Horizontal
 	row.Padding = UDim.new(0, 4)
 	row.Parent = avatars
+	-- P8-2: a fixed set of slots built once, shown and hidden by
+	-- renderVotes. The board is re-sent every second while voting, and
+	-- rebuilding each face on every send was up to MAX_AVATARS labels
+	-- (and corners) per card per second. The list layout skips hidden
+	-- slots, so the visible ones still pack to the left.
+	local avatarSlots: { ImageLabel } = {}
+	for i = 1, MAX_AVATARS do
+		local avatar = Instance.new("ImageLabel")
+		avatar.Size = UDim2.fromOffset(AVATAR_SIZE, AVATAR_SIZE)
+		avatar.BackgroundColor3 = COLORS.sheet
+		avatar.LayoutOrder = i
+		avatar.Visible = false
+		corner(avatar, AVATAR_SIZE // 2)
+		avatar.Parent = avatars
+		avatarSlots[i] = avatar
+	end
 	avatars.Parent = button
 
 	button.Activated:Connect(function()
@@ -200,7 +217,14 @@ local function buildCard(list: ScrollingFrame, mapId: string, index: number): Ca
 	end)
 
 	button.Parent = list
-	return { button = button, stroke = stroke, count = count, avatars = avatars, tag = tag }
+	return {
+		button = button,
+		stroke = stroke,
+		count = count,
+		avatars = avatars,
+		avatarSlots = avatarSlots,
+		tag = tag,
+	}
 end
 
 local function buildBoard(state: any): Board
@@ -315,21 +339,17 @@ local function renderVotes(current: Board, state: any)
 			continue
 		end
 		card.count.Text = tostring(entry.votes)
-		for _, child in card.avatars:GetChildren() do
-			if child:IsA("ImageLabel") then
-				child:Destroy()
+		for i, avatar in card.avatarSlots do
+			local userId = entry.voters[i]
+			avatar.Visible = userId ~= nil
+			if userId ~= nil then
+				-- Same-value writes are skipped, so an unchanged face
+				-- doesn't re-resolve its image every second.
+				local image = avatarFor(userId)
+				if avatar.Image ~= image then
+					avatar.Image = image
+				end
 			end
-		end
-		for i, userId in entry.voters do
-			if i > MAX_AVATARS then
-				break
-			end
-			local avatar = Instance.new("ImageLabel")
-			avatar.Size = UDim2.fromOffset(AVATAR_SIZE, AVATAR_SIZE)
-			avatar.BackgroundColor3 = COLORS.sheet
-			avatar.Image = avatarFor(userId)
-			corner(avatar, AVATAR_SIZE // 2)
-			avatar.Parent = card.avatars
 		end
 		if not current.revealed then
 			local mine = if state.myVote == entry.mapId then HIGHLIGHT.mine else nil

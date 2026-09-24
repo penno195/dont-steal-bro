@@ -52,7 +52,10 @@ keybind can vary by Studio version, confirm in your own install.
 **Cut first:** consolidate materials and `SurfaceAppearance`s — every
 unique material on visible geometry is a potential extra draw call.
 
-**Triangle budget.** Studio: sum visible `MeshPart` triangle counts for
+**Triangle budget.** *(P8-2: `Stats.SceneTriangleCount` and
+`Stats.SceneDrawcallCount` give both aggregates directly on the client.
+See `perf-report.md` §6 for the snippet; that supersedes the manual
+approach below.)* Studio: sum visible `MeshPart` triangle counts for
 the current view (mesh info per-part; no single aggregate view is known
 to be reliable — verify this against current Studio tooling before
 treating it as a workflow). **Cut first:** swap high-poly asset-pack

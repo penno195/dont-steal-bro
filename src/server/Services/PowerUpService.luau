@@ -118,6 +118,14 @@ type RacerState = {
 
 local spawnPoints: { SpawnPointRecord } = {}
 local livePickups: { [SpawnPointRecord]: LivePickup } = {}
+-- P8-2: one part per spawn point for as long as that point exists,
+-- shown on spawn and hidden on claim rather than created and destroyed.
+-- Pooling by unparenting would save nothing here: a server-side part
+-- leaving and re-entering Workspace replicates to every client as a full
+-- destroy and create. A property change only sends the changed fields.
+-- The practice area respawns pickups for the life of the hub server, so
+-- this was unbounded churn there.
+local pickupParts: { [SpawnPointRecord]: BasePart } = {}
 local pendingRespawnThreads: { [SpawnPointRecord]: thread } = {}
 local racerStates: { [number]: RacerState } = {}
 local pickupsFolder: Folder? = nil
@@ -311,12 +319,45 @@ end
 
 local spawnAt: (point: SpawnPointRecord) -> ()
 
-local function destroyLivePickup(point: SpawnPointRecord)
-	local live = livePickups[point]
-	if live ~= nil then
-		live.part:Destroy()
-		livePickups[point] = nil
+-- Hidden rather than destroyed (see pickupParts). CanTouch and CanQuery
+-- go off with the visuals, so a hidden pickup can't be claimed or hit by
+-- a raycast.
+local function hideLivePickup(point: SpawnPointRecord)
+	livePickups[point] = nil
+	local part: BasePart? = pickupParts[point]
+	if part ~= nil then
+		part.Transparency = 1
+		part.CanTouch = false
+		part.CanQuery = false
 	end
+end
+
+local tryClaimPickup: (point: SpawnPointRecord, live: LivePickup, hitPart: BasePart) -> ()
+
+local function pickupPartFor(point: SpawnPointRecord): BasePart
+	local existing: BasePart? = pickupParts[point]
+	if existing ~= nil then
+		return existing
+	end
+	local part = Instance.new("Part")
+	part.Shape = Enum.PartType.Ball
+	part.Size = Vector3.new(2.5, 2.5, 2.5)
+	part.Anchored = true
+	part.CanCollide = false
+	part.Material = Enum.Material.Neon
+	part.Color = RARITY_COLOR[point.rarity] or Color3.fromRGB(255, 255, 255)
+	part.CFrame = point.part.CFrame + Vector3.new(0, 2, 0)
+	part.Parent = pickupsFolder
+	-- Connected once for the part's life. It reads the live record at
+	-- touch time, so a touch while hidden finds nothing to claim.
+	part.Touched:Connect(function(hit: BasePart)
+		local live = livePickups[point]
+		if live ~= nil then
+			tryClaimPickup(point, live, hit)
+		end
+	end)
+	pickupParts[point] = part
+	return part
 end
 
 local function cancelPendingRespawn(point: SpawnPointRecord)
@@ -360,7 +401,7 @@ end
 -- synchronously as the first line below, before anything that could
 -- yield - see this file's header comment, exploit #5, for why that
 -- ordering is what makes a near-simultaneous double-claim impossible.
-local function tryClaimPickup(point: SpawnPointRecord, live: LivePickup, hitPart: BasePart)
+tryClaimPickup = function(point: SpawnPointRecord, live: LivePickup, hitPart: BasePart)
 	if live.claimed then
 		return
 	end
@@ -419,12 +460,12 @@ local function tryClaimPickup(point: SpawnPointRecord, live: LivePickup, hitPart
 	table.insert(state.inventory, { powerUpId = live.def.id, acquiredAt = now() })
 	broadcastInventory(racer)
 
-	destroyLivePickup(point)
+	hideLivePickup(point)
 	scheduleRespawn(point)
 end
 
 spawnAt = function(point: SpawnPointRecord)
-	destroyLivePickup(point) -- defensive idempotency guard; shouldn't normally find one live
+	hideLivePickup(point) -- defensive idempotency guard; shouldn't normally find one live
 
 	local pool = eligiblePool(point)
 	if #pool == 0 then
@@ -434,25 +475,13 @@ spawnAt = function(point: SpawnPointRecord)
 
 	local def = PowerUpLogic.selectUniform(pool, math.random())
 
-	local part = Instance.new("Part")
+	local part = pickupPartFor(point)
 	part.Name = string.format("PowerUpPickup_%s", def.id)
-	part.Shape = Enum.PartType.Ball
-	part.Size = Vector3.new(2.5, 2.5, 2.5)
-	part.Anchored = true
-	part.CanCollide = false
+	part.Transparency = 0
 	part.CanTouch = true
 	part.CanQuery = true
-	part.Material = Enum.Material.Neon
-	part.Color = RARITY_COLOR[point.rarity] or Color3.fromRGB(255, 255, 255)
-	part.CFrame = point.part.CFrame + Vector3.new(0, 2, 0)
-	part.Parent = pickupsFolder
 
-	local live: LivePickup = { part = part, def = def, claimed = false }
-	livePickups[point] = live
-
-	part.Touched:Connect(function(hit: BasePart)
-		tryClaimPickup(point, live, hit)
-	end)
+	livePickups[point] = { part = part, def = def, claimed = false }
 end
 
 -- ===== use-intent validation pipeline ======================================
@@ -706,7 +735,19 @@ local function startPickups()
 		cancelPendingRespawn(point)
 	end
 	for point in livePickups do
-		destroyLivePickup(point)
+		hideLivePickup(point)
+	end
+	-- A part whose spawn point was replaced (a new map, or the practice
+	-- area) would otherwise sit forever at the old position.
+	local current: { [SpawnPointRecord]: boolean } = {}
+	for _, point in spawnPoints do
+		current[point] = true
+	end
+	for point, part in pickupParts do
+		if not current[point] then
+			part:Destroy()
+			pickupParts[point] = nil
+		end
 	end
 	racerStates = {}
 
