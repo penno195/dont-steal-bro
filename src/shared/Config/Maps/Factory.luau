@@ -23,7 +23,7 @@ local Factory: Validate.MapDef = {
 	},
 	npcDifficultyModifier = 1.0,
 	waveNumber = 1,
-	enabled = true,
+	enabled = false, -- wave 1: set true once built in ServerStorage.Maps
 	taskStationCount = 12, -- PLACEHOLDER: spec floor; update to the real built count
 }
 
