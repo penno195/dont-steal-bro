@@ -245,9 +245,9 @@ before it goes into a map, in order:
    `ModuleScript` inside the model, with no exceptions. A script shipped
    inside a downloaded asset pack is the single most common way a Roblox
    game gets backdoored — this is a security step, not tidiness (Ground
-   Rule 1). Note what you removed somewhere you can find again later; the
-   sanitiser tool (a later task) will do this automatically and log it,
-   but until it exists, this step is manual and mandatory.
+   Rule 1). `scripts/sanitise-pack.luau` (P7-2) automates steps 1–5 and
+   logs every script it removes — run it on every pack, dry run first.
+   Doing this step by hand is only the fallback.
 
 2. **Anchor everything.** Every part should be `Anchored = true` unless
    it has a specific, intentional reason to move (and if it does, flag
