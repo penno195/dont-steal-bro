@@ -350,6 +350,24 @@ export type TelemetryConfig = {
 	perMinuteLimit: number, -- 0 = no limit
 }
 
+-- ===== LiveOpsConfig: P8-5 ===============================================
+-- Where the live config lives, who may edit it, and which paths an
+-- override may touch. src/server/LiveConfigLogic.luau owns the rules.
+export type LiveOpsConfig = {
+	enabled: boolean, -- false = shipped defaults only, the DataStore is never read
+	dataStoreName: string,
+	envelopeKey: string,
+	auditKey: string,
+	refreshSeconds: number,
+	auditLogCap: number,
+	adminUserIds: { number },
+	tunablePaths: { string }, -- "<root>.<seg>..."; "*" = one segment, trailing "**" = any depth
+}
+
+-- LiveConfigLogic.ROOTS, copied (this file has zero requires) - change
+-- both together.
+local LIVE_OPS_ROOTS = { "game", "powerUp", "effect", "map" }
+
 -- ===== MatchmakingConfig: P5-1 ===========================================
 -- Cross-server queue timings and MemoryStore names. The ORDERINGS
 -- between these (checked in checkMatchmakingConfig) are what keep
@@ -559,6 +577,9 @@ export type GameConfig = {
 	-- on each NPCPersonalityDef, so adding a personality stays a
 	-- one-file change (Ground Rule 2).
 	npcBrain: NPCBrainConfig,
+
+	-- P8-5: live operations. See LiveOpsConfig above.
+	liveOps: LiveOpsConfig,
 }
 
 -- ===== LeaderboardConfig: P4-3 ===========================================
@@ -2172,6 +2193,68 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 				"telemetry.perMinuteLimit",
 				"must not be negative (0 means no limit)"
 			)
+		end
+	end
+
+	local liveOps = config.liveOps
+	if liveOps == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "liveOps", "the liveOps config block is missing entirely")
+	else
+		if type(liveOps.enabled) ~= "boolean" then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.enabled", "must be a boolean")
+		end
+		for _, field in { "dataStoreName", "envelopeKey", "auditKey" } do
+			if not isNonEmptyString((liveOps :: any)[field]) then
+				issue(issues, "GameConfig", "GameConfig.luau", "liveOps." .. field, "must be a non-empty string")
+			end
+		end
+		if liveOps.envelopeKey == liveOps.auditKey then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.auditKey", "must differ from envelopeKey")
+		end
+		-- One GetAsync per server per refresh: faster than this spends
+		-- the DataStore read budget on polling.
+		if liveOps.refreshSeconds < 15 then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.refreshSeconds", "must be at least 15")
+		end
+		if liveOps.auditLogCap < 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.auditLogCap", "must be at least 1")
+		end
+		for i, userId in liveOps.adminUserIds do
+			if type(userId) ~= "number" or userId <= 0 or userId ~= math.floor(userId) then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					string.format("liveOps.adminUserIds[%d]", i),
+					"must be a positive integer user id"
+				)
+			end
+		end
+		for i, pattern in liveOps.tunablePaths do
+			local label = string.format("liveOps.tunablePaths[%d]", i)
+			if not isNonEmptyString(pattern) then
+				issue(issues, "GameConfig", "GameConfig.luau", label, "must be a non-empty string")
+				continue
+			end
+			local segments = string.split(pattern, ".")
+			if not inSet(segments[1], LIVE_OPS_ROOTS) then
+				issue(issues, "GameConfig", "GameConfig.luau", label, pattern .. " must start with a known root")
+			end
+			if #segments < 2 then
+				issue(issues, "GameConfig", "GameConfig.luau", label, pattern .. " must name something under the root")
+			end
+			for s, segment in segments do
+				if segment == "" or (segment == "**" and s ~= #segments) then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						label,
+						pattern .. " has an empty segment or a non-trailing **"
+					)
+					break
+				end
+			end
 		end
 	end
 

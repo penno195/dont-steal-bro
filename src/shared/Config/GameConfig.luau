@@ -414,6 +414,62 @@ local GameConfig: Validate.GameConfig = {
 
 		chooseWobbleChance = 0.5,
 	},
+
+	-- P8-5: live operations. src/server/LiveConfigLogic.luau owns the
+	-- rules; docs/live-ops.md is the operator's guide.
+	liveOps = {
+		-- false = never read the DataStore; every server runs exactly
+		-- what shipped. The switch for "the live config itself is the
+		-- incident".
+		enabled = true,
+		dataStoreName = "LiveConfig_v1",
+		envelopeKey = "envelope",
+		auditKey = "audit",
+		-- Each refresh is one GetAsync per server. 60s keeps a fleet of
+		-- servers far inside the per-server read budget, and a kill
+		-- switch reaches every server within a minute.
+		refreshSeconds = 60,
+		auditLogCap = 200,
+		-- PLACEHOLDER: the developers' Roblox user ids. Empty = nobody
+		-- can run admin commands (edit the DataStore by hand instead).
+		adminUserIds = {},
+
+		-- What an override may touch. "*" = one path segment, a trailing
+		-- "**" = any depth. Roots: game = GameConfig, powerUp = PowerUps
+		-- registry by id, effect = StatusEffectDefs by id, map = Maps
+		-- registry by id. Every candidate is re-run through Validate, so a
+		-- pattern here allows a path, never a bad value.
+		--
+		-- Deliberately NOT here: player/qualifier counts and anything
+		-- else that changes the game's shape; place ids and MemoryStore
+		-- names; and matchmaking's queue timings (TTLs, leases, formation
+		-- tick). Those are read by every hub at once, and a staged
+		-- rollout would run two sets of them against the same queue -
+		-- the per-server settings below are the only safe ones.
+		tunablePaths = {
+			"game.raceDurationSeconds",
+			"game.tasksPerPlayer",
+			"game.qualificationFloorPercent",
+			"game.roundTimers.*",
+			"game.studioTimers.*",
+			"game.bountyTiers.*.soleStealerVU",
+			"game.bountyTiers.*.loneSharerVU",
+			"game.bountyTiers.*.allShareVU",
+			"game.powerUpRotationTimers.*",
+			"game.powerUpUseRangeStuds",
+			"game.npc.**",
+			"game.npcBrain.**",
+			"game.matchmaking.partialGroupTimeoutSeconds",
+			"game.matchmaking.partialGroupMinPlayers",
+			"game.matchmaking.rematchCooldownSeconds",
+			"game.telemetry.enabled",
+			"powerUp.*.durationSeconds",
+			"powerUp.*.cooldownSeconds",
+			"effect.*.magnitude",
+			"effect.*.durationSeconds",
+			"map.*.npcDifficultyModifier",
+		},
+	},
 }
 
 return GameConfig

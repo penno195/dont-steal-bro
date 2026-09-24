@@ -155,6 +155,16 @@ local function validGameConfig(): Validate.GameConfig
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
 		npcTitleTopRungsExcluded = 3,
+		liveOps = {
+			enabled = true,
+			dataStoreName = "LiveConfig_v1",
+			envelopeKey = "envelope",
+			auditKey = "audit",
+			refreshSeconds = 60,
+			auditLogCap = 200,
+			adminUserIds = { 12345 },
+			tunablePaths = { "game.roundTimers.*", "game.npc.**", "powerUp.*.durationSeconds" },
+		},
 	}
 end
 
@@ -1737,5 +1747,52 @@ TestRunner.describe("Validate.run lighting preset cross-checks (P7-5)", function
 			{ fileName = "B.luau", def = validPreset("Test") },
 		})
 		TestRunner.expect(#issues):toBe(1)
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (P8-5 liveOps)", function()
+	local function issuesWith(mutate: (any) -> ()): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		mutate(config.liveOps)
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the valid block", function()
+		TestRunner.expect(#issuesWith(function(_lo) end)):toBe(0)
+	end)
+
+	TestRunner.it("rejects a polling interval that would spend the read budget", function()
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.refreshSeconds = 5
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects the audit log sharing the envelope's key", function()
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.auditKey = lo.envelopeKey
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects a non-integer admin id", function()
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.adminUserIds = { 1.5 }
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects unknown roots, bare roots and a non-trailing **", function()
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.tunablePaths = { "store.items.*" }
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.tunablePaths = { "game" }
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.tunablePaths = { "game.**.seconds" }
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.tunablePaths = { "game..seconds" }
+		end)):toBe(1)
 	end)
 end)
