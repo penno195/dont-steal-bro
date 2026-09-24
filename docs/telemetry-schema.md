@@ -10,6 +10,11 @@ All analytics events flow through a single `Telemetry.luau` service to ensure co
 - **Batched and flushed** at 50 events or 10 seconds, whichever comes first.
 - **Kill switch** in `GameConfig.telemetry.enabled`.
 
+> **Wiring status (P9-2):** only `UserMatched`, `RoundStarted` and
+> `MapPlayed` are called anywhere, and the sink uses the deprecated
+> `AnalyticsService:FireEvent`. See `launch-review.md` §0 for the gap and
+> what has to change before launch.
+
 ---
 
 ## Core Funnel Events
