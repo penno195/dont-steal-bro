@@ -272,6 +272,13 @@ local function characterRoot(character: Model?): BasePart?
 	return nil
 end
 
+-- P8-1: how far a character's root may be from a pickup's centre and
+-- still count as touching it. The ball's 1.25 radius + ~3 studs from an
+-- R15 root down to the feet + ~5 studs of run-speed-times-latency slack,
+-- rounded up. Generous on purpose: a legit grab must never be refused,
+-- and anything within 10 studs was going to reach the pickup anyway.
+local PICKUP_REACH_STUDS = 10
+
 local RARITY_COLOR: { [string]: Color3 } = {
 	Common = Color3.fromRGB(180, 180, 180),
 	Uncommon = Color3.fromRGB(80, 170, 90),
@@ -374,6 +381,15 @@ local function tryClaimPickup(point: SpawnPointRecord, live: LivePickup, hitPart
 	end
 	-- P5-5: in practice, only someone inside the practice area.
 	if not EffectContext.mayAct(racer.id) then
+		return
+	end
+	-- P8-1: the touch itself is client-reported for a player's own
+	-- character, so re-measure it server-side before believing it.
+	local root = characterRoot(racer.character)
+	if
+		root == nil
+		or not PowerUpLogic.isWithinPickupReach(toVec3(root.Position), toVec3(live.part.Position), PICKUP_REACH_STUDS)
+	then
 		return
 	end
 

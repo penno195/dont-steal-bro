@@ -152,6 +152,43 @@ function StoreLogic.isPurchaseSaved(savedCache: { string }?, purchaseId: string)
 	return table.find(savedCache, purchaseId) ~= nil
 end
 
+-- Pulls `purchaseIdCache` out of a whole LastSavedData snapshot, for
+-- isPurchaseSaved above. Exists because the caller once passed the whole
+-- snapshot straight in (P8-1): a `:: any` cast hid the type mismatch,
+-- `table.find` over a dictionary always misses, and so NO receipt was
+-- ever seen as saved. Anything that isn't a table is "not saved yet",
+-- same as isPurchaseSaved's own nil.
+function StoreLogic.savedPurchaseIds(lastSavedData: any): { string }?
+	if type(lastSavedData) ~= "table" then
+		return nil
+	end
+	local cache = lastSavedData.purchaseIdCache
+	if type(cache) ~= "table" then
+		return nil
+	end
+	return cache
+end
+
+-- What to answer Roblox for a receipt classifyReceipt called
+-- "AlreadyGranted" (P8-1). The in-memory cache proves the grant was
+-- APPLIED, not that it was SAVED: a first attempt that applied the
+-- grant but timed out waiting for the save returns NotProcessedYet, and
+-- the retry then finds the id in memory. Confirming at that point would
+-- tell Roblox the player has their item while it still exists only in
+-- RAM. So: confirm if the save has landed; otherwise wait for one if the
+-- profile can still save; otherwise decline and let Roblox re-offer.
+export type ReplayAnswer = "Confirm" | "WaitForSave" | "Decline"
+
+function StoreLogic.answerReplay(savedCache: { string }?, purchaseId: string, profileActive: boolean): ReplayAnswer
+	if StoreLogic.isPurchaseSaved(savedCache, purchaseId) then
+		return "Confirm"
+	end
+	if profileActive then
+		return "WaitForSave"
+	end
+	return "Decline"
+end
+
 -- ===== grants =============================================================
 
 -- Applies every grant in `grants` to a copy of `state`, returning the

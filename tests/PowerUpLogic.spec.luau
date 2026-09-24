@@ -165,3 +165,19 @@ TestRunner.describe("PowerUpLogic.nearestInRange", function()
 		TestRunner.expect(PowerUpLogic.nearestInRange(caster, candidates, 24)):toBe(nil)
 	end)
 end)
+
+TestRunner.describe("PowerUpLogic.isWithinPickupReach (P8-1)", function()
+	local pickup = { x = 0, y = 2, z = 0 }
+
+	TestRunner.it("accepts a character standing on the pickup", function()
+		TestRunner.expect(PowerUpLogic.isWithinPickupReach({ x = 1, y = 3, z = 1 }, pickup, 10)):toBe(true)
+	end)
+
+	TestRunner.it("accepts exactly at the reach boundary", function()
+		TestRunner.expect(PowerUpLogic.isWithinPickupReach({ x = 10, y = 2, z = 0 }, pickup, 10)):toBe(true)
+	end)
+
+	TestRunner.it("refuses a touch reported from across the map", function()
+		TestRunner.expect(PowerUpLogic.isWithinPickupReach({ x = 200, y = 2, z = 40 }, pickup, 10)):toBe(false)
+	end)
+end)

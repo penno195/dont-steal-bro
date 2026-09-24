@@ -276,7 +276,7 @@ local function waitForSave(handle: any, purchaseId: string): boolean
 
 	local saved = false
 	local disconnect = handle.onAfterSave(function()
-		if StoreLogic.isPurchaseSaved(handle.getLastSavedData() :: any, purchaseId) then
+		if StoreLogic.isPurchaseSaved(StoreLogic.savedPurchaseIds(handle.getLastSavedData()), purchaseId) then
 			saved = true
 		end
 	end)
@@ -286,14 +286,14 @@ local function waitForSave(handle: any, purchaseId: string): boolean
 		return saved
 	end
 
-	if StoreLogic.isPurchaseSaved(handle.getLastSavedData() :: any, purchaseId) then
+	if StoreLogic.isPurchaseSaved(StoreLogic.savedPurchaseIds(handle.getLastSavedData()), purchaseId) then
 		return cleanup()
 	end
 
 	handle.save()
 
 	while now() < deadline do
-		if saved or StoreLogic.isPurchaseSaved(handle.getLastSavedData() :: any, purchaseId) then
+		if saved or StoreLogic.isPurchaseSaved(StoreLogic.savedPurchaseIds(handle.getLastSavedData()), purchaseId) then
 			saved = true
 			return cleanup()
 		end
@@ -372,9 +372,29 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 	local decision = StoreLogic.classifyReceipt(data.purchaseIdCache, purchaseKey, handle.isActive(), def ~= nil)
 
 	if decision == "AlreadyGranted" then
+		-- Applied is not saved (P8-1) - see StoreLogic.answerReplay.
+		local answer = StoreLogic.answerReplay(
+			StoreLogic.savedPurchaseIds(handle.getLastSavedData()),
+			purchaseKey,
+			handle.isActive()
+		)
+		if answer == "WaitForSave" and waitForSave(handle, purchaseKey) then
+			answer = "Confirm"
+		end
+		if answer ~= "Confirm" then
+			warn(
+				string.format(
+					"StoreService: receipt %s for %s (%d) was already applied but is not yet confirmed saved - declining so Roblox re-offers it",
+					purchaseKey,
+					player.Name,
+					userId
+				)
+			)
+			return notYet
+		end
 		print(
 			string.format(
-				"StoreService: receipt %s for %s (%d) already granted in an earlier session - confirming, granting nothing",
+				"StoreService: receipt %s for %s (%d) already granted and saved - confirming, granting nothing",
 				purchaseKey,
 				player.Name,
 				userId

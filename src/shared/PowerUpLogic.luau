@@ -56,6 +56,17 @@ end
 
 -- ===== inventory ==========================================================
 
+-- Pure: could a character whose root is at `root` really have touched a
+-- pickup at `pickup`? (P8-1.) Touched is reported by whichever machine
+-- simulates the touching part, and a player's own character is simulated
+-- on THEIR client - so an exploit can report a touch against a pickup on
+-- the far side of the map. The server re-measures instead of believing
+-- it. `reachStuds` covers the pickup's radius plus a character's
+-- half-extent plus latency slack; see PowerUpService.PICKUP_REACH_STUDS.
+function PowerUpLogic.isWithinPickupReach(root: Vec3, pickup: Vec3, reachStuds: number): boolean
+	return magnitude(subtract(root, pickup)) <= reachStuds
+end
+
 -- Pure: picking up a power-up while holding `currentSlotCount` of
 -- `maxSlots`. Returns (allowed, shouldSwapOldest) - "Swap" always allows
 -- and signals the caller to evict the oldest held item first; "Refuse"

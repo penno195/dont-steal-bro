@@ -3,8 +3,8 @@
 -- any real game-logic handler sees it. Net.luau (src/shared/Net.luau)
 -- declares WHAT a remote looks like; this is what ENFORCES that
 -- declaration against a client that Ground Rule 1 says is fully
--- compromised: exact-shape payload validation, a round-state gate, and
--- per-player rate limiting, in that order, before a handler ever runs.
+-- compromised: per-player rate limiting, exact-shape payload validation
+-- and a round-state gate, in that order, before a handler ever runs.
 --
 -- WHAT THIS WOULD NOT SAVE YOU FROM if you skipped server-side
 -- validation somewhere else and relied on the client instead:
@@ -124,11 +124,33 @@ local function setFlagHandler(handler: FlagHandler)
 	flagHandler = handler
 end
 
+-- Per-player budget for REPORTS, separate from every remote's own call
+-- budget (P8-1). Without it, 1000 junk calls a second were 1000 `warn`
+-- lines a second: the flood's cost landed on the server's log pipeline
+-- instead of on the attacker. Past the budget, reports are counted and
+-- the count rides along on the next one that is let through, so the log
+-- still says how big the flood was without printing every line of it.
+local REPORT_RATE_LIMIT: Net.RateLimit = { capacity = 10, refillPerSecond = 1 }
+local reportLimiters: { [Player]: Net.RateLimiterState } = {}
+local suppressedReports: { [Player]: number } = {}
+
 local function report(player: Player, remoteName: string, payload: any, reason: string)
+	local limiter = reportLimiters[player]
+	if limiter == nil then
+		limiter = Net.newRateLimiterState(REPORT_RATE_LIMIT, os.clock())
+		reportLimiters[player] = limiter
+	end
+	if not Net.tryConsume(limiter, os.clock()) then
+		suppressedReports[player] = (suppressedReports[player] or 0) + 1
+		return
+	end
+
+	local suppressed = suppressedReports[player]
+	suppressedReports[player] = nil
 	reportSink({
 		player = player,
 		remote = remoteName,
-		reason = reason,
+		reason = if suppressed then string.format("%s (+%d similar suppressed)", reason, suppressed) else reason,
 		payloadSize = Net.estimatePayloadSize(payload),
 	})
 end
@@ -162,14 +184,33 @@ local function getRateLimiterState(player: Player, def: Net.RemoteDef): Net.Rate
 	return state
 end
 
--- The guard pipeline itself: shape, then state, then rate limit, in
--- that order - cheapest and most-likely-to-reject checks first, so a
--- spam flood is rejected on shape/state before ever touching the token
--- bucket's bookkeeping.
+-- The guard pipeline itself: rate limit, then shape, then state.
+--
+-- Rate limit FIRST (P8-1). It used to run last, on the theory that
+-- shape/state are cheaper and reject most spam - but that meant a
+-- malformed or wrong-state call never touched the bucket at all, so a
+-- flood of junk was entirely unthrottled and every call paid for a
+-- schema walk and a report. Charging the bucket up front means every
+-- call, well-formed or not, spends from the same per-remote budget; a
+-- legitimate client never sends junk, so this costs it nothing.
 local function handleServerEvent(def: Net.RemoteDef, player: Player, payload: any)
+	-- An event can still arrive after PlayerRemoving has cleared this
+	-- player's state; handling it would just re-create that state and
+	-- leak it for the rest of the server's life.
+	if player.Parent ~= Players then
+		return
+	end
+
 	local schema = def.schema
 	if schema == nil then
 		report(player, def.name, payload, "remote declares no schema - dropped by default")
+		return
+	end
+
+	local limiterState = getRateLimiterState(player, def)
+	if not Net.tryConsume(limiterState, os.clock()) then
+		report(player, def.name, payload, "rate limit exceeded")
+		recordViolation(player, def.name)
 		return
 	end
 
@@ -183,13 +224,6 @@ local function handleServerEvent(def: Net.RemoteDef, player: Player, payload: an
 	if not Net.isStateAllowed(def, roundStateProvider()) then
 		local wanted = if def.states then table.concat(def.states :: { string }, ", ") else "any"
 		report(player, def.name, payload, string.format("wrong round state (needs one of: %s)", wanted))
-		recordViolation(player, def.name)
-		return
-	end
-
-	local limiterState = getRateLimiterState(player, def)
-	if not Net.tryConsume(limiterState, os.clock()) then
-		report(player, def.name, payload, "rate limit exceeded")
 		recordViolation(player, def.name)
 		return
 	end
@@ -215,11 +249,13 @@ local NetGuard: Loader.Service = {
 function NetGuard:init()
 	Net.createRemotes(ReplicatedStorage)
 
+	-- Every remote gets a listener, ServerBroadcasts included (P8-1). A
+	-- client can FireServer on a broadcast remote too, and with no
+	-- listener Roblox queues each call and then logs "invocation queue
+	-- exhausted" once per call - an unthrottled log flood. Connected here,
+	-- a broadcast has no schema, so handleServerEvent drops it through
+	-- the same throttled report as any other junk.
 	for _, def in Net.Remotes do
-		if def.direction ~= "ServerIntent" then
-			continue
-		end
-
 		local remote = Net.getRemote(def.name)
 		remote.OnServerEvent:Connect(function(player: Player, payload: any)
 			handleServerEvent(def, player, payload)
@@ -229,6 +265,8 @@ function NetGuard:init()
 	Players.PlayerRemoving:Connect(function(player: Player)
 		limiterStates[player] = nil
 		violationTrackers[player] = nil
+		reportLimiters[player] = nil
+		suppressedReports[player] = nil
 	end)
 end
 

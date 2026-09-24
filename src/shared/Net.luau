@@ -177,10 +177,21 @@ end
 -- value shape a schema wouldn't already have rejected (a function, an
 -- Instance) just gets counted by its type name and moved past; this
 -- exists for an analytics log line, not correctness.
-function Net.estimatePayloadSize(value: any): number
+--
+-- BOUNDED (P8-1): it only ever runs on a REJECTED payload, which by
+-- definition came from a hostile or broken client. An unbounded walk
+-- let a client make the server recurse through a huge, deeply nested
+-- table on every single rejected call - server CPU spent entirely at
+-- the attacker's choosing. It stops at `cap` (default PAYLOAD_SIZE_CAP)
+-- and at PAYLOAD_DEPTH_CAP levels of nesting, and returns `cap` itself to
+-- mean "at least this big" - which is all a log line needs.
+local PAYLOAD_SIZE_CAP = 4096
+local PAYLOAD_DEPTH_CAP = 8
+
+local function estimateBounded(value: any, budget: number, depth: number): number
 	local t = type(value)
 	if t == "string" then
-		return #(value :: string)
+		return math.min(#(value :: string), budget)
 	elseif t == "number" then
 		return 8
 	elseif t == "boolean" then
@@ -188,14 +199,29 @@ function Net.estimatePayloadSize(value: any): number
 	elseif t == "nil" then
 		return 0
 	elseif t == "table" then
+		if depth >= PAYLOAD_DEPTH_CAP then
+			return budget
+		end
 		local total = 0
 		for key, entry in value :: { [any]: any } do
-			total += Net.estimatePayloadSize(key) + Net.estimatePayloadSize(entry)
+			total += estimateBounded(key, budget - total, depth + 1)
+			if total >= budget then
+				return budget
+			end
+			total += estimateBounded(entry, budget - total, depth + 1)
+			if total >= budget then
+				return budget
+			end
 		end
 		return total
 	else
 		return #t
 	end
+end
+
+function Net.estimatePayloadSize(value: any, cap: number?): number
+	local budget = cap or PAYLOAD_SIZE_CAP
+	return math.min(estimateBounded(value, budget, 0), budget)
 end
 
 -- ===== Rate limiting: pure token bucket ==============================

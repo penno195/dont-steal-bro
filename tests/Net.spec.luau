@@ -196,3 +196,25 @@ TestRunner.describe("Net.recordViolation", function()
 		TestRunner.expect(tracker.count):toBe(1)
 	end)
 end)
+
+TestRunner.describe("Net.estimatePayloadSize (P8-1: bounded)", function()
+	TestRunner.it("still sizes an ordinary payload exactly", function()
+		TestRunner.expect(Net.estimatePayloadSize({ stationId = "abc" })):toBe(9 + 3)
+	end)
+
+	TestRunner.it("stops at the cap on a huge table instead of walking all of it", function()
+		local huge = {}
+		for i = 1, 100000 do
+			huge[i] = "xxxxxxxx"
+		end
+		TestRunner.expect(Net.estimatePayloadSize(huge, 100)):toBe(100)
+	end)
+
+	TestRunner.it("stops descending past the depth cap", function()
+		local deep: any = "leaf"
+		for _ = 1, 200 do
+			deep = { deep }
+		end
+		TestRunner.expect(Net.estimatePayloadSize(deep, 50)):toBe(50)
+	end)
+end)

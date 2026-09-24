@@ -379,3 +379,45 @@ TestRunner.describe("StoreLogic.formatGrantAudit", function()
 		TestRunner.expect(string.find(line, "n/a", 1, true) ~= nil):toBe(true)
 	end)
 end)
+
+TestRunner.describe("StoreLogic.savedPurchaseIds (P8-1)", function()
+	TestRunner.it("reads the cache out of a whole LastSavedData snapshot", function()
+		local snapshot = { currency = 50, purchaseIdCache = { "p1", "p2" } }
+		local cache = StoreLogic.savedPurchaseIds(snapshot)
+		TestRunner.expect(StoreLogic.isPurchaseSaved(cache, "p2")):toBe(true)
+	end)
+
+	TestRunner.it("regression: the whole snapshot is never mistaken for the cache", function()
+		-- The P8-1 bug: passing the snapshot itself made every lookup miss.
+		local snapshot = { currency = 50, purchaseIdCache = { "p1" } }
+		TestRunner.expect(StoreLogic.isPurchaseSaved(snapshot :: any, "p1")):toBe(false)
+		TestRunner.expect(StoreLogic.isPurchaseSaved(StoreLogic.savedPurchaseIds(snapshot), "p1")):toBe(true)
+	end)
+
+	TestRunner.it("treats a missing snapshot or missing cache as not saved", function()
+		TestRunner.expect(StoreLogic.savedPurchaseIds(nil)):toBe(nil)
+		TestRunner.expect(StoreLogic.savedPurchaseIds({ currency = 1 })):toBe(nil)
+		TestRunner.expect(StoreLogic.savedPurchaseIds({ purchaseIdCache = "p1" })):toBe(nil)
+	end)
+end)
+
+TestRunner.describe("StoreLogic.answerReplay (P8-1)", function()
+	TestRunner.it("confirms a replay whose grant has been saved", function()
+		TestRunner.expect(StoreLogic.answerReplay({ "p1" }, "p1", true)):toBe("Confirm")
+	end)
+
+	TestRunner.it("confirms a saved replay even after the session ended", function()
+		TestRunner.expect(StoreLogic.answerReplay({ "p1" }, "p1", false)):toBe("Confirm")
+	end)
+
+	TestRunner.it("waits for a save when the grant is only in memory", function()
+		-- First attempt applied the grant, timed out on the save and
+		-- declined; the retry must not confirm off the in-memory cache.
+		TestRunner.expect(StoreLogic.answerReplay({}, "p1", true)):toBe("WaitForSave")
+		TestRunner.expect(StoreLogic.answerReplay(nil, "p1", true)):toBe("WaitForSave")
+	end)
+
+	TestRunner.it("declines an unsaved replay once the profile can no longer save", function()
+		TestRunner.expect(StoreLogic.answerReplay({}, "p1", false)):toBe("Decline")
+	end)
+end)
