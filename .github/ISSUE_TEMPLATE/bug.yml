@@ -1,0 +1,118 @@
+name: Bug
+description: Something behaves differently from the spec, crashes, softlocks, or loses data.
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Severity rules are in `docs/playtest-protocol.md` §5. If you're unsure between two levels, pick the higher one.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity (your guess; triage confirms)
+      options:
+        - "S0 Critical: money, data, trust or server authority"
+        - "S1 Major: the round can't finish, or a player can't play"
+        - "S2 Moderate: works badly enough to change who wins"
+        - "S3 Minor: cosmetic or rare"
+    validations:
+      required: true
+  - type: input
+    id: place-id
+    attributes:
+      label: Place id
+      placeholder: "e.g. 1234567890"
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build version / commit
+      placeholder: "e.g. 7176f3f"
+    validations:
+      required: true
+  - type: input
+    id: round-id
+    attributes:
+      label: Round id
+      description: 'From the F9 server log line `RoundService: round <id> begins`. Write "unknown" only if it really can''t be found.'
+      placeholder: "e.g. 3f2a...:4"
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - PC (Windows)
+        - Mac
+        - iPhone
+        - iPad
+        - Android phone
+        - Android tablet
+        - Console
+        - Studio (local test)
+    validations:
+      required: true
+  - type: input
+    id: device-model
+    attributes:
+      label: Device model (phones and tablets)
+      placeholder: "e.g. Samsung Galaxy A14"
+  - type: dropdown
+    id: phase
+    attributes:
+      label: When did it happen?
+      options:
+        - Hub / queue
+        - Map vote
+        - Race
+        - Decision Studio (negotiate / choose)
+        - Reveal / results
+        - Store
+        - Teleport between places
+    validations:
+      required: true
+  - type: input
+    id: map
+    attributes:
+      label: Map (and task station or power-up, if relevant)
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Qualify in 3rd place
+        2. Leave the game during negotiation
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected (link the spec or config if you can)
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What actually happened
+    validations:
+      required: true
+  - type: dropdown
+    id: repro-rate
+    attributes:
+      label: How often?
+      options:
+        - Every time
+        - Sometimes
+        - Once so far
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs, screenshots, video
+      description: Paste F9 console errors (client and server) as text, not screenshots.
+      render: text

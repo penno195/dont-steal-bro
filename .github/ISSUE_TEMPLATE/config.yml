@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Playtest protocol
+    url: https://github.com/penno195/dont-steal-bro/blob/main/docs/playtest-protocol.md
+    about: How to run a session, and the severity rubric used on every issue.

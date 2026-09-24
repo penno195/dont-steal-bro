@@ -1,0 +1,97 @@
+name: Usability finding
+description: A player didn't understand something, or couldn't do something on their device.
+title: "[Usability] "
+labels: ["usability", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Write what the player **did and said**, not what you think the fix is. A finding shared by more than half the new players in a session blocks launch.
+  - type: input
+    id: place-id
+    attributes:
+      label: Place id
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build version / commit
+    validations:
+      required: true
+  - type: input
+    id: round-id
+    attributes:
+      label: Round id
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - PC (Windows)
+        - Mac
+        - iPhone
+        - iPad
+        - Android phone
+        - Android tablet
+        - Console
+    validations:
+      required: true
+  - type: input
+    id: device-model
+    attributes:
+      label: Device model and orientation (phones and tablets)
+      placeholder: "e.g. Galaxy A14, portrait"
+  - type: dropdown
+    id: experience
+    attributes:
+      label: Player experience
+      options:
+        - New (first session)
+        - Returning
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of problem
+      options:
+        - Didn't understand a rule (top 3, streak, Steal/Share, bounty)
+        - Didn't know where to go or what to do
+        - Couldn't reach or tap something (thumb zone, too small)
+        - Couldn't read something (size, contrast, colour)
+        - Missed information that was on screen
+        - A tip or prompt was wrong, late or in the way
+    validations:
+      required: true
+  - type: input
+    id: moment
+    attributes:
+      label: When (phase and moment)
+      description: Use the M1–M9 codes from the moderator script if one fits.
+      placeholder: "e.g. M6 Studio intro, 20s in"
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What the player did
+    validations:
+      required: true
+  - type: textarea
+    id: quote
+    attributes:
+      label: What they said (word for word)
+  - type: input
+    id: how-many
+    attributes:
+      label: How many players hit the same thing this session?
+      placeholder: "e.g. 3 of 4 new players"
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshot or clip

@@ -1,0 +1,104 @@
+name: Balance concern
+description: It works as designed, but it feels unfair, too strong, or pointless.
+title: "[Balance] "
+labels: ["balance", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A balance concern becomes a **bug** if the game doesn't match the shipped config, an attack has no counter-play, it's an exploit, or three sessions raise the same thing (`docs/playtest-protocol.md` §5). If one of those applies, use the Bug template instead.
+  - type: dropdown
+    id: area
+    attributes:
+      label: What's it about?
+      options:
+        - Power-up
+        - Task station
+        - Map layout
+        - Round timer / pacing
+        - Bounty or streak rewards
+        - NPC behaviour
+        - Store / loadout
+        - Finale payoffs
+    validations:
+      required: true
+  - type: input
+    id: subject
+    attributes:
+      label: Which one exactly?
+      description: The id from the config file if you know it.
+      placeholder: "e.g. power-up SlowField, task FuseRewire, map Factory"
+    validations:
+      required: true
+  - type: input
+    id: place-id
+    attributes:
+      label: Place id
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Build version / commit
+    validations:
+      required: true
+  - type: input
+    id: round-ids
+    attributes:
+      label: Round id(s) where it showed up
+      description: Several are better. Telemetry is looked up by these.
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device of the player(s) affected
+      multiple: true
+      options:
+        - PC / Mac
+        - Phone
+        - Tablet
+        - Console
+    validations:
+      required: true
+  - type: dropdown
+    id: direction
+    attributes:
+      label: The problem is that it's...
+      options:
+        - Too strong / unfair to face
+        - Too weak / nobody uses it
+        - Too random / luck beats skill
+        - Too slow / boring
+        - Too fast / confusing
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: What happened
+      description: Specific rounds and players, not a general feeling.
+    validations:
+      required: true
+  - type: textarea
+    id: quotes
+    attributes:
+      label: What players said
+      description: Word for word from the session, if anyone said something.
+  - type: input
+    id: counterplay
+    attributes:
+      label: Was there counter-play? What was it?
+      description: If there was none, this may be a bug. Every attack must have counter-play.
+    validations:
+      required: true
+  - type: input
+    id: sessions
+    attributes:
+      label: Sessions that raised this
+      description: Link earlier issues about the same thing. A third session makes it a bug.
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested change (optional)
+      description: Name the config value and the new number, if you have one in mind.
