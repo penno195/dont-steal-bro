@@ -44,7 +44,7 @@ Then, separately (map authoring, not code): add the id to a station's
 export type TaskHandler<Challenge, State, Submission> = {
 	taskId: string,
 	start: (ctx: TaskContext) -> (Challenge, State),
-	validate: (ctx: TaskContext, state: State, submission: Submission) -> (boolean, State),
+	validate: (ctx: TaskContext, state: State, submission: Submission) -> (boolean, State, TaskFeedback?),
 	cleanup: (ctx: TaskContext, state: State) -> (),
 }
 ```
@@ -77,6 +77,14 @@ itself, once, **before** your `validate` ever runs. You don't re-check
 them; a handler that reaches for `Players` to re-verify range itself is a
 sign the abstraction has a hole, not a sign of thoroughness.
 
+The plausible-time floor applies to the **completing** submission only:
+intermediate steps are validated at once, and a solve that lands before
+the floor is held until it and then counts. `validate` may also return
+optional **feedback** about the submission just made (Fuse Rewire:
+`{ accepted, fuseId, slotId }`). It reaches only the submitting player,
+inside `TaskResult`, and must never reveal an answer the player has not
+already tried.
+
 ## The client contract
 
 **Build the client view on `src/client/UI/TaskViewBase.luau`** — the
@@ -89,7 +97,7 @@ implements the raw contract below for you; you only write a `build`.
 export type TaskView = {
 	taskId: string,
 	show: (stationId: string, challenge: any, session: Session) -> (),
-	onResult: (stationId: string, success: boolean) -> (),
+	onResult: (stationId: string, success: boolean, feedback: any?) -> (),
 	hide: (stationId: string) -> (),
 }
 ```

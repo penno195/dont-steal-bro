@@ -58,6 +58,9 @@ type Session = {
 	-- TaskAbort/TaskEnded, so a message about an old attempt can never
 	-- end a newer one on either side, whatever order remotes land in.
 	attempt: number,
+	-- Solved, waiting out the plausible-time floor before it counts.
+	-- Further submissions are ignored so they can't disturb the solve.
+	completing: boolean?,
 }
 
 -- One attempt at a time per player - matches CLAUDE.md's mobile-first,
@@ -172,7 +175,7 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 	local TaskService = Loader.get("TaskService") :: any
 
 	local session = activeSessions[player]
-	if session == nil or session.ctx.stationId ~= stationId then
+	if session == nil or session.ctx.stationId ~= stationId or session.completing then
 		return
 	end
 
@@ -189,20 +192,15 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 		return
 	end
 
-	local taskDef = taskDefsById[session.taskId]
-	local minPlausibleSeconds = if taskDef
-		then taskDef.expectedDurationSeconds.min * Types.MIN_PLAUSIBLE_COMPLETION_FRACTION
-		else 0
-	if session.ctx.elapsedSeconds() < minPlausibleSeconds then
-		return
-	end
-
-	local done, nextState = session.handler.validate(session.ctx, session.state, submission)
+	local done, nextState, feedback = session.handler.validate(session.ctx, session.state, submission)
 	session.state = nextState
 
-	Net.fireClient("TaskResult", player, { stationId = stationId, success = done })
-
-	if done then
+	local function complete()
+		Net.fireClient(
+			"TaskResult",
+			player,
+			{ stationId = stationId, success = true, attempt = session.attempt, feedback = feedback }
+		)
 		-- The session's own elapsed time goes along with the completion
 		-- (P3-5): it's the only place a REAL human duration for this task
 		-- exists, and NPCService's fairness floor is measured against the
@@ -211,6 +209,40 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 		TaskService.recordCompletion(player, stationId, session.ctx.elapsedSeconds())
 		endSession(player)
 	end
+
+	if not done then
+		Net.fireClient(
+			"TaskResult",
+			player,
+			{ stationId = stationId, success = false, attempt = session.attempt, feedback = feedback }
+		)
+		return
+	end
+
+	-- Solved too fast to be human: hold the completion until the floor.
+	-- The view shows the last step landing (feedback), then "Done!" when
+	-- this fires. Anything that ends the session meanwhile - walking
+	-- away, a new interaction, the round ending - cancels it.
+	local taskDef = taskDefsById[session.taskId]
+	local wait = Types.completionDelaySeconds(
+		if taskDef then taskDef.expectedDurationSeconds.min else nil,
+		session.ctx.elapsedSeconds()
+	)
+	if wait <= 0 then
+		complete()
+		return
+	end
+	session.completing = true
+	Net.fireClient(
+		"TaskResult",
+		player,
+		{ stationId = stationId, success = false, attempt = session.attempt, feedback = feedback }
+	)
+	task.delay(wait, function()
+		if activeSessions[player] == session and TaskService.isAssignedAndIncomplete(player, stationId) then
+			complete()
+		end
+	end)
 end
 
 local TaskHandlerService: Loader.Service = {

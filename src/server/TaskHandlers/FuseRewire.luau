@@ -79,20 +79,27 @@ local function start(ctx: Types.TaskContext): (Challenge, State)
 	return challenge, state
 end
 
-local function validate(_ctx: Types.TaskContext, state: State, submission: Submission): (boolean, State)
+-- Feedback names only the pair the player just tried, so the view can
+-- lock a right pair in place or bounce a wrong one - without it the
+-- player has no way to tell which of their drops landed.
+local function validate(
+	_ctx: Types.TaskContext,
+	state: State,
+	submission: Submission
+): (boolean, State, Types.TaskFeedback)
 	local expectedSlotId = state.mapping[submission.fuseId]
 
 	if expectedSlotId == nil or expectedSlotId ~= submission.slotId or state.filledSlots[submission.slotId] then
 		-- Wrong slot (or a slot already locked in, re-sent) - "bounces
 		-- back to the tray with no penalty" - nothing about `state`
 		-- changes. Never reveals which slot WAS expected.
-		return false, state
+		return false, state, { accepted = false, fuseId = submission.fuseId, slotId = submission.slotId }
 	end
 
 	state.filledSlots[submission.slotId] = true
 	state.remainingCount -= 1
 
-	return state.remainingCount <= 0, state
+	return state.remainingCount <= 0, state, { accepted = true, fuseId = submission.fuseId, slotId = submission.slotId }
 end
 
 local function cleanup(_ctx: Types.TaskContext, _state: State)

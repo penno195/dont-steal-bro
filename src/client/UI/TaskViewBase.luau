@@ -94,8 +94,10 @@ export type Spec = {
 	-- Vide scope. May return instances to parent into the area.
 	build: (ctx: Context) -> { Instance }?,
 	-- A non-final result (the attempt stays open). Default: "Keep going".
-	-- Success is handled by the shell and never reaches here.
-	onProgress: ((ctx: Context) -> ())?,
+	-- `feedback` is the handler's optional per-submission detail. The
+	-- shell owns success, but a successful result that carries feedback
+	-- reaches here first, so the last step paints before "Done!".
+	onProgress: ((ctx: Context, feedback: any?) -> ())?,
 }
 
 type Attempt = {
@@ -498,16 +500,19 @@ function TaskViewBase.define(spec: Spec): TaskViewTypes.TaskView
 			end
 			current = open(spec, stationId, challenge, session)
 		end,
-		onResult = function(stationId: string, success: boolean)
+		onResult = function(stationId: string, success: boolean, feedback: any?)
 			local a = current
 			if a == nil or a.stationId ~= stationId then
 				return
 			end
 			if success then
 				current = nil
+				if feedback ~= nil and spec.onProgress then
+					spec.onProgress(a.ctx, feedback)
+				end
 				a.onSuccess()
 			elseif spec.onProgress then
-				spec.onProgress(a.ctx)
+				spec.onProgress(a.ctx, feedback)
 			else
 				a.ctx.setStatus("Keep going", "Active")
 			end

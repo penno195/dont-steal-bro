@@ -67,10 +67,19 @@ export type TaskContext = {
 -- empty; it exists for the task that eventually does (spawns a
 -- temporary prop, starts a sound loop - anything with a lifetime tied to
 -- the attempt rather than the station itself).
+--
+-- validate()'s optional third return is per-submission feedback, sent
+-- to the submitting player only inside TaskResult. It may describe THAT
+-- submission (Fuse Rewire: "fuse-2 into slot-3 was accepted") - which
+-- the player just chose, so it reveals nothing - but never the answer
+-- to one they haven't made. Its shape is the task's own; the view that
+-- renders it is the only reader.
+export type TaskFeedback = { [string]: any }
+
 export type TaskHandler<Challenge, State, Submission> = {
 	taskId: string,
 	start: (ctx: TaskContext) -> (Challenge, State),
-	validate: (ctx: TaskContext, state: State, submission: Submission) -> (boolean, State),
+	validate: (ctx: TaskContext, state: State, submission: Submission) -> (boolean, State, TaskFeedback?),
 	cleanup: (ctx: TaskContext, state: State) -> (),
 }
 
@@ -83,6 +92,17 @@ export type TaskHandler<Challenge, State, Submission> = {
 -- re-implement - see TaskHandlerService.luau for where these are
 -- actually checked.
 Types.MIN_PLAUSIBLE_COMPLETION_FRACTION = 0.4 -- a submission faster than 40% of a task's own declared minimum expected duration is implausible for any human, regardless of which task it is
+-- How long a correct final submission waits before it counts, so no
+-- attempt ever completes faster than the plausible floor. Applied to the
+-- COMPLETING submission only: gating every submission silently dropped
+-- a fast player's first fuse drops, and the view looked frozen.
+function Types.completionDelaySeconds(expectedMinSeconds: number?, elapsedSeconds: number): number
+	if expectedMinSeconds == nil then
+		return 0
+	end
+	return math.max(0, expectedMinSeconds * Types.MIN_PLAUSIBLE_COMPLETION_FRACTION - elapsedSeconds)
+end
+
 Types.INTERACT_RANGE_STUDS = 12 -- generous enough for normal camera/controller drift, tight enough that "I wasn't even there" isn't plausible
 
 return Types

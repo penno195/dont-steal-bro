@@ -94,6 +94,7 @@ type NPCRecord = {
 	nodeRoute: { string },
 	nodeIndex: number,
 	waypoints: { Vector3 },
+	jumpWaypoints: { [number]: boolean },
 	waypointIndex: number,
 	repathsThisStation: number,
 	blocked: boolean,
@@ -382,6 +383,7 @@ local function spawnNPC(index: number): NPCRecord?
 		nodeRoute = {},
 		nodeIndex = 1,
 		waypoints = {},
+		jumpWaypoints = {},
 		waypointIndex = 1,
 		repathsThisStation = 0,
 		blocked = false,
@@ -491,24 +493,32 @@ local function computePath(record: NPCRecord): boolean
 		-- honest fallback: on a sane map the next hop is close and in
 		-- line of sight, and the stuck timer catches it if it isn't.
 		record.waypoints = { target }
+		record.jumpWaypoints = {}
 		record.waypointIndex = 1
 		record.blocked = false
 		return true
 	end
 
 	local waypoints: { Vector3 } = {}
-	for _, waypoint in path:GetWaypoints() do
+	local jumpWaypoints: { [number]: boolean } = {}
+	for index, waypoint in path:GetWaypoints() do
 		table.insert(waypoints, waypoint.Position)
+		if waypoint.Action == Enum.PathWaypointAction.Jump then
+			jumpWaypoints[index] = true
+		end
 	end
 
 	record.waypoints = waypoints
+	record.jumpWaypoints = jumpWaypoints
 	record.waypointIndex = 1
 	record.blocked = false
-	record.blockedConnection = path.Blocked:Connect(function()
+	record.blockedConnection = path.Blocked:Connect(function(blockedWaypointIndex: number)
 		-- Flagged, not recomputed inline: the recompute happens on the
 		-- next tick, so a path that blocks and unblocks repeatedly can't
 		-- turn into a ComputeAsync storm between ticks.
-		record.blocked = true
+		if blockedWaypointIndex >= record.waypointIndex then
+			record.blocked = true
+		end
 	end)
 
 	return true
@@ -700,6 +710,12 @@ local function tickWalking(record: NPCRecord, nowValue: number)
 		record.nodeIndex += 1
 		computePath(record)
 		return
+	end
+
+	-- Honour the jump action returned by the engine before advancing this waypoint.
+	if record.jumpWaypoints[record.waypointIndex] and record.humanoid.FloorMaterial ~= Enum.Material.Air then
+		record.humanoid.Jump = true
+		record.jumpWaypoints[record.waypointIndex] = nil
 	end
 
 	if ((waypoint :: Vector3) - position).Magnitude <= WAYPOINT_REACHED_STUDS then

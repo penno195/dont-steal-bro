@@ -1,282 +1,314 @@
 --!strict
+--# selene: allow(mixed_table) -- Vide props + children, see UI/Components/Base.luau
 -- The client half of P2-6's Drag reference task (tasks-catalogue.md #7,
 -- `fuse-rewire`) - see src/server/TaskHandlers/FuseRewire.luau for the
--- server half. Matches CodePlayback.luau's structure/style exactly (see
--- its own header comment for why plain Instances, not a framework).
+-- server half. Built on UI/TaskViewBase like CodePlayback.luau: the
+-- shell owns the window, close, timer and status line; this file owns
+-- the sockets, the fuses and what a drop looks like.
 --
--- WHY A DROPPED FUSE ALWAYS SNAPS BACK TO THE TRAY, EVEN WHEN IT WAS
--- RIGHT: TaskResult only ever carries the WHOLE task's `success`
--- boolean, never which specific drop it was for (the same limitation
--- CodePlayback.luau's view lives with for "wrong digit" vs "correct but
--- not done yet" - see its own onResult). This view genuinely can't tell
--- "that drop locked in" from "that drop bounced," so it never guesses -
--- every drop snaps back immediately, and only the eventual `success =
--- true` (every slot filled) changes anything visually. This is also why
--- success can't animate each fuse into its resolved slot: the correct
--- mapping is server-private BY DESIGN (see the server handler's header
--- comment) - the client never learns it, win or lose.
+-- Input is InputAdapters.Drag: drag a fuse onto a socket, or tap a fuse
+-- then a socket (gamepad/keyboard pick-then-place works the same way).
+-- A drop only SENDS the pair. The mapping is server-private; the
+-- handler's feedback says whether that one pair was right, and only
+-- then does the fuse move into its socket. A wrong pair flashes the
+-- socket and the fuse stays in the tray, "no penalty" as specified.
 --
--- Every touch target here is well past the 44pt minimum and each hit
--- area (the Frame/Button itself) is larger than the icon drawn inside it
--- (P2-6's own requirements) - fuses and slots are both 64x64 hit areas
--- with a smaller 40x40 visual centered inside. The whole play area is
--- anchored low-center with margin on every side, so a drag never needs
--- to approach a screen edge.
+-- Right and wrong are never colour alone: a wired socket shows a check
+-- and the fuse's number, a rejected one flashes a cross.
+--
+-- Layout: sockets on top (drop targets, read at a glance), fuses in the
+-- bottom row where a one-handed thumb picks them up.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Net = require(ReplicatedStorage.Shared.Net)
-local Types = require(script.Parent.Types)
+
+local vide = require(ReplicatedStorage.Packages.Vide)
+
+local Base = require(script.Parent.Parent.UI.Components.Base)
+local Env = require(script.Parent.Parent.UI.Components.Env)
+local Icons = require(script.Parent.Parent.UI.Components.Icons)
+local InputAdapters = require(script.Parent.Parent.UI.InputAdapters)
+local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
 local Theme = require(script.Parent.Parent.UI.Theme)
-local UIScaleController = require(script.Parent.Parent.Controllers.UIScaleController)
+
+local create = vide.create
+local source = vide.source
 
 type Challenge = {
 	fuseIds: { string },
 	slotIds: { string },
 }
 
-local screenGui: ScreenGui? = nil
-local statusLabel: TextLabel? = nil
-local activeStationId: string? = nil
-local slotFrames: { Frame } = {}
-
-local function isPrimaryInput(inputType: Enum.UserInputType): boolean
-	return inputType == Enum.UserInputType.Touch or inputType == Enum.UserInputType.MouseButton1
-end
-
-local function slotAtScreenPosition(screenPosition: Vector2): Frame?
-	for _, slot in slotFrames do
-		local topLeft = slot.AbsolutePosition
-		local size = slot.AbsoluteSize
-		if
-			screenPosition.X >= topLeft.X
-			and screenPosition.X <= topLeft.X + size.X
-			and screenPosition.Y >= topLeft.Y
-			and screenPosition.Y <= topLeft.Y + size.Y
-		then
-			return slot
-		end
-	end
-	return nil
-end
-
-local function makeHitArea(parent: Instance, name: string, labelText: string): TextButton
-	local button = Instance.new("TextButton")
-	button.Name = name
-	button.Size = UDim2.fromOffset(64, 64)
-	button.Text = ""
-	button.AutoButtonColor = false
-	button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-	button.Parent = parent
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = button
-
-	local visual = Instance.new("Frame")
-	visual.Name = "Visual"
-	visual.AnchorPoint = Vector2.new(0.5, 0.5)
-	visual.Position = UDim2.fromScale(0.5, 0.5)
-	visual.Size = UDim2.fromOffset(40, 40)
-	visual.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
-	visual.Parent = button
-
-	local visualCorner = Instance.new("UICorner")
-	visualCorner.CornerRadius = UDim.new(0, 6)
-	visualCorner.Parent = visual
-
-	local label = Instance.new("TextLabel")
-	label.Name = "Label"
-	label.Size = UDim2.fromScale(1, 1)
-	label.BackgroundTransparency = 1
-	label.TextColor3 = Color3.new(1, 1, 1)
-	label.TextScaled = true
-	label.Font = Enum.Font.GothamBold
-	label.Text = labelText
-	label.Parent = visual
-
-	return button
-end
-
-local function makeDraggable(fuseId: string, button: TextButton)
-	local dragging = false
-	local homePosition = button.Position
-
-	local function screenPositionOf(input: InputObject): Vector2
-		return Vector2.new(input.Position.X, input.Position.Y)
-	end
-
-	button.InputBegan:Connect(function(input: InputObject)
-		if not isPrimaryInput(input.UserInputType) then
-			return
-		end
-		dragging = true
-		button.ZIndex = 10
-	end)
-
-	button.InputChanged:Connect(function(input: InputObject)
-		if not dragging then
-			return
-		end
-		if
-			input.UserInputType ~= Enum.UserInputType.Touch
-			and input.UserInputType ~= Enum.UserInputType.MouseMovement
-		then
-			return
-		end
-		local screenPosition = screenPositionOf(input)
-		button.Position =
-			UDim2.fromOffset(screenPosition.X - button.AbsoluteSize.X / 2, screenPosition.Y - button.AbsoluteSize.Y / 2)
-	end)
-
-	button.InputEnded:Connect(function(input: InputObject)
-		if not dragging or not isPrimaryInput(input.UserInputType) then
-			return
-		end
-		dragging = false
-		button.ZIndex = 1
-
-		local droppedSlot = slotAtScreenPosition(screenPositionOf(input))
-		button.Position = homePosition -- see this file's header comment for why this always snaps back
-
-		if droppedSlot ~= nil and activeStationId ~= nil then
-			local slotId = droppedSlot.Name
-			Net.fireServer("FuseDropSubmit", { stationId = activeStationId, fuseId = fuseId, slotId = slotId })
-		end
-	end)
-end
-
-local function buildGui(): ScreenGui
-	-- P6-7: on the safe-area screen and anchored to its bottom edge, so
-	-- the tray stays on a landscape phone. Input positions and
-	-- AbsolutePosition then share the space InputAdapters.pointOf uses.
-	local gui = UIScaleController.createScreen("FuseRewireView", { displayOrder = Theme.displayOrder.panel + 1 })
-	gui.Enabled = false
-
-	local frame = Instance.new("Frame")
-	frame.Name = "Root"
-	frame.AnchorPoint = Vector2.new(0.5, 1)
-	frame.Position = UDim2.new(0.5, 0, 1, -Theme.spacing.md)
-	frame.Size = UDim2.fromOffset(320, 260)
-	frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-	frame.BackgroundTransparency = 0.1
-	frame.Parent = gui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 12)
-	corner.Parent = frame
-
-	local status = Instance.new("TextLabel")
-	status.Name = "Status"
-	status.Size = UDim2.new(1, 0, 0, 32)
-	status.Position = UDim2.fromOffset(0, 8)
-	status.BackgroundTransparency = 1
-	status.TextColor3 = Color3.new(1, 1, 1)
-	status.TextScaled = true
-	status.Font = Enum.Font.GothamBold
-	status.Text = "Drag each fuse to a slot"
-	status.Parent = frame
-
-	local slots = Instance.new("Frame")
-	slots.Name = "Slots"
-	slots.Size = UDim2.new(1, -32, 0, 64)
-	slots.Position = UDim2.fromOffset(16, 56)
-	slots.BackgroundTransparency = 1
-	slots.Parent = frame
-
-	local slotsLayout = Instance.new("UIListLayout")
-	slotsLayout.FillDirection = Enum.FillDirection.Horizontal
-	slotsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	slotsLayout.Padding = UDim.new(0, 16)
-	slotsLayout.Parent = slots
-
-	local tray = Instance.new("Frame")
-	tray.Name = "Tray"
-	tray.Size = UDim2.new(1, -32, 0, 64)
-	tray.Position = UDim2.fromOffset(16, 168)
-	tray.BackgroundTransparency = 1
-	tray.Parent = frame
-
-	local trayLayout = Instance.new("UIListLayout")
-	trayLayout.FillDirection = Enum.FillDirection.Horizontal
-	trayLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-	trayLayout.Padding = UDim.new(0, 16)
-	trayLayout.Parent = tray
-
-	local slotLabels = { "A", "B", "C", "D" }
-	local slots_: { Frame } = {}
-	for index, letter in slotLabels do
-		local slot = makeHitArea(slots, string.format("slot-%d", index), letter)
-		table.insert(slots_, slot :: any)
-	end
-
-	for index = 1, 4 do
-		local fuseId = string.format("fuse-%d", index)
-		local button = makeHitArea(tray, fuseId, tostring(index))
-		makeDraggable(fuseId, button)
-	end
-
-	statusLabel = status
-	slotFrames = slots_
-
-	return gui
-end
-
-local function ensureGui(): ScreenGui
-	if screenGui == nil then
-		screenGui = buildGui()
-	end
-	return screenGui :: ScreenGui
-end
-
-local function show(stationId: string, _challenge: any)
-	-- `_challenge.fuseIds`/`slotIds` aren't needed to build the UI - the
-	-- fixed 4 fuses/4 slots this view always renders already match them
-	-- 1:1 by construction (see FuseRewire.luau's own start()). A task
-	-- with a variable slot count would read them here instead.
-	local gui = ensureGui()
-	local status = statusLabel :: TextLabel
-
-	activeStationId = stationId
-	gui.Enabled = true
-	status.Text = "Drag each fuse to a slot"
-
-	Types.freezeCamera()
-end
-
-local function onResult(stationId: string, success: boolean)
-	if activeStationId ~= stationId or statusLabel == nil then
-		return
-	end
-
-	if success then
-		Types.unfreezeCamera()
-		statusLabel.Text = "Done!"
-		task.delay(0.6, function()
-			if screenGui ~= nil then
-				screenGui.Enabled = false
-			end
-		end)
-	else
-		statusLabel.Text = "Keep going"
-	end
-end
-
-local function hide(stationId: string)
-	if activeStationId ~= stationId then
-		return
-	end
-	Types.unfreezeCamera()
-	if screenGui ~= nil then
-		screenGui.Enabled = false
-	end
-	activeStationId = nil
-end
-
-local FuseRewireView = {
-	taskId = "fuse-rewire",
-	show = show,
-	onResult = onResult,
-	hide = hide,
+type Feedback = {
+	accepted: boolean,
+	fuseId: string,
+	slotId: string,
 }
 
-return FuseRewireView
+-- 4 x 64 plus gaps fits a 360-point portrait sheet inside its margins.
+local CELL = 64
+local GAP = Theme.spacing.md
+local REJECT_SECONDS = 0.4
+
+-- Per-attempt feedback handlers, keyed by the attempt's ctx: onProgress
+-- is spec-level but the sources it updates are built per attempt.
+local handlers: { [any]: (Feedback) -> () } = setmetatable({}, { __mode = "k" }) :: any
+
+local function numberOf(id: string): string
+	return id:match("%d+") or id
+end
+
+local function row(name: string, children: { Instance }, anchorY: number): Frame
+	local frame = create("Frame")({
+		Name = name,
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, anchorY),
+		Position = UDim2.fromScale(0.5, anchorY),
+		Size = UDim2.fromOffset(4 * CELL + 3 * GAP, CELL),
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			SortOrder = Enum.SortOrder.LayoutOrder,
+			Padding = UDim.new(0, GAP),
+		}),
+	}) :: Frame
+	for _, child in children do
+		child.Parent = frame
+	end
+	return frame
+end
+
+return TaskViewBase.define({
+	taskId = "fuse-rewire",
+	title = "Fuse Rewire",
+
+	build = function(ctx)
+		local challenge = ctx.challenge :: Challenge
+		-- fuseId -> slotId, only for pairs the server accepted.
+		local placed: Base.Source<{ [string]: string }> & (({ [string]: string }) -> { [string]: string }) =
+			source({}) :: any
+		local rejected: Base.Source<string?> & ((string?) -> string?) = source(nil) :: any
+		local rejectSerial = 0
+
+		local function fuseIn(slotId: string): string?
+			for fuseId, s in placed() do
+				if s == slotId then
+					return fuseId
+				end
+			end
+			return nil
+		end
+
+		-- Mirrors the Drag adapter's `held`. The adapter needs the buttons,
+		-- so it's created after them; visuals bind to this proxy instead.
+		local held: Base.Source<string?> & ((string?) -> string?) = source(nil) :: any
+
+		local sockets: { [string]: GuiButton } = {}
+		local socketList: { Instance } = {}
+		for i, slotId in challenge.slotIds do
+			local letter = string.char(64 + i)
+			local button = Base.interactive({
+				name = slotId,
+				size = Vector2.new(CELL, CELL),
+				layoutOrder = i,
+				order = 10 + i,
+				radius = Theme.radius.md,
+				onActivate = function() end, -- Drag listens for Activated itself
+				visual = function()
+					return {
+						create("Frame")({
+							Name = "Surface",
+							Size = UDim2.fromScale(1, 1),
+							BackgroundColor3 = Env.animate(function(): Color3
+								return if fuseIn(slotId) ~= nil
+									then Theme.color.success
+									elseif rejected() == slotId then Theme.color.danger
+									else Theme.color.surface
+							end, Theme.motion.fast),
+							Base.corner(Theme.radius.md),
+							create("UIStroke")({
+								ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+								Color = Theme.color.line,
+								Thickness = 2,
+							}),
+							Base.text("headline", {
+								Size = UDim2.fromScale(1, 1),
+								Text = function()
+									local fuseId = fuseIn(slotId)
+									return if fuseId then numberOf(fuseId) else letter
+								end,
+								TextColor3 = function()
+									return if fuseIn(slotId) ~= nil or rejected() == slotId
+										then Theme.color.inkOnLight
+										else Theme.color.inkMuted
+								end,
+							}),
+							-- Corner badge: the non-colour half of right/wrong.
+							create("Frame")({
+								Name = "Badge",
+								BackgroundTransparency = 1,
+								AnchorPoint = Vector2.new(1, 0),
+								Position = UDim2.new(1, -2, 0, 2),
+								Size = UDim2.fromOffset(20, 20),
+								vide.show(function()
+									return fuseIn(slotId) ~= nil
+								end, function()
+									return Icons.view("check", 18, Theme.color.inkOnLight)
+								end) :: any,
+								vide.show(function()
+									return rejected() == slotId
+								end, function()
+									return Icons.view("close", 18, Theme.color.inkOnLight)
+								end) :: any,
+							}),
+						}),
+					}
+				end,
+			})
+			sockets[slotId] = button
+			table.insert(socketList, button)
+		end
+
+		local fuses: { [string]: GuiButton } = {}
+		local fuseList: { Instance } = {}
+		for i, fuseId in challenge.fuseIds do
+			local button = Base.interactive({
+				name = fuseId,
+				size = Vector2.new(CELL, CELL),
+				layoutOrder = i,
+				order = i,
+				radius = Theme.radius.md,
+				onActivate = function() end, -- Drag listens for Activated itself
+				visual = function()
+					return {
+						create("Frame")({
+							Name = "Surface",
+							Size = UDim2.fromScale(1, 1),
+							BackgroundColor3 = function()
+								return if held() == fuseId then Theme.color.primary else Theme.color.surfaceRaised
+							end,
+							Base.corner(Theme.radius.md),
+							create("UIStroke")({
+								ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+								Color = Theme.color.focus,
+								-- Thicker ring on the held fuse: the pick is shape, not just fill.
+								Thickness = function()
+									return if held() == fuseId then 3 else 0
+								end,
+							}),
+							Base.text("headline", {
+								Size = UDim2.fromScale(1, 1),
+								Text = numberOf(fuseId),
+								TextColor3 = function()
+									return if held() == fuseId then Theme.color.onPrimary else Theme.color.ink
+								end,
+							}),
+						}),
+					}
+				end,
+			})
+			-- A wired fuse leaves the tray (its number shows in the socket).
+			-- The empty holder keeps its place so the others don't shift
+			-- under a thumb mid-reach.
+			vide.effect(function()
+				button.Visible = placed()[fuseId] == nil
+			end)
+			local holder = create("Frame")({
+				Name = fuseId .. "Holder",
+				BackgroundTransparency = 1,
+				LayoutOrder = i,
+				Size = UDim2.fromOffset(CELL, CELL),
+			})
+			button.AnchorPoint = Vector2.new(0.5, 0.5)
+			button.Position = UDim2.fromScale(0.5, 0.5)
+			button.Parent = holder
+			fuses[fuseId] = button
+			table.insert(fuseList, holder)
+		end
+
+		local socketRow = row("Sockets", socketList, 0)
+		local fuseRow = row("Fuses", fuseList, 1)
+
+		local drag = InputAdapters.Drag({
+			items = fuses,
+			targets = sockets,
+			area = ctx.area,
+			onDrop = function(fuseId: string, slotId: string)
+				if placed()[fuseId] ~= nil or fuseIn(slotId) ~= nil then
+					return
+				end
+				ctx.submit("FuseDropSubmit", { fuseId = fuseId, slotId = slotId })
+			end,
+		})
+		vide.effect(function()
+			held(drag.held())
+		end)
+
+		handlers[ctx] = function(feedback: Feedback)
+			if feedback.accepted then
+				local nextPlaced = table.clone(placed())
+				nextPlaced[feedback.fuseId] = feedback.slotId
+				placed(nextPlaced)
+				local count = 0
+				for _ in nextPlaced do
+					count += 1
+				end
+				ctx.setStatus(string.format("%d of %d wired", count, #challenge.slotIds), "Active")
+				ctx.cue("Good")
+			else
+				rejectSerial += 1
+				local mine = rejectSerial
+				rejected(feedback.slotId)
+				task.delay(REJECT_SECONDS, function()
+					if mine == rejectSerial then
+						rejected(nil)
+					end
+				end)
+				ctx.setStatus("Wrong socket, try another")
+				ctx.cue("Bad")
+			end
+		end
+
+		ctx.setStatus(
+			if Env.inputMode() == Enum.PreferredInput.Touch
+				then "Drag, or tap a fuse then a socket"
+				else "Drag each fuse to a socket"
+		)
+
+		local ghost = create("Frame")({
+			Name = "DragGhost",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Size = UDim2.fromOffset(CELL, CELL),
+			BackgroundColor3 = Theme.color.primary,
+			BackgroundTransparency = 0.15,
+			ZIndex = 10,
+			Visible = function()
+				return drag.ghost() ~= nil
+			end,
+			Position = function()
+				return drag.ghost() or UDim2.new()
+			end,
+			Base.corner(Theme.radius.md),
+			Base.text("headline", {
+				Size = UDim2.fromScale(1, 1),
+				ZIndex = 11,
+				Text = function()
+					local id = drag.held()
+					return if id then numberOf(id) else ""
+				end,
+				TextColor3 = Theme.color.onPrimary,
+			}),
+		}) :: Frame
+
+		return { socketRow :: Instance, fuseRow :: Instance, ghost :: Instance }
+	end,
+
+	-- Feedback-less results are the shell's default "Keep going".
+	onProgress = function(ctx, feedback)
+		local handle = handlers[ctx]
+		if handle ~= nil and type(feedback) == "table" then
+			handle(feedback :: Feedback)
+		else
+			ctx.setStatus("Keep going", "Active")
+		end
+	end,
+})

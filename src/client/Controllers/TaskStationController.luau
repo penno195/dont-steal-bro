@@ -48,6 +48,26 @@ local activeStationId: string? = nil
 local activeAttempt = 0
 local stopGuards: (() -> ())? = nil
 
+-- Prompts show only on your own unfinished stations during Race: the
+-- server rejects any other station, and a Start that silently does
+-- nothing reads as a bug. Cosmetic only - the server check stands.
+local prompts: { [string]: ProximityPrompt } = {}
+local route: { [string]: boolean } = {} -- stationId -> completed
+local racing = false
+
+local function refreshPrompt(stationId: string)
+	local prompt: ProximityPrompt? = prompts[stationId]
+	if prompt ~= nil then
+		prompt.Enabled = racing and route[stationId] == false
+	end
+end
+
+local function refreshPrompts()
+	for stationId in prompts do
+		refreshPrompt(stationId)
+	end
+end
+
 -- Ends the current attempt for any reason but success. `tellServer` is
 -- false only when the server is the one that ended it.
 local function finish(tellServer: boolean)
@@ -142,6 +162,8 @@ local function attachPrompt(stationPart: BasePart)
 	prompt.MaxActivationDistance = PROMPT_MAX_DISTANCE
 	prompt.RequiresLineOfSight = false
 	prompt.Parent = stationPart
+	prompts[stationId] = prompt
+	refreshPrompt(stationId)
 
 	prompt.Triggered:Connect(function()
 		Net.fireServer("TaskInteract", { stationId = stationId })
@@ -186,17 +208,28 @@ local function onEnded(payload: any)
 end
 
 local function onRoundState(payload: any)
-	if payload.state ~= "Race" then
+	racing = payload.state == "Race"
+	if not racing then
 		finish(true)
+		route = {} -- a new race sends a new route
 	end
+	refreshPrompts()
+end
+
+local function onRoute(payload: any)
+	route = {}
+	for _, entry in payload.assignments do
+		route[entry.stationId :: string] = entry.completed == true
+	end
+	refreshPrompts()
 end
 
 local function onResult(payload: any)
-	if activeView == nil or activeStationId ~= payload.stationId then
+	if activeView == nil or activeStationId ~= payload.stationId or payload.attempt ~= activeAttempt then
 		return
 	end
 
-	activeView.onResult(payload.stationId, payload.success)
+	activeView.onResult(payload.stationId, payload.success, payload.feedback)
 
 	if payload.success then
 		activeView = nil
@@ -218,6 +251,7 @@ function TaskStationController:init()
 	Net.onClientEvent("TaskResult", onResult)
 	Net.onClientEvent("TaskEnded", onEnded)
 	Net.onClientEvent("RoundState", onRoundState)
+	Net.onClientEvent("TaskAssignmentState", onRoute)
 end
 
 function TaskStationController:start()

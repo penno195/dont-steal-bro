@@ -14,7 +14,10 @@
 -- docs/task-views.md walks through this file as its worked example.
 --
 -- Layout: the digit display on top (read, not touched), the keypad at
--- the bottom of the play area where a one-handed thumb lives.
+-- the bottom of the play area where a one-handed thumb lives. The
+-- keypad owns only the space BELOW the display and shrinks to fit it:
+-- on a short play area (a landscape phone, a small Studio viewport) a
+-- full-size pad pinned to the bottom used to cover the code.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -149,7 +152,34 @@ return TaskViewBase.define({
 				})
 				grid.AnchorPoint = Vector2.new(0.5, 1)
 				grid.Position = UDim2.fromScale(0.5, 1)
-				return grid :: Instance
+
+				local keypadArea = create("Frame")({
+					Name = "KeypadArea",
+					BackgroundTransparency = 1,
+					Position = UDim2.fromOffset(0, DISPLAY_HEIGHT + Theme.spacing.sm),
+					Size = UDim2.new(1, 0, 1, -(DISPLAY_HEIGHT + Theme.spacing.sm)),
+				}) :: Frame
+				-- Shrink-only fit. Both absolute sizes carry the same
+				-- ancestor scaling, so their ratio is scale-independent;
+				-- the grid's own UIScale is divided back out first.
+				local fitScale = create("UIScale")({ Parent = grid }) :: UIScale
+				local function fit()
+					local room, native = keypadArea.AbsoluteSize, grid.AbsoluteSize / fitScale.Scale
+					if room.X <= 0 or room.Y <= 0 or native.X <= 0 or native.Y <= 0 then
+						return
+					end
+					local scale = math.min(1, room.X / native.X, room.Y / native.Y)
+					if math.abs(scale - fitScale.Scale) > 0.001 then
+						fitScale.Scale = scale
+					end
+				end
+				local sizeChanged = keypadArea:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
+				vide.cleanup(function()
+					sizeChanged:Disconnect()
+				end)
+				grid.Parent = keypadArea
+				task.defer(fit)
+				return keypadArea :: Instance
 			end)(),
 		}
 	end,

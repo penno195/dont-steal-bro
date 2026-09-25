@@ -44,8 +44,10 @@ for the handler, config and remote. This page covers only the view.
    colour is never the only signal. A cue always pulses the status line;
    the sound is optional garnish.
 7. **Don't write close, abort, camera, timer or success handling.** The
-   base does all of it. `onProgress` is only for a non-final result
-   (default text: "Keep going").
+   base does all of it. `onProgress(ctx, feedback)` is for a non-final result
+   (default text: "Keep going"), plus the handler's optional per-submission
+   feedback; a successful result carrying feedback reaches it first so
+   the last step paints before "Done!". `FuseRewire.luau` uses it.
 8. **Lay out for one thumb:** read-only content at the top of the area,
    interactive content anchored to the bottom (`AnchorPoint (0.5, 1)`).
    Sizes are reference pixels from `Theme` tokens.

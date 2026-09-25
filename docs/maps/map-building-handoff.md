@@ -135,7 +135,9 @@ Notes on these tags:
 - **`AcceptedTaskIds` today:** only four task ids are registered, which
   are `pressure-valve`, `vent-purge`, `fuse-rewire` and `code-playback`.
   An unregistered id is a **hard error** at boot and in the validator.
-  Give each station 1–3 of these four. When more tasks ship, stations get
+  **`vent-purge` is registered but has no handler or task screen yet**:
+  a station offering it opens nothing, so don't use it until it ships.
+  Give each station 1–3 of the other three. When more tasks ship, stations get
   widened, and that's a map edit, not a code edit.
 - **NavNode:** an Attachment has to sit inside a part. Put it in an
   anchored floor part, or in an invisible, non-colliding, anchored helper

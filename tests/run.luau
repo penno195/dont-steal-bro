@@ -48,5 +48,6 @@ require("./StationOccupants.spec")
 require("./StationMarkerLogic.spec")
 require("./AudioLogic.spec")
 require("./FeelLogic.spec")
+require("./TaskHandlerTypes.spec")
 
 TestRunner.run()

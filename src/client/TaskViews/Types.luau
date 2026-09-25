@@ -36,8 +36,10 @@ export type TaskView = {
 	-- The server responded to a submission this view itself fired. Must
 	-- handle being called again for the SAME attempt after a fail (the
 	-- UI stays open, ready for another submission) - only a `success`
-	-- result ends the attempt.
-	onResult: (stationId: string, success: boolean) -> (),
+	-- result ends the attempt. `feedback` is the handler's optional
+	-- per-submission detail (its own shape, e.g. Fuse Rewire's accepted
+	-- pair) - see the server's TaskHandlers/Types.luau TaskFeedback.
+	onResult: (stationId: string, success: boolean, feedback: any?) -> (),
 
 	-- The attempt ended for any OTHER reason before success - walked
 	-- away, a new interaction started elsewhere, disconnecting. Tears

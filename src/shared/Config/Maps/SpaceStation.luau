@@ -12,19 +12,19 @@ local SpaceStation: Validate.MapDef = {
 	displayName = "Space Station",
 	description = "In space, no one can hear you steal.",
 	thumbnailAssetId = "rbxassetid://0", -- PLACEHOLDER
-	lightingPreset = "SpaceStation", -- PLACEHOLDER: key into P7-5's preset table
+	lightingPreset = "SpaceStation",
 	musicTrackId = "rbxassetid://0", -- PLACEHOLDER
-	-- Full registered set for now; prune after playtesting.
+	-- vent-purge is left out: it has a TaskDef but no handler or view yet,
+	-- so a station offering it would open nothing.
 	enabledTaskIds = {
 		"code-playback",
 		"fuse-rewire",
 		"pressure-valve",
-		"vent-purge",
 	},
 	npcDifficultyModifier = 1.0,
 	waveNumber = 3,
 	enabled = false,
-	taskStationCount = 12, -- PLACEHOLDER: spec floor; update to the real built count
+	taskStationCount = 16, -- the built map (2026-09-25 gray-box)
 }
 
 return SpaceStation
