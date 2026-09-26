@@ -59,12 +59,14 @@ already what `debugLoadSpawnPointsFromMap` reads.
    point.
 
 4. **Full-inventory behavior.** With the default `powerUpInventorySlots
-   = 1`/`powerUpFullInventoryPolicy = "Refuse"`, have client 1 walk into
-   a second pickup while still holding the first. Expect: the second
+   = 3`/`powerUpFullInventoryPolicy = "Refuse"`, have client 1 fill all
+   three slots, then walk into a fourth pickup. Expect: the fourth
    pickup is refused and **stays in the world** (touch it again to
-   confirm it's still claimable — by client 2, say). Temporarily flip
-   `GameConfig.powerUpFullInventoryPolicy` to `"Swap"` and repeat:
-   expect the first item evicted and the second one now held.
+   confirm it's still claimable — by client 2, say). Use slot 2, then
+   grab it again: expect it to land in slot 2, with slots 1 and 3
+   unchanged. Temporarily flip `GameConfig.powerUpFullInventoryPolicy`
+   to `"Swap"` and repeat: expect the oldest item evicted and the new
+   one held in its slot.
 
 5. **Use validation, from either client's command bar (or a temporary
    LocalScript)**:

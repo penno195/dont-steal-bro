@@ -140,9 +140,13 @@ local TAG_RULES: { TagRule } = {
 	{ tag = "NavNode", class = "Attachment", min = 1 },
 	{ tag = "PlayableBounds", class = "BasePart", min = 1, max = 4 },
 	{ tag = "KillZone", class = "BasePart", min = 1 },
-	{ tag = "StudioAnchor", class = "BasePart", min = 1, max = 1 },
-	{ tag = "StudioPodiumSlot", class = "BasePart", min = 3, max = 3 },
-	{ tag = "StudioBoundary", class = "BasePart", min = 1, max = 1 },
+	-- Optional on a race map since 2026-09-25: every finale runs on the
+	-- one shared Decision Studio set (StudioStageService), so a race
+	-- map's own Studio markers are ignored. Still capped, and still
+	-- checked if present, so a map that keeps them keeps them valid.
+	{ tag = "StudioAnchor", class = "BasePart", min = 0, max = 1 },
+	{ tag = "StudioPodiumSlot", class = "BasePart", min = 0, max = 3 },
+	{ tag = "StudioBoundary", class = "BasePart", min = 0, max = 1 },
 	{ tag = "StudioSpectatorArea", class = "BasePart", min = 0, max = 1 },
 }
 

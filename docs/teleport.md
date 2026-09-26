@@ -80,8 +80,13 @@ admits them if its gate is still open, or sends them home otherwise.
 "Sent home" means `TeleportAsync` to `hubPlaceId` with
 `{ returnReason = "Late" | "Stray" }`, and a `Kick` with the same
 message if that fails or no hub place is set. The hub maps the reason
-to one of two fixed strings (`TeleportLogic.returnMessage`), so a
+to one of its fixed strings (`TeleportLogic.returnMessage`), so a
 forged reason can't put text on screen.
+
+Every match also ends this way: at `Cleanup`, everyone still on the
+server is sent home together with `returnReason = "RoundOver"`
+(`MatchTeleportService.sendEveryoneHome`). In Studio they respawn
+instead.
 
 A public (non-reserved) server of the match place never runs a round:
 everyone who joins one is sent home.
@@ -155,7 +160,7 @@ each field:
 | Drop TeleportData entirely | Flagged `Missing`. Nothing depends on it. |
 | Add streak / bounty / currency fields | Nothing reads them. Streak and bounty come only from the ProfileStore profile (DataService header, threat-model.md §5). |
 | Join a different group's reserved server | Impossible from the client: access codes live only in MemoryStore. If it happened, the manifest wouldn't list them, so **Stray**, sent home. |
-| Forge a `returnReason` when arriving at the hub | It can only select one of two fixed messages. Anything else is ignored. |
+| Forge a `returnReason` when arriving at the hub | It can only select one of three fixed messages. Anything else is ignored. |
 | Replay an old hint later | It carries nothing trusted, and a Late arrival is sent home. |
 
 ## Limits and APIs to VERIFY before launch

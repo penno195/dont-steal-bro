@@ -43,12 +43,16 @@
 --    routes to it, so a client still has no way to name its own caster.
 --
 -- 4. RANGE SPOOFING. PowerUpUseIntent's payload carries an OPTIONAL
---    target *hint* (`targetPlayerId`) and nothing else - no position, no
---    distance, no "I'm in range" claim. Range/cone are computed entirely
---    server-side in `resolveTarget`, from `Character.HumanoidRootPart.
---    Position` on both the caster and the candidate target - real
---    Instance state the client has no way to misreport through this
---    remote.
+--    target *hint* (`targetPlayerId`) and an optional aim direction,
+--    and nothing else - no position, no distance, no "I'm in range"
+--    claim. Range is computed entirely server-side in `resolveTarget`,
+--    from `Character.HumanoidRootPart.Position` on both the caster and
+--    the candidate target - real Instance state the client has no way
+--    to misreport through this remote. The aim direction only chooses
+--    WHICH way the lock-on cone points; since any direction is a legal
+--    aim, the cone is a consistency check on the locked target, not a
+--    security boundary. Range is the boundary, and the lock-on slack
+--    (GameConfig.powerUpLockOnSlackStuds) is the most a client gains.
 --
 -- 5. CLAIMING A PICKUP SOMEONE ELSE ALREADY GOT. `tryClaimPickup` sets
 --    `live.claimed = true` as its literal first line, before anything
@@ -60,14 +64,19 @@
 --    requirement).
 --
 -- 6. USING AN EMPTY OR UNOWNED SLOT. `slotIndex` only ever indexes into
---    the caster's OWN server-held inventory array; an out-of-range or
---    empty index is rejected before anything else runs, and there is no
---    way to reference another player's inventory through this payload
---    at all (see #3).
+--    the caster's OWN server-held slots; an out-of-range or empty index
+--    is rejected before anything else runs, and there is no way to
+--    reference another player's inventory through this payload at all
+--    (see #3).
+--
+-- 7. A FREE LOADOUT. Loadout items are placed only at the start of a
+--    race, through StoreService.consumeLoadoutFor - the one function
+--    that spends stock. No remote grants a slot.
 
 local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -112,7 +121,10 @@ type InventoryItem = {
 }
 
 type RacerState = {
-	inventory: { InventoryItem },
+	-- Keyed by slot index, 1..powerUpInventorySlots, with holes: slots
+	-- are fixed positions (PowerUpLogic.slotForPickup), so using slot 2
+	-- never moves slot 3.
+	inventory: { [number]: InventoryItem },
 	lastUsedAt: { [string]: number },
 }
 
@@ -293,9 +305,29 @@ local RARITY_COLOR: { [string]: Color3 } = {
 	Rare = Color3.fromRGB(90, 120, 220),
 }
 
+-- STUDIO ONLY playtest override: set Workspace attribute
+-- DebugPowerUpTarget to a target kind ("Aimed", "Nearest", "Self",
+-- "Area") and every spawn point drops only items of that kind,
+-- whatever its rarity or allow-list. Ignored outside Studio; a client
+-- can't set it on the server either way (attributes don't replicate up).
+local function debugTargetFilter(): string?
+	if not RunService:IsStudio() then
+		return nil
+	end
+	local target = Workspace:GetAttribute("DebugPowerUpTarget")
+	return if typeof(target) == "string" and target ~= "" then target else nil
+end
+
 local function eligiblePool(point: SpawnPointRecord): { Validate.PowerUpDef }
 	local pool: { Validate.PowerUpDef } = {}
+	local debugTarget = debugTargetFilter()
 	for _, def in powerUpDefsById do
+		if debugTarget ~= nil then
+			if def.target == debugTarget and Loader.get("LiveConfig").isPowerUpEnabled(def.id) then
+				table.insert(pool, def)
+			end
+			continue
+		end
 		if def.rarity ~= point.rarity then
 			continue
 		end
@@ -392,11 +424,27 @@ local function broadcastInventory(racer: Participants.Participant)
 	local state = racerStates[racer.id]
 	local items = {}
 	if state ~= nil then
-		for _, item in state.inventory do
-			table.insert(items, { powerUpId = item.powerUpId })
+		for slotIndex = 1, GameConfig.powerUpInventorySlots do
+			local item = state.inventory[slotIndex]
+			if item ~= nil then
+				table.insert(items, { slotIndex = slotIndex, powerUpId = item.powerUpId })
+			end
 		end
 	end
-	Net.fireClient("PowerUpInventoryChanged", player, { inventory = items })
+	Net.fireClient(
+		"PowerUpInventoryChanged",
+		player,
+		{ slotCount = GameConfig.powerUpInventorySlots, inventory = items }
+	)
+end
+
+local function stateFor(racerId: number): RacerState
+	local state = racerStates[racerId]
+	if state == nil then
+		state = { inventory = {}, lastUsedAt = {} }
+		racerStates[racerId] = state
+	end
+	return state :: RacerState
 end
 
 -- "Pickup is server-confirmed" (the task's own requirement) - detected
@@ -439,28 +487,21 @@ tryClaimPickup = function(point: SpawnPointRecord, live: LivePickup, hitPart: Ba
 
 	live.claimed = true
 
-	local state = racerStates[racer.id]
-	if state == nil then
-		state = { inventory = {}, lastUsedAt = {} }
-		racerStates[racer.id] = state
+	local state = stateFor(racer.id)
+	local acquiredAt: { [number]: number } = {}
+	for slotIndex, item in state.inventory do
+		acquiredAt[slotIndex] = item.acquiredAt
 	end
+	local slotIndex =
+		PowerUpLogic.slotForPickup(acquiredAt, GameConfig.powerUpInventorySlots, GameConfig.powerUpFullInventoryPolicy)
 
-	local allowed, shouldSwap = PowerUpLogic.canPickUp(
-		#state.inventory,
-		GameConfig.powerUpInventorySlots,
-		GameConfig.powerUpFullInventoryPolicy
-	)
-
-	if not allowed then
+	if slotIndex == nil then
 		live.claimed = false -- refused - the world pickup stays available for someone else
 		return
 	end
 
-	if shouldSwap and #state.inventory > 0 then
-		table.remove(state.inventory, 1) -- oldest held item evicted
-	end
-
-	table.insert(state.inventory, { powerUpId = live.def.id, acquiredAt = now() })
+	-- Under Swap this overwrites (evicts) the oldest held item.
+	state.inventory[slotIndex] = { powerUpId = live.def.id, acquiredAt = now() }
 	broadcastInventory(racer)
 
 	hideLivePickup(point)
@@ -497,17 +538,27 @@ end
 -- also means a client CAN aim at a bot on purpose, deliberately: a
 -- power-up that can't be aimed at half the field would be a strange
 -- thing to hand a player.
+--
+-- LOCK-ON (powerups.md "Inventory and aiming"): an Aimed item's cone
+-- points along the client's aim direction when it sent one (hold-to-aim
+-- or a drag from the slot), else along the character's facing (a quick
+-- fire). The client highlights the target it locked on to and sends its
+-- id; that target is honoured if it's still in range and cone, with
+-- GameConfig's lock-on slack for the round trip, and REFUSED otherwise
+-- rather than swapped for someone the player never saw highlighted. A
+-- refused use keeps the item (see useFor).
 local function resolveTarget(
 	caster: Participants.Participant,
 	def: Validate.PowerUpDef,
-	explicitTargetId: number?
+	explicitTargetId: number?,
+	aim: PowerUpLogic.Vec3?
 ): Participants.Participant?
 	local casterRoot = characterRoot(caster.character)
 	if casterRoot == nil then
 		return nil
 	end
 	local casterPosition = toVec3(casterRoot.Position)
-	local casterForward = toVec3(casterRoot.CFrame.LookVector)
+	local casterForward = aim or toVec3(casterRoot.CFrame.LookVector)
 
 	if def.target == "Aimed" and explicitTargetId ~= nil then
 		local explicitTarget = Participants.get(explicitTargetId)
@@ -522,8 +573,8 @@ local function resolveTarget(
 			casterPosition,
 			casterForward,
 			toVec3(targetRoot.Position),
-			GameConfig.powerUpUseRangeStuds,
-			GameConfig.powerUpTargetConeDegrees
+			GameConfig.powerUpUseRangeStuds + GameConfig.powerUpLockOnSlackStuds,
+			math.min(GameConfig.powerUpTargetConeDegrees + GameConfig.powerUpLockOnSlackDegrees, 360)
 		)
 		if inRange then
 			return explicitTarget
@@ -607,7 +658,12 @@ end
 -- (they live inside effectApplier), and gets nothing back for a
 -- rejected use except a log line - same as a player whose attempt
 -- missed.
-local function useFor(racer: Participants.Participant, slotIndex: number?, targetRacerId: number?)
+local function useFor(
+	racer: Participants.Participant,
+	slotIndex: number?,
+	targetRacerId: number?,
+	aim: PowerUpLogic.Vec3?
+)
 	local resolvedSlotIndex = slotIndex or 1
 	local state = racerStates[racer.id]
 
@@ -626,7 +682,9 @@ local function useFor(racer: Participants.Participant, slotIndex: number?, targe
 		return
 	end
 
-	local item = state.inventory[resolvedSlotIndex]
+	local item = if resolvedSlotIndex <= GameConfig.powerUpInventorySlots
+		then state.inventory[resolvedSlotIndex]
+		else nil
 	if item == nil then
 		audit(racer, nil, nil, "Rejected", "empty slot")
 		sendResult(racer, false, nil, nil, "empty slot")
@@ -662,7 +720,7 @@ local function useFor(racer: Participants.Participant, slotIndex: number?, targe
 	elseif def.target == "Area" then
 		resolvedTarget = nil -- a zone at the caster's own position, not a racer target
 	else
-		resolvedTarget = resolveTarget(racer, def, targetRacerId)
+		resolvedTarget = resolveTarget(racer, def, targetRacerId, aim)
 		if resolvedTarget == nil then
 			audit(racer, def.id, nil, "Rejected", "no valid target")
 			sendResult(racer, false, def.id, nil, "no valid target")
@@ -693,7 +751,7 @@ local function useFor(racer: Participants.Participant, slotIndex: number?, targe
 	-- protection is meant to cost the attacker something. Revisit here
 	-- if playtesting says firing into an immunity window feels unfair
 	-- rather than punishing.
-	table.remove(state.inventory, resolvedSlotIndex)
+	state.inventory[resolvedSlotIndex] = nil -- a hole, not a shift: slots are fixed positions
 	state.lastUsedAt[def.id] = now()
 	broadcastInventory(racer)
 
@@ -712,13 +770,13 @@ end
 
 -- The client remote's entry point: authenticate the Player into a
 -- participant, then hand over to the one path above.
-local function handleUseIntent(player: Player, slotIndex: number?, targetPlayerId: number?)
+local function handleUseIntent(player: Player, slotIndex: number?, targetPlayerId: number?, aim: PowerUpLogic.Vec3?)
 	local racer = Participants.fromPlayer(player)
 	if racer == nil then
 		warn(string.format("PowerUpService: %s used a power-up while not on the roster", player.Name))
 		return
 	end
-	useFor(racer, slotIndex, targetPlayerId)
+	useFor(racer, slotIndex, targetPlayerId, aim)
 end
 
 -- P3-6's entry point. Takes an ID, not a participant, so NPCBrain can't
@@ -779,16 +837,45 @@ local function startPickups()
 	end
 end
 
+-- The pre-game loadout starts in the slots, in the order the player
+-- picked it (powerups.md "Inventory and aiming"), which settles
+-- store-receipts.md §5's open seam. Humans only: an NPC has no profile
+-- and so no loadout. Runs after startPickups' reset, so a Studio replay
+-- of Race spends the (by then empty) loadout again rather than stacking
+-- items from the previous run.
+local function grantLoadouts()
+	local StoreService = Loader.get("StoreService") :: any
+	for _, racer in Participants.all() do
+		local player = racer.player
+		if player == nil then
+			continue
+		end
+		local granted = StoreService.consumeLoadoutFor(player) :: { string }
+		if #granted == 0 then
+			continue
+		end
+		local state = stateFor(racer.id)
+		local at = now()
+		for slotIndex, powerUpId in granted do
+			-- Validate pins powerUpInventorySlots >= store.loadoutSlots, so
+			-- this never drops an item whose stock was just spent.
+			state.inventory[slotIndex] = { powerUpId = powerUpId, acquiredAt = at }
+		end
+		broadcastInventory(racer)
+	end
+end
+
 local function beginRace()
 	EffectContext.assertRound("PowerUpService.beginRace")
 	startPickups()
+	grantLoadouts()
 end
 
 -- P5-5: empties one participant's held items, e.g. on leaving the
 -- practice area, so nothing is carried out and used elsewhere.
 local function clearInventoryFor(racerId: number)
 	local state = racerStates[racerId]
-	if state == nil or #state.inventory == 0 then
+	if state == nil or next(state.inventory) == nil then
 		return
 	end
 	state.inventory = {}
@@ -800,7 +887,14 @@ end
 
 local PowerUpService: Loader.Service = {
 	name = "PowerUpService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "LiveConfig" },
+	dependencies = {
+		"NetGuard",
+		"ConfigValidator",
+		"RoundService",
+		"ParticipantService",
+		"LiveConfig",
+		"StoreService",
+	},
 
 	setSpawnPoints = setSpawnPoints,
 	debugLoadSpawnPointsFromMap = debugLoadSpawnPointsFromMap,
@@ -818,14 +912,15 @@ local PowerUpService: Loader.Service = {
 	startPickups = startPickups,
 	clearInventoryFor = clearInventoryFor,
 
-	getInventoryFor = function(racerId: number): { string }?
+	-- slot index -> power-up id, with holes where a slot is empty.
+	getInventoryFor = function(racerId: number): { [number]: string }?
 		local state = racerStates[racerId]
 		if state == nil then
 			return nil
 		end
 		local ids = {}
-		for _, item in state.inventory do
-			table.insert(ids, item.powerUpId)
+		for slotIndex, item in state.inventory do
+			ids[slotIndex] = item.powerUpId
 		end
 		return ids
 	end,
@@ -844,14 +939,15 @@ local PowerUpService: Loader.Service = {
 		return PowerUpLogic.isOnCooldown(state.lastUsedAt[powerUpId], def.cooldownSeconds, now())
 	end,
 
-	getInventory = function(player: Player): { string }?
+	-- Same shape as getInventoryFor.
+	getInventory = function(player: Player): { [number]: string }?
 		local state = racerStates[player.UserId]
 		if state == nil then
 			return nil
 		end
 		local ids = {}
-		for _, item in state.inventory do
-			table.insert(ids, item.powerUpId)
+		for slotIndex, item in state.inventory do
+			ids[slotIndex] = item.powerUpId
 		end
 		return ids
 	end,
@@ -861,7 +957,12 @@ function PowerUpService:init()
 	local NetGuard = Loader.get("NetGuard") :: any
 
 	NetGuard.on("PowerUpUseIntent", function(player: Player, payload: any)
-		handleUseIntent(player, payload.slotIndex, payload.targetPlayerId)
+		handleUseIntent(
+			player,
+			payload.slotIndex,
+			payload.targetPlayerId,
+			PowerUpLogic.aimForward(payload.aimX, payload.aimZ)
+		)
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)

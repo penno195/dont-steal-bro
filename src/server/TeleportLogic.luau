@@ -265,6 +265,9 @@ end
 local RETURN_MESSAGES: { [string]: string } = {
 	Late = "Your match started before you arrived. Press Play to queue again.",
 	Stray = "That match wasn't yours. Press Play to queue again.",
+	-- Every match ends by sending everyone home (design-decisions.md
+	-- Q6: the next round is a fresh queue, never the same server).
+	RoundOver = "Round over. Press Play to queue for the next one.",
 }
 
 function TeleportLogic.returnMessage(raw: any): string?

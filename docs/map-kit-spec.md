@@ -20,16 +20,26 @@ build correctly today without either tool existing yet.
 | `NavNode` | Attachment | ~1.5–2× the `TaskStation` count, no hard cap |
 | `PlayableBounds` | BasePart | 1–4 |
 | `KillZone` | BasePart | 1+, no hard cap |
-| `StudioAnchor` | BasePart | exactly 1 |
-| `StudioPodiumSlot` | BasePart | exactly 3 |
-| `StudioBoundary` | BasePart | exactly 1 |
-| `StudioSpectatorArea` | BasePart | 0–1 (optional) |
+| `StudioAnchor` | BasePart | exactly 1 (shared set only) |
+| `StudioPodiumSlot` | BasePart | exactly 3 (shared set only) |
+| `StudioBoundary` | BasePart | exactly 1 (shared set only) |
+| `StudioSpectatorArea` | BasePart | 0–1 (shared set only) |
+| `StudioSpectatorSpawn` | BasePart | 1+ (shared set only) |
 
-The last four exist for `design-decisions.md` Q3: all up to 6 finalists
+The last five exist for `design-decisions.md` Q3: all up to 6 finalists
 teleport into the Studio together, the 3 qualifiers stand fixed on podium
 slots inside a proximity boundary, and 4th–6th place can watch from the
-perimeter but can't cross in. That mechanic only works if every map
-defines these four tags consistently.
+perimeter but can't cross in.
+
+**Since 2026-09-25 they live on one shared set, not on each race map.**
+Every finale uses `ServerStorage.Maps.DecisionStudio` (see
+`decision-studio.md` "The set"). A race map doesn't need these tags, and
+`StudioStageService` ignores them if it has them. The map validator
+allows 0 of each and still caps and checks any that are present. On the
+shared set, `StudioSpectatorSpawn` marks the lookouts spectators are
+placed on. `StudioSpectatorArea` is the upper-level volume; anyone below
+its floor is put back on a lookout. The per-tag notes below describe the
+shared set.
 
 ### `SpawnPoint`
 

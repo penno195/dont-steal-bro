@@ -446,7 +446,8 @@ export type StudioTestConfig = {
 
 -- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
 -- Studio phase timers are locked exactly by architecture.md §6's network
--- trace (Intro +5s, Negotiate +45s, Choose +15s, Reveal +1s). Bounty
+-- trace (Intro +5s, Negotiate +20s - 45s until 2026-09-25 - Choose
+-- +15s, Reveal +1s). Bounty
 -- tiers are payoff-table.md §3's table verbatim (VU = the internal
 -- balancing currency that doc explains is never shown to a player - see
 -- its §1 for why L > M > S > 0 must hold at every tier). Fields with no
@@ -496,13 +497,15 @@ export type GameConfig = {
 	roundTimers: RoundTimers,
 	bountyTiers: { BountyTier },
 
-	-- P2-7: the IN-ROUND field-pickup inventory PowerUpService owns - not
-	-- to be confused with powerups.md's separate pre-game 3-item Loadout
-	-- slot selection (a future Hub/StoreService concern, unbuilt).
-	powerUpInventorySlots: number, -- default 1, powerups.md: "one inventory slot per player by default, configurable"
+	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
+	-- loadout (StoreService) starts in these slots; field pickups fill
+	-- the empty ones.
+	powerUpInventorySlots: number, -- default 3, powerups.md "Inventory and aiming"
 	powerUpFullInventoryPolicy: "Swap" | "Refuse", -- picking up while full: swap the oldest held item, or refuse the new pickup (world pickup stays available)
 	powerUpUseRangeStuds: number, -- max range for an Aimed/Nearest target
-	powerUpTargetConeDegrees: number, -- full cone width (not half-angle) for smart-targeting an Aimed power-up with no explicit target hint
+	powerUpTargetConeDegrees: number, -- full cone width (not half-angle) of an Aimed power-up's lock-on cone
+	powerUpLockOnSlackStuds: number, -- extra range allowed when re-checking the client's locked target (latency)
+	powerUpLockOnSlackDegrees: number, -- extra cone width allowed for the same re-check
 	powerUpRotationTimers: PowerUpRarityWeights, -- base respawn seconds per rarity tier; a MapDef may multiply these (see PowerUpRarityWeights' own doc comment)
 
 	-- P2-9: MovementWatch's thresholds - "configurable... not hard-coded"
@@ -534,6 +537,10 @@ export type GameConfig = {
 	-- Audio-API-managed curve (AudioEmitter.DistanceAttenuation) this
 	-- field does NOT control - see StudioChat.luau's own header comment.
 	decisionStudioChatRangeStuds: number,
+	-- The shared Decision Studio set (StudioStageService): its model
+	-- name in ServerStorage.Maps, and how far along +X it's moved so it
+	-- can't overlap the race map loaded beside it.
+	decisionStudioStage: { mapId: string, offsetStuds: number },
 
 	-- P3-5: every NPC-fill tuning knob, in one block. All PLACEHOLDER
 	-- except where noted - no real telemetry exists to tune against yet,
@@ -2090,6 +2097,16 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 
 	if config.powerUpInventorySlots <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "powerUpInventorySlots", "must be positive")
+	elseif config.store ~= nil and config.powerUpInventorySlots < config.store.loadoutSlots then
+		-- The loadout starts in these slots, and its stock is spent as it
+		-- is granted - a loadout that can't fit would burn items.
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"powerUpInventorySlots",
+			string.format("must be at least store.loadoutSlots (%d)", config.store.loadoutSlots)
+		)
 	end
 	if config.powerUpFullInventoryPolicy ~= "Swap" and config.powerUpFullInventoryPolicy ~= "Refuse" then
 		issue(
@@ -2105,6 +2122,12 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	end
 	if config.powerUpTargetConeDegrees <= 0 or config.powerUpTargetConeDegrees > 360 then
 		issue(issues, "GameConfig", "GameConfig.luau", "powerUpTargetConeDegrees", "must be > 0 and <= 360")
+	end
+	if config.powerUpLockOnSlackStuds < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "powerUpLockOnSlackStuds", "must not be negative")
+	end
+	if config.powerUpLockOnSlackDegrees < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "powerUpLockOnSlackDegrees", "must not be negative")
 	end
 	for _, rarity in { "Common", "Uncommon", "Rare" } do
 		local seconds = (config.powerUpRotationTimers :: any)[rarity]
@@ -2159,6 +2182,19 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	end
 	if config.decisionStudioChatRangeStuds <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "decisionStudioChatRangeStuds", "must be positive")
+	end
+	local stage = config.decisionStudioStage
+	if stage == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "decisionStudioStage", "missing")
+	else
+		if stage.mapId == "" then
+			issue(issues, "GameConfig", "GameConfig.luau", "decisionStudioStage.mapId", "must not be empty")
+		end
+		-- A race map spans a few hundred studs; closer than this and the
+		-- set can land inside one.
+		if stage.offsetStuds < 1000 then
+			issue(issues, "GameConfig", "GameConfig.luau", "decisionStudioStage.offsetStuds", "must be at least 1000")
+		end
 	end
 
 	checkNPCConfig(config.npc, issues)

@@ -19,6 +19,65 @@ Each power-up below is one `src/shared/Config/PowerUps/<Name>.luau`
 definition and one handler module, per the architecture doc's scaling
 rule — adding an 11th needs no service changes.
 
+## Inventory and aiming
+
+Decided 2026-09-25 after a playtest. This replaces the earlier "one
+inventory slot" default, and answers how the two acquisition paths
+coexist (`store-receipts.md` §5).
+
+- **Three slots** (`GameConfig.powerUpInventorySlots = 3`), shown as a
+  panel in the bottom-right thumb zone. The pre-game loadout starts in
+  them, in the order the player picked it, as the race begins. Field
+  pickups fill the lowest empty slot. With all three full, a pickup is
+  refused and stays on the map (`powerUpFullInventoryPolicy = "Refuse"`).
+- **Slots are fixed positions.** Using slot 2 empties slot 2; slot 3
+  doesn't slide down. The slot a player has selected never changes under
+  their thumb. When the selected slot empties, the HUD moves the
+  selection to the lowest slot that still holds something.
+- **Selection.** Tap or click a slot to select it. The selected slot has
+  a glow outline. On a keyboard, 1–3 select; on a gamepad, L1/R1 cycle.
+- **Firing.** **Q** (gamepad **X**) fires the selected item. On touch,
+  tapping the selected slot quick-fires it.
+- **Lock-on aim for `Aimed` items.** These aren't skill-shot projectiles.
+  The nearest racer inside a cone (`powerUpTargetConeDegrees`, up to
+  `powerUpUseRangeStuds`) is highlighted, and that racer is who the shot
+  hits. With no aim, the cone points where the character faces, and a
+  faint highlight shows who a quick-fire would hit. To aim:
+  - **PC:** hold right-click. The camera goes first person, so the cone
+    points where you look: the mouse turns the view (and the character),
+    and WASD still moves. The crosshair sits where you look until it
+    locks on. Press Q or left-click to fire at the strongly highlighted
+    target, or just let go: releasing fires if something is locked, and
+    otherwise cancels. Either way the previous zoom comes back. Gamepad:
+    hold L2 the same way, right stick to turn.
+  - **Mobile:** press a slot and drag out of it. The cone follows the drag
+    direction, and releasing fires. Dragging back onto the slot cancels
+    (Brawl Stars style).
+  - **While aiming**, a laser runs along the floor from the character's
+    feet, with a crosshair at its end. (In first person it instead runs
+    from hand height to the crosshair, which sits where you look until it
+    locks on.) With no lock, it's white and runs
+    the full `powerUpUseRangeStuds`, so the reach is visible. When locked
+    on, it runs to the target, and the crosshair sits on their body,
+    turning green and tightening to a solid dot (a shape change as well,
+    so it doesn't rely on colour). The crosshair is drawn on screen above
+    the HUD, because its unlocked spot is near the horizon, right where
+    the top bar is.
+  - Only `Aimed` items (Freeze, Task Scramble) aim. The key hint shows
+    "RMB aim" / "L2 aim" only while one of those is selected.
+- **`Nearest` items** (Blind, Push/Trip) keep auto-targeting the nearest
+  racer in range. The highlight shows who that is. Aiming doesn't
+  change it.
+- **Server authority.** The client sends only the slot, the id of the
+  racer it locked on to, and a ground-plane aim direction. The server
+  re-runs the same `PowerUpLogic` targeting and honours that lock only if
+  the racer is still in range and in the cone. It allows
+  `powerUpLockOnSlackStuds`/`Degrees` of slack because the client saw
+  that racer a round trip ago. Otherwise the use is refused ("No target")
+  and the item stays in its slot. Any direction is a legal aim, so the
+  cone isn't a security boundary. Range is, and the slack is the most a
+  modified client can gain.
+
 ## The 10 power-ups
 
 | id | Type | Target | Duration | Magnitude | Cooldown | Rarity |

@@ -61,6 +61,12 @@ type RacerState = {
 local racerStates: { [number]: RacerState } = {}
 local instanceCounter = 0
 
+-- The start gate: every racer stands still on their spawn from Loading
+-- until Race begins, while the client counts down 3-2-1 over Intro's
+-- last seconds. Not an effect - nothing can cleanse or shorten it.
+local HELD_STATES: { [string]: boolean } = { Loading = true, Intro = true }
+local startGateHeld = false
+
 local function now(): number
 	return Workspace:GetServerTimeNow()
 end
@@ -122,8 +128,11 @@ local function applyResolvedStats(racerId: number, stats: StatusEffectResolver.R
 		return
 	end
 
-	humanoid.WalkSpeed = if stats.ControlLock then 0 else BASE_WALK_SPEED * stats.MoveSpeed
-	humanoid.JumpPower = if stats.ControlLock then 0 else BASE_JUMP_POWER * stats.JumpPower
+	-- Bots idle until Race on their own, and keep a per-profile speed
+	-- this function doesn't know, so the gate only holds humans.
+	local locked = stats.ControlLock or (startGateHeld and participant ~= nil and participant.player ~= nil)
+	humanoid.WalkSpeed = if locked then 0 else BASE_WALK_SPEED * stats.MoveSpeed
+	humanoid.JumpPower = if locked then 0 else BASE_JUMP_POWER * stats.JumpPower
 end
 
 local function replicate(racerId: number, state: RacerState)
@@ -372,6 +381,15 @@ function StatusEffects:init()
 	for _, state in RoundStates.ALL do
 		RoundService.onExit(state, function()
 			clearEveryRacer()
+		end)
+		RoundService.onEnter(state, function()
+			local held = HELD_STATES[state] == true
+			if held ~= startGateHeld then
+				startGateHeld = held
+				for _, participant in Participants.humans() do
+					recomputeAndApply(participant.id)
+				end
+			end
 		end)
 	end
 

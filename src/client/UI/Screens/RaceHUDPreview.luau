@@ -4,8 +4,8 @@
 -- screenshotted without a live round (docs/race-hud.md "Device
 -- review"). Every STEP seconds it moves to the next scene: a different
 -- effect, a different place against the qualification line, the arrow
--- turned 45 degrees further, and the power-up slot alternating between
--- held and empty.
+-- turned 45 degrees further, and the power-up slots filling and
+-- emptying (full, empty, a hole in the middle, one held).
 --
 -- Mounted by UIScaleController when ReplicatedStorage has the
 -- UIRaceHUDPreview attribute set. Debug only.
@@ -28,16 +28,31 @@ local TITLES = { "Code Playback", "Pressure Valve", "Fuse Rewire", "Vent Purge",
 -- One scene per step. `mine` is the preview player's task count against
 -- a fixed field of rivals on 5, 4, 3, 3, 1: it walks from out, to on
 -- the line, to safe.
-type Scene = { mine: number, effect: HudLogic.Effect?, held: boolean }
+-- `held` is which of the ITEMS' slots hold something.
+type Scene = { mine: number, effect: HudLogic.Effect?, held: { boolean } }
+local ALL, NONE = { true, true, true }, { false, false, false }
 local SCENES: { Scene } = {
-	{ mine = 1, effect = { id = "freeze", category = "HardControl", kind = "Debuff", expiresAt = 0 }, held = true },
-	{ mine = 2, effect = { id = "slow-field", category = "Movement", kind = "Debuff", expiresAt = 0 }, held = false },
-	{ mine = 3, effect = { id = "blind", category = "Vision", kind = "Debuff", expiresAt = 0 }, held = true },
-	{ mine = 4, effect = { id = "sprint-boost", category = "Movement", kind = "Buff", expiresAt = 0 }, held = false },
-	{ mine = 5, effect = { id = "gravity", category = "Gravity", kind = "Debuff", expiresAt = 0 }, held = true },
-	{ mine = 6, effect = nil, held = false },
+	{ mine = 1, effect = { id = "freeze", category = "HardControl", kind = "Debuff", expiresAt = 0 }, held = ALL },
+	{ mine = 2, effect = { id = "slow-field", category = "Movement", kind = "Debuff", expiresAt = 0 }, held = NONE },
+	{
+		mine = 3,
+		effect = { id = "blind", category = "Vision", kind = "Debuff", expiresAt = 0 },
+		held = { true, false, true },
+	},
+	{
+		mine = 4,
+		effect = { id = "sprint-boost", category = "Movement", kind = "Buff", expiresAt = 0 },
+		held = { true, false, false },
+	},
+	{ mine = 5, effect = { id = "gravity", category = "Gravity", kind = "Debuff", expiresAt = 0 }, held = ALL },
+	{ mine = 6, effect = nil, held = { false, true, false } },
 }
 local RIVALS = { 5, 4, 3, 3, 1 }
+local ITEMS = {
+	{ id = "freeze", name = "Freeze" },
+	{ id = "blind", name = "Blind" },
+	{ id = "sprint-boost", name = "Sprint Boost" },
+}
 
 local RaceHUDPreview = {}
 
@@ -46,7 +61,9 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 	local endsAt = source((start + 300) :: number?)
 	local tasks = source({} :: { RaceHUD.TaskRow })
 	local progress = source({} :: { HudLogic.ProgressEntry })
-	local held = source(nil :: RaceHUD.Held?)
+	local slots = source({ { index = 1 }, { index = 2 }, { index = 3 } } :: { RaceHUD.Slot })
+	local selected = source(1)
+	local aiming = source(false)
 	local pending = source(false)
 	local effects = source({} :: { HudLogic.Effect })
 	local objective = source(nil :: RaceHUD.Objective?)
@@ -73,7 +90,13 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 			table.insert(running, table.freeze(entry))
 		end
 		effects(running)
-		held(if scene.held then table.freeze({ id = "freeze", name = "Freeze" }) else nil)
+		local list: { RaceHUD.Slot } = {}
+		for index, item in ITEMS do
+			list[index] = table.freeze(
+				if scene.held[index] then { index = index, id = item.id, name = item.name } else { index = index }
+			)
+		end
+		slots(list)
 		objective(
 			if scene.mine < #TITLES
 				then table.freeze({ bearing = (step * 45) % 360 - 180, distance = 12 + step * 7 })
@@ -88,17 +111,35 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 		endsAt = endsAt,
 		tasks = tasks,
 		progress = progress,
-		held = held,
+		slots = slots,
+		selected = selected,
+		aiming = aiming,
 		pending = pending,
 		effects = effects,
 		objective = objective,
-		-- Spin for a moment, then empty the slot: what a real use does.
-		use = function()
+		select = function(index: number)
+			selected(index)
+		end,
+		-- Dim for a moment, then empty the slot: what a real use does.
+		fire = function()
+			local index = selected()
+			if slots()[index].id == nil then
+				return
+			end
 			pending(true)
 			task.delay(0.6, function()
 				pending(false)
-				held(nil)
+				local list = table.clone(slots())
+				list[index] = table.freeze({ index = index })
+				slots(list)
 			end)
+		end,
+		startAim = function()
+			aiming(true)
+		end,
+		dragAim = function() end,
+		endAim = function(_fireIfLocked: boolean?)
+			aiming(false)
 		end,
 	}
 

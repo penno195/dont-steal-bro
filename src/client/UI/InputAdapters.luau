@@ -218,7 +218,9 @@ end
 export type DragProps = {
 	-- Draggable items and drop targets. Both must be GuiButtons so the
 	-- pick-then-place path (gamepad, keyboard, and touch players who
-	-- would rather tap twice) works through Activated.
+	-- would rather tap twice) works through Activated. An id may be in
+	-- both (a two-way match, either side picked first): tapping it while
+	-- another item is held places onto it, otherwise it picks it.
 	items: { [string]: GuiButton },
 	targets: { [string]: GuiButton },
 	-- The play area (TaskViewBase's content frame). A drag that leaves
@@ -235,12 +237,27 @@ export type DragState = {
 	-- Where the dragged ghost is, in the area's local space; nil when
 	-- the item is picked (not dragged) or nothing is held.
 	ghost: Source<UDim2?>,
+	-- The target the held item would land on right now (under the
+	-- dragged ghost, or under the mouse after a pick), for hover
+	-- feedback. Never the held item itself.
+	hovered: Source<string?>,
 }
 
 function InputAdapters.Drag(props: DragProps): DragState
 	local drag = TaskViewLogic.newDrag()
 	local held: Source<string?> & ((string?) -> string?) = source(nil) :: any
 	local ghost: Source<UDim2?> & ((UDim2?) -> UDim2?) = source(nil) :: any
+	local hoveredRaw: Source<string?> & ((string?) -> string?) = source(nil) :: any
+	local function isTarget(id: string): boolean
+		return (props.targets :: { [string]: GuiButton? })[id] ~= nil
+	end
+	local function isItem(id: string): boolean
+		return (props.items :: { [string]: GuiButton? })[id] ~= nil
+	end
+	local function hovered(): string?
+		local id = hoveredRaw()
+		return if id ~= nil and id ~= held() then id else nil
+	end
 	local extra = props.targetExtra or Theme.spacing.lg
 
 	local function targetRects(): { [string]: TaskViewLogic.Rect }
@@ -251,15 +268,22 @@ function InputAdapters.Drag(props: DragProps): DragState
 		return out
 	end
 
+	-- As a fraction of the area, not an offset: the area sits under a
+	-- UIScale, which multiplies offsets, so a pixel offset lands the
+	-- ghost off the pointer by (scale - 1) of the distance.
 	local function toLocal(p: TaskViewLogic.Point): UDim2
-		local a = props.area.AbsolutePosition
-		return UDim2.fromOffset(p.x - a.X, p.y - a.Y)
+		local a, s = props.area.AbsolutePosition, props.area.AbsoluteSize
+		if s.X <= 0 or s.Y <= 0 then
+			return UDim2.new()
+		end
+		return UDim2.fromScale((p.x - a.X) / s.X, (p.y - a.Y) / s.Y)
 	end
 
 	local function drop(itemId: string, targetId: string?)
 		held(nil)
 		ghost(nil)
-		if targetId ~= nil then
+		hoveredRaw(nil)
+		if targetId ~= nil and targetId ~= itemId then
 			props.onDrop(itemId, targetId)
 		end
 	end
@@ -270,6 +294,7 @@ function InputAdapters.Drag(props: DragProps): DragState
 		end
 		if o.kind == "Moved" then
 			ghost(toLocal(o.at))
+			hoveredRaw(TaskViewLogic.pickTarget(targetRects(), o.at))
 		elseif o.kind == "Drop" then
 			drop(itemId, TaskViewLogic.pickTarget(targetRects(), o.at))
 		elseif o.kind == "Tap" then
@@ -278,12 +303,19 @@ function InputAdapters.Drag(props: DragProps): DragState
 		elseif o.kind == "Cancel" then
 			held(nil)
 			ghost(nil)
+			hoveredRaw(nil)
 		end
 	end
 
 	for id, item in props.items do
 		connect(item.InputBegan, function(input: InputObject)
 			if not isPointerPress(input) then
+				return
+			end
+			-- Something else is picked and this is a place to put it: the
+			-- press is a place (Activated handles it), not a new drag.
+			local current = held()
+			if current ~= nil and current ~= id and isTarget(id) and drag.pointer == nil then
 				return
 			end
 			local o = TaskViewLogic.dragBegin(drag, pointerOf(input), pointOf(input), os.clock(), rectOf(props.area))
@@ -295,17 +327,38 @@ function InputAdapters.Drag(props: DragProps): DragState
 		-- after the drag machine has already reported "Tap": harmless,
 		-- it picks the same item.)
 		connect(item.Activated, function()
-			if drag.pointer == nil then
-				held(if held() == id then nil else id)
+			if drag.pointer ~= nil then
+				return
+			end
+			local current = held()
+			if current ~= nil and current ~= id and isTarget(id) then
+				drop(current, id)
+			else
+				held(if current == id then nil else id)
 			end
 		end)
 	end
 
 	for id, target in props.targets do
-		connect(target.Activated, function()
-			local itemId = held()
-			if itemId ~= nil and drag.pointer == nil then
-				drop(itemId, id)
+		-- An id that's also an item places through its item handler above.
+		if not isItem(id) then
+			connect(target.Activated, function()
+				local itemId = held()
+				if itemId ~= nil and drag.pointer == nil then
+					drop(itemId, id)
+				end
+			end)
+		end
+		-- Mouse hover after a pick (no drag in flight). Touch has no
+		-- hover; a drag reports it through Moved instead.
+		connect(target.MouseEnter, function()
+			if held() ~= nil and drag.pointer == nil then
+				hoveredRaw(id)
+			end
+		end)
+		connect(target.MouseLeave, function()
+			if hoveredRaw() == id and drag.pointer == nil then
+				hoveredRaw(nil)
 			end
 		end)
 	end
@@ -347,7 +400,7 @@ function InputAdapters.Drag(props: DragProps): DragState
 		TaskViewLogic.dragCancel(drag)
 	end)
 
-	return { held = held, ghost = ghost }
+	return { held = held, ghost = ghost, hovered = hovered }
 end
 
 -- SEQUENCE -------------------------------------------------------------

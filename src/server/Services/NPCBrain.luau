@@ -201,8 +201,10 @@ end
 
 local function considerPowerUp(npcId: number)
 	local PowerUpService = Loader.get("PowerUpService") :: any
-	local inventory = PowerUpService.getInventoryFor(npcId) :: { string }?
-	if inventory == nil or #inventory == 0 then
+	-- Slot index -> id, with holes: slots are fixed positions, so `#`
+	-- can't be trusted to count them.
+	local inventory = PowerUpService.getInventoryFor(npcId) :: { [number]: string }?
+	if inventory == nil or next(inventory) == nil then
 		return
 	end
 
@@ -210,9 +212,7 @@ local function considerPowerUp(npcId: number)
 	local bestSlot: number? = nil
 	local bestScore = 0
 
-	-- Scores every slot even though the default inventory is one deep:
-	-- powerUpInventorySlots is config, and a two-slot round shouldn't
-	-- silently only ever use slot 1.
+	-- Scores every held slot, not just slot 1.
 	for slotIndex, powerUpId in inventory do
 		local def = powerUpDefsById[powerUpId]
 		if def == nil then

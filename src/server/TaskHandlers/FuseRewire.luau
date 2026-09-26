@@ -12,7 +12,8 @@
 -- state doesn't reveal the right answer" (tasks-catalogue.md's own
 -- words, about Cable Splice, reused verbatim here - Fuse Rewire is
 -- explicitly the same validation pattern). Challenge below sends the
--- fuse/slot IDS to render, never the mapping between them.
+-- fuse/slot ids plus each one's amperage: the matching amperages ARE the
+-- answer, on purpose (see Challenge), but the server still owns it.
 --
 -- SIMPLIFICATION, NOTED HONESTLY (same stance CodePlayback.luau and
 -- PressureValve.luau take on their own gaps): tasks-catalogue.md adds "a
@@ -27,9 +28,19 @@ local Types = require(script.Parent.Types)
 
 local SLOT_COUNT = 4 -- tasks-catalogue.md: "fewer, larger drop targets than Lock Tumbler" (which uses 3-4)
 
+-- Amperage ratings a panel draws its 4 from, rolled per attempt.
+local AMPERAGES = { 5, 10, 15, 20, 25, 30 }
+
+-- The match is VISIBLE (design call, 2026-09-25): each fuse and its
+-- socket carry the same amperage, so the task is spot-and-drag speed,
+-- not trial and error, and the view can light a hovered socket green or
+-- red without leaking anything the player can't already read. The
+-- server still checks every drop against its own mapping.
 type Challenge = {
 	fuseIds: { string },
 	slotIds: { string },
+	fuseAmps: { [string]: number },
+	slotAmps: { [string]: number },
 }
 
 type State = {
@@ -74,7 +85,19 @@ local function start(ctx: Types.TaskContext): (Challenge, State)
 		mapping[fuseId] = shuffledSlotIds[index]
 	end
 
-	local challenge: Challenge = { fuseIds = fuseIds, slotIds = slotIds }
+	local ampPool = table.clone(AMPERAGES)
+	for i = #ampPool, 2, -1 do
+		local j = ctx.rng:NextInteger(1, i)
+		ampPool[i], ampPool[j] = ampPool[j], ampPool[i]
+	end
+	local fuseAmps: { [string]: number } = {}
+	local slotAmps: { [string]: number } = {}
+	for index, fuseId in fuseIds do
+		fuseAmps[fuseId] = ampPool[index]
+		slotAmps[mapping[fuseId]] = ampPool[index]
+	end
+
+	local challenge: Challenge = { fuseIds = fuseIds, slotIds = slotIds, fuseAmps = fuseAmps, slotAmps = slotAmps }
 	local state: State = { mapping = mapping, filledSlots = {}, remainingCount = SLOT_COUNT }
 	return challenge, state
 end

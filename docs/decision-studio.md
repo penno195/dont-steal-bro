@@ -211,7 +211,84 @@ Screenshot at least: portrait 360×640 in each stage; landscape; OS reduced
 motion on during a reveal; a colour-blind simulation of the payoff table
 and the revealed cards.
 
+## The set (2026-09-25)
+
+Every finale, on every race map, happens on one shared set:
+`ServerStorage.Maps.DecisionStudio`, built from the Blocky Cave place by
+`scripts/build-decision-studio.luau`. Race maps no longer carry their own
+Studio markers; the map validator treats them as optional.
+
+- **Building it.** Run
+  `lune run scripts/build-decision-studio "<Blocky Cave.rbxl>" "<out>.rbxm"`
+  from the repo root. The script removes the ramp to the upper level (six
+  wooden planks and the slate slope, matched by position, and it fails
+  rather than guesses if the place changed). It then adds `StudioStage`
+  (the `StudioAnchor` centre, three `StudioPodiumSlot` podiums with
+  `SlotIndex` 1–3, and a `StudioBoundary`) and `StudioSpectators` (the
+  `StudioSpectatorSpawn` lookouts and the `StudioSpectatorArea` box).
+  In Studio, use Insert from File on `ServerStorage.Maps`.
+- **Adjusting it.** The staging reads only tags, so moving `StudioStage`
+  moves the whole podium ring, and each lookout pad can be dragged on its
+  own. The positions were computed from the place's geometry rather than
+  looked at. Check them in Studio.
+- **Loading.** `StudioStageService` clones the set when the race
+  resolves (`Qualified`), moves it `decisionStudioStage.offsetStuds`
+  along +X so it can't overlap the race map. It is **not** destroyed at
+  `Cleanup`. That's when everyone is sent home, and a teleport takes
+  seconds, so deleting the floor dropped players into the void. The
+  match server shuts down once everyone has left, and the set goes with
+  it.
+- **Chat box.** During Negotiate, a finalist gets a text field and a
+  Send button at the top of the bottom panel. It sends into the
+  Negotiate channel, and Enter sends too. Roblox's own chat bar is closed
+  by default and easy to miss, especially on a phone. That chat bar is
+  also pointed at the Negotiate channel while it's open
+  (`StudioChatController`), so typing there reaches the other finalists
+  instead of the general channel, which finalists are cut out of.
+
+## After the finale
+
+At `Cleanup`, `MatchTeleportService` sends everyone back to the hub in
+one `TeleportAsync`, with `returnReason = "RoundOver"`, and the hub shows
+"Round over. Press Play to queue for the next one." (design-decisions.md
+Q6: the next round is a fresh queue). Anyone the teleport fails for is
+kicked with the same message. In Studio there's no hub and teleports
+don't work, so everyone respawns at the place's spawn instead.
+
+## Staging
+
+`StudioStageService`, at the start of Intro:
+
+- **Finalists** (seat order after any Q3 promotion, NPCs included) stand
+  on the podium matching their seat, facing the centre, so the three face
+  each other. They're held there by anchoring the root part, and released
+  when the round leaves `DecisionStudio`.
+- **Everyone else** goes to a lookout on the walkway behind the east
+  fence, facing the podiums. Anyone whose root leaves the
+  `StudioSpectatorArea` box around that walkway is put straight back,
+  checked 4 times a second. That covers climbing over the fence onto the
+  rocks, dropping off the north end onto the terraces, and walking round
+  the corner onto the south walkway.
+- **A respawn** mid-finale goes back to the same podium or lookout.
+- **Humans** have the spot streamed to them before they're moved
+  (`MapStreaming.streamAround`), so nobody lands on unloaded floor.
+
+**Watch-only spectators** (`StudioChat`). Spectators read the Negotiate
+channel as members with `CanSend = false`. They hear the finalists'
+voices, because each finalist's allow list includes them during
+Negotiate. For the whole finale, finalists are out of `RBXGeneral` both
+ways, and every spectator's voice denies the finalists. The rules live
+in `StudioStageLogic` and are unit-tested.
+
 ## Not verified yet (device pass needed)
+
+- **The set's positions** (see "The set"). Check that the podiums sit
+  clear on the floor by the waterfall, that every lookout stands clear
+  with a view of the podiums, and that no route down remains other than
+  jumping, which is caught.
+- **`TextSource.CanSend = false`** hides the send box for that channel,
+  and bubble chat above the finalists shows to spectators.
+- **Lighting.** The race map's lighting preset stays applied in the cave.
 
 - `ChatWindowConfiguration.AbsolutePosition`'s coordinate space. The
   inset assumes it is screen space (with the top bar) and converts it into

@@ -210,16 +210,30 @@ happen is a double grant, and the PurchaseId cache is what rules it out.
 4. Fire it for an item with no stock, and for a `loadoutEligible = false`
    item. **Expect:** both refused.
 
-## 5. The one seam left open
+## 5. The loadout seam (closed 2026-09-25)
 
-`StoreService.consumeLoadoutFor(player)` is written, tested and **wired
+**Resolved.** The in-round inventory is now 3 slots, and the loadout
+starts in them. `PowerUpService.beginRace` calls
+`StoreService.consumeLoadoutFor(player)` for each human racer and places
+the granted items in slots 1..n, in picked order. Field pickups fill
+whatever is empty. See `powerups.md` "Inventory and aiming".
+`Validate` requires `powerUpInventorySlots >= store.loadoutSlots`, so
+stock is never spent on an item that has no slot.
+
+To test: set a 3-item loadout in the hub (case 4), start a round, and
+confirm that the three items are in slots 1–3 at the start whistle and
+that stock went down by one each.
+
+The original write-up is kept below for the record.
+
+`StoreService.consumeLoadoutFor(player)` was written, tested and **wired
 to nothing**.
 
 It is the only place stock is ever decremented, and the rule it
 implements is settled: spend one of each item the loadout names,
-re-validated against stock, clear the selection. What is *not* settled
-is where it should be called from, because that needs an answer to a
-question nobody has answered:
+re-validated against stock, clear the selection. What was *not* settled
+was where it should be called from, because that needed an answer to a
+question nobody had answered:
 
 > `powerups.md` describes two acquisition paths — a 3-item pre-game
 > loadout and a 1-slot in-round field-pickup inventory

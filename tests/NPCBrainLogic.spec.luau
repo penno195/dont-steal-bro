@@ -256,6 +256,13 @@ TestRunner.describe("NPCBrainLogic.lineScheduleSeconds", function()
 		end
 	end)
 
+	TestRunner.it("fits all 3 lines in the live 20s Negotiate at a 4s gap, every seed", function()
+		for seed = 1, 200 do
+			local schedule = NPCBrainLogic.lineScheduleSeconds(20, 3, 4, NPCLogic.newRng(seed))
+			assert(#schedule == 3, string.format("seed %d fit only %d lines", seed, #schedule))
+		end
+	end)
+
 	TestRunner.it("drops lines rather than cramming them into a short window", function()
 		-- Two things said at a believable pace beat three on top of each
 		-- other.

@@ -133,6 +133,10 @@ function DecisionStudioPreview.mount(controller: any): () -> ()
 		dismiss = function()
 			reveal(nil) -- skip to the next loop's Intro sooner
 		end,
+		send = function(text: string)
+			print("DecisionStudioPreview: would send", text)
+		end,
+		typing = function() end,
 	}
 
 	local function enter(name: DecisionLogic.Phase, seconds: number)

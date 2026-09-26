@@ -45,7 +45,7 @@ local TIPS: { Tip } = {
 		id = "powerUp",
 		stage = "Race",
 		title = "You got a power-up",
-		body = "Hit the power-up button to mess with a rival. Or save it.",
+		body = "It's in your slots, bottom right. Use it on a rival, or save it.",
 	},
 	{
 		id = "hit",

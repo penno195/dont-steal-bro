@@ -67,23 +67,35 @@ function PowerUpLogic.isWithinPickupReach(root: Vec3, pickup: Vec3, reachStuds: 
 	return magnitude(subtract(root, pickup)) <= reachStuds
 end
 
--- Pure: picking up a power-up while holding `currentSlotCount` of
--- `maxSlots`. Returns (allowed, shouldSwapOldest) - "Swap" always allows
--- and signals the caller to evict the oldest held item first; "Refuse"
--- only allows when there's already free space (powerups.md: "either
--- swap or is refused, per config").
-function PowerUpLogic.canPickUp(
-	currentSlotCount: number,
+-- Pure: which slot a new pickup lands in, or nil if it's refused.
+-- `acquiredAt` maps each OCCUPIED slot index (1..maxSlots) to when its
+-- item was acquired; an empty slot is simply absent. Slots are fixed
+-- positions, not a list - using slot 2 leaves a hole at 2 rather than
+-- shifting slot 3 down, so the slot a player has selected on the HUD
+-- never changes under their thumb. The lowest empty slot wins; with
+-- none, "Swap" evicts the oldest item (ties to the lower slot) and
+-- "Refuse" turns the pickup down (powerups.md: "either swap or is
+-- refused, per config").
+function PowerUpLogic.slotForPickup(
+	acquiredAt: { [number]: number },
 	maxSlots: number,
 	fullPolicy: "Swap" | "Refuse"
-): (boolean, boolean)
-	if currentSlotCount < maxSlots then
-		return true, false
+): number?
+	for slot = 1, maxSlots do
+		if acquiredAt[slot] == nil then
+			return slot
+		end
 	end
-	if fullPolicy == "Swap" then
-		return true, true
+	if fullPolicy ~= "Swap" then
+		return nil
 	end
-	return false, false
+	local oldest: number? = nil
+	for slot = 1, maxSlots do
+		if oldest == nil or acquiredAt[slot] < acquiredAt[oldest] then
+			oldest = slot
+		end
+	end
+	return oldest
 end
 
 -- ===== weighted pool selection ===========================================
@@ -179,6 +191,22 @@ function PowerUpLogic.nearestInCone(
 	end
 
 	return bestId
+end
+
+-- Pure: a client's aim direction as a unit vector on the ground plane,
+-- or nil if it doesn't name one. The client sends only (x, z): aiming
+-- is a compass bearing, and a caster looking up a ramp still means
+-- "that way". A near-zero vector is nil rather than a guess, so the
+-- caller falls back to the character's own facing.
+function PowerUpLogic.aimForward(aimX: number?, aimZ: number?): Vec3?
+	if aimX == nil or aimZ == nil then
+		return nil
+	end
+	local length = math.sqrt(aimX * aimX + aimZ * aimZ)
+	if length < 1e-3 then
+		return nil
+	end
+	return { x = aimX / length, y = 0, z = aimZ / length }
 end
 
 -- Pure: the nearest candidate within range only, no cone constraint -

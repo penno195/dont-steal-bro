@@ -22,10 +22,13 @@
 -- stays up through Results until the player dismisses it or the round
 -- leaves Results. A results screen (P6-6) should wait on isActive().
 
+local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local TextChatService = game:GetService("TextChatService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
@@ -198,13 +201,84 @@ local store: DecisionStudio.Store = {
 	press = press,
 	release = release,
 	dismiss = hide,
+	send = StudioChatController.send,
+	typing = StudioChatController.noteTyping,
 }
+
+-- STAGE CAMERA. StudioStageService moves this player onto a podium or a
+-- lookout, turned to face the podiums, but the default camera keeps the
+-- angle it had in the race, which left the stage off to one side. So
+-- whenever the character jumps (the placement, a respawn back to the
+-- same spot), the camera is put behind it, looking at the stage's
+-- centre (the nearest StudioAnchor: race maps can carry their own, far
+-- away). The lookouts sit well above the podiums, so a level look would
+-- go over them. Only on those jumps: the player turns the camera freely
+-- in between.
+local SNAP_JUMP_STUDS = 20
+local CAMERA_BACK_STUDS = 12
+local CAMERA_UP_STUDS = 5
+
+local cameraWatch: RBXScriptConnection? = nil
+
+local function nearestStageCentre(from: Vector3): Vector3?
+	local best: Vector3?, bestDistance = nil, math.huge
+	for _, anchor in CollectionService:GetTagged("StudioAnchor") do
+		if anchor:IsA("BasePart") and anchor:IsDescendantOf(Workspace) then
+			local distance = (anchor.Position - from).Magnitude
+			if distance < bestDistance then
+				best, bestDistance = anchor.Position, distance
+			end
+		end
+	end
+	return best
+end
+
+local function snapCamera(root: BasePart)
+	local camera = Workspace.CurrentCamera
+	local centre = nearestStageCentre(root.Position)
+	local toward = if centre ~= nil then centre - root.Position else root.CFrame.LookVector
+	local flat = Vector3.new(toward.X, 0, toward.Z)
+	if camera == nil or flat.Magnitude < 1e-3 then
+		return
+	end
+	flat = flat.Unit
+	local eye = root.Position - flat * CAMERA_BACK_STUDS + Vector3.new(0, CAMERA_UP_STUDS, 0)
+	camera.CFrame = CFrame.lookAt(eye, centre or root.Position + flat * CAMERA_BACK_STUDS)
+end
+
+local function watchPlacement()
+	if cameraWatch ~= nil then
+		return
+	end
+	local last: Vector3? = nil
+	cameraWatch = RunService.RenderStepped:Connect(function()
+		local character = Players.LocalPlayer.Character
+		local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+		if root == nil or not root:IsA("BasePart") then
+			last = nil
+			return
+		end
+		local at = root.Position
+		if last == nil or (at - last).Magnitude > SNAP_JUMP_STUDS then
+			snapCamera(root)
+		end
+		last = at
+	end)
+end
+
+local function unwatchPlacement()
+	if cameraWatch ~= nil then
+		cameraWatch:Disconnect()
+		cameraWatch = nil
+	end
+end
 
 local function show()
 	if unmount == nil then
 		unmount = DecisionStudio.mount(UIScaleController, store)
 		startTalk()
 	end
+	watchPlacement()
 end
 
 -- Roblox's chat window, so the seats can sit below it. Read through the
@@ -257,8 +331,11 @@ function DecisionStudioController:init()
 	Net.onClientEvent("RoundState", function(payload: any)
 		if payload.state == "DecisionStudio" then
 			show()
-		elseif payload.state ~= "Results" then
-			hide()
+		else
+			unwatchPlacement()
+			if payload.state ~= "Results" then
+				hide()
+			end
 		end
 	end)
 

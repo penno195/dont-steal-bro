@@ -556,12 +556,21 @@ Net.Remotes = {
 	-- the effect" (the task's own requirement, verbatim). See
 	-- PowerUpService.luau's own header comment for the full exploit
 	-- list this shape closes off.
+	--
+	-- The lock-on aim (powerups.md "Inventory and aiming") adds only a
+	-- ground-plane aim DIRECTION (aimX, aimZ), never a position: the
+	-- server still measures range from the caster's real root. The
+	-- target id may be negative, because the racer a player locked on
+	-- to may be an NPC (Participants ids). No upper bound on slotIndex
+	-- here - PowerUpService checks it against the slot count.
 	PowerUpUseIntent = {
 		name = "PowerUpUseIntent",
 		direction = "ServerIntent",
 		schema = Net.struct({
 			slotIndex = Net.optional(Net.number({ min = 1, integer = true })),
-			targetPlayerId = Net.optional(Net.number({ min = 1, integer = true })),
+			targetPlayerId = Net.optional(Net.number({ integer = true })),
+			aimX = Net.optional(Net.number({ min = -1, max = 1 })),
+			aimZ = Net.optional(Net.number({ min = -1, max = 1 })),
 		}),
 		rateLimit = { capacity = 5, refillPerSecond = 1 },
 		states = { "Race" },
@@ -569,7 +578,9 @@ Net.Remotes = {
 
 	-- Server -> client (targeted, never fireAllClients - see
 	-- PowerUpService.luau): a player's own current inventory, for HUD
-	-- display.
+	-- display. `{ slotCount, inventory = { { slotIndex, powerUpId } } }`,
+	-- held items only, in slot order - a dense list, so `#inventory` is
+	-- still the held count for listeners that only count.
 	PowerUpInventoryChanged = {
 		name = "PowerUpInventoryChanged",
 		direction = "ServerBroadcast",

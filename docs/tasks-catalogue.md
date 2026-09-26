@@ -295,6 +295,12 @@ the server's private mapping, same pattern as Cable Splice — deliberately
 reused so `TaskHandlers` can share one `SlotMatchChallenge` helper module
 instead of three near-duplicate implementations.
 
+**Visible match (decided 2026-09-25):** every fuse and its slot show the
+same amperage, so the task is spot-and-drag speed, not trial and error.
+Either row can be picked first; the held piece lights red, hovering a
+piece on the other row flashes green (match) or red (no match), and an
+accepted slot turns solid green. The server still checks every drop.
+
 **Mobile feasibility:** 4/5 — same ergonomics as Cable Splice; fewer,
 larger drop targets than Lock Tumbler keeps this one comfortable.
 

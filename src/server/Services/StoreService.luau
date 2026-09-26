@@ -721,13 +721,9 @@ end
 -- Spends the player's stored loadout and hands back what they take into
 -- the round. THE ONLY PLACE STOCK IS DECREMENTED.
 --
--- NOT WIRED TO ANYTHING YET, DELIBERATELY. See docs/store-receipts.md
--- §"The one seam left open": granting 3 loadout items into
--- PowerUpService's 1-slot field inventory is a design question nobody
--- has answered (powerups.md describes both, and never says how they
--- coexist), and P4-5 is not the task that should answer it. The
--- consumption rule itself is settled and tested here so that wiring it
--- up later is a call site, not a redesign.
+-- Called by PowerUpService as each race begins: the loadout starts in
+-- the in-round inventory's slots, which is how the two coexist
+-- (powerups.md "Inventory and aiming"; docs/store-receipts.md §5).
 local function consumeLoadoutFor(player: Player): { string }
 	local DataService = Loader.get("DataService") :: any
 

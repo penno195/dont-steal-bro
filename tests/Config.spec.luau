@@ -28,10 +28,12 @@ local function validGameConfig(): Validate.GameConfig
 			{ tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
 			{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
 		},
-		powerUpInventorySlots = 1,
+		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
 		powerUpUseRangeStuds = 24,
 		powerUpTargetConeDegrees = 90,
+		powerUpLockOnSlackStuds = 4,
+		powerUpLockOnSlackDegrees = 20,
 		powerUpRotationTimers = { Common = 20, Uncommon = 35, Rare = 60 },
 		movementSampleIntervalSeconds = 0.5,
 		movementSpeedTolerance = 1.25,
@@ -41,6 +43,7 @@ local function validGameConfig(): Validate.GameConfig
 		movementViolationActThreshold = 6.0,
 		decisionStudioDefaultChoice = "Share",
 		decisionStudioChatRangeStuds = 30,
+		decisionStudioStage = { mapId = "DecisionStudio", offsetStuds = 5000 },
 		npc = {
 			fillGraceSeconds = 10,
 			tickHz = 8,
@@ -393,6 +396,22 @@ TestRunner.describe("Validate.checkGameConfig (P2-7 power-up fields)", function(
 		TestRunner.expect(#issues > 0):toBeTruthy()
 	end)
 
+	TestRunner.it("rejects fewer inventory slots than loadout slots", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.powerUpInventorySlots = 2
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects negative lock-on slack", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.powerUpLockOnSlackDegrees = -1
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
 	TestRunner.it("rejects a powerUpFullInventoryPolicy that isn't Swap or Refuse", function()
 		local issues = {}
 		local config = validGameConfig()
@@ -483,6 +502,22 @@ TestRunner.describe("Validate.checkGameConfig (P3-2 decisionStudioDefaultChoice)
 		local issues = {}
 		local config = validGameConfig()
 		config.decisionStudioChatRangeStuds = 0
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a Studio set close enough to overlap a race map", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.decisionStudioStage = { mapId = "DecisionStudio", offsetStuds = 200 }
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects an empty Studio set map id", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.decisionStudioStage = { mapId = "", offsetStuds = 5000 }
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
 	end)

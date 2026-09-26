@@ -38,8 +38,10 @@ other tips fill in whatever happens to that player.
 - A tip stays up for about 3 words a second plus 2 seconds (4 to 9
   seconds in total), or until it's tapped.
 
-**The card:** it sits in the upper-middle of the screen, clear of the
-top-centre info bar and the bottom thumb zone. Only the card takes
+**The card:** it sits in the top-right corner (in portrait, just below
+the full-width info bar), 260 wide, out of the middle of the view. It
+used to sit upper-middle, and the first playtest found it in the way
+every time it appeared. Only the card takes
 taps, so movement is never blocked. Tapping anywhere on it closes it.
 It never takes gamepad focus: mid-race, the stick is steering.
 

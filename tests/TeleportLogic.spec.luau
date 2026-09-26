@@ -226,6 +226,7 @@ end)
 TestRunner.describe("TeleportLogic.returnMessage", function()
 	TestRunner.it("maps a known reason to its fixed message", function()
 		TestRunner.expect(TeleportLogic.returnMessage({ returnReason = "Late" }) ~= nil):toBeTruthy()
+		TestRunner.expect(TeleportLogic.returnMessage({ returnReason = "RoundOver" }) ~= nil):toBeTruthy()
 	end)
 
 	TestRunner.it("ignores anything else, so a forged reason can't inject text", function()

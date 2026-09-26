@@ -9,10 +9,14 @@
 --     effect chips (and, in portrait, the task progress bar).
 --   - Top-left, landscape only: the task list. Portrait has no room
 --     beside the info bar, so it gets the bar alone.
---   - The first Primary zone: the held power-up. On touch it is the use
---     button, above and left of Roblox's jump button. With a keyboard or
---     gamepad it is the same card with a key hint instead, because
---     there is nothing to tap.
+--   - The first Primary zone: the power-up slots (powerups.md
+--     "Inventory and aiming"), above and left of Roblox's jump button.
+--     Tap or click a slot to select it (the glow outline); tap the
+--     selected one to quick-fire; press and drag out of a slot to aim,
+--     release to fire, drag back onto it to cancel. With a keyboard,
+--     1-N select, Q fires, and holding right-click aims in first
+--     person (Q or left-click fires); a gamepad uses L1/R1, X and L2
+--     the same way.
 --   - The screen edges, on their own full-bleed ScreenGui: a band per
 --     debuff category you're suffering (HudLogic.EDGES), never the
 --     middle of the screen.
@@ -30,6 +34,7 @@
 -- docs/race-hud.md "Performance".
 
 local ContextActionService = game:GetService("ContextActionService")
+local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -56,7 +61,12 @@ local Env = C.Env
 local Icons = C.Icons
 
 export type TaskRow = { title: string, completed: boolean }
-export type Held = { id: string, name: string }
+-- One inventory slot. `id`/`name` are nil when it's empty.
+-- aimable: the item is Aimed, so hold-to-aim does something with it.
+export type Slot = { index: number, id: string?, name: string?, aimable: boolean? }
+-- How the player is aiming: along the first-person camera (hold
+-- right-click / L2), or along a drag from the slot (touch).
+export type AimMode = "Camera" | "Drag"
 -- Degrees clockwise from screen-up, and studs on the ground plane.
 export type Objective = { bearing: number, distance: number }
 
@@ -71,19 +81,41 @@ export type Store = {
 	endsAt: () -> number?, -- server time the race ends
 	tasks: () -> { TaskRow },
 	progress: () -> { HudLogic.ProgressEntry },
-	held: () -> Held?,
+	slots: () -> { Slot }, -- always the full slot count, empty ones included
+	selected: () -> number,
+	aiming: () -> boolean,
 	pending: () -> boolean, -- a use is on its way to the server
 	effects: () -> { HudLogic.Effect },
 	objective: () -> Objective?,
-	use: () -> (),
+	select: (index: number) -> (),
+	fire: () -> (), -- the selected slot, at whatever is locked on
+	startAim: (mode: AimMode) -> (),
+	dragAim: (dx: number, dy: number) -> (), -- pixels from where the drag began
+	-- fireIfLocked: fire first if a target is locked (hold-to-aim release).
+	endAim: (fireIfLocked: boolean?) -> (),
 	now: (() -> number)?, -- clock override for the preview; default Clock.now
 }
 
 local CLOCK_STEP = 0.1
 local USE_ACTION = "RaceHUDUsePowerUp"
+local SELECT_ACTION = "RaceHUDSelectPowerUp"
 local USE_KEY = Enum.KeyCode.Q
 -- ButtonA is jump and R2 is Roblox's tool activate; X is free.
 local USE_PAD = Enum.KeyCode.ButtonX
+-- Hold to aim: the camera goes first person (RaceHUDController), so
+-- the aim is where you look.
+local AIM_MOUSE = Enum.UserInputType.MouseButton2
+local AIM_PAD = Enum.KeyCode.ButtonL2
+local SELECT_KEYS = {
+	Enum.KeyCode.One,
+	Enum.KeyCode.Two,
+	Enum.KeyCode.Three,
+	Enum.KeyCode.Four,
+	Enum.KeyCode.Five,
+	Enum.KeyCode.Six,
+}
+local PREVIOUS_PAD = Enum.KeyCode.ButtonL1
+local NEXT_PAD = Enum.KeyCode.ButtonR1
 
 local RING = 64
 local PILL = 88
@@ -92,8 +124,15 @@ local TOP_WIDTH = 2 * PILL + RING + 2 * GAP
 local CHIP = 36
 local TASK_WIDTH = 150
 local TASK_ROW = 18
-local POWER_WIDTH = 160
-local POWER_HEIGHT = 52
+-- Above Tokens.touch.minTargetPoints, so no hit-area padding at scale
+-- 1, and three of them still fit portrait's half-width Primary zone.
+local SLOT = 60
+local SLOT_LABEL = 14
+-- The slot drag, in screen pixels: a press that never moves this far is
+-- a tap; an aim dragged back within CANCEL_RADIUS of where it began is
+-- a cancel (roughly back over the slot it started on).
+local DRAG_DEADZONE = 12
+local CANCEL_RADIUS = SLOT / 2
 
 local CATEGORY_ICON: { [string]: string } = { HardControl = "lock", Movement = "slow", Vision = "eye" }
 local EFFECT_ICONS = { "boost", "lock", "slow", "eye", "warning" }
@@ -396,99 +435,239 @@ end
 
 -- POWER-UP -------------------------------------------------------------
 
-local function powerUpCard(store: Store, position: () -> UDim2): Frame
-	local touch = function()
-		return Env.inputMode() == Enum.PreferredInput.Touch
-	end
-	local name = derive(function()
-		local held = store.held()
-		return if held then held.name else "Empty"
-	end)
+-- One slot: the item's icon and name, its number on a keyboard, and the
+-- glow outline when selected (red while a drag is armed to cancel).
+-- Pointer input goes to `press` by hand rather than through
+-- Base.interactive, because a press on a slot may become a drag.
+local function powerUpSlot(
+	store: Store,
+	slot: () -> Slot,
+	cancelling: () -> boolean,
+	press: (index: number, input: InputObject) -> ()
+): TextButton
 	local empty = derive(function()
-		return store.held() == nil
+		return slot().id == nil
+	end)
+	local isSelected = derive(function()
+		return store.selected() == slot().index
 	end)
 
-	local button = C.Button({
-		label = name,
-		icon = "bolt",
-		variant = "primary",
-		width = POWER_WIDTH,
-		disabled = empty,
-		loading = store.pending,
-		onActivate = store.use,
-		position = UDim2.fromScale(0.5, 0.5),
-		anchorPoint = Vector2.new(0.5, 0.5),
-	})
+	local icon = Icons.view("bolt", 26, function(): Color3
+		return if empty() then Theme.color.inkMuted else Theme.color.warning
+	end)
+	icon.AnchorPoint = Vector2.new(0.5, 0)
+	icon.Position = UDim2.new(0.5, 0, 0, Theme.spacing.xs)
+	-- Hidden when empty rather than muted: the bolt is an emoji glyph,
+	-- which ignores TextColor3, so a muted empty slot looked full.
+	vide.effect(function()
+		icon.Visible = not empty()
+	end)
 
-	-- Keyboard and gamepad: the same card, with the key to press where
-	-- the tap target would be.
-	local hint = card("KeyHint", 0, UDim2.fromScale(1, 1), {
-		create("UIListLayout")({
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Center,
-			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, GAP),
-			SortOrder = Enum.SortOrder.LayoutOrder,
+	local button = create("TextButton")({
+		Name = "Slot",
+		LayoutOrder = function()
+			return slot().index
+		end,
+		Size = UDim2.fromOffset(SLOT, SLOT),
+		Text = "",
+		AutoButtonColor = false,
+		Selectable = false, -- L1/R1 select on a gamepad; the stick is steering
+		BackgroundColor3 = Theme.color.surface,
+		BackgroundTransparency = function()
+			return if store.pending() and isSelected() then 0.5 else 0.15
+		end,
+		Base.corner(Theme.radius.md),
+		create("UIStroke")({
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = function(): Color3
+				if not isSelected() then
+					return Theme.color.line
+				end
+				return if cancelling() then Theme.color.danger else Theme.color.warning
+			end,
+			Thickness = function()
+				return if isSelected() then 3 else 1
+			end,
+			Transparency = function()
+				return if isSelected() then 0 else 0.6
+			end,
 		}),
-		create("Frame")({
-			Name = "Key",
-			LayoutOrder = 1,
-			Size = UDim2.fromOffset(28, 28),
-			BackgroundColor3 = Theme.color.surfaceRaised,
-			Base.corner(Theme.radius.sm),
-			create("UIStroke")({ Color = Theme.color.ink, Thickness = 1 }),
-			Base.text("label", {
-				Size = UDim2.fromScale(1, 1),
-				Text = function()
-					return if Env.isGamepad() then "X" else "Q"
-				end,
-			}),
-		}),
-		(function()
-			local icon = Icons.view("bolt", 24, function(): Color3
-				return if empty() then Theme.color.inkMuted else Theme.color.warning
-			end)
-			icon.LayoutOrder = 2
-			return icon
-		end)(),
-		Base.text("label", {
+		icon,
+		Base.text("caption", {
 			Name = "Name",
-			LayoutOrder = 3,
-			Size = UDim2.fromOffset(POWER_WIDTH - 28 - 24 - 3 * GAP - 2 * Theme.spacing.xs, 24),
-			TextXAlignment = Enum.TextXAlignment.Left,
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 1, -Theme.spacing.xxs),
+			Size = UDim2.new(1, -Theme.spacing.xxs * 2, 0, SLOT_LABEL),
 			TextColor3 = function(): Color3
 				return if empty() then Theme.color.inkMuted else Theme.color.ink
 			end,
-			Text = name,
+			Text = function()
+				return slot().name or ""
+			end,
 		}),
-	})
+		Base.text("caption", {
+			Name = "Number",
+			Position = UDim2.fromOffset(Theme.spacing.xxs, 0),
+			Size = UDim2.fromOffset(SLOT_LABEL, SLOT_LABEL),
+			TextColor3 = Theme.color.inkMuted,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Visible = function()
+				return Env.inputMode() == Enum.PreferredInput.KeyboardAndMouse
+			end,
+			Text = function()
+				return tostring(slot().index)
+			end,
+		}),
+	}) :: TextButton
 
-	effect(function()
-		local isTouch = touch()
-		button.Visible = isTouch
-		hint.Visible = not isTouch
+	button.InputBegan:Connect(function(input: InputObject)
+		press(slot().index, input)
+	end)
+	return button
+end
+
+-- The slot row, and under it (keyboard and gamepad only) the keys to
+-- fire and aim with. Owns the one press in flight: a tap selects, or
+-- fires if the slot is already selected; a drag aims and fires on
+-- release; dragged back onto its start it cancels (HudLogic.slotGesture).
+local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: number): Frame
+	local cancelling = source(false)
+	type Press = { input: InputObject, start: Vector2, furthest: number, index: number, aiming: boolean }
+	local active: Press? = nil
+
+	local function pointAt(input: InputObject): Vector2
+		return Vector2.new(input.Position.X, input.Position.Y)
+	end
+
+	local function press(index: number, input: InputObject)
+		local kind = input.UserInputType
+		if active ~= nil or (kind ~= Enum.UserInputType.Touch and kind ~= Enum.UserInputType.MouseButton1) then
+			return
+		end
+		active = { input = input, start = pointAt(input), furthest = 0, index = index, aiming = false }
+	end
+
+	-- A touch reports its moves and its end on the same InputObject; a
+	-- mouse reports moves as MouseMovement and the end as MouseButton1.
+	local function track(input: InputObject, ended: boolean)
+		local current = active
+		if current == nil then
+			return
+		end
+		local mouse = current.input.UserInputType == Enum.UserInputType.MouseButton1
+		local kind = input.UserInputType
+		local same = input == current.input
+			or (mouse and (kind == Enum.UserInputType.MouseMovement or kind == Enum.UserInputType.MouseButton1))
+		if not same then
+			return
+		end
+
+		local offset = pointAt(input) - current.start
+		current.furthest = math.max(current.furthest, offset.Magnitude)
+		local gesture = HudLogic.slotGesture(current.furthest, offset.Magnitude, DRAG_DEADZONE, CANCEL_RADIUS)
+
+		if not ended then
+			if gesture ~= "Tap" and not current.aiming then
+				current.aiming = true
+				store.select(current.index)
+				store.startAim("Drag")
+			end
+			if current.aiming then
+				store.dragAim(offset.X, offset.Y)
+				cancelling(gesture == "Cancel")
+			end
+			return
+		end
+
+		active = nil
+		cancelling(false)
+		if gesture == "Tap" then
+			if store.selected() == current.index then
+				store.fire()
+			else
+				store.select(current.index)
+			end
+		elseif gesture == "Aim" then
+			store.dragAim(offset.X, offset.Y)
+			store.fire()
+			store.endAim()
+		else
+			store.endAim()
+		end
+	end
+
+	local moved = UserInputService.InputChanged:Connect(function(input: InputObject)
+		track(input, false)
+	end)
+	local lifted = UserInputService.InputEnded:Connect(function(input: InputObject)
+		track(input, true)
+	end)
+	cleanup(function()
+		moved:Disconnect()
+		lifted:Disconnect()
 	end)
 
+	local width = slotCount * SLOT + (slotCount - 1) * GAP
 	return create("Frame")({
-		Name = "PowerUp",
-		AnchorPoint = Vector2.new(0.5, 0.5),
+		Name = "PowerUps",
+		AnchorPoint = Vector2.new(1, 0.5),
 		Position = position,
-		Size = UDim2.fromOffset(POWER_WIDTH, POWER_HEIGHT),
+		Size = UDim2.fromOffset(width, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
-		button :: GuiObject,
-		hint :: GuiObject,
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Vertical,
+			HorizontalAlignment = Enum.HorizontalAlignment.Right,
+			Padding = UDim.new(0, Theme.spacing.xxs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		create("Frame")({
+			Name = "Slots",
+			LayoutOrder = 1,
+			Size = UDim2.fromOffset(width, SLOT),
+			BackgroundTransparency = 1,
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				Padding = UDim.new(0, GAP),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			indexes(store.slots, function(slot: () -> Slot)
+				return powerUpSlot(store, slot, cancelling, press)
+			end) :: any,
+		}),
+		Base.text("caption", {
+			Name = "Keys",
+			LayoutOrder = 2,
+			Size = UDim2.fromOffset(width, SLOT_LABEL),
+			TextColor3 = Theme.color.inkMuted,
+			TextXAlignment = Enum.TextXAlignment.Right,
+			Visible = function()
+				return Env.inputMode() ~= Enum.PreferredInput.Touch
+			end,
+			Text = function()
+				-- The aim half only when the selected item can aim: on
+				-- anything else, holding it does nothing.
+				local aimable = store.slots()[store.selected()].aimable == true
+				if Env.isGamepad() then
+					return if aimable then "X use   L2 aim" else "X use"
+				end
+				return if aimable then "Q use   RMB aim" else "Q use"
+			end,
+		}),
 	}) :: Frame
 end
 
--- The centre of this orientation's first Primary zone.
-local function primaryCentre(orientation: string): UDim2
+-- The right edge of this orientation's first Primary zone, vertically
+-- centred in it. The slots hang left from there, so they stay clear of
+-- the jump button in landscape and of the screen edge in portrait.
+local function primaryAnchor(orientation: string): UDim2
 	for _, zone in Layout.THUMB_ZONES[orientation :: Layout.Orientation] do
 		if zone.kind == "Primary" then
 			local r = zone.rect
-			return UDim2.fromScale(r.x + r.width / 2, r.y + r.height / 2)
+			return UDim2.new(r.x + r.width, -Theme.spacing.sm, r.y + r.height / 2, 0)
 		end
 	end
-	return UDim2.fromScale(0.75, 0.75)
+	return UDim2.new(1, -Theme.spacing.sm, 0.75, 0)
 end
 
 -- EDGES ----------------------------------------------------------------
@@ -674,9 +853,10 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 		}) :: Frame
 		cleanup(controller.attachScale(tasks))
 
-		local power = powerUpCard(store, function()
-			return primaryCentre(orientation())
-		end)
+		local slotCount = #store.slots()
+		local power = powerUpPanel(store, function()
+			return primaryAnchor(orientation())
+		end, slotCount)
 		power.Parent = gui
 		cleanup(controller.attachScale(power))
 
@@ -710,17 +890,75 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 		local other = edgeSet(HudLogic.edgeFor("Other"), unknown, shortAxis, 0)
 		other.Parent = edgeGui
 
-		-- Keyboard and gamepad use. Bound on touch too: harmless, and a
+		-- Keyboard and gamepad. Bound on touch too: harmless, and a
 		-- tablet with a keyboard attached switches modes mid-race.
+		local function selectedHeld(): boolean
+			return store.slots()[store.selected()].id ~= nil
+		end
 		ContextActionService:BindAction(USE_ACTION, function(_, inputState: Enum.UserInputState)
-			if inputState ~= Enum.UserInputState.Begin or store.held() == nil or store.pending() then
+			if inputState ~= Enum.UserInputState.Begin or not selectedHeld() or store.pending() then
 				return Enum.ContextActionResult.Pass
 			end
-			store.use()
+			store.fire()
 			return Enum.ContextActionResult.Sink
 		end, false, USE_KEY, USE_PAD)
+
+		-- Hold to aim along the (first-person) camera. Watched on
+		-- UserInputService, not bound: the mouse / right stick still turn
+		-- the camera (which is how the aim is steered), so nothing here
+		-- may sink it, and the release must be seen even if something
+		-- else took the press. While aiming, left-click fires too - the
+		-- mouse is locked to the centre, so it can't be on a slot.
+		local function isAimInput(input: InputObject): boolean
+			return input.UserInputType == AIM_MOUSE or input.KeyCode == AIM_PAD
+		end
+		local aimBegan = UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
+			if processed then
+				return
+			end
+			if isAimInput(input) then
+				store.startAim("Camera")
+			elseif
+				input.UserInputType == Enum.UserInputType.MouseButton1
+				and store.aiming()
+				and selectedHeld()
+				and not store.pending()
+			then
+				store.fire()
+			end
+		end)
+		local aimEnded = UserInputService.InputEnded:Connect(function(input: InputObject)
+			if isAimInput(input) and store.aiming() then
+				store.endAim(true) -- release fires, if something is locked
+			end
+		end)
+		cleanup(function()
+			aimBegan:Disconnect()
+			aimEnded:Disconnect()
+		end)
+
+		local selectKeys = { PREVIOUS_PAD, NEXT_PAD }
+		for index = 1, math.min(slotCount, #SELECT_KEYS) do
+			table.insert(selectKeys, SELECT_KEYS[index])
+		end
+		ContextActionService:BindAction(SELECT_ACTION, function(_, inputState: Enum.UserInputState, input: InputObject)
+			if inputState ~= Enum.UserInputState.Begin then
+				return Enum.ContextActionResult.Pass
+			end
+			local current = store.selected()
+			if input.KeyCode == PREVIOUS_PAD then
+				store.select((current - 2) % slotCount + 1)
+			elseif input.KeyCode == NEXT_PAD then
+				store.select(current % slotCount + 1)
+			else
+				store.select(table.find(SELECT_KEYS, input.KeyCode) :: number)
+			end
+			return Enum.ContextActionResult.Sink
+		end, false, table.unpack(selectKeys))
+
 		cleanup(function()
 			ContextActionService:UnbindAction(USE_ACTION)
+			ContextActionService:UnbindAction(SELECT_ACTION)
 		end)
 	end)
 

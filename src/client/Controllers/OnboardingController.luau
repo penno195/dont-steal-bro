@@ -6,9 +6,11 @@
 -- tips are display-only, so a client that spoofs or hides them changes
 -- nothing but its own screen.
 --
--- THE CARD: upper-middle of the screen, clear of the top-centre info bar
--- and the bottom thumb zone, so it never covers a control and never
--- blocks movement (only the card itself takes input). Tap it to close
+-- THE CARD: top-right corner (below the info bar in portrait), out of
+-- the middle of the view where it used to sit in the way of play (moved
+-- after a 2026-09-25 playtest). Clear of the bottom thumb zone, so it
+-- never covers a control and never blocks movement (only the card
+-- itself takes input). Tap it to close
 -- it, or it leaves on its own after OnboardingLogic.readSeconds. It
 -- never takes gamepad focus: mid-race the stick is steering.
 --
@@ -27,6 +29,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local C = require(script.Parent.Parent.UI.Components)
 local Base = require(script.Parent.Parent.UI.Components.Base)
 local HudLogic = require(script.Parent.Parent.UI.HudLogic)
+local Layout = require(script.Parent.Parent.UI.Layout)
 local OnboardingLogic = require(script.Parent.Parent.UI.OnboardingLogic)
 local PayoffExplainer = require(script.Parent.Parent.UI.Screens.PayoffExplainer)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -38,7 +41,12 @@ local source = vide.source
 local Env = C.Env
 local selfId = Players.LocalPlayer.UserId
 
-local CARD_WIDTH = 320
+local CARD_WIDTH = 260
+-- Portrait's top-centre info bar spans the full width, so there the
+-- card drops below it (Layout.THUMB_ZONES: Info is the top 16%).
+local PORTRAIT_TOP = 0.16
+
+local portrait: Base.Source<boolean> & ((boolean) -> boolean) = source(false) :: any
 
 -- Round state -> OnboardingLogic.Stage. States not listed have no tips.
 local STAGE_OF_ROUND: { [string]: string } = {
@@ -102,8 +110,10 @@ local function card(): TextButton
 		AutoButtonColor = false,
 		Selectable = false,
 		Activated = dismiss,
-		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.fromScale(0.5, 0.2),
+		AnchorPoint = Vector2.new(1, 0),
+		Position = function()
+			return UDim2.new(1, -Theme.spacing.md, if portrait() then PORTRAIT_TOP else 0, Theme.spacing.md)
+		end,
 		Size = UDim2.fromOffset(CARD_WIDTH, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = Theme.elevation[3].surface,
@@ -164,6 +174,11 @@ end
 
 local function mount()
 	local gui = UIScaleController.createScreen("Tips", { displayOrder = Theme.displayOrder.hud + 5 })
+	local function setOrientation(usable: Layout.Rect)
+		portrait(Layout.orientationOf(usable.width, usable.height) == "Portrait")
+	end
+	setOrientation(UIScaleController.getUsableRect())
+	UIScaleController.observeUsableRect(setOrientation)
 	vide.root(function()
 		local root = card()
 		root.Parent = gui

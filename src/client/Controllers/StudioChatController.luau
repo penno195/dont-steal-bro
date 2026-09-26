@@ -61,6 +61,77 @@ local function isPlayerSpeaking(userId: number): boolean
 	return device.Active
 end
 
+local function negotiateChannel(): TextChannel?
+	local channel = TextChatService:FindFirstChild(CHANNEL_NAME)
+	return if channel ~= nil and channel:IsA("TextChannel") then channel else nil
+end
+
+local function sendTypingIntent()
+	local nowClock = os.clock()
+	if nowClock - lastTypingSentAt < TYPING_SEND_THROTTLE_SECONDS then
+		return
+	end
+	lastTypingSentAt = nowClock
+	Net.fireServer("StudioChatTypingIntent", {})
+end
+
+-- The Decision Studio screen's own chat box sends through here: the
+-- Negotiate channel, as the local player, exactly as Roblox's chat bar
+-- would. The server's ShouldDeliverCallback still decides who gets it,
+-- so nothing here can widen who hears a finalist - and a spectator
+-- (CanSend = false) is refused by the engine. SendAsync yields, so it
+-- runs off the UI's thread.
+local function send(text: string)
+	local channel = negotiateChannel()
+	if channel == nil then
+		return
+	end
+	task.spawn(function()
+		local ok, err = pcall(function()
+			channel:SendAsync(text)
+		end)
+		if not ok then
+			warn("StudioChatController: send failed - " .. tostring(err))
+		end
+	end)
+end
+
+-- While the Negotiate channel exists and this player may send in it
+-- (a finalist), Roblox's own chat bar targets it too, so typing there
+-- reaches the others rather than the general channel, which finalists
+-- are cut out of for the whole finale (StudioChat). Back to RBXGeneral
+-- when the channel closes.
+local function mayRetarget(inputBar: ChatInputBarConfiguration, channel: TextChannel)
+	for _, child in channel:GetChildren() do
+		if child:IsA("TextSource") and child.UserId == LocalPlayer.UserId and child.CanSend then
+			inputBar.TargetTextChannel = channel
+			return
+		end
+	end
+end
+
+local function followNegotiateChannel(inputBar: ChatInputBarConfiguration)
+	TextChatService.ChildAdded:Connect(function(child: Instance)
+		if child.Name ~= CHANNEL_NAME or not child:IsA("TextChannel") then
+			return
+		end
+		mayRetarget(inputBar, child)
+		child.ChildAdded:Connect(function()
+			mayRetarget(inputBar, child)
+		end)
+	end)
+	TextChatService.ChildRemoved:Connect(function(child: Instance)
+		if child.Name ~= CHANNEL_NAME then
+			return
+		end
+		local channels = TextChatService:FindFirstChild("TextChannels")
+		local general = if channels ~= nil then channels:FindFirstChild("RBXGeneral") else nil
+		if general ~= nil and general:IsA("TextChannel") then
+			inputBar.TargetTextChannel = general
+		end
+	end)
+end
+
 local function sendTypingIfNegotiating(inputBar: ChatInputBarConfiguration)
 	-- Declared non-optional in Roblox's own type defs even though it can
 	-- genuinely be unset at runtime (no channel targeted yet) - cast to
@@ -72,14 +143,7 @@ local function sendTypingIfNegotiating(inputBar: ChatInputBarConfiguration)
 	if targetChannel == nil or targetChannel.Name ~= CHANNEL_NAME then
 		return
 	end
-
-	local nowClock = os.clock()
-	if nowClock - lastTypingSentAt < TYPING_SEND_THROTTLE_SECONDS then
-		return
-	end
-	lastTypingSentAt = nowClock
-
-	Net.fireServer("StudioChatTypingIntent", {})
+	sendTypingIntent()
 end
 
 local StudioChatController: Loader.Controller = {
@@ -88,6 +152,10 @@ local StudioChatController: Loader.Controller = {
 
 	isPlayerTyping = isPlayerTyping,
 	isPlayerSpeaking = isPlayerSpeaking,
+	send = send,
+	-- The Studio screen's chat box, as the finalist types. Throttled,
+	-- and the server ignores it from anyone but a finalist in Negotiate.
+	noteTyping = sendTypingIntent,
 }
 
 function StudioChatController:init()
@@ -101,6 +169,7 @@ function StudioChatController:init()
 	-- fallback is IsFocused: a focused bar counts as typing, re-sent on
 	-- the throttle so the indicator doesn't go stale mid-message.
 	local inputBar = TextChatService:WaitForChild("ChatInputBarConfiguration") :: ChatInputBarConfiguration
+	followNegotiateChannel(inputBar)
 	local textBox = inputBar.TextBox :: TextBox?
 
 	if textBox ~= nil then

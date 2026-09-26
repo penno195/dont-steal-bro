@@ -94,6 +94,10 @@ export type Store = {
 	press: (choice: Choice) -> (),
 	release: (choice: Choice) -> (),
 	dismiss: () -> (),
+	-- The finalist's own chat line, sent into the Negotiate channel.
+	send: (text: string) -> (),
+	typing: () -> (), -- called as the finalist types, for the typing indicator
+
 	now: (() -> number)?, -- clock override for the preview; default Clock.now
 }
 
@@ -846,6 +850,67 @@ local DecisionStudio = {}
 -- preview both use it, so they tick the same machine. `send` is called
 -- exactly once, on the tick the hold completes. Returns the source,
 -- press/release for the Store, and a stop function.
+-- The finalist's chat line during Negotiate. Roblox's own chat bar is
+-- easy to miss (closed by default, behind a top-bar icon) and on a phone
+-- often isn't open at all, so the Studio carries its own: a text field
+-- and a Send button, above the payoff table where the thumb already is,
+-- lifted with the rest of this stack when the on-screen keyboard opens.
+-- Enter sends too. What's sent goes through the Negotiate channel
+-- exactly as the chat bar's would, so bubbles, filtering and the
+-- spectators' read-only view all apply unchanged.
+local CHAT_H = 56 -- a primary Button's own height, so the row fits it
+local SEND_W = 88
+-- TextChatService's own per-message limit.
+local MAX_MESSAGE = 200
+
+local function chatBox(store: Store, order: number): Frame
+	local input = create("TextBox")({
+		Name = "Input",
+		ClearTextOnFocus = false,
+		PlaceholderText = "Type to the others…",
+		PlaceholderColor3 = Theme.color.inkMuted,
+		Text = "",
+		TextColor3 = Theme.color.ink,
+		FontFace = Theme.type.body.font,
+		TextSize = Theme.type.body.size,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		BackgroundColor3 = Theme.color.surfaceRaised,
+		LayoutOrder = 1,
+		Size = UDim2.fromOffset(COLUMN - SEND_W - GAP, CHAT_H),
+		Base.corner(Theme.radius.md),
+		Base.padding(Theme.spacing.sm),
+	}) :: TextBox
+
+	local function submit()
+		local text = string.sub(input.Text, 1, MAX_MESSAGE)
+		input.Text = ""
+		if string.find(text, "%S") ~= nil then
+			store.send(text)
+		end
+	end
+
+	local focusLost = input.FocusLost:Connect(function(enterPressed: boolean)
+		if enterPressed then
+			submit()
+		end
+	end)
+	local changed = input:GetPropertyChangedSignal("Text"):Connect(function()
+		if input.Text ~= "" then
+			store.typing()
+		end
+	end)
+	cleanup(function()
+		focusLost:Disconnect()
+		changed:Disconnect()
+	end)
+
+	return hrow("Chat", order, CHAT_H, GAP, {
+		input,
+		C.Button({ label = "Send", variant = "primary", width = SEND_W, layoutOrder = 2, onActivate = submit }),
+	})
+end
+
 function DecisionStudio.confirmer(
 	send: (choice: Choice) -> (),
 	allowed: () -> boolean,
@@ -1043,7 +1108,12 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			result.Visible = resultShown()
 		end)
 
-		local decide = stack("Decide", COLUMN, GAP, { payoff, buttons, locked, result })
+		local chatRow = chatBox(store, 0)
+		effect(function()
+			chatRow.Visible = store.isFinalist() and stage() == "Negotiate"
+		end)
+
+		local decide = stack("Decide", COLUMN, GAP, { chatRow, payoff, buttons, locked, result })
 		decide.Parent = gui
 		cleanup(controller.attachScale(decide))
 

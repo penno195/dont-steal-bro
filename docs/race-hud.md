@@ -20,8 +20,9 @@ polls or requests anything.
 | Countdown | `RoundState.endsAt`, counted down locally against `Clock.now()` | On state change |
 | Task list, objective arrow | **`TaskAssignmentState`** (new, targeted) | At race start and on each of your own completions |
 | Placement, line gap | `TaskProgress` (counts for everyone) | On any completion |
-| Held power-up | `PowerUpInventoryChanged` | On change |
-| Use button spinner | `PowerUpUseResult` clears it (or a 2s timeout) | Per use |
+| Power-up slots | `PowerUpInventoryChanged` (`slotCount`, held `{ slotIndex, powerUpId }`) | On change |
+| Selected slot dimmed while firing | `PowerUpUseResult` clears it (or a 2s timeout) | Per use |
+| Lock-on highlight | Local: `PowerUpLogic` targeting over rivals' rigs | Per frame while an Aimed/Nearest item is selected |
 | Effect chips, edges | `StatusEffectsChanged`, which now carries `kind` | On change |
 
 **Two server changes were needed**, both minimal:
@@ -46,11 +47,21 @@ Positions come from `Layout.THUMB_ZONES` rather than numbers of their own.
   per task). Portrait has no room beside the info bar, so it shows the bar
   alone.
 - **The first Primary zone** (landscape: just left of and above the jump
-  button; portrait: lower right). This holds the held power-up. On touch it
-  is a `Button` (icon, name, loading while the intent is in flight,
-  disabled when empty). With a keyboard or gamepad the same card shows a
-  key hint instead, **Q** or **X**, bound through ContextActionService.
-  ButtonA is jump and R2 is Roblox's tool activate, which is why X.
+  button; portrait: lower right). This holds the three power-up slots in a
+  row, right-aligned to the zone's edge. Each slot shows an icon and a
+  name, and the selected one has a glow outline. The full scheme is in
+  `powerups.md` "Inventory and aiming". Tap a slot to select it, tap it
+  again to quick-fire, and drag out of it to aim, releasing to fire or
+  dragging back onto it to cancel (the outline turns red). With a
+  keyboard or gamepad, slot numbers show and a `Q use RMB aim` / `X use
+  L2 aim` line sits under the row. Q/X and 1–3/L1/R1 are bound through
+  ContextActionService. Hold-to-aim is watched on UserInputService
+  instead, because right-drag also turns the camera and must never be
+  sunk. ButtonA is jump and R2 is Roblox's tool activate, which is why X.
+- **Lock-on highlight.** A `Highlight` on the racer a fire would hit. It
+  is faint for a quick-fire and strong while aiming. `RaceHUDController`
+  runs the same `PowerUpLogic` targeting the server does, and sends the
+  highlighted racer's id with the fire.
 - **Screen edges.** These sit on their own full-bleed ScreenGui under the
   HUD, so the bands reach past the notch. Nothing on it is interactive.
 
@@ -129,10 +140,19 @@ The HUD has to run at 60 fps on a cheap phone without churning instances.
      of jump.
    - Each edge set reads as different in a greyscale screenshot.
    - The HardControl bands pulse, and stop pulsing under Reduced Motion.
-   - Tapping **Freeze** spins it, then empties the slot.
-3. Plug in a gamepad: the card should switch to an **X** hint with no
-   touch button, and X should fire the use. On a keyboard it should show Q.
-4. In a live Studio round (`DebugForceRoundState` to Race): the HUD mounts,
+   - Tapping a slot selects it (glow outline). Tapping the selected slot
+     dims it, then empties it. Slots empty in place, with no shifting.
+   - Dragging out of a slot and back onto it turns the outline red, and
+     releasing there fires nothing.
+3. Plug in a gamepad: the key line should read **X use L2 aim**, L1/R1
+   should move the selection, and X should fire. On a keyboard it should
+   read Q, and 1–3 should select.
+4. In a live round with a rival nearby, holding an Aimed item: the rival
+   gets a faint highlight when in front of you, and a strong one while
+   right-click (L2) is held - which switches to first person - and you
+   look at them. Q hits the highlighted
+   rival. On touch, the highlight follows a drag from the slot.
+5. In a live Studio round (`DebugForceRoundState` to Race): the HUD mounts,
    the arrow points at your nearest unfinished station, completing a task
    ticks its row and moves the arrow on, and the HUD goes away at
    Qualified.
@@ -144,8 +164,15 @@ The HUD has to run at 60 fps on a cheap phone without churning instances.
   the two rotations in `SIDES`.
 - **Glyphs.** 🐌 👁 ⏩ ▲ ▼ ○ are emoji or Unicode stand-ins, like P6-2's.
   The arrow has to point straight up at Rotation 0.
-- **ButtonX.** That no default or core binding claims it on any
-  controller layout.
+- **ButtonX, L1/R1, L2.** That no default or core binding claims them on
+  any controller layout.
+- **First-person aim.** That holding right-click / L2 with an Aimed item
+  drops into first person, the mouse turns the view while WASD moves,
+  and releasing restores the previous third-person zoom (the brief
+  minimum-zoom raise in RaceHUDController).
+- **Touch drag from a slot.** That a drag starting on a slot doesn't also
+  turn the camera. A touch that starts on an Active GuiButton normally
+  doesn't.
 - **CountdownRing at 3 digits.** A 300s race shows `300` in a 64px ring.
   Check it fits at the minimum scale.
 
@@ -155,11 +182,10 @@ The HUD has to run at 60 fps on a cheap phone without churning instances.
   on completions, not on join. A player who arrives mid-race has no race
   to be in anyway (RoundService only re-sends `RoundState`), but any
   future rejoin feature needs to re-send the route and the inventory.
-- **More than one inventory slot.** The HUD shows and uses slot 1.
-  `GameConfig`'s one-slot inventory is what's current; a second slot
-  needs a second card.
-- **Aimed targeting.** Use sends no target, and the server smart-targets
-  (P2-7). A manual-aim UI for `Aimed` power-ups would be separate work.
+- **Lock-on feel.** Cone width, range and the lock-on slack are
+  placeholders (`GameConfig.powerUp*`). The drag dead zone (12px) and
+  cancel radius (half a slot) are constants in `RaceHUD.luau`. All of
+  them need a playtest pass on a real phone.
 - **Qualification floor.** The line gap counts tasks only. It ignores
   `qualificationFloorPercent`, so a racer in the top 3 below the floor
   still shows as qualifying until the result arrives.

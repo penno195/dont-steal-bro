@@ -311,6 +311,43 @@ local function sendHome(player: Player, reason: "Late" | "Stray")
 	end
 end
 
+-- The round is over: everyone goes back to the hub together, where the
+-- next round is a fresh queue (design-decisions.md Q6). Every result was
+-- written at Results, and leaving releases the profile through
+-- DataService's own PlayerRemoving path, so there's nothing to wait for.
+-- One TeleportAsync for the whole group keeps friends on the same hub
+-- server; anyone it fails for is kicked with the same message, so no
+-- one is left standing in a finished match.
+--
+-- In Studio there is no hub to go to (TeleportService doesn't work
+-- there), so everyone respawns at the place's spawn instead - the test
+-- equivalent of "back to the lobby".
+local function sendEveryoneHome()
+	local players = Players:GetPlayers()
+	if #players == 0 then
+		return
+	end
+	if RunService:IsStudio() or matchmakingConfig.hubPlaceId == 0 then
+		for _, player in players do
+			player:LoadCharacter()
+		end
+		print("MatchTeleportService: round over - respawned everyone (no hub to teleport to in Studio)")
+		return
+	end
+
+	local message = TeleportLogic.returnMessage({ returnReason = "RoundOver" }) or "Round over."
+	local options = Instance.new("TeleportOptions")
+	options:SetTeleportData({ returnReason = "RoundOver" } :: any)
+	local ok = pcall(function()
+		TeleportService:TeleportAsync(matchmakingConfig.hubPlaceId, players, options)
+	end)
+	if not ok then
+		for _, player in players do
+			player:Kick(message)
+		end
+	end
+end
+
 local function readManifest()
 	local groupMap = MemoryStoreService:GetHashMap(matchmakingConfig.groupMapName)
 	for tries = 1, config.manifestReadAttempts do
@@ -492,6 +529,12 @@ local MatchTeleportService: Loader.Service = {
 }
 
 function MatchTeleportService:init()
+	-- Registered before the role check below, so the Studio fallback in
+	-- sendEveryoneHome runs too. Cleanup only ever happens on a server
+	-- that ran a round - never the hub.
+	local RoundService = Loader.get("RoundService") :: any
+	RoundService.onEnter("Cleanup", sendEveryoneHome)
+
 	-- TeleportService doesn't work in Studio, and an unset place id means
 	-- there is nowhere to go: Studio keeps P5-1's placeholder handler and
 	-- RoundService's debug interface.

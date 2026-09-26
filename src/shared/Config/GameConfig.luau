@@ -23,7 +23,7 @@ local GameConfig: Validate.GameConfig = {
 	-- architecture.md §6's network trace, verbatim.
 	studioTimers = {
 		introSeconds = 5,
-		negotiateSeconds = 45,
+		negotiateSeconds = 20, -- cut from 45 after the 2026-09-25 playtest
 		chooseSeconds = 15,
 		revealDelaySeconds = 1,
 	},
@@ -55,13 +55,21 @@ local GameConfig: Validate.GameConfig = {
 		{ tier = 5, minStreak = 15, soleStealerVU = 36, loneSharerVU = 18, allShareVU = 9 },
 	},
 
-	-- P2-7: PowerUpService's own field-pickup inventory, distinct from
-	-- powerups.md's separate pre-game Loadout selection. All PLACEHOLDER
-	-- - no locked value in docs/ yet, same stance as raceDurationSeconds.
-	powerUpInventorySlots = 1, -- powerups.md: "one inventory slot per player by default"
+	-- P2-7: PowerUpService's in-round inventory. The pre-game loadout
+	-- starts in these slots and field pickups fill whatever is empty
+	-- (powerups.md "Inventory and aiming", decided 2026-09-25). Range,
+	-- cone and slack are PLACEHOLDER, same stance as raceDurationSeconds.
+	powerUpInventorySlots = 3, -- matches store.loadoutSlots, so a full loadout fits
 	powerUpFullInventoryPolicy = "Refuse", -- picking up while full is refused (the world pickup stays available) rather than swapping the held item
 	powerUpUseRangeStuds = 24, -- max range for an Aimed/Nearest target
-	powerUpTargetConeDegrees = 90, -- full cone width for smart-targeting an Aimed power-up with no explicit target hint
+	powerUpTargetConeDegrees = 90, -- full width of the lock-on cone an Aimed power-up picks its target from
+	-- Extra allowance when the server re-checks the target the client had
+	-- locked on to: the client saw that target a round trip ago, so a
+	-- lock that was legal on screen can be a few studs or degrees out by
+	-- the time it lands. Only ever applied to the client's own locked
+	-- target, never to the server's own pick.
+	powerUpLockOnSlackStuds = 4,
+	powerUpLockOnSlackDegrees = 20,
 
 	-- Base respawn seconds per rarity tier - a MapDef may multiply these
 	-- (Validate.PowerUpRarityWeights' own doc comment). Ordered so a
@@ -90,6 +98,15 @@ local GameConfig: Validate.GameConfig = {
 	-- P3-3: PLACEHOLDER - no locked value in docs/ yet. P3-4's podium
 	-- layout is expected to fit comfortably inside this.
 	decisionStudioChatRangeStuds = 30,
+
+	-- The one Decision Studio set every finale uses, whatever the race
+	-- map was (StudioStageService). Cloned from ServerStorage.Maps at
+	-- Qualified and moved `offsetStuds` along +X, so it never overlaps
+	-- the race map it's loaded next to.
+	decisionStudioStage = {
+		mapId = "DecisionStudio",
+		offsetStuds = 5000,
+	},
 
 	-- P3-5: NPC fill. Every knob the bots have, in one block, so tuning
 	-- them is a config edit and never a service edit (Ground Rule 2).
@@ -406,11 +423,14 @@ local GameConfig: Validate.GameConfig = {
 		lockInEarliestFraction = 0.25,
 		lockInLatestFraction = 0.8,
 
-		-- 3 lines across a 45s Negotiate is roughly one every 15s -
-		-- enough presence to read as a participant, far short of
-		-- dominating a room where two humans are also trying to talk.
+		-- 3 lines across a 20s Negotiate is roughly one every 6s -
+		-- enough presence to read as a participant. The gap floor is 4s
+		-- so all three fit: NPCBrainLogic.lineScheduleSeconds uses 85%
+		-- of the window (17s) and stops early when the floor runs out
+		-- of room, which at 6s dropped the third line about half the
+		-- time.
 		negotiationLineCount = 3,
-		minSecondsBetweenLines = 6,
+		minSecondsBetweenLines = 4,
 
 		chooseWobbleChance = 0.5,
 	},

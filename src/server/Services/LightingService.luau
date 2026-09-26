@@ -43,9 +43,32 @@ local function convert(assignment: LightingLogic.Assignment): any
 	return assignment.value
 end
 
+-- Some Lighting properties (LightingStyle, PrioritizeLightingQuality)
+-- can refuse a runtime write. A refused property must not abort the
+-- whole preset - that error used to kill StudioTestService's round start
+-- before anyone was moved onto the map - so warn once and keep going.
+local refusedProperties: { [string]: boolean } = {}
+
+local function setProperty(target: Instance, property: string, value: any)
+	local ok, message = pcall(function()
+		(target :: any)[property] = value
+	end)
+	if not ok and not refusedProperties[property] then
+		refusedProperties[property] = true
+		warn(
+			string.format(
+				"LightingService: can't set %s.%s at runtime (%s) - skipping it",
+				target.ClassName,
+				property,
+				tostring(message)
+			)
+		)
+	end
+end
+
 local function write(target: Instance, assignments: { LightingLogic.Assignment })
 	for _, assignment in assignments do
-		(target :: any)[assignment.property] = convert(assignment)
+		setProperty(target, assignment.property, convert(assignment))
 	end
 end
 
@@ -67,7 +90,7 @@ function LightingService.restore()
 		return
 	end
 	for property, value in defaults do
-		(Lighting :: any)[property] = value
+		setProperty(Lighting, property, value)
 	end
 	for _, effect in ownedEffects do
 		effect:Destroy()

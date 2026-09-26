@@ -127,7 +127,7 @@ or anything else that replicates.
 
 ```
 Server → Qualifiers   StudioPhase { phase = "Intro",     endsAt = t+5  }
-Server → Qualifiers   StudioPhase { phase = "Negotiate", endsAt = t+45 }   -- chat open
+Server → Qualifiers   StudioPhase { phase = "Negotiate", endsAt = t+20 }   -- chat open (45s until 2026-09-25)
 Server → Qualifiers   StudioPhase { phase = "Choose",    endsAt = t+15 }
 Client → Server       SubmitChoice("Steal" | "Share")
 Server → Qualifiers   PlayerLocked { userId }                               -- no choice content

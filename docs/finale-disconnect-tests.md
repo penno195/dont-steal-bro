@@ -80,7 +80,7 @@ branch, not a three-player branch with an empty seat.
 
 ## Case 2 — leaves during Negotiate
 
-**When to close the window:** any time during the 45-second Negotiate
+**When to close the window:** any time during the 20-second Negotiate
 phase, after the `DecisionPhaseChanged` broadcast naming it.
 
 **Expect:**

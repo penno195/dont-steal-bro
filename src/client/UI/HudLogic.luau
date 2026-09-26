@@ -277,4 +277,41 @@ function HudLogic.bearing(lookX: number, lookZ: number, toX: number, toZ: number
 	return if degrees <= -180 then 180 else degrees
 end
 
+-- POWER-UP SLOTS -------------------------------------------------------
+
+-- The mobile slot gesture (powerups.md "Inventory and aiming"), from a
+-- press on a slot: `furthest` is the furthest the finger got from the
+-- slot's centre during the press, `distance` is where it is now, both
+-- in pixels. A press that never left the dead zone is a tap. Past it,
+-- the press is an aim, and it cancels if the finger comes back onto
+-- the slot (within `cancelRadius`) - Brawl Stars' drag-back-to-cancel.
+export type SlotGesture = "Tap" | "Aim" | "Cancel"
+
+function HudLogic.slotGesture(furthest: number, distance: number, deadzone: number, cancelRadius: number): SlotGesture
+	if furthest < deadzone then
+		return "Tap"
+	elseif distance <= cancelRadius then
+		return "Cancel"
+	end
+	return "Aim"
+end
+
+-- A drag on screen as a direction on the ground plane. Screen-up is
+-- the camera's flattened look direction and screen-right its right
+-- vector (-lookZ, lookX) - see `bearing`. `dy` is in GUI pixels, so
+-- positive is DOWN, i.e. towards the camera. Returns (0, 0) for a drag
+-- of no length or a camera looking straight down its own Y axis;
+-- PowerUpLogic.aimForward turns that into "no aim" rather than a guess.
+function HudLogic.dragToGround(dx: number, dy: number, lookX: number, lookZ: number): (number, number)
+	local length = math.sqrt(lookX * lookX + lookZ * lookZ)
+	local dragLength = math.sqrt(dx * dx + dy * dy)
+	if length < 1e-6 or dragLength < 1e-6 then
+		return 0, 0
+	end
+	local fx, fz = lookX / length, lookZ / length
+	local x = -fz * dx + fx * -dy
+	local z = fx * dx + fz * -dy
+	return x / dragLength, z / dragLength
+end
+
 return table.freeze(HudLogic)
