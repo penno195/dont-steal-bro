@@ -20,9 +20,13 @@
 --      ModuleScript) and logs each one's full path.
 --   2. Anchored = true on every part.
 --   3. CanCollide / CanTouch / CanQuery set by role (see ROLES below).
---   4. CollisionFidelity = Box on collidable meshes and unions.
+--   4. CollisionFidelity = Box on chunky collidable meshes and unions.
+--      Thin wall/arch-like ones (see isWallLike) go to
+--      PreciseConvexDecomposition instead, because a Box collider fills
+--      their openings - an archway becomes an invisible wall. They're
+--      listed in the report for a human to check.
 --   5. Removes every attribute and CollectionService tag.
--- It reports, but never fixes: PreciseConvexDecomposition meshes,
+-- It reports, but never fixes: other PreciseConvexDecomposition meshes,
 -- suspected duplicate mesh uploads, and oversized textures. It never
 -- touches Size, CFrame, MeshId, Material, Color, textures or any other
 -- geometry/appearance property (map-kit-spec.md §3 step 6) - if an
@@ -91,6 +95,14 @@ local CONTRACT_TAGS = {
 }
 
 local ROLE_ATTRIBUTE = "SanitiseRole"
+
+-- map-kit-spec.md §3 step 3: a collidable mesh is wall/arch-like, and
+-- kept off Box, when its thinnest edge is <= WALL_MAX_THICKNESS and the
+-- other two are both >= WALL_MIN_SPAN, or its name contains one of
+-- WALL_NAME_HINTS (case-insensitive). Keep in step with MapCheck.luau.
+local WALL_MAX_THICKNESS = 3
+local WALL_MIN_SPAN = 5
+local WALL_NAME_HINTS = { "arch", "frame", "door" }
 
 -- ===== the plan ==============================================================
 --
@@ -266,6 +278,23 @@ end
 local roleCounts = { Solid = 0, Decor = 0 }
 local unanchoredLog: { string } = {}
 local preciseLog: { string } = {}
+local wallLog: { string } = {}
+
+local function isWallLike(mesh: BasePart): boolean
+	local s = mesh.Size
+	local dims = { s.X, s.Y, s.Z }
+	table.sort(dims)
+	if dims[1] <= WALL_MAX_THICKNESS and dims[2] >= WALL_MIN_SPAN then
+		return true
+	end
+	local name = string.lower(mesh.Name)
+	for _, hint in WALL_NAME_HINTS do
+		if string.find(name, hint, 1, true) then
+			return true
+		end
+	end
+	return false
+end
 
 -- Before/after tallies for the summary table. `after` is what the part
 -- will hold once the plan is applied.
@@ -313,17 +342,28 @@ for _, part in parts do
 	-- from TriangleMeshPart. Decor keeps its fidelity: with collision and
 	-- queries off it never computes against it, and "only the listed
 	-- properties" means not tidying what the task didn't ask for.
+	-- Solid wall/arch-like meshes go to Precise, not Box: Box fills
+	-- doorways and arches (the hub hotel's 20.8 x 12.9 x 0.6 archway
+	-- union became an invisible wall).
 	if part:IsA("TriangleMeshPart") then
 		local mesh = part :: TriangleMeshPart
 		local fidelity = mesh.CollisionFidelity
-		if fidelity == Enum.CollisionFidelity.PreciseConvexDecomposition then
+		local wallLike = solid and isWallLike(mesh)
+		if fidelity == Enum.CollisionFidelity.PreciseConvexDecomposition and not wallLike then
 			table.insert(preciseLog, `{role}  {path(mesh)}` .. (if solid then "  -> Box" else "  (decor, left)"))
 		end
 		local wasBox = fidelity == Enum.CollisionFidelity.Box
 		if wasBox then
 			tallies.BoxFidelity.before += 1
 		end
-		if solid then
+		if wallLike then
+			local s = mesh.Size
+			table.insert(
+				wallLog,
+				string.format("%s  (%.1f x %.1f x %.1f, was %s)", path(mesh), s.X, s.Y, s.Z, fidelity.Name)
+			)
+			setProp(mesh, "CollisionFidelity", Enum.CollisionFidelity.PreciseConvexDecomposition)
+		elseif solid then
 			tallies.BoxFidelity.after += 1
 			setProp(mesh, "CollisionFidelity", Enum.CollisionFidelity.Box)
 		elseif wasBox then
@@ -479,6 +519,7 @@ section("tags removed", tagLog)
 section("attributes removed", attributeLog)
 section("unanchored parts (review: was it meant to move?)", unanchoredLog)
 section("PreciseConvexDecomposition meshes", preciseLog)
+section("wall/arch-like meshes -> PreciseConvexDecomposition, not Box (check openings stay walkable)", wallLog)
 section("suspected duplicate mesh uploads (same MeshSize, different MeshId)", duplicateLog)
 section(`textures over {MAX_TEXTURE_EDGE}px`, oversizeLog)
 section("textures whose size couldn't be read", unreadableLog)

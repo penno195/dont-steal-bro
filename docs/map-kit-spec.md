@@ -270,9 +270,17 @@ before it goes into a map, in order:
 
 3. **Set collision fidelity by role.**
    - Floors, walls, and anything players walk on or bump into:
-     `CollisionFidelity = Box` on the collision mesh. Never leave a mesh
-     on `PreciseConvexDecomposition` — it's the most expensive collision
-     type and almost never needed for level geometry.
+     `CollisionFidelity = Box` on the collision mesh. Don't leave a
+     chunky mesh on `PreciseConvexDecomposition` — it's the most
+     expensive collision type and almost never needed for solid blocks.
+   - **Exception — thin wall/arch-like meshes and unions:** thinnest
+     dimension ≤ 3 studs with the other two both ≥ 5 studs, or a name
+     containing `arch`, `frame` or `door` (case-insensitive). Use
+     `PreciseConvexDecomposition` (or `Default`), never `Box`: a box
+     collider fills the opening, so an archway or door frame becomes an
+     invisible wall (this happened to the hub hotel's 20.8 × 12.9 × 0.6
+     archway union). The sanitiser applies this rule and lists every
+     such mesh — check each opening is still walkable.
    - Pure decoration (a poster, a light fixture, background clutter):
      `CanCollide = false`, `CanTouch = false`, `CanQuery = false`. Decor
      has no gameplay role and shouldn't cost a physics check.
