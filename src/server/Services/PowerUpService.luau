@@ -471,7 +471,7 @@ tryClaimPickup = function(point: SpawnPointRecord, live: LivePickup, hitPart: Ba
 	if racer == nil then
 		return
 	end
-	-- P5-5: in practice, only someone inside the practice area.
+	-- P5-5: in practice, anyone the practice gate admits.
 	if not EffectContext.mayAct(racer.id) then
 		return
 	end
@@ -667,12 +667,11 @@ local function useFor(
 	local resolvedSlotIndex = slotIndex or 1
 	local state = racerStates[racer.id]
 
-	-- P5-5: always true in a round. In practice this is what stops an
-	-- item carried out of the practice area, or fired from the queue
-	-- pad's no-effect zone.
+	-- P5-5: always true in a round. In practice this stops someone a
+	-- match has claimed from using a practice item.
 	if not EffectContext.mayAct(racer.id) then
-		audit(racer, nil, nil, "Rejected", "outside the practice area")
-		sendResult(racer, false, nil, nil, "outside the practice area")
+		audit(racer, nil, nil, "Rejected", "not practising")
+		sendResult(racer, false, nil, nil, "not practising")
 		return
 	end
 
@@ -871,8 +870,8 @@ local function beginRace()
 	grantLoadouts()
 end
 
--- P5-5: empties one participant's held items, e.g. on leaving the
--- practice area, so nothing is carried out and used elsewhere.
+-- P5-5: empties one participant's held items, e.g. when a match
+-- claims them, so nothing is carried out of practice.
 local function clearInventoryFor(racerId: number)
 	local state = racerStates[racerId]
 	if state == nil or next(state.inventory) == nil then

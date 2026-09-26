@@ -1,7 +1,7 @@
 --!strict
 -- Gray-box hub world builder (P5-4). Paste this whole file into Studio's
 -- Command Bar in the HUB place (never the match place) and run it.
--- Builds Workspace.Hub: spawn plaza, queue pad + countdown display,
+-- Builds Workspace.Hub: spawn plaza, queue countdown display,
 -- store front with three podiums, a leaderboard wall
 -- with daily/weekly/all-time surfaces, and a practice area - every piece
 -- tagged per docs/hub-spec.md, then validated and measured.
@@ -17,10 +17,9 @@
 -- may be somebody's hand-built work.
 --
 -- LAYOUT READS FROM SPAWN. The player spawns facing -Z, straight at the
--- queue pad, with the back wall (countdown | leaderboards)
+-- queue zone, with the back wall (countdown | leaderboards)
 -- behind it; the store is off to the left and the practice area to the
--- right, away from the queue pad so practice griefing can't spill onto
--- it (P5-5's no-effect zone). Everything is within one short walk.
+-- right. Everything is within one short walk.
 
 local CollectionService = game:GetService("CollectionService")
 local StarterPlayer = game:GetService("StarterPlayer")
@@ -35,7 +34,7 @@ local DARK_GREY = Color3.fromRGB(90, 90, 90)
 local MAX_WALK_SECONDS = 8
 
 -- Portrait phone, default 70-degree vertical FOV, ~9:19.5 aspect gives a
--- horizontal half-angle of about 18 degrees. The queue pad has to sit
+-- horizontal half-angle of about 18 degrees. The queue zone has to sit
 -- inside that without the player turning, so 15 leaves a margin.
 local QUEUE_MAX_ANGLE_DEGREES = 15
 
@@ -178,7 +177,7 @@ makePart(
 ).Color =
 	DARK_GREY
 
--- Faces the queue pad; the spawned character takes this orientation.
+-- Faces the queue zone; the spawned character takes this orientation.
 local spawnLocation = Instance.new("SpawnLocation")
 spawnLocation.Name = "Spawn"
 spawnLocation.Size = Vector3.new(8, 1, 8)
@@ -190,26 +189,11 @@ spawnLocation.Color = GREY
 spawnLocation.Parent = spawnPlaza
 tagWith(spawnLocation, "HubSpawn")
 
--- ===== queue pad =============================================================
+-- ===== queue zone ============================================================
 
+-- No floor pad: queueing is the Play button, so the zone is just the
+-- countdown board. Practice items work anywhere, so no no-effect volume.
 local queueZone = zoneModel("QueuePad")
-local queuePad = makePart(
-	"Pad",
-	Vector3.new(1, 24, 24),
-	CFrame.new(QUEUE_POSITION + Vector3.new(0, 0.5, 0)) * CFrame.Angles(0, 0, math.rad(90)),
-	queueZone,
-	true,
-	false
-)
-queuePad.Shape = Enum.PartType.Cylinder
-queuePad.Color = DARK_GREY
-tagWith(queuePad, "HubQueuePad")
-
--- P5-5's griefing guard: no practice effects inside this box.
-tagWith(
-	makeVolume("NoEffectZone", Vector3.new(44, 20, 44), CFrame.new(QUEUE_POSITION + Vector3.new(0, 10, 0)), queueZone),
-	"HubQueueNoEffectZone"
-)
 
 -- Raised over the back wall so it reads over the heads of a crowd.
 local countdown = makePart(
@@ -343,8 +327,6 @@ local failures: { string } = {}
 local TAG_COUNTS: { { tag: string, min: number, max: number } } = {
 	{ tag = "HubZone", min = 5, max = 5 },
 	{ tag = "HubSpawn", min = 1, max = 1 },
-	{ tag = "HubQueuePad", min = 1, max = 1 },
-	{ tag = "HubQueueNoEffectZone", min = 1, max = 1 },
 	{ tag = "HubQueueCountdown", min = 1, max = 1 },
 	{ tag = "HubStorePodium", min = 3, max = 3 },
 	{ tag = "HubLeaderboardSurface", min = 3, max = 3 },
@@ -370,46 +352,33 @@ for _, rule in TAG_COUNTS do
 	end
 end
 
--- The queue no-effect zone and the practice area must never overlap, or
--- practice effects could land on someone standing on the pad.
-local function horizontalOverlap(a: BasePart, b: BasePart): boolean
-	local aMin, aMax = a.Position - a.Size / 2, a.Position + a.Size / 2
-	local bMin, bMax = b.Position - b.Size / 2, b.Position + b.Size / 2
-	return aMin.X < bMax.X and bMin.X < aMax.X and aMin.Z < bMax.Z and bMin.Z < aMax.Z
-end
-local noEffect = queueZone:FindFirstChild("NoEffectZone") :: BasePart
-local practiceBounds = practiceZone:FindFirstChild("Bounds") :: BasePart
-if horizontalOverlap(noEffect, practiceBounds) then
-	table.insert(failures, "HubQueueNoEffectZone overlaps HubPracticeArea")
-end
-
--- Queue pad in view from spawn without turning: inside the portrait
--- field of view, and nothing solid between the eye and the pad.
+-- Queue countdown in view from spawn without turning: inside the portrait
+-- field of view, and nothing solid between the eye and the board.
 local eye = SPAWN_POSITION + Vector3.new(0, EYE_HEIGHT, 0)
-local toPad = QUEUE_POSITION - SPAWN_POSITION
+local toQueue = QUEUE_POSITION - SPAWN_POSITION
 local look = spawnLocation.CFrame.LookVector
 local flatLook = Vector3.new(look.X, 0, look.Z).Unit
-local queueAngle = math.deg(math.acos(math.clamp(flatLook:Dot(Vector3.new(toPad.X, 0, toPad.Z).Unit), -1, 1)))
+local queueAngle = math.deg(math.acos(math.clamp(flatLook:Dot(Vector3.new(toQueue.X, 0, toQueue.Z).Unit), -1, 1)))
 if queueAngle > QUEUE_MAX_ANGLE_DEGREES then
 	table.insert(
 		failures,
-		string.format("queue pad is %.1f deg off the spawn facing (max %d)", queueAngle, QUEUE_MAX_ANGLE_DEGREES)
+		string.format("queue zone is %.1f deg off the spawn facing (max %d)", queueAngle, QUEUE_MAX_ANGLE_DEGREES)
 	)
 end
 
 local rayParams = RaycastParams.new()
 rayParams.FilterType = Enum.RaycastFilterType.Exclude
 rayParams.FilterDescendantsInstances = { spawnLocation }
--- Aim at the pad's centre, inside the part, so the ray can't stop just
--- short of its top surface and report a false "clear".
-local hit = Workspace:Raycast(eye, queuePad.Position - eye, rayParams)
-local sightClear = hit ~= nil and hit.Instance == queuePad
+-- Aim at the board's centre, inside the part, so the ray can't stop just
+-- short of its surface and report a false "clear".
+local hit = Workspace:Raycast(eye, countdown.Position - eye, rayParams)
+local sightClear = hit ~= nil and hit.Instance == countdown
 if not sightClear then
 	table.insert(
 		failures,
 		string.format(
-			"line of sight from spawn to queue pad blocked by %s",
-			if hit ~= nil then hit.Instance:GetFullName() else "nothing (ray missed the pad)"
+			"line of sight from spawn to queue countdown blocked by %s",
+			if hit ~= nil then hit.Instance:GetFullName() else "nothing (ray missed the board)"
 		)
 	)
 end
@@ -449,7 +418,7 @@ for _, zone in ZONES do
 end
 print(
 	string.format(
-		"Queue pad: %.1f deg off spawn facing, line of sight %s.",
+		"Queue countdown: %.1f deg off spawn facing, line of sight %s.",
 		queueAngle,
 		if sightClear then "clear" else "BLOCKED"
 	)

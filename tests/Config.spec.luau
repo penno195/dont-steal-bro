@@ -153,6 +153,7 @@ local function validGameConfig(): Validate.GameConfig
 			respawnMultipliers = { Common = 0.25, Uncommon = 0.25, Rare = 0.25 },
 			zoneCheckSeconds = 0.2,
 		},
+		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
 		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0 },
 		titleDisplayDuringRound = false,
@@ -1656,6 +1657,45 @@ TestRunner.describe("Validate.checkGameConfig (P5-5 practice)", function()
 		TestRunner.expect(#issuesWith(function(pc)
 			pc.respawnMultipliers = { Common = 0.25, Uncommon = 0 }
 		end)):toBe(2)
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (proximity doors)", function()
+	local function issuesWith(mutate: (any) -> ()): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		mutate(config.doors)
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the valid block", function()
+		TestRunner.expect(#issuesWith(function(_dc) end)):toBe(0)
+	end)
+
+	TestRunner.it("rejects a close radius inside the open radius", function()
+		TestRunner.expect(#issuesWith(function(dc)
+			dc.closeRadius = dc.openRadius - 1
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("keeps the check fast and the angle sane", function()
+		TestRunner.expect(#issuesWith(function(dc)
+			dc.checkSeconds = 2
+		end)):toBe(1)
+		for _, angle in { 0, 200 } do
+			TestRunner.expect(#issuesWith(function(dc)
+				dc.openAngle = angle
+			end)):toBe(1)
+		end
+	end)
+
+	TestRunner.it("flags a missing block", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.doors = nil
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(1)
 	end)
 end)
 

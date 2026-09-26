@@ -175,6 +175,23 @@ TestRunner.describe("Net.isStateAllowed", function()
 		local def = { name = "X", direction = "ServerIntent", schema = nil, rateLimit = nil, states = { "Race" } }
 		TestRunner.expect(Net.isStateAllowed(def, nil)):toBe(false)
 	end)
+
+	TestRunner.it("opens on a practice server only for a remote that opts in", function()
+		local gated = { name = "X", direction = "ServerIntent", schema = nil, rateLimit = nil, states = { "Race" } }
+		local practice = table.clone(gated) :: any
+		practice.practice = true
+		TestRunner.expect(Net.isStateAllowed(gated, "WaitingForPlayers", true)):toBe(false)
+		TestRunner.expect(Net.isStateAllowed(practice, "WaitingForPlayers", true)):toBe(true)
+		TestRunner.expect(Net.isStateAllowed(practice, nil, true)):toBe(true)
+		TestRunner.expect(Net.isStateAllowed(practice, "WaitingForPlayers", false)):toBe(false)
+		TestRunner.expect(Net.isStateAllowed(practice, "WaitingForPlayers")):toBe(false)
+	end)
+
+	TestRunner.it("opts in only the power-up use intent", function()
+		for name, def in Net.Remotes :: { [string]: any } do
+			TestRunner.expect(def.practice == true):toBe(name == "PowerUpUseIntent")
+		end
+	end)
 end)
 
 TestRunner.describe("Net.recordViolation", function()

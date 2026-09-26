@@ -1,6 +1,7 @@
 --!strict
 -- Feeds the race HUD (P6-3, UI/Screens/RaceHUD.luau) and mounts it for
--- the Race round state. The HUD never touches a remote: every server
+-- the Race round state. In the hub it mounts the power-up slots alone,
+-- for the practice area (mountPractice). The HUD never touches a remote: every server
 -- payload lands here, is turned into display-ready rows, and is written
 -- into one Vide source. The sources live for the whole session, so data
 -- that arrives just before the HUD mounts (TaskService sends the route
@@ -107,6 +108,9 @@ local dragX, dragY = 0, 0
 -- exactly as updateLock did).
 local lockedId: number? = nil
 local lockedAim: PowerUpLogic.Vec3? = nil
+
+-- True while the hub's practice tray is up (mountPractice).
+local practicing = false
 
 local highlight: Highlight? = nil
 local shownModel: Model? = nil
@@ -330,15 +334,27 @@ local function updateLock()
 
 	local candidates: { PowerUpLogic.TargetCandidate } = {}
 	local models: { [number]: Model } = {}
-	for _, entry in progress() do
-		if entry.playerId == selfId then
+	-- In a race the field is the racers; in hub practice, everyone here.
+	-- Either way the server re-checks (practice: EffectContext.mayAct).
+	local ids: { number } = {}
+	if practicing then
+		for _, player in Players:GetPlayers() do
+			table.insert(ids, player.UserId)
+		end
+	else
+		for _, entry in progress() do
+			table.insert(ids, entry.playerId)
+		end
+	end
+	for _, id in ids do
+		if id == selfId then
 			continue
 		end
-		local model = characterFor(entry.playerId)
+		local model = characterFor(id)
 		local otherRoot = rootOf(model)
 		if model ~= nil and otherRoot ~= nil then
-			table.insert(candidates, { id = entry.playerId, position = toVec3(otherRoot.Position) })
-			models[entry.playerId] = model
+			table.insert(candidates, { id = id, position = toVec3(otherRoot.Position) })
+			models[id] = model
 		end
 	end
 
@@ -681,10 +697,50 @@ local RaceHUDController: Loader.Controller = {
 local unmount: (() -> ())? = nil
 local stopObjective: (() -> ())? = nil
 local stopLockOn: (() -> ())? = nil
+local unmountPractice: (() -> ())? = nil
+
+-- The hub place; or, while its id is unset, a Studio playtest of a
+-- place with a Workspace.Hub (so testing a race map shows no tray).
+local function isHubServer(): boolean
+	local hubPlaceId = GameConfig.matchmaking.hubPlaceId
+	if hubPlaceId == 0 then
+		return RunService:IsStudio() and Workspace:FindFirstChild("Hub") ~= nil
+	end
+	return game.PlaceId == hubPlaceId
+end
+
+-- HUB PRACTICE (P5-5). The race's own slots, lock-on and keys, alone
+-- and always up in the hub, so practising is the real thing. Items
+-- are picked up in the practice area but work anywhere in the hub
+-- (PracticeService). Put away while a race HUD is up (a Studio
+-- playtest can run a round in the hub place).
+local function mountPractice()
+	if unmountPractice ~= nil or unmount ~= nil or not isHubServer() then
+		return
+	end
+	practicing = true
+	local unmountTray = RaceHUD.mountPowerUps(UIScaleController, store)
+	local stop = runLockOn()
+	unmountPractice = function()
+		stop()
+		unmountTray()
+		practicing = false
+	end
+end
+
+local function unmountPracticeTray()
+	if unmountPractice ~= nil then
+		(unmountPractice :: () -> ())()
+		unmountPractice = nil
+	end
+end
 
 local function onRoundState(payload: any)
 	endsAt(payload.endsAt)
 	local racing = payload.state == "Race"
+	if racing then
+		unmountPracticeTray()
+	end
 	if racing and unmount == nil then
 		unmount = RaceHUD.mount(UIScaleController, store)
 		stopObjective = runObjective()
@@ -709,6 +765,9 @@ local function onRoundState(payload: any)
 		selected(1)
 		pending(false)
 	end
+	if not racing then
+		mountPractice()
+	end
 end
 
 function RaceHUDController:init()
@@ -727,6 +786,7 @@ function RaceHUDController:start()
 		trackStation(instance)
 	end
 	CollectionService:GetInstanceAddedSignal("TaskStation"):Connect(trackStation)
+	mountPractice()
 end
 
 return RaceHUDController

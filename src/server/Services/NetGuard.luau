@@ -38,8 +38,10 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local EffectContext = require(ServerScriptService.Server.EffectContext)
 
 -- A violation crossing this many rejections within this many seconds
 -- fires the flag handler once. Conservative defaults for a game with no
@@ -260,7 +262,7 @@ local function handleServerEvent(def: Net.RemoteDef, player: Player, payload: an
 		return
 	end
 
-	if not Net.isStateAllowed(def, roundStateProvider()) then
+	if not Net.isStateAllowed(def, roundStateProvider(), EffectContext.isPractice()) then
 		local wanted = if def.states then table.concat(def.states :: { string }, ", ") else "any"
 		report(player, def.name, payload, string.format("wrong round state (needs one of: %s)", wanted))
 		recordViolation(player, def.name)

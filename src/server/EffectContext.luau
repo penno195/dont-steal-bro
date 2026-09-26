@@ -31,8 +31,8 @@ export type PracticeRules = {
 	maxActiveEffects: number, -- per participant, at once
 }
 
--- True when participant `id` is inside the practice area right now, out
--- of the queue pad's no-effect zone, and not about to leave for a match.
+-- True when participant `id` has a live character in the hub right now
+-- and is not about to leave for a match.
 export type Gate = (id: number) -> boolean
 
 local mode: Mode = "Round"
@@ -75,7 +75,7 @@ function EffectContext.recordsStats(): boolean
 	return mode == "Round"
 end
 
--- Inside the practice area, in practice mode. MovementWatch exempts
+-- Practising (anywhere in the hub), in practice mode. MovementWatch exempts
 -- these players: speed buffs and knockback are the point of practice.
 function EffectContext.inPracticeArea(id: number): boolean
 	if mode ~= "Practice" or gate == nil then
@@ -85,8 +85,8 @@ function EffectContext.inPracticeArea(id: number): boolean
 end
 
 -- May `id` pick up, cast, or be hit? Always yes in a round. In practice,
--- only inside the practice area, which is what keeps effects off the
--- rest of the hub and off the queue pad.
+-- only for someone the gate admits, which keeps effects off anyone a
+-- match has claimed.
 function EffectContext.mayAct(id: number): boolean
 	if mode == "Round" then
 		return true

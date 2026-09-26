@@ -436,6 +436,15 @@ export type PracticeConfig = {
 	zoneCheckSeconds: number, -- how often zone exits are noticed and effects cleared
 }
 
+-- Proximity doors. See GameConfig.doors.
+export type DoorConfig = {
+	openRadius: number,
+	closeRadius: number, -- >= openRadius
+	checkSeconds: number,
+	swingSeconds: number,
+	openAngle: number, -- degrees, default for doors without an OpenAngle attribute
+}
+
 -- StudioTestService: Studio-only auto-start. See GameConfig.studioTest.
 export type StudioTestConfig = {
 	enabled: boolean,
@@ -564,6 +573,9 @@ export type GameConfig = {
 
 	-- P5-5: the hub practice area. See PracticeConfig above.
 	practice: PracticeConfig,
+
+	-- Proximity doors. See DoorConfig above.
+	doors: DoorConfig,
 
 	-- Studio test mode. See StudioTestConfig above.
 	studioTest: StudioTestConfig,
@@ -1926,6 +1938,34 @@ end
 -- P5-3. Like teleport's, these protect liveness and the ballot's shape;
 -- nothing here can let a player vote twice or change a locked result
 -- (that rests on VoteLogic's compare-and-set transforms).
+local function checkDoorConfig(dc: DoorConfig, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "doors." .. field, message)
+	end
+
+	if dc == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "doors", "the doors config block is missing entirely")
+		return
+	end
+
+	if type(dc.openRadius) ~= "number" or dc.openRadius <= 0 then
+		bad("openRadius", "must be positive")
+	end
+	-- Equal radii are allowed but flap on the boundary; smaller is a bug.
+	if type(dc.closeRadius) ~= "number" or (type(dc.openRadius) == "number" and dc.closeRadius < dc.openRadius) then
+		bad("closeRadius", "must be at least openRadius, or a door closes on someone it just opened for")
+	end
+	if type(dc.checkSeconds) ~= "number" or dc.checkSeconds <= 0 or dc.checkSeconds > 1 then
+		bad("checkSeconds", "must be above 0 and at most 1 - it is the delay before a door reacts")
+	end
+	if type(dc.swingSeconds) ~= "number" or dc.swingSeconds <= 0 then
+		bad("swingSeconds", "must be positive")
+	end
+	if type(dc.openAngle) ~= "number" or dc.openAngle <= 0 or dc.openAngle > 180 then
+		bad("openAngle", "must be above 0 and at most 180 degrees")
+	end
+end
+
 local function checkPracticeConfig(pc: PracticeConfig, issues: { Issue })
 	local function bad(field: string, message: string)
 		issue(issues, "GameConfig", "GameConfig.luau", "practice." .. field, message)
@@ -2206,6 +2246,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkTeleportConfig(config.teleport, config.matchmaking, issues)
 	checkVoteConfig(config.vote, config.matchmaking, config.teleport, issues)
 	checkPracticeConfig(config.practice, issues)
+	checkDoorConfig(config.doors, issues)
 	checkStudioTestConfig(config.studioTest, config.playerCount, issues)
 
 	local telemetry = config.telemetry

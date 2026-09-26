@@ -307,14 +307,22 @@ export type RemoteDef = {
 	schema: Schema<any>?, -- required for ServerIntent; unused for ServerBroadcast
 	rateLimit: RateLimit?, -- required for ServerIntent; unused for ServerBroadcast
 	states: { string }?, -- nil = valid in every round state
+	-- Also accepted, whatever the round state, on a server in practice
+	-- mode (the hub, EffectContext.isPractice), which never runs a round.
+	-- The handler still applies practice's own gates.
+	practice: boolean?,
 }
 
 -- Pure: does this remote's declared `states` allow `currentState`? A
 -- gated remote whose current state is unknown (no RoundService wired up
 -- to NetGuard yet, or a state name that's stale) fails CLOSED, not open
 -- - an unrecognised state is never treated as "good enough."
-function Net.isStateAllowed(def: RemoteDef, currentState: string?): boolean
+-- `practiceServer` opens it only for a def that opts in with `practice`.
+function Net.isStateAllowed(def: RemoteDef, currentState: string?, practiceServer: boolean?): boolean
 	if def.states == nil then
+		return true
+	end
+	if def.practice == true and practiceServer == true then
 		return true
 	end
 	if currentState == nil then
@@ -574,6 +582,9 @@ Net.Remotes = {
 		}),
 		rateLimit = { capacity = 5, refillPerSecond = 1 },
 		states = { "Race" },
+		-- Hub practice (P5-5) uses the real items, anywhere in the hub. PowerUpService
+		-- still refuses anyone a match has claimed (EffectContext.mayAct).
+		practice = true,
 	} :: RemoteDef,
 
 	-- Server -> client (targeted, never fireAllClients - see

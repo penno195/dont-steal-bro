@@ -182,7 +182,7 @@ local function sample(player: Player, nowValue: number, inRace: boolean)
 		return
 	end
 
-	-- P5-5: the practice area is exempt. A hub never enters Race, so
+	-- P5-5: hub practice is exempt. A hub never enters Race, so
 	-- this is belt and braces, but knockback and speed buffs are the
 	-- whole point there, so it must never be scored even if one did.
 	local exempt = EffectContext.inPracticeArea(player.UserId)

@@ -2,6 +2,7 @@
 --# selene: allow(mixed_table) -- Vide props + children, see Components/Base.luau
 -- The in-race HUD (P6-3). Mounted by RaceHUDController for the Race
 -- round state, and by RaceHUDPreview with fake data for device review.
+-- `mountPowerUps` puts up the slots alone, for the hub's practice area.
 --
 -- WHAT GOES WHERE (Layout.THUMB_ZONES):
 --   - Top-centre, the Info zone: placement and the qualification-line
@@ -735,6 +736,82 @@ local function edgeSet(edge: HudLogic.Edge, visible: () -> boolean, shortAxis: (
 	return create("Frame")(props) :: Frame
 end
 
+-- INPUT ----------------------------------------------------------------
+
+-- Keyboard and gamepad for the slots. Call inside a Vide root: the
+-- bindings go when it's destroyed. Bound on touch too: harmless, and a
+-- tablet with a keyboard attached switches modes mid-race.
+local function bindPowerUpInput(store: Store, slotCount: number)
+	local function selectedHeld(): boolean
+		return store.slots()[store.selected()].id ~= nil
+	end
+	ContextActionService:BindAction(USE_ACTION, function(_, inputState: Enum.UserInputState)
+		if inputState ~= Enum.UserInputState.Begin or not selectedHeld() or store.pending() then
+			return Enum.ContextActionResult.Pass
+		end
+		store.fire()
+		return Enum.ContextActionResult.Sink
+	end, false, USE_KEY, USE_PAD)
+
+	-- Hold to aim along the (first-person) camera. Watched on
+	-- UserInputService, not bound: the mouse / right stick still turn
+	-- the camera (which is how the aim is steered), so nothing here
+	-- may sink it, and the release must be seen even if something
+	-- else took the press. While aiming, left-click fires too - the
+	-- mouse is locked to the centre, so it can't be on a slot.
+	local function isAimInput(input: InputObject): boolean
+		return input.UserInputType == AIM_MOUSE or input.KeyCode == AIM_PAD
+	end
+	local aimBegan = UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
+		if processed then
+			return
+		end
+		if isAimInput(input) then
+			store.startAim("Camera")
+		elseif
+			input.UserInputType == Enum.UserInputType.MouseButton1
+			and store.aiming()
+			and selectedHeld()
+			and not store.pending()
+		then
+			store.fire()
+		end
+	end)
+	local aimEnded = UserInputService.InputEnded:Connect(function(input: InputObject)
+		if isAimInput(input) and store.aiming() then
+			store.endAim(true) -- release fires, if something is locked
+		end
+	end)
+	cleanup(function()
+		aimBegan:Disconnect()
+		aimEnded:Disconnect()
+	end)
+
+	local selectKeys = { PREVIOUS_PAD, NEXT_PAD }
+	for index = 1, math.min(slotCount, #SELECT_KEYS) do
+		table.insert(selectKeys, SELECT_KEYS[index])
+	end
+	ContextActionService:BindAction(SELECT_ACTION, function(_, inputState: Enum.UserInputState, input: InputObject)
+		if inputState ~= Enum.UserInputState.Begin then
+			return Enum.ContextActionResult.Pass
+		end
+		local current = store.selected()
+		if input.KeyCode == PREVIOUS_PAD then
+			store.select((current - 2) % slotCount + 1)
+		elseif input.KeyCode == NEXT_PAD then
+			store.select(current % slotCount + 1)
+		else
+			store.select(table.find(SELECT_KEYS, input.KeyCode) :: number)
+		end
+		return Enum.ContextActionResult.Sink
+	end, false, table.unpack(selectKeys))
+
+	cleanup(function()
+		ContextActionService:UnbindAction(USE_ACTION)
+		ContextActionService:UnbindAction(SELECT_ACTION)
+	end)
+end
+
 -- MOUNT ----------------------------------------------------------------
 
 local RaceHUD = {}
@@ -890,82 +967,42 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 		local other = edgeSet(HudLogic.edgeFor("Other"), unknown, shortAxis, 0)
 		other.Parent = edgeGui
 
-		-- Keyboard and gamepad. Bound on touch too: harmless, and a
-		-- tablet with a keyboard attached switches modes mid-race.
-		local function selectedHeld(): boolean
-			return store.slots()[store.selected()].id ~= nil
-		end
-		ContextActionService:BindAction(USE_ACTION, function(_, inputState: Enum.UserInputState)
-			if inputState ~= Enum.UserInputState.Begin or not selectedHeld() or store.pending() then
-				return Enum.ContextActionResult.Pass
-			end
-			store.fire()
-			return Enum.ContextActionResult.Sink
-		end, false, USE_KEY, USE_PAD)
-
-		-- Hold to aim along the (first-person) camera. Watched on
-		-- UserInputService, not bound: the mouse / right stick still turn
-		-- the camera (which is how the aim is steered), so nothing here
-		-- may sink it, and the release must be seen even if something
-		-- else took the press. While aiming, left-click fires too - the
-		-- mouse is locked to the centre, so it can't be on a slot.
-		local function isAimInput(input: InputObject): boolean
-			return input.UserInputType == AIM_MOUSE or input.KeyCode == AIM_PAD
-		end
-		local aimBegan = UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-			if processed then
-				return
-			end
-			if isAimInput(input) then
-				store.startAim("Camera")
-			elseif
-				input.UserInputType == Enum.UserInputType.MouseButton1
-				and store.aiming()
-				and selectedHeld()
-				and not store.pending()
-			then
-				store.fire()
-			end
-		end)
-		local aimEnded = UserInputService.InputEnded:Connect(function(input: InputObject)
-			if isAimInput(input) and store.aiming() then
-				store.endAim(true) -- release fires, if something is locked
-			end
-		end)
-		cleanup(function()
-			aimBegan:Disconnect()
-			aimEnded:Disconnect()
-		end)
-
-		local selectKeys = { PREVIOUS_PAD, NEXT_PAD }
-		for index = 1, math.min(slotCount, #SELECT_KEYS) do
-			table.insert(selectKeys, SELECT_KEYS[index])
-		end
-		ContextActionService:BindAction(SELECT_ACTION, function(_, inputState: Enum.UserInputState, input: InputObject)
-			if inputState ~= Enum.UserInputState.Begin then
-				return Enum.ContextActionResult.Pass
-			end
-			local current = store.selected()
-			if input.KeyCode == PREVIOUS_PAD then
-				store.select((current - 2) % slotCount + 1)
-			elseif input.KeyCode == NEXT_PAD then
-				store.select(current % slotCount + 1)
-			else
-				store.select(table.find(SELECT_KEYS, input.KeyCode) :: number)
-			end
-			return Enum.ContextActionResult.Sink
-		end, false, table.unpack(selectKeys))
-
-		cleanup(function()
-			ContextActionService:UnbindAction(USE_ACTION)
-			ContextActionService:UnbindAction(SELECT_ACTION)
-		end)
+		bindPowerUpInput(store, slotCount)
 	end)
 
 	return function()
 		destroy()
 		gui:Destroy()
 		edgeGui:Destroy()
+	end
+end
+
+-- Just the power-up slots and their keys, for the hub's practice area
+-- (P5-5): the same panel, gestures and bindings as the race, so what's
+-- learnt there carries over. Only `slots`, `selected`, `aiming`,
+-- `pending` and the actions are read from the store. Returns unmount.
+function RaceHUD.mountPowerUps(controller: any, store: Store): () -> ()
+	local gui = controller.createScreen("PracticeHUD", { displayOrder = Theme.displayOrder.hud }) :: ScreenGui
+
+	local destroy = vide.root(function()
+		local orientation = source("Landscape" :: Layout.Orientation)
+		cleanup(controller.observeUsableRect(function(rect: Layout.Rect)
+			orientation(Layout.orientationOf(rect.width, rect.height))
+		end))
+
+		local slotCount = #store.slots()
+		local power = powerUpPanel(store, function()
+			return primaryAnchor(orientation())
+		end, slotCount)
+		power.Parent = gui
+		cleanup(controller.attachScale(power))
+
+		bindPowerUpInput(store, slotCount)
+	end)
+
+	return function()
+		destroy()
+		gui:Destroy()
 	end
 end
 

@@ -4,21 +4,14 @@
 -- logic. It switches EffectContext into practice mode, which makes the
 -- real PowerUpService and StatusEffects run with shorter effects and a
 -- lower cap (see EffectContext.luau for why it isn't a copy). Then it
--- tells them where the practice area is, and clears people who leave it.
+-- spawns pickups in the practice area and clears people who get matched.
 --
 -- WHAT KEEPS PRACTICE CONTAINED
 --
---   Anywhere else in the hub. EffectContext.mayAct is false outside the
---   HubPracticeArea volume. PowerUpService checks it for the pickup, the
---   caster and every target, and StatusEffects checks it again for the
---   victim. An item carried out of the area is emptied on the next zone
---   check, and can't be used even before then.
---
---   The queue pad. A player in HubQueueNoEffectZone can't cast or be
---   hit, even if a hand-built hub let it overlap the practice area
---   (hub-spec.md forbids that). So campers on the pad have no effect.
---   Walking in clears whatever they had within zoneCheckSeconds. The
---   zone surrounds the pad, so that happens before they reach the pad.
+--   The hub itself. Items spawn in HubPracticeArea but, once held, work
+--   anywhere in the hub: there is no queue pad to protect, since joining
+--   the queue is a UI button. EffectContext.mayAct only refuses a player
+--   with no character or one a match has claimed (below).
 --
 --   Match found. From the moment a group claims a player (their ticket
 --   is Departing), they are out of practice wherever they stand.
@@ -35,7 +28,7 @@
 -- WHAT PRACTICE NEVER WRITES: progression, stats or analytics. Nothing in
 -- the power-up path writes progression, and Telemetry.powerUpUsed and
 -- PowerUpService's audit both check EffectContext.recordsStats().
--- MovementWatch exempts the area (EffectContext.inPracticeArea).
+-- MovementWatch exempts practising players (EffectContext.inPracticeArea).
 --
 -- STUDIO: with matchmaking.hubPlaceId unset, this runs in Studio when
 -- Workspace.Hub has a practice area, like MatchmakingService does. Don't
@@ -55,15 +48,6 @@ local EffectContext = require(ServerScriptService.Server.EffectContext)
 local config = GameConfig.practice
 
 local active = false
-local practiceArea: BasePart? = nil
-local noEffectZone: BasePart? = nil
-
--- Whole 3D box, in the volume's own space, so a rotated volume works.
-local function isInside(volume: BasePart, position: Vector3): boolean
-	local localPoint = volume.CFrame:PointToObjectSpace(position)
-	local half = volume.Size / 2
-	return math.abs(localPoint.X) <= half.X and math.abs(localPoint.Y) <= half.Y and math.abs(localPoint.Z) <= half.Z
-end
 
 local function rootPosition(participant: Participants.Participant): Vector3?
 	local character = participant.character
@@ -74,12 +58,12 @@ local function rootPosition(participant: Participants.Participant): Vector3?
 	return nil
 end
 
--- EffectContext's gate. Read live on every check, never cached, so a
--- player can't act from a spot they left a moment ago.
+-- EffectContext's gate. Read live on every check, never cached. Practice
+-- works anywhere in the hub, so the only questions are "is there a live
+-- character" and "has a match claimed them".
 local function gate(id: number): boolean
 	local participant = Participants.get(id)
-	local area = practiceArea
-	if participant == nil or area == nil then
+	if participant == nil or not active then
 		return false
 	end
 
@@ -88,12 +72,7 @@ local function gate(id: number): boolean
 		return false
 	end
 
-	local position = rootPosition(participant)
-	if position == nil or not isInside(area, position) then
-		return false
-	end
-	local zone = noEffectZone
-	return zone == nil or not isInside(zone, position)
+	return rootPosition(participant) ~= nil
 end
 
 -- Drops every effect and held item. Idempotent and cheap on someone who
@@ -119,8 +98,7 @@ local function release(players: { Player })
 end
 
 -- Stateless on purpose: anyone outside the gate who still has an effect
--- or an item gets cleared, whether they walked out, walked onto the
--- queue pad, or got matched. There's no "was inside" state to go stale.
+-- or an item gets cleared, which in practice means they got matched.
 local function checkZones()
 	for _, participant in Participants.all() do
 		if not gate(participant.id) then
@@ -184,14 +162,10 @@ function PracticeService:init()
 	if not isHubServer() then
 		return
 	end
-	practiceArea = findOne("HubPracticeArea")
-	if practiceArea == nil then
+	-- The area only marks where pickups spawn; it no longer bounds use.
+	if findOne("HubPracticeArea") == nil then
 		warn("PracticeService: no HubPracticeArea under Workspace.Hub - practice is off on this server")
 		return
-	end
-	noEffectZone = findOne("HubQueueNoEffectZone")
-	if noEffectZone == nil then
-		warn("PracticeService: no HubQueueNoEffectZone - the queue pad has no no-effect zone")
 	end
 
 	-- In init, not start: every service's start runs with the mode

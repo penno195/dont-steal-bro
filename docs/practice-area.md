@@ -14,15 +14,16 @@ stacking rules and hard-control immunity.
 
 | | Round (default) | Practice |
 |---|---|---|
-| Who can pick up, cast, be hit | everyone | only inside `HubPracticeArea`, outside `HubQueueNoEffectZone`, and not Departing |
+| Who can pick up, cast, be hit | everyone | anyone in the hub with a character who isn't Departing |
 | Effect duration | as defined | × `durationScale`, capped at `maxEffectSeconds` |
 | Active effects per player | unlimited | `maxActiveEffects` (a refresh doesn't count) |
 | PowerUpService audit, `Telemetry.powerUpUsed` | written | skipped (`EffectContext.recordsStats()`) |
-| MovementWatch | scores Race samples | skips anyone in the practice area |
+| MovementWatch | scores Race samples | skips anyone practising |
 | `PowerUpService.beginRace` | runs | **asserts**: a round can't start in practice mode |
 
-Leaving the area, entering the queue pad's no-effect zone, or being
-matched clears every effect and held item within `zoneCheckSeconds`.
+Pickups spawn only in `HubPracticeArea`, but a held item works anywhere
+in the hub. Being matched clears every effect and held item within
+`zoneCheckSeconds`.
 `MatchTeleportService` also clears the whole group the moment it
 departs, so a frozen player is thawed and travels anyway.
 
@@ -71,27 +72,24 @@ server with 3 players:
 1. **Pickups spawn.** A glowing pickup appears above every
    `HubPracticeItemSpawn`, colours cycling Common → Uncommon → Rare.
 2. **Real items work, shortened.** Player A picks up Freeze and uses it on
-   B inside the area. B is frozen for about 1.25 s, not 2.5 s.
+   B. B is frozen for about 1.25 s, not 2.5 s.
 3. **Cap.** With B holding one effect, a second, different item on B is
    rejected (`practice effect cap reached`). The same item again refreshes.
-4. **No effects outside.** C stands just outside the area. A's aimed item
-   finds no target. A walks out holding an item: the inventory empties
-   within 0.2 s and a use is rejected (`outside the practice area`).
-5. **Queue pad.** Freeze B, and have B walk into the no-effect zone
-   before it ends (or teleport B's character there with the command bar).
-   The freeze clears and B can't be targeted while there.
-6. **Frozen when the match is ready.** Freeze B in the area, then queue B
+4. **Works anywhere.** A picks up an item, walks out of the practice area
+   to the hotel door, and uses it on C there. The item stays held and the
+   effect lands.
+5. **Frozen when the match is ready.** Freeze B, then queue B
    into a group. Once the group forms (B's ticket is Departing), B is
    thawed within 0.2 s and can't be hit again. On published places,
    `MatchTeleportService` also thaws B at the moment the group departs.
    Studio has no teleport, so only the Departing check runs there.
-7. **Nothing recorded.** During steps 2–6 the Output shows no
+6. **Nothing recorded.** During steps 2–5 the Output shows no
    `PowerUpService AUDIT` lines, and `PowerUpService.getAuditLog()` is
    empty.
-8. **No round in practice mode.** In the same place, force Race with
+7. **No round in practice mode.** In the same place, force Race with
    RoundService's debug interface: it errors with "practice rules are
    active on a server running a round".
-9. **Match server is clean** (published places): arrive on the match
+8. **Match server is clean** (published places): arrive on the match
    server from a practice scuffle. The command bar shows
    `EffectContext.mode()` is `"Round"` and `StatusEffects` has no active
    effects for anyone.

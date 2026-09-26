@@ -338,6 +338,16 @@ local GameConfig: Validate.GameConfig = {
 		zoneCheckSeconds = 0.2,
 	},
 
+	-- Proximity doors (DoorService / DoorController): any Model tagged
+	-- ProximityDoor with a Hinge part. docs/hub-spec.md "Doors".
+	doors = {
+		openRadius = 10, -- studs on the ground plane; someone this close opens it
+		closeRadius = 13, -- and it shuts once nobody is this close (> openRadius: no flapping)
+		checkSeconds = 0.15, -- server proximity check; also the worst-case open delay
+		swingSeconds = 0.4, -- client tween, open or close
+		openAngle = 95, -- degrees; a Model's own OpenAngle attribute overrides it
+	},
+
 	-- Studio test mode (StudioTestService). Never runs outside Studio.
 	-- Pressing Play loads `mapId` from ServerStorage.Maps and starts a
 	-- round once `minHumans` have loaded, NPCs filling the rest. Set

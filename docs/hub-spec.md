@@ -12,8 +12,6 @@ geometry is ever cloned into a match server.
 |---|---|---|---|
 | `HubZone` | Model | exactly 5 | `ZoneId` (string), `ApproachPoint` (Vector3) |
 | `HubSpawn` | SpawnLocation | exactly 1 | — |
-| `HubQueuePad` | BasePart | exactly 1 | — |
-| `HubQueueNoEffectZone` | BasePart (volume) | exactly 1 | — |
 | `HubQueueCountdown` | BasePart | exactly 1 | — |
 | `HubStorePodium` | BasePart | exactly 3 | `Slot` (1–3) |
 | `HubLeaderboardSurface` | BasePart | exactly 3 | `Period` (`"Daily"`, `"Weekly"`, `"AllTime"`) |
@@ -27,25 +25,40 @@ to use the zone. Walk times are measured to it, and wayfinding can reuse it.
 
 ## Rules
 
-- **Volumes** (`HubQueueNoEffectZone`, `HubPracticeArea`) are invisible,
-  `CanCollide`/`CanTouch`/`CanQuery` all off, so they never block movement
-  or camera and click rays. Test containment against their `CFrame`/`Size`
-  or use them as the query shape for `GetPartsInPart`. Do not rely on
-  `.Touched`.
-- **The two volumes must not overlap** on the horizontal plane, or
-  practice effects could reach someone standing on the queue pad (P5-5).
-- **The queue pad is signage and a zone, not a trigger.** Joining the queue
-  is the `QueueJoinIntent` UI intent (`MatchmakingService`). Stepping on
-  the pad starts nothing.
+- **The `HubPracticeArea` volume** is invisible, with
+  `CanCollide`/`CanTouch`/`CanQuery` all off, so it never blocks movement
+  or camera and click rays. It marks where practice pickups live; held
+  items work anywhere in the hub (`practice-area.md`).
+- **No queue pad.** Joining the queue is the `QueueJoinIntent` UI intent
+  (the Play card, `MatchmakingService`), so the hub has no floor pad to
+  stand on and no no-effect zone. The `QueuePad` zone is just the
+  countdown board.
 - **No map vote wall.** The map vote is a per-player overlay shown after
   a match forms (`voting.md`), because several groups vote at once on one
   server, so the hub has no vote zone or board.
 - **Display surfaces** (`HubQueueCountdown`, `HubLeaderboardSurface`) face the player with their **Front** face,
   where client UI mounts its `SurfaceGui`.
-- **Readability from spawn:** the queue pad sits within 15° of the
+- **Readability from spawn:** the queue countdown sits within 15° of the
   spawn's facing, which fits a portrait phone's horizontal field of view
   without turning, and the sight line to it is clear. Every zone's
   `ApproachPoint` is at most **8 s** of straight-line walking from spawn
   at `StarterPlayer.CharacterWalkSpeed`.
 - Exactly one `SpawnLocation` should exist in the hub place. The builder
   warns about any outside `Workspace.Hub`.
+
+## Doors
+
+Proximity doors work anywhere (hub or a race map); adding one is tagging
+it, never editing code (`DoorService`, `DoorController`, `DoorLogic`).
+
+| Tag | Instance class | Needs |
+|---|---|---|
+| `ProximityDoor` | Model | a direct `BasePart` child named `Hinge` (usually invisible, non-colliding); optional `OpenAngle` attribute (degrees) |
+
+- The door swings about the **Hinge's up axis**, so put the Hinge on the
+  panel's hinged edge, upright.
+- It opens when anyone comes within `GameConfig.doors.openRadius` (ground
+  distance), swings **away from them**, and closes once nobody is within
+  `closeRadius`. While open, its colliding parts don't collide.
+- The server only sets `Open`/`OpenSide` attributes; each client tweens
+  the swing. Parts that stream in late are posed on arrival.

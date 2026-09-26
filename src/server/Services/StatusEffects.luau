@@ -205,12 +205,12 @@ end
 -- ===== applying an effect ===================================================
 
 local function applyEffect(targetId: number, def: StatusEffectResolver.EffectDef, casterId: number?): (boolean, string)
-	-- P5-5: the last line of defence for the practice area. PowerUpService
+	-- P5-5: the last line of defence for hub practice. PowerUpService
 	-- already filters targets, but an Area item lands on its caster, and
-	-- nothing may land on anyone outside the practice area. Always true
+	-- nothing may land on anyone the practice gate refuses. Always true
 	-- in a round.
 	if not EffectContext.mayAct(targetId) then
-		return false, "target is outside the practice area"
+		return false, "target is not practising"
 	end
 
 	pruneExpired(targetId)
