@@ -1,8 +1,8 @@
 --!strict
 -- Gray-box hub world builder (P5-4). Paste this whole file into Studio's
 -- Command Bar in the HUB place (never the match place) and run it.
--- Builds Workspace.Hub: spawn plaza, queue pad + countdown display, map
--- vote board wall, store front with three podiums, a leaderboard wall
+-- Builds Workspace.Hub: spawn plaza, queue pad + countdown display,
+-- store front with three podiums, a leaderboard wall
 -- with daily/weekly/all-time surfaces, and a practice area - every piece
 -- tagged per docs/hub-spec.md, then validated and measured.
 --
@@ -17,7 +17,7 @@
 -- may be somebody's hand-built work.
 --
 -- LAYOUT READS FROM SPAWN. The player spawns facing -Z, straight at the
--- queue pad, with the back wall (vote board | countdown | leaderboards)
+-- queue pad, with the back wall (countdown | leaderboards)
 -- behind it; the store is off to the left and the practice area to the
 -- right, away from the queue pad so practice griefing can't spill onto
 -- it (P5-5's no-effect zone). Everything is within one short walk.
@@ -54,7 +54,6 @@ local BACK_WALL_Z = -92
 local ZONES: { { id: string, approach: Vector3 } } = {
 	{ id = "SpawnPlaza", approach = SPAWN_POSITION },
 	{ id = "QueuePad", approach = Vector3.new(0, 0, -46) },
-	{ id = "VoteBoard", approach = Vector3.new(-50, 0, -78) },
 	{ id = "StoreFront", approach = Vector3.new(-42, 0, -20) },
 	{ id = "Leaderboards", approach = Vector3.new(52, 0, -78) },
 	{ id = "PracticeArea", approach = Vector3.new(40, 0, -12) },
@@ -225,21 +224,8 @@ label(countdown, "0:00")
 tagWith(countdown, "HubQueueCountdown")
 makePart("CountdownPost", Vector3.new(2, 13, 1), CFrame.new(0, 6.5, BACK_WALL_Z - 1), queueZone, true, false)
 
--- ===== map vote board wall ===================================================
-
--- Signage only: each group's live ballot is a per-player overlay
--- (docs/voting.md), since several groups vote at once on one server.
-local voteZone = zoneModel("VoteBoard")
-local voteBoard = makePart(
-	"Board",
-	Vector3.new(36, 14, 1),
-	facing(Vector3.new(-50, 8, BACK_WALL_Z), Vector3.new(-50, 0, 0)),
-	voteZone,
-	true,
-	false
-)
-label(voteBoard, "MAP VOTE")
-tagWith(voteBoard, "HubVoteBoard")
+-- No map vote wall: the vote is a per-player overlay after a match
+-- forms (docs/voting.md), so the hub has nothing to show for it.
 
 -- ===== store front ===========================================================
 
@@ -355,12 +341,11 @@ local failures: { string } = {}
 
 -- Exact/min/max tag counts from docs/hub-spec.md, counted inside Hub only.
 local TAG_COUNTS: { { tag: string, min: number, max: number } } = {
-	{ tag = "HubZone", min = 6, max = 6 },
+	{ tag = "HubZone", min = 5, max = 5 },
 	{ tag = "HubSpawn", min = 1, max = 1 },
 	{ tag = "HubQueuePad", min = 1, max = 1 },
 	{ tag = "HubQueueNoEffectZone", min = 1, max = 1 },
 	{ tag = "HubQueueCountdown", min = 1, max = 1 },
-	{ tag = "HubVoteBoard", min = 1, max = 1 },
 	{ tag = "HubStorePodium", min = 3, max = 3 },
 	{ tag = "HubLeaderboardSurface", min = 3, max = 3 },
 	{ tag = "HubPracticeArea", min = 1, max = 1 },

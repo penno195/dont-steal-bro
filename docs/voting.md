@@ -25,9 +25,13 @@ is also the match server's manifest:
 | `votes` | each voter's own hub server | compare-and-set per vote (`castVote`) |
 | `result` | whichever owner locks first | once; `{ winner, tied }` |
 
-**The hub's physical board wall (P5-4) can't show this.** Several groups
-from the same hub server vote at once, each on its own ballot, so the
-ballot is a per-player screen overlay. The wall is signage.
+So the sequence a player sees is: queue → match found (group formed) →
+the vote overlay for `voteSeconds` (8 s, deliberately short) → the
+winner → teleport → the match server's loading screen → the round.
+
+**There is no physical vote board in the hub.** Several groups from the
+same hub server vote at once, each on its own ballot, so the ballot is a
+per-player screen overlay. (P5-4's signage wall was dropped.)
 
 ## The flow
 

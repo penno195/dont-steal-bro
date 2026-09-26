@@ -10,19 +10,18 @@ geometry is ever cloned into a match server.
 
 | Tag | Instance class | Count | Attributes |
 |---|---|---|---|
-| `HubZone` | Model | exactly 6 | `ZoneId` (string), `ApproachPoint` (Vector3) |
+| `HubZone` | Model | exactly 5 | `ZoneId` (string), `ApproachPoint` (Vector3) |
 | `HubSpawn` | SpawnLocation | exactly 1 | — |
 | `HubQueuePad` | BasePart | exactly 1 | — |
 | `HubQueueNoEffectZone` | BasePart (volume) | exactly 1 | — |
 | `HubQueueCountdown` | BasePart | exactly 1 | — |
-| `HubVoteBoard` | BasePart | exactly 1 | — |
 | `HubStorePodium` | BasePart | exactly 3 | `Slot` (1–3) |
 | `HubLeaderboardSurface` | BasePart | exactly 3 | `Period` (`"Daily"`, `"Weekly"`, `"AllTime"`) |
 | `HubPracticeArea` | BasePart (volume) | exactly 1 | — |
 | `HubPracticeItemSpawn` | BasePart | 4–8 | — |
 | `HubSoftBarrier` | BasePart | 1+ | — |
 
-`ZoneId` is one of `SpawnPlaza`, `QueuePad`, `VoteBoard`, `StoreFront`,
+`ZoneId` is one of `SpawnPlaza`, `QueuePad`, `StoreFront`,
 `Leaderboards`, `PracticeArea`. `ApproachPoint` is where a player stands
 to use the zone. Walk times are measured to it, and wayfinding can reuse it.
 
@@ -38,11 +37,10 @@ to use the zone. Walk times are measured to it, and wayfinding can reuse it.
 - **The queue pad is signage and a zone, not a trigger.** Joining the queue
   is the `QueueJoinIntent` UI intent (`MatchmakingService`). Stepping on
   the pad starts nothing.
-- **The vote board wall is signage.** Each group's live ballot is a
-  per-player overlay (`voting.md`), because several groups vote at once
-  on one server.
-- **Display surfaces** (`HubQueueCountdown`, `HubVoteBoard`,
-  `HubLeaderboardSurface`) face the player with their **Front** face,
+- **No map vote wall.** The map vote is a per-player overlay shown after
+  a match forms (`voting.md`), because several groups vote at once on one
+  server, so the hub has no vote zone or board.
+- **Display surfaces** (`HubQueueCountdown`, `HubLeaderboardSurface`) face the player with their **Front** face,
   where client UI mounts its `SurfaceGui`.
 - **Readability from spawn:** the queue pad sits within 15° of the
   spawn's facing, which fits a portrait phone's horizontal field of view

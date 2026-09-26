@@ -312,7 +312,7 @@ local GameConfig: Validate.GameConfig = {
 	-- travels. docs/voting.md explains each number.
 	vote = {
 		ballotSize = 4, -- P5-3: "3 to 4 ... never all 11"
-		voteSeconds = 15, -- PLACEHOLDER: locks early once every member has voted
+		voteSeconds = 8, -- short on purpose (6-8s asked for); locks early once every member has voted
 		revealSeconds = 3, -- PLACEHOLDER: the winner (or the tie roulette) on screen before travel
 		pollSeconds = 1, -- each owner server's read of the group record while voting
 		-- PLACEHOLDER: how long past the deadline an owner keeps trying to
