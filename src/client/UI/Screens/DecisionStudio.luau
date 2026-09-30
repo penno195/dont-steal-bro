@@ -9,16 +9,19 @@
 -- -> Reveal, one screen whose parts show and hide rather than five
 -- screens, so a phase change never rebuilds the seats mid-sentence.
 --
--- WHAT GOES WHERE, PORTRAIT (the design target):
---   top      the three seats: name, reputation line, and a status that
---            is speaking / typing / deciding / locked - never a choice
---            until the reveal flips the card.
---            Pushed below Roblox's chat window when it's open, because
---            a player with no voice negotiates entirely inside it.
---   middle   the stage title and the phase countdown.
---   bottom   the payoff table (always, until the outcome is shown),
---            then the Steal/Share hold buttons in the thumb's reach.
--- Landscape splits the same parts into two columns.
+-- WHAT GOES WHERE (decluttered 2026-09-26: the middle of the screen,
+-- where the finalists stand and their chat bubbles show, stays clear):
+--   top      the stage title, (i) How it works, and the countdown;
+--            top-left sideways, top-centre in portrait. Pushed below
+--            Roblox's chat window when it's open. At the reveal the
+--            three seat cards join it and flip. Names and steal/share
+--            records float over the finalists' heads instead
+--            (FinalistTagController); the prizes are on the loading
+--            card before the Studio opens (FinaleLoading).
+--   corners  STEAL bottom-left, SHARE bottom-right. Same shape, HOLD
+--            written inside.
+--   bottom   the chat line between them (or above them when there's
+--            no room), then the locked card and the result panel.
 --
 -- SECRECY: this file never sees another player's choice before the
 -- reveal packet, because the Store has nowhere to put one - `locked` is
@@ -36,6 +39,7 @@ local UserInputService = game:GetService("UserInputService")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Clock = require(ReplicatedStorage.Shared.Clock)
+local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
 local Feel = require(script.Parent.Parent.Components.Feel)
@@ -66,7 +70,6 @@ export type Seat = {
 	name: string,
 	isSelf: boolean,
 	isNPC: boolean,
-	reputation: string, -- DecisionLogic.reputationLabel, already formatted
 	-- Forfeited mid-Studio (P3-7). The seat stays and still resolves,
 	-- but the card says only that they left - never "votes Share": a
 	-- seat that locked before leaving keeps its real choice.
@@ -91,12 +94,18 @@ export type Store = {
 	personal: () -> DecisionLogic.Personal?,
 	chat: () -> DecisionLogic.Rect?, -- Roblox's chat window, screen pixels
 	keyboard: (() -> number?)?, -- on-screen keyboard's top edge, screen pixels; nil when closed
+	-- The ready-up notice (DecisionLogic.waitingNotice); nil hides it.
+	waiting: (() -> string?)?,
 	press: (choice: Choice) -> (),
 	release: (choice: Choice) -> (),
 	dismiss: () -> (),
 	-- The finalist's own chat line, sent into the Negotiate channel.
 	send: (text: string) -> (),
 	typing: () -> (), -- called as the finalist types, for the typing indicator
+	-- A spectator's close-up camera on the podiums, and its toggle. Both
+	-- nil hides the button (the preview has no camera to move).
+	watching: (() -> boolean)?,
+	toggleWatch: (() -> ())?,
 
 	now: (() -> number)?, -- clock override for the preview; default Clock.now
 }
@@ -105,15 +114,21 @@ local CLOCK_STEP = 0.05
 local COLUMN = 344
 local GAP = Theme.spacing.md
 local SEAT_W = 108
-local SEAT_H = 132
+local SEAT_H = 112
 local AVATAR = 48
 local RING = 56
 local HEADER_H = 64
-local ROW_H = 44
+local NOTICE_H = 40
+local NOTICE_SPINNER = 20
 local HEAD_W = 76
-local HEADING_H = 28 -- the payoff table's heading row, with its (i)
-local CHOICE_W = 164
-local CHOICE_H = 96
+local INFO_W = 44 -- the (i) beside the title
+local SEAT_CHIP_H = 26 -- a seat's revealed choice, under the name
+local STAGE_CARD = Vector2.new(260, 180) -- the big card in the middle at the reveal
+local CHOICE_W = 150
+local CHOICE_H = 132
+local HOLD_CHIP_H = 30
+local CHAT_W = 320 -- the chat line between the buttons, landscape
+local EDGE = Theme.spacing.lg -- buttons' distance from the screen edges
 local CHAT_MAX_FRACTION = 0.3
 local KEYBOARD_MAX_FRACTION = 0.6 -- a phone keyboard is ~40-50% of portrait height
 local SLIDE_OFF = 24 -- px a thumb may drift off a hold button before it counts as letting go
@@ -138,9 +153,12 @@ local STAGE_TITLE: { [string]: string } = {
 }
 local STAGE_HINT: { [string]: string } = {
 	Waiting = "",
-	Intro = "Their history is all you get.",
+	Intro = "Their record is over their heads.",
 	Negotiate = "Talk or type. Promises cost nothing.",
-	Choose = "Hold to lock in. It's final.",
+	-- The server locks anyone still undecided at the deadline into the
+	-- default (DecisionService), so say so - a silent default reads as
+	-- the game choosing at random.
+	Choose = string.format("Hold to lock in. No pick = %s.", GameConfig.decisionStudioDefaultChoice),
 	Locked = "",
 	Reveal = "",
 }
@@ -211,7 +229,9 @@ local function face(choice: Choice, size: Vector2, textStyle: string): Frame
 		Name = "Face" .. choice,
 		Size = UDim2.fromOffset(size.X, size.Y),
 		BackgroundColor3 = Theme.color[style.color],
-		Base.corner(if diamond then Theme.radius.sm else Theme.radius.pill),
+		-- A pill reads as a chip when small; the big reveal card would be an
+		-- oval, so large faces get a rounded rectangle.
+		Base.corner(if diamond then Theme.radius.sm elseif size.Y >= 100 then Theme.radius.lg else Theme.radius.pill),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -264,11 +284,15 @@ local function seatCard(
 	index: number,
 	store: Store,
 	stage: () -> DecisionLogic.Stage,
-	step: () -> DecisionLogic.RevealStep?
+	step: () -> DecisionLogic.RevealStep?,
+	order: () -> { number }
 ): Frame
+	-- Turned once its card has turned in the middle of the screen, in
+	-- this screen's own order (DecisionLogic.revealOrder).
 	local revealed = derive(function()
 		local s = step()
-		return s ~= nil and s.cardsShown >= index
+		local position = table.find(order(), seat().id) or index
+		return s ~= nil and s.cardsShown >= position
 	end)
 	local choice = derive(function(): Choice?
 		local r = store.reveal()
@@ -301,54 +325,33 @@ local function seatCard(
 		return STATUS_NONE
 	end)
 
-	-- One face per choice, built now and hidden, so the reveal is a
-	-- visibility flip rather than instance creation at the dramatic
-	-- moment. Both exist for every seat from the start, which is why
-	-- their existence says nothing.
-	local faceSize = Vector2.new(SEAT_W - 2 * Theme.spacing.xs, SEAT_H - AVATAR - Theme.spacing.md)
-	local faces: { [Choice]: Frame } = {
-		Steal = face("Steal", faceSize, "label"),
-		Share = face("Share", faceSize, "label"),
-	}
-	local holder = create("Frame")({
-		Name = "Revealed",
+	-- The seat's choice, once its card has turned in the middle: a chip
+	-- under the name (it used to cover the name). The drama happens in
+	-- the middle; this row is the tally.
+	local chip = Base.text("label", {
+		Name = "Choice",
 		AnchorPoint = Vector2.new(0.5, 1),
-		Position = UDim2.new(0.5, 0, 1, -Theme.spacing.xs),
-		Size = UDim2.fromOffset(faceSize.X, faceSize.Y),
-		BackgroundTransparency = 1,
-		ClipsDescendants = true,
+		Position = UDim2.new(0.5, 0, 1, -Theme.spacing.sm),
+		Size = UDim2.fromOffset(SEAT_W - 2 * Theme.spacing.sm, SEAT_CHIP_H),
+		BackgroundTransparency = 0,
+		BackgroundColor3 = function()
+			local c = choice()
+			return if c then Theme.color[decisionStyle(c :: Choice).color] else Theme.color.surfaceRaised
+		end,
+		TextColor3 = function()
+			local c = choice()
+			return if c then Theme.color[decisionStyle(c :: Choice).on] else Theme.color.ink
+		end,
+		Text = function()
+			local c = choice()
+			return if c then decisionStyle(c :: Choice).label else ""
+		end,
+		Visible = function()
+			return choice() ~= nil
+		end,
 		ZIndex = 3,
-		Visible = false,
-	}) :: Frame
-	for _, f in faces do
-		f.AnchorPoint = Vector2.new(0.5, 0.5)
-		f.Position = UDim2.fromScale(0.5, 0.5)
-		f.Visible = false
-		f.Parent = holder
-	end
-	-- The flip: the face grows out of a vertical line, like a card
-	-- turning. Reduced motion cuts straight to it - same moment, no
-	-- movement.
-	effect(function()
-		local c = choice()
-		for key, f in faces do
-			f.Visible = key == c
-		end
-		holder.Visible = c ~= nil
-		if c ~= nil then
-			local full = UDim2.fromOffset(faceSize.X, faceSize.Y)
-			if Env.reducedMotion() then
-				holder.Size = full
-			else
-				holder.Size = UDim2.fromOffset(0, faceSize.Y)
-				TweenService:Create(
-					holder,
-					TweenInfo.new(Theme.motion.slow, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-					{ Size = full }
-				):Play()
-			end
-		end
-	end)
+		Base.corner(Theme.radius.pill),
+	})
 
 	return create("Frame")({
 		Name = "Seat",
@@ -393,18 +396,6 @@ local function seatCard(
 			TextWrapped = false,
 		}),
 		Base.text("caption", {
-			Name = "Reputation",
-			Position = UDim2.fromOffset(
-				Theme.spacing.xs,
-				AVATAR + Theme.spacing.sm + Theme.type.label.size + Theme.spacing.xs
-			),
-			Size = UDim2.new(1, -2 * Theme.spacing.xs, 0, Theme.type.caption.size + Theme.spacing.xxs),
-			Text = function()
-				return seat().reputation
-			end,
-			TextColor3 = Theme.color.inkMuted,
-		}),
-		Base.text("caption", {
 			Name = "Status",
 			AnchorPoint = Vector2.new(0, 1),
 			Position = UDim2.new(0, Theme.spacing.xs, 1, -Theme.spacing.sm),
@@ -416,7 +407,7 @@ local function seatCard(
 				return Theme.color[status().color]
 			end,
 		}),
-		holder,
+		chip,
 		-- WINS / LOSES in words as well as the stroke colour.
 		Base.text("label", {
 			Name = "Verdict",
@@ -444,133 +435,228 @@ end
 
 -- PAYOFF TABLE -----------------------------------------------------------
 
-local function payoffTable(seats: () -> number, order: number): Frame
-	local rows = derive(function()
-		return DecisionLogic.payoffRows(seats())
+-- THE REVEAL, CENTRE STAGE -------------------------------------------------
+
+-- One card at a time in the middle of the screen, in this screen's own
+-- order (DecisionLogic.revealOrder): it comes up face down under the
+-- finalist's name, holds for TIMING.suspense, then turns. After the
+-- last card the outcome line takes its place until the result panel.
+-- Both faces are built up front, as everywhere else here, so nothing
+-- outcome-specific is created at the dramatic moment.
+local function revealStage(
+	store: Store,
+	step: () -> DecisionLogic.RevealStep?,
+	order: () -> { number },
+	banner: () -> string?
+): Frame
+	local currentId = derive(function(): number?
+		local s = step()
+		if s == nil or s.current == 0 then
+			return nil
+		end
+		return order()[s.current]
 	end)
-	local function cellsOf(row: () -> DecisionLogic.PayoffRow): Frame
-		local width = derive(function()
-			local n = #row().cells
-			return math.floor((COLUMN - 2 * Theme.spacing.sm - HEAD_W - n * Theme.spacing.xs) / n)
-		end)
-		return create("Frame")({
-			Name = "Cells",
-			LayoutOrder = 2,
-			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(COLUMN - 2 * Theme.spacing.sm - HEAD_W - Theme.spacing.xs, ROW_H),
-			create("UIListLayout")({
-				FillDirection = Enum.FillDirection.Horizontal,
-				Padding = UDim.new(0, Theme.spacing.xs),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-			}),
-			indexes(function()
-				return row().cells
-			end, function(cell: () -> DecisionLogic.PayoffCell, i: number)
-				local nothing = function()
-					return cell().prize == "Nothing"
-				end
-				return create("Frame")({
-					Name = "Cell",
-					LayoutOrder = i,
-					Size = function()
-						return UDim2.fromOffset(width(), ROW_H)
-					end,
-					BackgroundColor3 = Theme.color.surfaceRaised,
-					BackgroundTransparency = function()
-						return if nothing() then 0.6 else 0
-					end,
-					Base.corner(Theme.radius.sm),
-					Base.text("caption", {
-						Name = "When",
-						Size = UDim2.fromScale(1, 0.45),
-						Text = function()
-							return cell().when
-						end,
-						TextColor3 = Theme.color.inkMuted,
-					}),
-					Base.text("label", {
-						Name = "Prize",
-						Position = UDim2.fromScale(0, 0.45),
-						Size = UDim2.fromScale(1, 0.55),
-						Text = function()
-							local label = DecisionLogic.PRIZE_LABEL[cell().prize]
-							return if nothing() then "✕ " .. label else label
-						end,
-						TextColor3 = function()
-							return if nothing() then Theme.color.inkMuted else Theme.color.ink
-						end,
-					}),
-				})
-			end) :: any,
-		}) :: Frame
+	local choice = derive(function(): Choice?
+		local r, s, id = store.reveal(), step(), currentId()
+		if r == nil or s == nil or id == nil or not s.faceUp then
+			return nil
+		end
+		return r.choices[id]
+	end)
+	local name = derive(function(): string
+		local id = currentId()
+		if id == nil then
+			return ""
+		elseif id == store.selfId then
+			return "You"
+		end
+		for _, seat in store.seats() do
+			if seat.id == id then
+				return seat.name
+			end
+		end
+		return "Finalist"
+	end)
+	local showCard = derive(function()
+		local s = step()
+		return s ~= nil and s.current > 0 and not s.outcomeShown
+	end)
+	local showBanner = derive(function()
+		local s = step()
+		return s ~= nil and s.outcomeShown and not s.resultShown
+	end)
+
+	local holder = create("Frame")({
+		Name = "Flip",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.fromOffset(STAGE_CARD.X, STAGE_CARD.Y),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+	}) :: Frame
+	local back = create("Frame")({
+		Name = "Back",
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = Theme.color.surfaceRaised,
+		Base.corner(Theme.radius.lg),
+		create("UIStroke")({ ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = Theme.color.line, Thickness = 2 }),
+		Base.text("display", {
+			Name = "Mystery",
+			Size = UDim2.fromScale(1, 1),
+			Text = "?",
+			TextColor3 = Theme.color.inkMuted,
+		}),
+		Parent = holder,
+	}) :: Frame
+	local faces: { [Choice]: Frame } = {
+		Steal = face("Steal", STAGE_CARD, "headline"),
+		Share = face("Share", STAGE_CARD, "headline"),
+	}
+	for _, f in faces do
+		f.AnchorPoint = Vector2.new(0.5, 0.5)
+		f.Position = UDim2.fromScale(0.5, 0.5)
+		f.Visible = false
+		f.Parent = holder
 	end
 
+	local full = UDim2.fromOffset(STAGE_CARD.X, STAGE_CARD.Y)
+	local function tweenFrom(size: UDim2, style: Enum.EasingStyle)
+		if Env.reducedMotion() then
+			holder.Size = full
+			return
+		end
+		holder.Size = size
+		TweenService:Create(holder, TweenInfo.new(Theme.motion.slow * 1.5, style, Enum.EasingDirection.Out), {
+			Size = full,
+		}):Play()
+	end
+	-- A new card rises into place face down...
+	effect(function()
+		if currentId() ~= nil then
+			tweenFrom(UDim2.fromOffset(STAGE_CARD.X * 0.6, STAGE_CARD.Y * 0.6), Enum.EasingStyle.Quad)
+		end
+	end)
+	-- ...then turns: the face grows out of a vertical line. Reduced
+	-- motion cuts straight to it - same moment, no movement.
+	effect(function()
+		local c = choice()
+		back.Visible = c == nil
+		for key, f in faces do
+			f.Visible = key == c
+		end
+		if c ~= nil then
+			tweenFrom(UDim2.fromOffset(0, STAGE_CARD.Y), Enum.EasingStyle.Back)
+		end
+	end)
+
 	return create("Frame")({
-		Name = "Payoff",
-		LayoutOrder = order,
+		Name = "RevealStage",
+		BackgroundTransparency = 1,
 		Size = UDim2.fromOffset(COLUMN, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = Theme.elevation[2].surface,
-		Base.corner(Theme.radius.md),
-		Base.padding(Theme.spacing.sm),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Vertical,
-			Padding = UDim.new(0, Theme.spacing.xs),
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			Padding = UDim.new(0, Theme.spacing.sm),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
-		create("Frame")({
-			Name = "HeadingRow",
-			LayoutOrder = 0,
-			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 0, HEADING_H),
-			Base.text("caption", {
-				Name = "Heading",
-				AnchorPoint = Vector2.new(0, 0.5),
-				Position = UDim2.fromScale(0, 0.5),
-				Size = UDim2.new(1, -HEADING_H, 0, Theme.type.caption.size + Theme.spacing.xxs),
-				Text = "WHAT YOU GET, IF THE OTHERS…",
-				TextColor3 = Theme.color.inkMuted,
-				TextXAlignment = Enum.TextXAlignment.Left,
-			}),
-			-- "How it works" (P6-8). A ghost button, so its 44-pt hit area
-			-- can overhang the short heading row without covering the
-			-- table: nothing under it is tappable.
-			C.IconButton({
-				icon = "info",
-				label = "How it works",
-				onActivate = function()
-					PayoffExplainer.open(seats())
-				end,
-				order = 900,
-				anchorPoint = Vector2.new(1, 0.5),
-				position = UDim2.fromScale(1, 0.5),
-			}) :: any,
+		Base.text("headline", {
+			Name = "Who",
+			LayoutOrder = 1,
+			Size = UDim2.new(1, 0, 0, Theme.type.headline.size + Theme.spacing.xs),
+			Text = function()
+				local s = step()
+				local waiting = s ~= nil and not s.faceUp
+				return if waiting then name() .. " chose…" else name()
+			end,
+			Visible = showCard,
 		}),
-		indexes(rows, function(row: () -> DecisionLogic.PayoffRow, i: number)
-			local headSize = Vector2.new(HEAD_W, ROW_H)
-			return create("Frame")({
-				Name = "Row",
-				LayoutOrder = i,
-				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, ROW_H),
-				create("UIListLayout")({
-					FillDirection = Enum.FillDirection.Horizontal,
-					Padding = UDim.new(0, Theme.spacing.xs),
-					SortOrder = Enum.SortOrder.LayoutOrder,
-				}),
-				-- rows() is always Steal then Share, so each head is fixed.
-				face(if i == 1 then "Steal" else "Share", headSize, "caption"),
-				cellsOf(row),
-			})
-		end) :: any,
+		create("Frame")({
+			Name = "Card",
+			LayoutOrder = 2,
+			BackgroundTransparency = 1,
+			Size = full,
+			Visible = showCard,
+			holder,
+		}),
+		Base.text("display", {
+			Name = "Outcome",
+			LayoutOrder = 3,
+			Size = UDim2.new(1, 0, 0, Theme.type.display.size * 2 + Theme.spacing.sm),
+			Text = function()
+				return banner() or ""
+			end,
+			TextWrapped = true,
+			Visible = showBanner,
+		}),
 	}) :: Frame
 end
 
+-- Gone from the Studio (2026-09-26): the prizes are on the loading card
+-- (FinaleLoading), and "How it works" is the (i) beside the title.
+
 -- HOLD TO CONFIRM ----------------------------------------------------
 
-local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, order: number): Frame
+-- "HOLD", plus the key on a keyboard or pad. Inside the button, on a
+-- chip in the button's own ink, so nobody taps it and wonders why
+-- nothing happened.
+local function holdHint(choice: Choice): string
+	local mode = Env.inputMode()
+	if mode == Enum.PreferredInput.Gamepad then
+		return if choice == "Steal" then "HOLD X" else "HOLD Y"
+	elseif mode == Enum.PreferredInput.KeyboardAndMouse then
+		return if choice == "Steal" then "HOLD Q" else "HOLD E"
+	end
+	return "HOLD"
+end
+
+-- The hold button's face: both choices the same shape and size, told
+-- apart by colour, icon, word and side of the screen.
+local function holdFace(choice: Choice): Frame
 	local style = decisionStyle(choice)
-	local diamond = style.shape == "Diamond"
+	local fill, ink = Theme.color[style.color], Theme.color[style.on]
+	local icon = Icons.view(style.icon, 36, ink)
+	icon.LayoutOrder = 1
+	return create("Frame")({
+		Name = "Face" .. choice,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundColor3 = fill,
+		Base.corner(Theme.radius.lg),
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Vertical,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, Theme.spacing.xs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		icon :: any,
+		Base.text("title", {
+			Name = "Label",
+			LayoutOrder = 2,
+			Size = UDim2.new(1, -Theme.spacing.sm, 0, Theme.type.title.size + Theme.spacing.xxs),
+			Text = style.label,
+			TextColor3 = ink,
+		}),
+		create("Frame")({
+			Name = "HoldChip",
+			LayoutOrder = 3,
+			Size = UDim2.fromOffset(CHOICE_W - 2 * Theme.spacing.lg, HOLD_CHIP_H),
+			BackgroundColor3 = ink,
+			BackgroundTransparency = 0.1,
+			Base.corner(Theme.radius.pill),
+			Base.text("label", {
+				Name = "Hold",
+				Size = UDim2.fromScale(1, 1),
+				Text = function()
+					return holdHint(choice)
+				end,
+				TextColor3 = fill,
+			}),
+		}),
+	}) :: Frame
+end
+
+local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, order: number): Frame
 	local readNow = store.now or Clock.now
 	local fraction = source(0)
 	local mine = derive(function()
@@ -588,7 +674,7 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 		hb:Disconnect()
 	end)
 
-	local faceFrame = face(choice, Vector2.new(CHOICE_W, CHOICE_H), "title")
+	local faceFrame = holdFace(choice)
 	faceFrame.ZIndex = 1
 	local button = create("TextButton")({
 		Name = "Hold" .. choice,
@@ -612,7 +698,7 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 			BackgroundColor3 = Theme.color.focus,
 			BackgroundTransparency = 0.6,
 			ZIndex = 2,
-			Base.corner(if diamond then Theme.radius.sm else Theme.radius.pill),
+			Base.corner(Theme.radius.lg),
 		}),
 		-- Dimmed until Choose opens: visible early so the thumb knows
 		-- where it's going, inert until it's allowed to go there.
@@ -625,7 +711,7 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 				return not enabled()
 			end,
 			ZIndex = 3,
-			Base.corner(if diamond then Theme.radius.sm else Theme.radius.pill),
+			Base.corner(Theme.radius.lg),
 		}),
 	}) :: TextButton
 
@@ -678,29 +764,7 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 		c4:Disconnect()
 	end)
 
-	return create("Frame")({
-		Name = "HoldSlot" .. choice,
-		LayoutOrder = order,
-		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(CHOICE_W, CHOICE_H + Theme.type.caption.size + Theme.spacing.xs),
-		button :: any,
-		Base.text("caption", {
-			Name = "KeyHint",
-			AnchorPoint = Vector2.new(0.5, 1),
-			Position = UDim2.fromScale(0.5, 1),
-			Size = UDim2.new(1, 0, 0, Theme.type.caption.size),
-			Text = function()
-				local mode = Env.inputMode()
-				if mode == Enum.PreferredInput.Gamepad then
-					return if choice == "Steal" then "Hold X" else "Hold Y"
-				elseif mode == Enum.PreferredInput.KeyboardAndMouse then
-					return if choice == "Steal" then "Hold Q" else "Hold E"
-				end
-				return "Hold"
-			end,
-			TextColor3 = Theme.color.inkMuted,
-		}),
-	}) :: Frame
+	return button :: any
 end
 
 -- The lock, made obviously final: the two buttons are gone, replaced by
@@ -853,13 +917,14 @@ local DecisionStudio = {}
 -- The finalist's chat line during Negotiate. Roblox's own chat bar is
 -- easy to miss (closed by default, behind a top-bar icon) and on a phone
 -- often isn't open at all, so the Studio carries its own: a text field
--- and a Send button, above the payoff table where the thumb already is,
--- lifted with the rest of this stack when the on-screen keyboard opens.
+-- and a Send button, at the bottom between the hold buttons, lifted with the rest of this stack when the on-screen keyboard opens.
 -- Enter sends too. What's sent goes through the Negotiate channel
 -- exactly as the chat bar's would, so bubbles, filtering and the
 -- spectators' read-only view all apply unchanged.
 local CHAT_H = 56 -- a primary Button's own height, so the row fits it
 local SEND_W = 88
+local QUICK_GAP = Theme.spacing.xs
+local WATCH_W = 150
 -- TextChatService's own per-message limit.
 local MAX_MESSAGE = 200
 
@@ -877,7 +942,7 @@ local function chatBox(store: Store, order: number): Frame
 		TextTruncate = Enum.TextTruncate.AtEnd,
 		BackgroundColor3 = Theme.color.surfaceRaised,
 		LayoutOrder = 1,
-		Size = UDim2.fromOffset(COLUMN - SEND_W - GAP, CHAT_H),
+		Size = UDim2.fromOffset(CHAT_W - SEND_W - Theme.spacing.sm, CHAT_H),
 		Base.corner(Theme.radius.md),
 		Base.padding(Theme.spacing.sm),
 	}) :: TextBox
@@ -905,10 +970,37 @@ local function chatBox(store: Store, order: number): Frame
 		changed:Disconnect()
 	end)
 
-	return hrow("Chat", order, CHAT_H, GAP, {
+	local row = hrow("Line", 1, CHAT_H, Theme.spacing.sm, {
 		input,
 		C.Button({ label = "Send", variant = "primary", width = SEND_W, layoutOrder = 2, onActivate = submit }),
 	})
+	row.Size = UDim2.fromOffset(CHAT_W, CHAT_H)
+
+	-- One tap sends a stock line (DecisionLogic.QUICK_PHRASES) through
+	-- the same store.send as the box, so it's just chat.
+	local phrases = DecisionLogic.QUICK_PHRASES
+	local quickW = (CHAT_W - (#phrases - 1) * QUICK_GAP) / #phrases
+	local quick: { any } = {}
+	for index, phrase in phrases do
+		table.insert(
+			quick,
+			C.Button({
+				label = phrase,
+				variant = "secondary",
+				width = quickW,
+				layoutOrder = index,
+				onActivate = function()
+					store.send(phrase)
+				end,
+			})
+		)
+	end
+	local quickRow = hrow("QuickChat", 2, Theme.touch.primaryHeight, QUICK_GAP, quick)
+	quickRow.Size = UDim2.fromOffset(CHAT_W, Theme.touch.primaryHeight)
+
+	local block = stack("Chat", CHAT_W, Theme.spacing.xs, { row, quickRow })
+	block.LayoutOrder = order
+	return block
 end
 
 function DecisionStudio.confirmer(
@@ -989,6 +1081,15 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			end
 			return DecisionLogic.revealStep(now() - r.revealAt, seatCount())
 		end)
+		-- The order the cards turn on THIS screen (your own first).
+		local order = derive(function(): { number }
+			local ids: { number } = {}
+			for _, seat in store.seats() do
+				table.insert(ids, seat.id)
+			end
+			local r = store.reveal()
+			return if r then DecisionLogic.revealOrder(ids, r.choices, store.selfId) else ids
+		end)
 		local outcomeShown = derive(function()
 			local s = step()
 			return s ~= nil and s.outcomeShown
@@ -1018,20 +1119,20 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			return stage() == "Choose"
 		end)
 
-		-- Seats + header. Titles carries the outcome banner, so it's what
-		-- the reveal punches (FeelController, P8-3).
-		local header = hrow("Header", 2, HEADER_H, GAP, {
+		-- Header: title, hint, (i), countdown. Titles carries the outcome
+		-- banner, so it's what the reveal punches (FeelController, P8-3).
+		local header = hrow("Header", 1, HEADER_H, GAP, {
 			create("Frame")({
 				Name = "Titles",
 				Feel.scale("Reveal"),
 				LayoutOrder = 1,
 				BackgroundTransparency = 1,
-				Size = UDim2.fromOffset(COLUMN - RING - GAP, HEADER_H),
+				Size = UDim2.fromOffset(COLUMN - RING - INFO_W - 2 * GAP, HEADER_H),
 				Base.text("title", {
 					Name = "Title",
 					Size = UDim2.fromScale(1, 0.55),
 					Text = function()
-						return banner() or STAGE_TITLE[stage()]
+						return STAGE_TITLE[stage()] -- the outcome line is big in the middle now
 					end,
 					TextXAlignment = Enum.TextXAlignment.Left,
 				}),
@@ -1048,6 +1149,23 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 					TextColor3 = Theme.color.inkMuted,
 					TextXAlignment = Enum.TextXAlignment.Left,
 				}),
+			}),
+			-- "How it works" (P6-8), now that the payoff table is gone.
+			create("Frame")({
+				Name = "Info",
+				LayoutOrder = 2,
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(INFO_W, HEADER_H),
+				C.IconButton({
+					icon = "info",
+					label = "How it works",
+					onActivate = function()
+						PayoffExplainer.open(seatCount())
+					end,
+					order = 900,
+					anchorPoint = Vector2.new(0.5, 0.5),
+					position = UDim2.fromScale(0.5, 0.5),
+				}) :: any,
 			}),
 			(function()
 				-- CountdownRing takes a fixed total, so it's rebuilt per
@@ -1067,7 +1185,7 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 				end
 				return create("Frame")({
 					Name = "Ring",
-					LayoutOrder = 2,
+					LayoutOrder = 3,
 					BackgroundTransparency = 1,
 					Size = UDim2.fromOffset(RING, RING),
 					switch(ringPhase)(map),
@@ -1075,29 +1193,92 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			end)(),
 		})
 
-		local seatsRow = hrow("Seats", 1, SEAT_H + Theme.spacing.md, Theme.spacing.sm, {
+		-- The seats only come up for the reveal, to flip each finalist's
+		-- card. Until then the names and records are over their heads in
+		-- the world (FinalistTagController), and the seats were clutter.
+		local seatsRow = hrow("Seats", 2, SEAT_H + Theme.spacing.md, Theme.spacing.sm, {
 			indexes(store.seats, function(seat: () -> Seat, index: number)
-				return seatCard(seat, index, store, stage, step)
+				return seatCard(seat, index, store, stage, step, order)
 			end) :: any,
 		})
+		effect(function()
+			seatsRow.Visible = stage() == "Reveal"
+		end)
 
-		local info = stack("Info", COLUMN, GAP, { seatsRow, header })
+		-- "Waiting for 2 more…" after you close the loading card, so the
+		-- quiet room doesn't read as stalled.
+		local waitingText = derive(function(): string?
+			return if store.waiting then store.waiting() else nil
+		end)
+		local notice = create("Frame")({
+			Name = "Waiting",
+			LayoutOrder = 3,
+			Size = UDim2.fromOffset(COLUMN, NOTICE_H),
+			BackgroundColor3 = Theme.color.surfaceRaised,
+			Visible = function()
+				return waitingText() ~= nil
+			end,
+			Base.corner(Theme.radius.pill),
+			Base.padding(Theme.spacing.sm),
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+			}),
+			create("Frame")({
+				Name = "SpinnerBox",
+				LayoutOrder = 1,
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(NOTICE_SPINNER, NOTICE_SPINNER),
+				Base.spinner(NOTICE_SPINNER, function()
+					return Theme.color.inkMuted
+				end) :: any,
+			}),
+			Base.text("label", {
+				Name = "Text",
+				LayoutOrder = 2,
+				Size = UDim2.fromOffset(0, NOTICE_SPINNER),
+				AutomaticSize = Enum.AutomaticSize.X,
+				Text = function()
+					return waitingText() or ""
+				end,
+			}),
+		})
+
+		local info = stack("Info", COLUMN, GAP, { header, seatsRow, notice })
 		info.Parent = gui
 		cleanup(controller.attachScale(info))
 
-		-- Payoff + actions + result.
-		local payoff = payoffTable(seatCount, 1)
+		-- The reveal itself, big in the middle of the screen.
+		local centre = revealStage(store, step, order, banner)
+		centre.AnchorPoint = Vector2.new(0.5, 0.5)
+		centre.Position = UDim2.fromScale(0.5, 0.45)
+		centre.Parent = gui
+		cleanup(controller.attachScale(centre))
 		effect(function()
-			payoff.Visible = not outcomeShown()
+			centre.Visible = stage() == "Reveal"
 		end)
-		local buttons = hrow("Choices", 2, CHOICE_H + Theme.type.caption.size + Theme.spacing.xs, GAP, {
-			holdButton("Steal", store, chooseOpen, 1),
-			holdButton("Share", store, chooseOpen, 2),
-		})
-		effect(function()
+
+		-- The two hold buttons, Steal in the bottom-left corner and Share
+		-- in the bottom-right: one per thumb on a phone held sideways,
+		-- and the middle of the screen - where the finalists stand and
+		-- their chat bubbles show - stays clear.
+		local stealButton = holdButton("Steal", store, chooseOpen, 1)
+		local shareButton = holdButton("Share", store, chooseOpen, 2)
+		local buttonsUp = derive(function()
 			local s = stage()
-			buttons.Visible = store.isFinalist() and (s == "Intro" or s == "Negotiate" or s == "Choose")
+			return store.isFinalist() and (s == "Intro" or s == "Negotiate" or s == "Choose")
 		end)
+		for _, b in { stealButton, shareButton } do
+			b.Parent = gui
+			cleanup(controller.attachScale(b))
+			effect(function()
+				b.Visible = buttonsUp()
+			end)
+		end
+
 		local locked = lockedCard(store, 3)
 		Feel.attach(locked, "Locked") -- punches on your lock-in (P8-3)
 		effect(function()
@@ -1113,9 +1294,35 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			chatRow.Visible = store.isFinalist() and stage() == "Negotiate"
 		end)
 
-		local decide = stack("Decide", COLUMN, GAP, { chatRow, payoff, buttons, locked, result })
+		local decide = stack("Decide", COLUMN, GAP, { chatRow, locked, result })
 		decide.Parent = gui
 		cleanup(controller.attachScale(decide))
+
+		-- Spectators only: swap the balcony view for a close-up on the
+		-- podiums and back (DecisionStudioController's watch camera).
+		-- Placed in the layout effect below.
+		local watching = store.watching
+		local toggleWatch = store.toggleWatch
+		local watchButton: GuiObject? = nil
+		if watching ~= nil and toggleWatch ~= nil then
+			local button = C.Button({
+				label = function()
+					return if watching() then "Balcony view" else "Watch up close"
+				end,
+				variant = "secondary",
+				width = WATCH_W,
+				onActivate = toggleWatch,
+				anchorPoint = Vector2.new(1, 1),
+			})
+			button.Parent = gui
+			cleanup(controller.attachScale(button))
+			effect(function()
+				local s = stage()
+				button.Visible = not store.isFinalist()
+					and (s == "Intro" or s == "Negotiate" or s == "Choose" or s == "Reveal")
+			end)
+			watchButton = button
+		end
 
 		-- Placement. Portrait: info from the top (below the chat window),
 		-- decide from the bottom. Landscape: side by side. Positions are
@@ -1159,18 +1366,31 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 				KEYBOARD_MAX_FRACTION
 			)
 		end)
+		-- Whether the chat line fits between the two buttons (a phone or
+		-- PC held sideways), or has to sit above them (portrait, or a
+		-- squarer tablet). In reference px, like everything it measures.
+		local between = derive(function()
+			local width = guiRect().width / math.max(Env.scale(), 0.01)
+			return width >= 2 * (CHOICE_W + EDGE + GAP) + CHAT_W
+		end)
 		effect(function()
 			local margin = lift()
-			if portrait() then
-				info.AnchorPoint = Vector2.new(0.5, 0)
-				info.Position = UDim2.new(0.5, 0, 0, top())
-				decide.AnchorPoint = Vector2.new(0.5, 1)
-				decide.Position = UDim2.new(0.5, 0, 1, -margin)
-			else
-				info.AnchorPoint = Vector2.new(0.5, 0)
-				info.Position = UDim2.new(0.28, 0, 0, top())
-				decide.AnchorPoint = Vector2.new(0.5, 1)
-				decide.Position = UDim2.new(0.72, 0, 1, -margin)
+			local scale = Env.scale()
+			local edge = EDGE * scale
+			info.AnchorPoint = if portrait() then Vector2.new(0.5, 0) else Vector2.new(0, 0)
+			info.Position = if portrait() then UDim2.new(0.5, 0, 0, top()) else UDim2.fromOffset(edge, top())
+			stealButton.AnchorPoint = Vector2.new(0, 1)
+			stealButton.Position = UDim2.new(0, edge, 1, -(edge + margin))
+			shareButton.AnchorPoint = Vector2.new(1, 1)
+			shareButton.Position = UDim2.new(1, -edge, 1, -(edge + margin))
+			local above = if buttonsUp() and not between() then (CHOICE_H + GAP) * scale else 0
+			decide.AnchorPoint = Vector2.new(0.5, 1)
+			decide.Position = UDim2.new(0.5, 0, 1, -(edge + margin + above))
+			-- Bottom-right, where a finalist's Share button sits: a spectator
+			-- has no hold buttons, it's in thumb reach, and the top right
+			-- is Roblox's player list.
+			if watchButton ~= nil then
+				watchButton.Position = UDim2.new(1, -edge, 1, -(edge + margin))
 			end
 		end)
 

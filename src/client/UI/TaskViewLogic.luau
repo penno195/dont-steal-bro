@@ -26,6 +26,21 @@ function TaskViewLogic.presentation(usable: Rect, isTouch: boolean, windowMinSho
 	return "Window"
 end
 
+-- The window's size in reference pixels: the token size, shrunk to fit
+-- a usable rect of `roomWidth` x `roomHeight` (also reference pixels,
+-- i.e. screen / scale) with `gap` clear on every side. The scale grows
+-- with the short axis, so that axis is only ~360 reference px on most
+-- monitors - a fixed 560-tall window hung off the bottom of every one.
+function TaskViewLogic.windowSize(
+	want: { width: number, height: number },
+	roomWidth: number,
+	roomHeight: number,
+	gap: number
+): (number, number)
+	return math.max(0, math.min(want.width, roomWidth - 2 * gap)),
+		math.max(0, math.min(want.height, roomHeight - 2 * gap))
+end
+
 -- EDGE MARGIN ----------------------------------------------------------
 
 -- True if `rect` comes within `margin` of any edge of `usable` (both in
@@ -235,6 +250,21 @@ function TaskViewLogic.sweep(elapsed: number, period: number): number
 	end
 	local t = (elapsed % period) / period
 	return if t < 0.5 then t * 2 else 2 - t * 2
+end
+
+-- A flashed sequence, `elapsed` seconds in: which item (1-based) is up
+-- and whether it's lit. Each item gets `perItem` seconds, lit for the
+-- first `onFraction` of it and dark for the rest, so a repeat (9, 9)
+-- reads as two flashes, not one long one. nil once the sequence is over.
+function TaskViewLogic.flash(elapsed: number, perItem: number, count: number, onFraction: number): (number?, boolean)
+	if perItem <= 0 or elapsed < 0 then
+		return nil, false
+	end
+	local index = math.floor(elapsed / perItem) + 1
+	if index > count then
+		return nil, false
+	end
+	return index, (elapsed - (index - 1) * perItem) < perItem * onFraction
 end
 
 -- SEQUENCE GRID NAVIGATION ---------------------------------------------

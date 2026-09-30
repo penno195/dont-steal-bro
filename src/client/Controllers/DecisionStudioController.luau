@@ -37,6 +37,8 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local DecisionLogic = require(script.Parent.Parent.UI.DecisionLogic)
 local DecisionStudio = require(script.Parent.Parent.UI.Screens.DecisionStudio)
+local FinaleLoading = require(script.Parent.Parent.UI.Screens.FinaleLoading)
+local InputLock = require(script.Parent.Parent.UI.InputLock)
 local NPCBubbleController = require(script.Parent.NPCBubbleController)
 local StudioChatController = require(script.Parent.StudioChatController)
 local UIScaleController = require(script.Parent.UIScaleController)
@@ -65,8 +67,15 @@ local personal = source(nil :: DecisionLogic.Personal?)
 local chat = source(nil :: DecisionLogic.Rect?)
 local keyboard = source(nil :: number?)
 
+local finalists = source({} :: { FinaleLoading.Finalist })
+
+-- The Intro's ready-up: who the server says is ready, and whether WE
+-- closed the loading card (spectators can close it too; only a
+-- finalist's tap is sent).
+local readyIds = source({} :: { [number]: boolean })
+local dismissed = source(false)
+
 local ids: { number } = {}
-local reputations: { [number]: DecisionLogic.Reputation } = {}
 local leftIds: { [number]: boolean } = {}
 
 local function nameOf(id: number): string
@@ -75,6 +84,14 @@ local function nameOf(id: number): string
 	end
 	local player = Players:GetPlayerByUserId(id)
 	return if player then player.DisplayName else "Finalist"
+end
+
+local function setFinalists(list: { number })
+	local out: { FinaleLoading.Finalist } = {}
+	for _, id in list do
+		table.insert(out, table.freeze({ id = id, name = nameOf(id) }))
+	end
+	finalists(out)
 end
 
 local function rebuildSeats()
@@ -87,13 +104,13 @@ local function rebuildSeats()
 				name = nameOf(id),
 				isSelf = id == selfId,
 				isNPC = id < 0,
-				reputation = DecisionLogic.reputationLabel(reputations[id]),
 				left = leftIds[id] == true,
 			})
 		)
 	end
 	seats(list)
 	isFinalist(table.find(ids, selfId) ~= nil)
+	setFinalists(ids)
 end
 
 -- Sending: the one intent, then the SAME choice again if the server's
@@ -171,6 +188,25 @@ local function resetStudio()
 	confirm(DecisionLogic.OPEN)
 end
 
+-- The spectator close-up's on/off (see SPECTATOR CLOSE-UP below).
+local watching = source(false)
+local cameraTypeBefore: Enum.CameraType? = nil
+
+local function setWatching(on: boolean)
+	local camera = Workspace.CurrentCamera
+	if on == watching() or camera == nil then
+		return
+	end
+	watching(on)
+	if on then
+		cameraTypeBefore = camera.CameraType
+		camera.CameraType = Enum.CameraType.Scriptable
+	else
+		camera.CameraType = cameraTypeBefore or Enum.CameraType.Custom
+		cameraTypeBefore = nil
+	end
+end
+
 local function hide()
 	if unmount ~= nil then
 		(unmount :: () -> ())()
@@ -186,7 +222,7 @@ local store: DecisionStudio.Store = {
 	phase = phase,
 	endsAt = endsAt,
 	phaseSeconds = {
-		Intro = GameConfig.studioTimers.introSeconds,
+		Intro = GameConfig.studioTimers.introNewPlayerSeconds, -- the longest the Intro can run
 		Negotiate = GameConfig.studioTimers.negotiateSeconds,
 		Choose = GameConfig.studioTimers.chooseSeconds,
 	},
@@ -198,11 +234,31 @@ local store: DecisionStudio.Store = {
 	personal = personal,
 	chat = chat,
 	keyboard = keyboard,
+	waiting = function(): string?
+		if phase() ~= "Intro" or not dismissed() then
+			return nil
+		end
+		local finalistIds: { number } = {}
+		local left: { [number]: boolean } = {}
+		for _, seat in seats() do
+			table.insert(finalistIds, seat.id)
+			left[seat.id] = seat.left
+		end
+		return DecisionLogic.waitingNotice(isFinalist(), finalistIds, readyIds(), left)
+	end,
 	press = press,
 	release = release,
 	dismiss = hide,
 	send = StudioChatController.send,
 	typing = StudioChatController.noteTyping,
+	watching = function(): boolean
+		return watching()
+	end,
+	toggleWatch = function()
+		if not isFinalist() then
+			setWatching(not watching())
+		end
+	end,
 }
 
 -- STAGE CAMERA. StudioStageService moves this player onto a podium or a
@@ -233,6 +289,33 @@ local function nearestStageCentre(from: Vector3): Vector3?
 	return best
 end
 
+-- SPECTATOR CLOSE-UP. From the balcony the podiums are a long way off:
+-- the finalists are small, their bubbles hard to read, and their voices
+-- faint, because Roblox hears through an AudioListener on the camera.
+-- "Watch" moves this spectator's camera in close - so all three get
+-- better at once. The eye sits on the straight line from the stage
+-- centre to the spectator's own head, WATCH_STUDS out: the spectator can
+-- see the podiums from where they stand, so that line is clear of rock.
+-- Their character stays on the balcony, and the server still keeps it
+-- there; only this client's view moves.
+local WATCH_STUDS = 22
+local WATCH_LOOK_UP_STUDS = 3 -- aim at chest height, not the podium tops
+
+local function watchCFrame(root: BasePart): CFrame?
+	local centre = nearestStageCentre(root.Position)
+	if centre == nil then
+		return nil
+	end
+	local target = centre + Vector3.new(0, WATCH_LOOK_UP_STUDS, 0)
+	local head = root.Position + Vector3.new(0, 1.5, 0)
+	local toward = head - target
+	if toward.Magnitude < 1e-3 then
+		return nil
+	end
+	local eye = target + toward.Unit * math.min(WATCH_STUDS, toward.Magnitude)
+	return CFrame.lookAt(eye, target)
+end
+
 local function snapCamera(root: BasePart)
 	local camera = Workspace.CurrentCamera
 	local centre = nearestStageCentre(root.Position)
@@ -246,23 +329,94 @@ local function snapCamera(root: BasePart)
 	camera.CFrame = CFrame.lookAt(eye, centre or root.Position + flat * CAMERA_BACK_STUDS)
 end
 
+-- STANDING STILL ON THE PODIUM. The server anchors a finalist's root
+-- part to hold them there. A character anchored mid-stride stops
+-- stepping its Humanoid, so Humanoid.Running never fires the speed-0
+-- that tells the default Animate script to go idle: the run animation
+-- played on the spot for the whole finale (2026-09-26 playtest). So,
+-- while this client's own root is anchored: its movement input is off
+-- (a held thumbstick would keep asking to run), the walk/run tracks are
+-- stopped, and the rig's own idle is played in their place. Animation
+-- replicates from the owning client, so everyone sees the idle.
+local MOVE_ANIM_FOLDERS: { [string]: boolean } = { run = true, walk = true }
+local heldIdle: AnimationTrack? = nil
+
+local function releaseIdle()
+	if heldIdle ~= nil then
+		heldIdle:Stop(0.2)
+		heldIdle = nil
+	end
+end
+
+local function settleOnPodium(character: Model)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local animator = if humanoid ~= nil then humanoid:FindFirstChildOfClass("Animator") else nil
+	if animator == nil then
+		return
+	end
+	for _, track in animator:GetPlayingAnimationTracks() do
+		local anim = track.Animation :: Animation?
+		local folder = if anim ~= nil then anim.Parent else nil
+		if folder ~= nil and MOVE_ANIM_FOLDERS[string.lower(folder.Name)] then
+			track:Stop(0.2)
+		end
+	end
+	releaseIdle()
+	local animate = character:FindFirstChild("Animate")
+	local idleFolder = if animate ~= nil then animate:FindFirstChild("idle") else nil
+	local idle = if idleFolder ~= nil then idleFolder:FindFirstChildWhichIsA("Animation") else nil
+	if idle ~= nil then
+		local track = animator:LoadAnimation(idle :: Animation)
+		track.Looped = true
+		track:Play(0.2)
+		heldIdle = track
+	end
+end
+
+local function setHeld(character: Model?, held: boolean)
+	InputLock.holdMovement(held)
+	if held and character ~= nil then
+		settleOnPodium(character)
+	else
+		releaseIdle()
+	end
+end
+
 local function watchPlacement()
 	if cameraWatch ~= nil then
 		return
 	end
 	local last: Vector3? = nil
+	local wasAnchored = false
 	cameraWatch = RunService.RenderStepped:Connect(function()
 		local character = Players.LocalPlayer.Character
 		local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
 		if root == nil or not root:IsA("BasePart") then
 			last = nil
+			if wasAnchored then
+				wasAnchored = false
+				setHeld(nil, false)
+			end
 			return
 		end
 		local at = root.Position
-		if last == nil or (at - last).Magnitude > SNAP_JUMP_STUDS then
+		if watching() and isFinalist() then
+			setWatching(false) -- promoted onto a podium mid-finale (Q3)
+		end
+		if watching() then
+			local camera = Workspace.CurrentCamera
+			local view = watchCFrame(root)
+			if camera ~= nil and view ~= nil then
+				camera.CFrame = view
+			end
+		elseif last == nil or (at - last).Magnitude > SNAP_JUMP_STUDS then
 			snapCamera(root)
 		end
 		last = at
+		if root.Anchored ~= wasAnchored then
+			wasAnchored = root.Anchored
+			setHeld(character, wasAnchored)
+		end
 	end)
 end
 
@@ -270,6 +424,46 @@ local function unwatchPlacement()
 	if cameraWatch ~= nil then
 		cameraWatch:Disconnect()
 		cameraWatch = nil
+	end
+	setHeld(nil, false)
+	setWatching(false)
+end
+
+-- THE LOADING CARD (UI/Screens/FinaleLoading). Up from the moment the
+-- race resolves (Qualified) until the Studio's Intro ends, so the move
+-- onto the set happens behind it and the Studio opens on Negotiate.
+local unmountLoading: (() -> ())? = nil
+
+local function hideLoading()
+	if unmountLoading ~= nil then
+		(unmountLoading :: () -> ())()
+		unmountLoading = nil
+	end
+end
+
+-- "Got it". Closing the card starts nothing by itself - the server ends
+-- the Intro only once every finalist is ready.
+local function dismissLoading()
+	if dismissed() then
+		return
+	end
+	dismissed(true)
+	hideLoading()
+	if isFinalist() then
+		Net.fireServer("DecisionReadyIntent", {})
+	end
+end
+
+local function showLoading()
+	if unmountLoading == nil then
+		unmountLoading = FinaleLoading.mount(UIScaleController, {
+			selfId = selfId,
+			finalists = finalists,
+			canDismiss = function()
+				return phase() == "Intro"
+			end,
+			onDismiss = dismissLoading,
+		})
 	end
 end
 
@@ -329,6 +523,17 @@ local DecisionStudioController: Loader.Controller = {
 
 function DecisionStudioController:init()
 	Net.onClientEvent("RoundState", function(payload: any)
+		if payload.state == "Qualified" then
+			dismissed(false)
+			readyIds({})
+			showLoading()
+		elseif payload.state ~= "DecisionStudio" then
+			hideLoading()
+			-- Not at Qualified: TaskQualificationResult fires just before it.
+			if payload.state == "Race" then
+				finalists({})
+			end
+		end
 		if payload.state == "DecisionStudio" then
 			show()
 		else
@@ -337,6 +542,21 @@ function DecisionStudioController:init()
 				hide()
 			end
 		end
+	end)
+
+	-- Names the finalists on the loading card as the race resolves. DecisionParticipants replaces this list (after any Q3
+	-- promotion) once the Studio opens.
+	Net.onClientEvent("TaskQualificationResult", function(payload: any)
+		if type(payload) ~= "table" or type(payload.qualifiers) ~= "table" then
+			return
+		end
+		local list: { number } = {}
+		for _, raw in payload.qualifiers :: { any } do
+			if type(raw) == "number" then
+				table.insert(list, raw)
+			end
+		end
+		setFinalists(list)
 	end)
 
 	Net.onClientEvent("DecisionParticipants", function(payload: any)
@@ -348,7 +568,6 @@ function DecisionStudioController:init()
 				table.insert(ids, raw)
 			end
 		end
-		reputations = DecisionLogic.parseReputation(payload.reputation)
 		rebuildSeats()
 	end)
 
@@ -373,6 +592,21 @@ function DecisionStudioController:init()
 	Net.onClientEvent("DecisionPhaseChanged", function(payload: any)
 		phase(payload.phase)
 		endsAt(payload.endsAt)
+		if payload.phase ~= "Intro" then
+			hideLoading()
+		end
+	end)
+
+	Net.onClientEvent("DecisionReadyState", function(payload: any)
+		local set: { [number]: boolean } = {}
+		if type(payload) == "table" and type(payload.readyIds) == "table" then
+			for _, id in payload.readyIds do
+				if type(id) == "number" then
+					set[id] = true
+				end
+			end
+		end
+		readyIds(set)
 	end)
 
 	Net.onClientEvent("DecisionLockedIn", function(payload: any)

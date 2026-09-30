@@ -58,6 +58,11 @@ local source = vide.source
 local T = Tokens.taskView
 local HEADER_HEIGHT = Theme.touch.iconButton
 local STATUS_HEIGHT = Theme.touch.iconButton
+-- The close button's art, a touch bigger than its 44 hit area so it
+-- reads as THE way out; its centre sits this far in from the window's
+-- corner (the card's rounded corner), so half of it hangs off.
+local CLOSE_SIZE = 52
+local CORNER_INSET = 6
 -- How long the success tick stays up before the sheet leaves. Not
 -- motion (nothing moves), so reduced motion keeps it.
 local SUCCESS_HOLD = 0.6
@@ -89,7 +94,10 @@ export type Context = {
 
 export type Spec = {
 	taskId: string,
+	-- Shown at the top of the explainer (the card itself has no title).
 	title: string,
+	-- How to play, a sentence or two, behind the header's (i).
+	explainer: string,
 	-- Builds the task's content into ctx.area. Runs inside the attempt's
 	-- Vide scope. May return instances to parent into the area.
 	build: (ctx: Context) -> { Instance }?,
@@ -185,13 +193,23 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 
 		-- Reference-pixel size of the card: the whole usable rect for a
 		-- sheet (divided back out of the global scale), the token size
-		-- for a window.
+		-- for a window - shrunk until it fits (TaskViewLogic.windowSize).
 		local cardSize = derive(function(): UDim2
+			local r, s = usable(), Env.scale()
 			if isSheet() then
-				local r, s = usable(), Env.scale()
 				return UDim2.fromOffset(r.width / s, r.height / s)
 			end
-			return UDim2.fromOffset(T.windowSize.width, T.windowSize.height)
+			-- Room for the close button hanging off the top-right corner:
+			-- half its size off the width and the height (the holder then
+			-- sits CLOSE_SIZE / 4 low, so the overhang is only at the top).
+			return UDim2.fromOffset(
+				TaskViewLogic.windowSize(
+					T.windowSize,
+					r.width / s - CLOSE_SIZE,
+					r.height / s - CLOSE_SIZE / 2,
+					T.edgeMargin
+				)
+			)
 		end)
 
 		local status = source("")
@@ -257,11 +275,127 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			Size = cardSize,
 			-- Sheet: slides up from below. Window: fixed, grows in (below).
 			Position = Env.animate(function(): UDim2
-				return if shown() or not isSheet() then UDim2.fromScale(0.5, 0.5) else UDim2.fromScale(0.5, 1.5)
+				if isSheet() then
+					return if shown() then UDim2.fromScale(0.5, 0.5) else UDim2.fromScale(0.5, 1.5)
+				end
+				-- (The screen isn't under the UI scale: offsets are real px.)
+				return UDim2.new(0.5, 0, 0.5, CLOSE_SIZE / 4 * Env.scale())
 			end, Theme.motion.base),
 			Parent = gui,
 		}) :: Frame
 		cleanup(UIScaleController.attachScale(holder))
+
+		-- The card's inner padding (see the UIPadding below).
+		local padPx = derive(function(): number
+			return if isSheet() then T.edgeMargin else Theme.spacing.md
+		end)
+		local pad = function(): UDim
+			return UDim.new(0, padPx())
+		end
+
+		-- The (i): hovering (mouse), tapping (touch) or selecting
+		-- (gamepad) shows how to play. A tap/click pins it open until
+		-- the next one; hover alone shows it only while over the button.
+		local hovering, pinned = source(false), source(false)
+		local explainerOpen = derive(function()
+			return hovering() or pinned()
+		end)
+		local infoButton = IconButton({
+			icon = "info-button",
+			iconSize = HEADER_HEIGHT,
+			label = "How to play",
+			onActivate = function()
+				pinned(not pinned())
+			end,
+			order = 999,
+			anchorPoint = Vector2.new(0, 0.5),
+			position = UDim2.fromScale(0, 0.5),
+		})
+		for signal, on in
+			{
+				[infoButton.MouseEnter] = true,
+				[infoButton.MouseLeave] = false,
+				[infoButton.SelectionGained] = true,
+				[infoButton.SelectionLost] = false,
+			} :: { [RBXScriptSignal]: boolean }
+		do
+			local c = signal:Connect(function()
+				hovering(on)
+			end)
+			cleanup(function()
+				c:Disconnect()
+			end)
+		end
+
+		create("Frame")({
+			Name = "Explainer",
+			ZIndex = 20,
+			Position = function()
+				return UDim2.fromOffset(padPx(), padPx() + HEADER_HEIGHT + Theme.spacing.xs)
+			end,
+			Size = function()
+				return UDim2.new(1, -2 * padPx(), 0, 0)
+			end,
+			AutomaticSize = Enum.AutomaticSize.Y,
+			BackgroundColor3 = Theme.elevation[3].surface,
+			Visible = explainerOpen,
+			Base.corner(Theme.radius.md),
+			create("UIStroke")({
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.color.brand,
+				Thickness = 2,
+			}),
+			create("UIPadding")({
+				PaddingTop = UDim.new(0, Theme.spacing.md),
+				PaddingBottom = UDim.new(0, Theme.spacing.md),
+				PaddingLeft = UDim.new(0, Theme.spacing.md),
+				PaddingRight = UDim.new(0, Theme.spacing.md),
+			}),
+			create("UIListLayout")({
+				Padding = UDim.new(0, Theme.spacing.xs),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			Base.text("title", {
+				LayoutOrder = 1,
+				ZIndex = 21,
+				Size = UDim2.new(1, 0, 0, Theme.type.title.size),
+				Text = spec.title,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+			create("TextLabel")({
+				LayoutOrder = 2,
+				ZIndex = 21,
+				BackgroundTransparency = 1,
+				Size = UDim2.fromScale(1, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				FontFace = Theme.type.body.font,
+				TextSize = Theme.type.body.size,
+				TextColor3 = Theme.color.ink,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				Text = spec.explainer,
+			}),
+			Parent = holder,
+		})
+
+		-- The close button straddles the card's top-right corner, over
+		-- the edge. A sheet IS the screen, so there it tucks into the
+		-- corner inside the edge margin instead of hanging off the glass.
+		local closeButton = IconButton({
+			icon = "close-button",
+			iconSize = CLOSE_SIZE,
+			label = "Close task",
+			onActivate = session.close,
+			order = 1000, -- last in gamepad order: never the default focus
+		})
+		closeButton.ZIndex = 10
+		cleanup(Env.observe(isSheet, function(sheet: boolean)
+			closeButton.AnchorPoint = if sheet then Vector2.new(1, 0) else Vector2.new(0.5, 0.5)
+			closeButton.Position = if sheet
+				then UDim2.new(1, -T.edgeMargin, 0, T.edgeMargin)
+				else UDim2.new(1, -CORNER_INSET, 0, CORNER_INSET)
+		end))
+		closeButton.Parent = holder
 
 		local card = create("Frame")({
 			Name = "TaskViewCard",
@@ -286,12 +420,14 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 					return if shown() or isSheet() then 1 else 0.92
 				end, Theme.motion.base),
 			}),
-			-- The edge margin. Everything interactive lives inside this.
+			-- The edge margin. Everything interactive lives inside this. A
+			-- window already sits a margin clear of the screen's edges, so
+			-- inside it a normal card padding does.
 			create("UIPadding")({
-				PaddingTop = UDim.new(0, T.edgeMargin),
-				PaddingBottom = UDim.new(0, T.edgeMargin),
-				PaddingLeft = UDim.new(0, T.edgeMargin),
-				PaddingRight = UDim.new(0, T.edgeMargin),
+				PaddingTop = pad,
+				PaddingBottom = pad,
+				PaddingLeft = pad,
+				PaddingRight = pad,
 			}),
 			create("UIListLayout")({
 				Padding = UDim.new(0, Theme.spacing.sm),
@@ -299,16 +435,15 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				HorizontalAlignment = Enum.HorizontalAlignment.Center,
 			}),
 
+			-- No title: the (i) opens the explainer instead. The timer
+			-- keeps clear of the top-right corner, where the close button
+			-- sits (on the holder, below).
 			create("Frame")({
 				Name = "Header",
 				LayoutOrder = 0,
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1, 0, 0, HEADER_HEIGHT),
-				Base.text("title", {
-					Size = UDim2.new(1, -(2 * HEADER_HEIGHT + Theme.spacing.sm), 1, 0),
-					Text = spec.title,
-					TextXAlignment = Enum.TextXAlignment.Left,
-				}),
+				infoButton :: any,
 				Base.text("label", {
 					Name = "Timer",
 					AnchorPoint = Vector2.new(1, 0),
@@ -319,14 +454,6 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 						return TaskViewLogic.clock(elapsed())
 					end,
 				}),
-				IconButton({
-					icon = "close",
-					label = "Close task",
-					onActivate = session.close,
-					order = 1000, -- last in gamepad order: never the default focus
-					anchorPoint = Vector2.new(1, 0.5),
-					position = UDim2.fromScale(1, 0.5),
-				}) :: any,
 			}),
 
 			area,

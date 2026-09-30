@@ -10,10 +10,12 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local SprintBoost: Validate.PowerUpDef = {
 	id = "sprint-boost",
 	displayName = "Sprint Boost",
+	description = "Run faster for a few seconds",
 	kind = "Buff",
+	role = "Utility",
 	target = "Self",
 	durationSeconds = 6,
-	cooldownSeconds = 20,
+	cooldownSeconds = 10,
 	rarity = "Common",
 	hardControl = false,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },

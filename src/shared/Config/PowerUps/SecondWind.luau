@@ -14,10 +14,12 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local SecondWind: Validate.PowerUpDef = {
 	id = "second-wind",
 	displayName = "Second Wind",
+	description = "Clears effects on you, then brief immunity",
 	kind = "Buff",
+	role = "Defence",
 	target = "Self",
 	durationSeconds = 2.5,
-	cooldownSeconds = 45,
+	cooldownSeconds = 22,
 	rarity = "Rare",
 	hardControl = false,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },

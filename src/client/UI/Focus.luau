@@ -18,10 +18,23 @@ local Focus = {}
 
 -- The visible, selectable descendant of `root` with the lowest
 -- SelectionOrder - where a D-pad user expects to start.
+-- Visible all the way up to `root`: a button inside a hidden frame
+-- (a view's alternate layout) keeps its own Visible = true.
+local function shown(d: GuiObject, root: Instance): boolean
+	local node: Instance? = d
+	while node ~= nil and node ~= root do
+		if node:IsA("GuiObject") and not node.Visible then
+			return false
+		end
+		node = node.Parent
+	end
+	return true
+end
+
 function Focus.firstSelectable(root: Instance): GuiObject?
 	local best: GuiObject? = nil
 	for _, d in root:GetDescendants() do
-		if d:IsA("GuiObject") and d.Selectable and d.Visible then
+		if d:IsA("GuiObject") and d.Selectable and shown(d, root) then
 			if best == nil or d.SelectionOrder < (best :: GuiObject).SelectionOrder then
 				best = d
 			end

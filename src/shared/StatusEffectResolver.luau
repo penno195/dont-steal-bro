@@ -23,7 +23,19 @@
 
 local StatusEffectResolver = {}
 
-export type Stat = "MoveSpeed" | "JumpPower" | "ControlLock" | "Vision" | "TaskSpeed"
+export type Stat =
+	"MoveSpeed"
+	| "JumpPower"
+	| "ControlLock"
+	| "Vision"
+	| "TaskSpeed"
+	-- Wards, not character stats: StatusEffects reads them before letting
+	-- a new debuff land (Second Wind's immunity, Phase Step's untargetable
+	-- window), and PowerUpService scales cooldowns by CooldownRate
+	-- (Overclock). Same resolver, so "why can't I be hit" is data too.
+	| "DebuffImmunity"
+	| "Untargetable"
+	| "CooldownRate"
 export type StatOperation = "Add" | "Multiply" | "Override"
 export type StackingRule = "Refresh" | "StackWithCap" | "Ignore" | "Replace"
 
@@ -65,6 +77,9 @@ export type ResolvedStats = {
 	ControlLock: boolean,
 	Vision: number, -- 0 = clear, 1 = fully obscured
 	TaskSpeed: number, -- multiplier, 1.0 = baseline
+	DebuffImmunity: boolean, -- no new debuff may land (Second Wind)
+	Untargetable: boolean, -- no targeted debuff may land (Phase Step)
+	CooldownRate: number, -- multiplier on power-up cooldowns, 1.0 = baseline (Overclock 0.5)
 }
 
 -- A plain record, not a `{[Stat]: number}` index-signature table -
@@ -81,10 +96,22 @@ type RunningStats = {
 	ControlLock: number,
 	Vision: number,
 	TaskSpeed: number,
+	DebuffImmunity: number,
+	Untargetable: number,
+	CooldownRate: number,
 }
 
 local function newBaseline(): RunningStats
-	return { MoveSpeed = 1.0, JumpPower = 1.0, ControlLock = 0, Vision = 0, TaskSpeed = 1.0 }
+	return {
+		MoveSpeed = 1.0,
+		JumpPower = 1.0,
+		ControlLock = 0,
+		Vision = 0,
+		TaskSpeed = 1.0,
+		DebuffImmunity = 0,
+		Untargetable = 0,
+		CooldownRate = 1.0,
+	}
 end
 
 local function getStat(stats: RunningStats, stat: Stat): number
@@ -96,6 +123,12 @@ local function getStat(stats: RunningStats, stat: Stat): number
 		return stats.ControlLock
 	elseif stat == "Vision" then
 		return stats.Vision
+	elseif stat == "DebuffImmunity" then
+		return stats.DebuffImmunity
+	elseif stat == "Untargetable" then
+		return stats.Untargetable
+	elseif stat == "CooldownRate" then
+		return stats.CooldownRate
 	else
 		return stats.TaskSpeed
 	end
@@ -110,6 +143,12 @@ local function setStat(stats: RunningStats, stat: Stat, value: number)
 		stats.ControlLock = value
 	elseif stat == "Vision" then
 		stats.Vision = value
+	elseif stat == "DebuffImmunity" then
+		stats.DebuffImmunity = value
+	elseif stat == "Untargetable" then
+		stats.Untargetable = value
+	elseif stat == "CooldownRate" then
+		stats.CooldownRate = value
 	else
 		stats.TaskSpeed = value
 	end
@@ -186,7 +225,24 @@ function StatusEffectResolver.resolve(activeEffects: { ActiveEffect }): Resolved
 		ControlLock = running.ControlLock > 0,
 		Vision = running.Vision,
 		TaskSpeed = running.TaskSpeed,
+		DebuffImmunity = running.DebuffImmunity > 0,
+		Untargetable = running.Untargetable > 0,
+		CooldownRate = running.CooldownRate,
 	}
+end
+
+-- Pure: why an incoming debuff can't land on someone with `stats`, or
+-- nil if it can. powerups.md's matrix: Second Wind's window blocks every
+-- debuff; Phase Step blocks only TARGETED ones - a Slow Field is a zone
+-- you walk into, so `targeted` is false for it and it still lands.
+function StatusEffectResolver.debuffBlockReason(stats: ResolvedStats, targeted: boolean): string?
+	if stats.DebuffImmunity then
+		return "target is shielded by Second Wind"
+	end
+	if targeted and stats.Untargetable then
+		return "target is phased out"
+	end
+	return nil
 end
 
 -- Pure: folds `newEffect` into `existing` per its own def.stackingRule,

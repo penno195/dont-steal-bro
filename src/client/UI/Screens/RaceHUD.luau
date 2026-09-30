@@ -14,10 +14,12 @@
 --     "Inventory and aiming"), above and left of Roblox's jump button.
 --     Tap or click a slot to select it (the glow outline); tap the
 --     selected one to quick-fire; press and drag out of a slot to aim,
---     release to fire, drag back onto it to cancel. With a keyboard,
---     1-N select, Q fires, and holding right-click aims in first
---     person (Q or left-click fires); a gamepad uses L1/R1, X and L2
---     the same way.
+--     release to fire, drag back onto it to cancel. Dragging a held
+--     item also brings up a bin above the slots: release on it to
+--     throw the item away. With a keyboard, 1-N select, Q fires, X
+--     discards, and holding left-click aims in first person (let go to
+--     fire; right-click still turns the camera); a gamepad uses L1/R1,
+--     X and L2 the same way.
 --   - The screen edges, on their own full-bleed ScreenGui: a band per
 --     debuff category you're suffering (HudLogic.EDGES), never the
 --     middle of the screen.
@@ -35,10 +37,12 @@
 -- docs/race-hud.md "Performance".
 
 local ContextActionService = game:GetService("ContextActionService")
+local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
@@ -64,9 +68,11 @@ local Icons = C.Icons
 export type TaskRow = { title: string, completed: boolean }
 -- One inventory slot. `id`/`name` are nil when it's empty.
 -- aimable: the item is Aimed, so hold-to-aim does something with it.
-export type Slot = { index: number, id: string?, name: string?, aimable: boolean? }
+-- roleColor: the item's role colour (PowerUpLogic.ROLE_RGB), tinting
+-- the slot so it matches the orb it was picked up from.
+export type Slot = { index: number, id: string?, name: string?, aimable: boolean?, roleColor: Color3? }
 -- How the player is aiming: along the first-person camera (hold
--- right-click / L2), or along a drag from the slot (touch).
+-- left-click / L2), or along a drag from the slot (touch).
 export type AimMode = "Camera" | "Drag"
 -- Degrees clockwise from screen-up, and studs on the ground plane.
 export type Objective = { bearing: number, distance: number }
@@ -94,18 +100,22 @@ export type Store = {
 	dragAim: (dx: number, dy: number) -> (), -- pixels from where the drag began
 	-- fireIfLocked: fire first if a target is locked (hold-to-aim release).
 	endAim: (fireIfLocked: boolean?) -> (),
+	discard: (index: number) -> (), -- throw a held item away (the bin, or X)
 	now: (() -> number)?, -- clock override for the preview; default Clock.now
 }
 
 local CLOCK_STEP = 0.1
 local USE_ACTION = "RaceHUDUsePowerUp"
 local SELECT_ACTION = "RaceHUDSelectPowerUp"
+local DISCARD_ACTION = "RaceHUDDiscardPowerUp"
 local USE_KEY = Enum.KeyCode.Q
+local DISCARD_KEY = Enum.KeyCode.X
 -- ButtonA is jump and R2 is Roblox's tool activate; X is free.
 local USE_PAD = Enum.KeyCode.ButtonX
 -- Hold to aim: the camera goes first person (RaceHUDController), so
--- the aim is where you look.
-local AIM_MOUSE = Enum.UserInputType.MouseButton2
+-- the aim is where you look. Left, because right-drag is the default
+-- camera's own look control.
+local AIM_MOUSE = Enum.UserInputType.MouseButton1
 local AIM_PAD = Enum.KeyCode.ButtonL2
 local SELECT_KEYS = {
 	Enum.KeyCode.One,
@@ -118,10 +128,11 @@ local SELECT_KEYS = {
 local PREVIOUS_PAD = Enum.KeyCode.ButtonL1
 local NEXT_PAD = Enum.KeyCode.ButtonR1
 
-local RING = 64
-local PILL = 88
+local RING = 52
+local PILL = 72
 local GAP = Theme.spacing.sm
 local TOP_WIDTH = 2 * PILL + RING + 2 * GAP
+local TOP_MARGIN = 4 -- px from the top bar (or the screen top, when lifted into the bar)
 local CHIP = 36
 local TASK_WIDTH = 150
 local TASK_ROW = 18
@@ -134,6 +145,9 @@ local SLOT_LABEL = 14
 -- a cancel (roughly back over the slot it started on).
 local DRAG_DEADZONE = 12
 local CANCEL_RADIUS = SLOT / 2
+-- The discard bin, over the left end of the slot row while a held item
+-- is dragged.
+local BIN = SLOT
 
 local CATEGORY_ICON: { [string]: string } = { HardControl = "lock", Movement = "slow", Vision = "eye" }
 local EFFECT_ICONS = { "boost", "lock", "slow", "eye", "warning" }
@@ -473,7 +487,12 @@ local function powerUpSlot(
 		Text = "",
 		AutoButtonColor = false,
 		Selectable = false, -- L1/R1 select on a gamepad; the stick is steering
-		BackgroundColor3 = Theme.color.surface,
+		-- Mostly surface, so the caption stays readable; enough role
+		-- colour to tell Attack from Defence from Utility at a glance.
+		BackgroundColor3 = function(): Color3
+			local role = slot().roleColor
+			return if role then Theme.color.surface:Lerp(role, 0.45) else Theme.color.surface
+		end,
 		BackgroundTransparency = function()
 			return if store.pending() and isSelected() then 0.5 else 0.15
 		end,
@@ -527,17 +546,61 @@ local function powerUpSlot(
 	return button
 end
 
+-- The bin a dragged item can be dropped on. Shown only mid-drag, and
+-- lit red (and grown) while the finger is over it, so a discard is
+-- never a surprise.
+local function discardBin(shown: () -> boolean, over: () -> boolean): Frame
+	return create("Frame")({
+		Name = "Bin",
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.fromOffset(0, -GAP),
+		Size = function()
+			local edge = if over() then BIN + 8 else BIN
+			return UDim2.fromOffset(edge, edge)
+		end,
+		Visible = shown,
+		BackgroundColor3 = function(): Color3
+			return if over() then Theme.color.danger else Theme.color.surface
+		end,
+		BackgroundTransparency = 0.15,
+		Base.corner(Theme.radius.md),
+		create("UIStroke")({
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = Theme.color.danger,
+			Thickness = 2,
+		}),
+		(function()
+			local icon = Icons.view("trash", 28, Theme.color.ink)
+			icon.AnchorPoint = Vector2.new(0.5, 0.5)
+			icon.Position = UDim2.fromScale(0.5, 0.5)
+			return icon
+		end)(),
+	}) :: Frame
+end
+
 -- The slot row, and under it (keyboard and gamepad only) the keys to
 -- fire and aim with. Owns the one press in flight: a tap selects, or
 -- fires if the slot is already selected; a drag aims and fires on
 -- release; dragged back onto its start it cancels (HudLogic.slotGesture).
+-- Dragging a held item also shows the bin; released over it, the item
+-- is discarded instead of fired.
 local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: number): Frame
 	local cancelling = source(false)
+	local binShown = source(false)
+	local overBin = source(false)
+	local bin = discardBin(binShown, overBin)
 	type Press = { input: InputObject, start: Vector2, furthest: number, index: number, aiming: boolean }
 	local active: Press? = nil
 
 	local function pointAt(input: InputObject): Vector2
 		return Vector2.new(input.Position.X, input.Position.Y)
+	end
+
+	-- Input positions and AbsolutePosition share one space (see
+	-- InputAdapters.pointOf).
+	local function isOverBin(point: Vector2): boolean
+		local p, s = bin.AbsolutePosition, bin.AbsoluteSize
+		return point.X >= p.X and point.X <= p.X + s.X and point.Y >= p.Y and point.Y <= p.Y + s.Y
 	end
 
 	local function press(index: number, input: InputObject)
@@ -563,26 +626,36 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 			return
 		end
 
-		local offset = pointAt(input) - current.start
+		local point = pointAt(input)
+		local offset = point - current.start
 		current.furthest = math.max(current.furthest, offset.Magnitude)
 		local gesture = HudLogic.slotGesture(current.furthest, offset.Magnitude, DRAG_DEADZONE, CANCEL_RADIUS)
+		local held = store.slots()[current.index].id ~= nil
+		local onBin = gesture ~= "Tap" and held and isOverBin(point)
 
 		if not ended then
 			if gesture ~= "Tap" and not current.aiming then
 				current.aiming = true
 				store.select(current.index)
 				store.startAim("Drag")
+				binShown(held)
 			end
 			if current.aiming then
 				store.dragAim(offset.X, offset.Y)
-				cancelling(gesture == "Cancel")
+				cancelling(gesture == "Cancel" or onBin)
+				overBin(onBin)
 			end
 			return
 		end
 
 		active = nil
 		cancelling(false)
-		if gesture == "Tap" then
+		binShown(false)
+		overBin(false)
+		if onBin then
+			store.endAim()
+			store.discard(current.index)
+		elseif gesture == "Tap" then
 			if store.selected() == current.index then
 				store.fire()
 			else
@@ -622,6 +695,15 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 			Padding = UDim.new(0, Theme.spacing.xxs),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
+		-- No height of its own, so the bin floats above the slots
+		-- without pushing them down when it appears.
+		create("Frame")({
+			Name = "BinAnchor",
+			LayoutOrder = 0,
+			Size = UDim2.fromOffset(width, 0),
+			BackgroundTransparency = 1,
+			bin,
+		}),
 		create("Frame")({
 			Name = "Slots",
 			LayoutOrder = 1,
@@ -652,7 +734,7 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 				if Env.isGamepad() then
 					return if aimable then "X use   L2 aim" else "X use"
 				end
-				return if aimable then "Q use   RMB aim" else "Q use"
+				return if aimable then "Q use   LMB aim   X drop" else "Q use   X drop"
 			end,
 		}),
 	}) :: Frame
@@ -753,33 +835,49 @@ local function bindPowerUpInput(store: Store, slotCount: number)
 		return Enum.ContextActionResult.Sink
 	end, false, USE_KEY, USE_PAD)
 
+	-- X throws the selected item away (the keyboard's drag-to-bin).
+	ContextActionService:BindAction(DISCARD_ACTION, function(_, inputState: Enum.UserInputState)
+		if inputState ~= Enum.UserInputState.Begin or not selectedHeld() or store.aiming() then
+			return Enum.ContextActionResult.Pass
+		end
+		store.discard(store.selected())
+		return Enum.ContextActionResult.Sink
+	end, false, DISCARD_KEY)
+
 	-- Hold to aim along the (first-person) camera. Watched on
 	-- UserInputService, not bound: the mouse / right stick still turn
 	-- the camera (which is how the aim is steered), so nothing here
 	-- may sink it, and the release must be seen even if something
-	-- else took the press. While aiming, left-click fires too - the
-	-- mouse is locked to the centre, so it can't be on a slot.
+	-- else took the press. A click on the HUD itself arrives processed,
+	-- so pressing a slot never starts a camera aim. Left-click only
+	-- aims with an aimable item selected; otherwise it's an ordinary
+	-- click in the world. Q still fires mid-aim.
 	local function isAimInput(input: InputObject): boolean
 		return input.UserInputType == AIM_MOUSE or input.KeyCode == AIM_PAD
 	end
+	local cameraAim = false
 	local aimBegan = UserInputService.InputBegan:Connect(function(input: InputObject, processed: boolean)
-		if processed then
+		if processed or not isAimInput(input) then
 			return
 		end
-		if isAimInput(input) then
-			store.startAim("Camera")
-		elseif
-			input.UserInputType == Enum.UserInputType.MouseButton1
-			and store.aiming()
-			and selectedHeld()
-			and not store.pending()
-		then
-			store.fire()
+		if input.UserInputType == AIM_MOUSE then
+			local slot = store.slots()[store.selected()]
+			if slot.id == nil or slot.aimable ~= true or store.pending() then
+				return
+			end
 		end
+		cameraAim = true
+		store.startAim("Camera")
 	end)
+	-- Only a release of the aim this binding began: a slot drag also
+	-- ends on a left-button release, and the panel owns that one (it
+	-- may be a drop on the bin, which must never fire instead).
 	local aimEnded = UserInputService.InputEnded:Connect(function(input: InputObject)
-		if isAimInput(input) and store.aiming() then
-			store.endAim(true) -- release fires, if something is locked
+		if isAimInput(input) and cameraAim then
+			cameraAim = false
+			if store.aiming() then
+				store.endAim(true) -- release fires, if something is locked
+			end
 		end
 	end)
 	cleanup(function()
@@ -809,6 +907,7 @@ local function bindPowerUpInput(store: Store, slotCount: number)
 	cleanup(function()
 		ContextActionService:UnbindAction(USE_ACTION)
 		ContextActionService:UnbindAction(SELECT_ACTION)
+		ContextActionService:UnbindAction(DISCARD_ACTION)
 	end)
 end
 
@@ -876,10 +975,39 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 		effect(function()
 			compactTasks.Visible = portrait()
 		end)
+
+		-- Lifted into Roblox's top bar when the bar's free middle
+		-- (GuiService.TopbarInset - the space between Roblox's own
+		-- buttons) is wide enough for the whole stack; otherwise it sits
+		-- just under the bar. This gui lays out below the bar, so lifting
+		-- is a negative offset of the bar's height. The Position isn't
+		-- under the stack's UIScale, so it's in real pixels.
+		local topY = source(TOP_MARGIN)
+		local function placeTop()
+			local camera = Workspace.CurrentCamera
+			local inset = GuiService.TopbarInset
+			local half = TOP_WIDTH * controller.getScale() / 2
+			local centre = if camera ~= nil then camera.ViewportSize.X / 2 else 0
+			local fits = inset.Height > 0 and centre - half >= inset.Min.X and centre + half <= inset.Max.X
+			topY(if fits then TOP_MARGIN - inset.Height else TOP_MARGIN)
+		end
+		local insetChanged = GuiService:GetPropertyChangedSignal("TopbarInset"):Connect(placeTop)
+		cleanup(function()
+			insetChanged:Disconnect()
+		end)
+		cleanup(controller.observeScale(function()
+			placeTop()
+		end))
+		cleanup(controller.observeUsableRect(function()
+			placeTop()
+		end))
+
 		local top = create("Frame")({
 			Name = "Top",
 			AnchorPoint = Vector2.new(0.5, 0),
-			Position = UDim2.fromScale(0.5, 0.01),
+			Position = function()
+				return UDim2.new(0.5, 0, 0, topY())
+			end,
 			Size = UDim2.fromOffset(TOP_WIDTH, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundTransparency = 1,

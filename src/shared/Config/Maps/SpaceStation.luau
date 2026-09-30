@@ -14,12 +14,11 @@ local SpaceStation: Validate.MapDef = {
 	thumbnailAssetId = "rbxassetid://0", -- PLACEHOLDER
 	lightingPreset = "SpaceStation",
 	musicTrackId = "rbxassetid://0", -- PLACEHOLDER
-	-- vent-purge is left out: it has a TaskDef but no handler or view yet,
-	-- so a station offering it would open nothing.
 	enabledTaskIds = {
 		"code-playback",
 		"fuse-rewire",
 		"pressure-valve",
+		"vent-purge",
 	},
 	npcDifficultyModifier = 1.0,
 	waveNumber = 3,

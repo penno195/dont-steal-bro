@@ -38,18 +38,27 @@ coexist (`store-receipts.md` §5).
   a glow outline. On a keyboard, 1–3 select; on a gamepad, L1/R1 cycle.
 - **Firing.** **Q** (gamepad **X**) fires the selected item. On touch,
   tapping the selected slot quick-fires it.
+- **Discarding.** Drag a held item out of its slot and a bin appears above
+  the left end of the slot row. It turns red and grows while you're over
+  it, and letting go there throws the item away, freeing the slot for a
+  better pickup. Letting go anywhere else fires or cancels as normal. On a
+  keyboard, **X** discards the selected item. The client sends only the
+  slot index (`PowerUpDiscardIntent`), and the server only ever empties
+  one of the sender's own slots. A discard sets no cooldown.
 - **Lock-on aim for `Aimed` items.** These aren't skill-shot projectiles.
   The nearest racer inside a cone (`powerUpTargetConeDegrees`, up to
   `powerUpUseRangeStuds`) is highlighted, and that racer is who the shot
   hits. With no aim, the cone points where the character faces, and a
   faint highlight shows who a quick-fire would hit. To aim:
-  - **PC:** hold right-click. The camera goes first person, so the cone
-    points where you look: the mouse turns the view (and the character),
-    and WASD still moves. The crosshair sits where you look until it
-    locks on. Press Q or left-click to fire at the strongly highlighted
-    target, or just let go: releasing fires if something is locked, and
-    otherwise cancels. Either way the previous zoom comes back. Gamepad:
-    hold L2 the same way, right stick to turn.
+  - **PC:** hold left-click (right-click stays the camera's own look
+    control). The camera goes first person, so the cone points where you
+    look: the mouse turns the view (and the character), and WASD still
+    moves. The crosshair sits where you look until it locks on. Let go to
+    fire: releasing fires if something is locked, and otherwise cancels.
+    Q also fires mid-aim. Either way the previous zoom comes back.
+    Left-click only aims while an `Aimed` item is selected; a click on the
+    HUD never starts an aim. Gamepad: hold L2 the same way, right stick to
+    turn.
   - **Mobile:** press a slot and drag out of it. The cone follows the drag
     direction, and releasing fires. Dragging back onto the slot cancels
     (Brawl Stars style).
@@ -63,11 +72,12 @@ coexist (`store-receipts.md` §5).
     so it doesn't rely on colour). The crosshair is drawn on screen above
     the HUD, because its unlocked spot is near the horizon, right where
     the top bar is.
-  - Only `Aimed` items (Freeze, Task Scramble) aim. The key hint shows
-    "RMB aim" / "L2 aim" only while one of those is selected.
-- **`Nearest` items** (Blind, Push/Trip) keep auto-targeting the nearest
-  racer in range. The highlight shows who that is. Aiming doesn't
-  change it.
+  - Only `Aimed` items (Freeze, Blind, Task Scramble, Push/Trip) aim.
+    The key hint shows "LMB aim" / "L2 aim" only while one of those is
+    selected.
+- **`Nearest` items** auto-target the nearest racer in range, ignoring
+  aim. The target kind still exists, but no item uses it since Blind and
+  Push/Trip became `Aimed`.
 - **Server authority.** The client sends only the slot, the id of the
   racer it locked on to, and a ground-plane aim direction. The server
   re-runs the same `PowerUpLogic` targeting and honours that lock only if
@@ -80,18 +90,44 @@ coexist (`store-receipts.md` §5).
 
 ## The 10 power-ups
 
-| id | Type | Target | Duration | Magnitude | Cooldown | Rarity |
-|---|---|---|---|---|---|---|
-| `sprint-boost` | Buff | Self | 6s | +35% move speed | 20s | Common |
-| `second-wind` | Buff | Self | instant + 2.5s immunity | Cleanses all active debuffs | 45s | Rare |
-| `task-insight` | Buff | Self | next attempt (≤15s) | -1 difficulty tier on current task's rolled challenge | 25s | Uncommon |
-| `phase-step` | Buff | Self | 3s | Untargetable by aimed/nearest effects; passes through hazards & players | 30s | Rare |
-| `overclock` | Buff | Self | 10s | -50% cooldown on own other power-ups | 40s | Rare |
-| `freeze` | Debuff | Aimed | 2.5s | Full immobilize, can't interact with tasks | 25s | Uncommon |
-| `slow-field` | Debuff | Area | 5s zone | -40% move speed while inside | 30s | Common |
-| `blind` | Debuff | Nearest | 4s | Obscures screen, no movement lock | 25s | Uncommon |
-| `task-scramble` | Debuff | Aimed | instant | Forces current task's challenge to re-roll (~4s added) | 20s | Common |
-| `push-trip` | Debuff | Nearest | 1s stagger | Knockback + brief stun | 15s | Common |
+| id | Type | Role | Target | Duration | Magnitude | Cooldown | Rarity |
+|---|---|---|---|---|---|---|---|
+| `sprint-boost` | Buff | Utility | Self | 6s | +35% move speed | 10s | Common |
+| `second-wind` | Buff | Defence | Self | instant + 2.5s immunity | Cleanses all active debuffs | 22s | Rare |
+| `task-insight` | Buff | Utility | Self | next attempt (≤15s) | -1 difficulty tier on current task's rolled challenge | 12s | Uncommon |
+| `phase-step` | Buff | Defence | Self | 3s | Untargetable by targeted effects; passes through hazards & players | 15s | Rare |
+| `overclock` | Buff | Utility | Self | 10s | -50% cooldown on own other power-ups | 20s | Rare |
+| `freeze` | Debuff | Attack | Aimed | 2.5s | Full immobilize, can't interact with tasks | 12s | Uncommon |
+| `slow-field` | Debuff | Attack | Area | 5s zone | -40% move speed while inside | 15s | Common |
+| `blind` | Debuff | Attack | Aimed | 4s | Obscures screen, no movement lock | 12s | Uncommon |
+| `task-scramble` | Debuff | Attack | Aimed | instant | Forces current task's challenge to re-roll (~4s added) | 10s | Common |
+| `push-trip` | Debuff | Attack | Aimed | 1s stagger | Knockback + brief stun | 7s | Common |
+
+**Role** is the colour family on the HUD slot and pickup orb: Attack red
+(exactly the Debuffs, enforced by `Validate.checkPowerUp`), Defence blue,
+Utility yellow. Rarity is a small ring on top, never the main colour.
+Cooldowns were halved on 2026-09-28, and field respawn timers with them
+(`GameConfig.powerUpRotationTimers`: 10/20/35s). Items are consumed on
+use, so a cooldown only matters on a duplicate pickup; respawn timers are
+the real pacing lever.
+
+### Explaining them in play
+
+A playtest on 2026-09-28 showed players couldn't tell what the power-ups
+did, whether they were using one or being hit by one. So:
+
+- **`description`** (required, at most 48 characters, enforced by
+  `Validate.checkPowerUp`): one plain line per item, e.g. Freeze's
+  "Freezes a rival in place". It has no numbers on purpose, so it can't
+  drift out of date when durations are rebalanced.
+- **First pickup:** the first time a player holds each type in a
+  session, a toast shows `displayName: description`. After that there's
+  only the slot icon, so it never nags.
+- **Being hit:** when an aimed or nearest-target item lands, the server
+  sends the victim alone `PowerUpHitYou` `{ powerUpId, casterName }`, and
+  a red toast reads "Alex used Freeze on you". A blocked hit sends
+  nothing. Slow Field is a zone rather than a hit on one player, so it
+  doesn't send this; its ground visual has to explain it instead.
 
 ### 1. Sprint Boost (Buff, Self)
 
@@ -116,6 +152,19 @@ off the same rolled-challenge parameters `tasks-catalogue.md` describes, no
 separate difficulty system needed. **Counter-play:** n/a. **Stacking:**
 reduces Blind and Task Scramble's effect (see matrix); doesn't stack with
 itself.
+
+**As built:** every task handler has an easy tier (`TaskContext.easy`):
+
+| Task | Normal | Easy |
+|---|---|---|
+| Code Playback | 4 digits | 3 digits |
+| Pressure Valve | 18–24 taps | 10–14 taps |
+| Vent Purge | 14–20 taps | 8–12 taps |
+| Fuse Rewire | 4 fuses | 3 fuses |
+
+Used mid-task, the current attempt restarts on its easy tier. Used
+anywhere else, the next attempt started within `durationSeconds` (15s)
+rolls easy, and that spends it.
 
 ### 4. Phase Step (Buff, Self)
 
@@ -155,9 +204,16 @@ different casters) stack multiplicatively but are capped at a combined
 specifically because Slow Field is the one debuff *not* covered by the
 hard-control safety nets below (it's soft, not hard, control).
 
-### 8. Blind (Debuff, Nearest)
+**As built:** the zone is a translucent red disc dropped at the caster's
+feet, `areaRadiusStuds = 15` across (about three times a character's
+height) and as tall as it is wide. It lasts `durationSeconds` and slows
+everyone inside it except the caster. A racer gets one slow per zone,
+which lasts while they stay in and ends 0.3s after they step out, so a
+single zone never stacks on itself. Only overlapping zones stack.
 
-Auto-targets the nearest opponent in range rather than requiring aim skill
+### 8. Blind (Debuff, Aimed)
+
+Aimed like Freeze (it auto-targeted the nearest opponent until 2026-09-28)
 — obscures vision but never touches movement. **Counter-play:** a blinded
 player can still walk to a known task by memory/landmarks since movement
 is untouched; Task Insight reduces the effect on task precision; Phase
@@ -175,7 +231,13 @@ re-apply to the same victim until their own cooldown clears, but a
 safety net (see below), since it's a soft, non-movement effect and time-
 cost, not disable-time, is what compounds.
 
-### 10. Push/Trip (Debuff, Nearest)
+**As built:** the victim's current attempt restarts from scratch with a
+fresh roll, which counts as 4s toward rule 5's 15s cap. If Task Insight
+made that attempt easy, it re-rolls easy and counts as 2s. A victim who
+isn't mid-task is unaffected. Phase Step and Second Wind's window block it.
+Bots have no task view, so it does nothing to them.
+
+### 10. Push/Trip (Debuff, Aimed)
 
 **Counter-play:** Phase Step blocks it; Second Wind cleanses the stagger;
 its 1s duration means even a fully unmitigated hit rarely costs real race

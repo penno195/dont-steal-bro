@@ -120,7 +120,7 @@ attribute names are case-sensitive and must match exactly.
 | `StudioAnchor` | BasePart | **exactly 1** | none. Where finalists land |
 | `StudioPodiumSlot` | BasePart | **exactly 3** | `SlotIndex`: integer 1–3, unique |
 | `StudioBoundary` | BasePart | **exactly 1** | `Radius`: number of studs, 8–30 (wave 1 uses 12) |
-| `StudioSpectatorArea` | BasePart | 0 or 1 | none. Optional perimeter for 4th–6th place |
+| `StudioSpectatorArea` | BasePart | 0 to 8 | none. Optional perimeter for 4th–6th place |
 
 Notes on these tags:
 

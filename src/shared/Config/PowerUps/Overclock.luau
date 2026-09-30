@@ -11,10 +11,12 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Overclock: Validate.PowerUpDef = {
 	id = "overclock",
 	displayName = "Overclock",
+	description = "Your other power-ups recharge faster",
 	kind = "Buff",
+	role = "Utility",
 	target = "Self",
 	durationSeconds = 10,
-	cooldownSeconds = 40,
+	cooldownSeconds = 20,
 	rarity = "Rare",
 	hardControl = false,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },

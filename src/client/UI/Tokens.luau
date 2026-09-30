@@ -109,22 +109,23 @@ Tokens.color = table.freeze({
 	focus = "#FFFFFF",
 	scrim = "#000000",
 
-	-- THE DECISION PAIR. Amber for Steal (loot, greed, gold), blue for
-	-- Share (trust). Chosen by running candidates through ColorVision's
-	-- Machado-2009 simulations: this pair keeps an OKLab distance of
-	-- >= 0.29 under protanopia, deuteranopia, tritanopia AND full
-	-- achromatopsia, and a 3.1:1 luminance ratio, so it survives even a
-	-- greyscale screenshot. A red/green pair of similar vividness drops
-	-- to ~0.05 under deuteranopia - that's the failure this avoids, and
-	-- tests/Theme.spec.luau keeps a red/green control to prove the check
-	-- would catch it.
+	-- THE DECISION PAIR. Red for Steal, green for Share (the owner's
+	-- call, 2026-09-26; it was amber/blue). A red/green pair of similar
+	-- vividness drops to ~0.05 OKLab apart under deuteranopia, so this
+	-- one is split by LIGHTNESS instead: a deep red against a light
+	-- green. Run through ColorVision's Machado-2009 simulations it keeps
+	-- >= 0.24 under protanopia, deuteranopia, tritanopia AND full
+	-- achromatopsia, and a 3.2:1 luminance ratio, so it survives a
+	-- greyscale screenshot. tests/Theme.spec.luau keeps a vivid
+	-- red/green control to prove the check would catch the naive pair.
 	--
 	-- Colour is still never the only cue: `Tokens.decision` below pairs
-	-- each with its own icon and silhouette.
-	steal = "#FFB020",
-	onSteal = "#12151C", -- dark ink: amber is too light for white text
-	share = "#3A5BD9",
-	onShare = "#FFFFFF",
+	-- each with its own icon and word, and the Studio puts Steal on the
+	-- left and Share on the right.
+	steal = "#C62828",
+	onSteal = "#FFFFFF",
+	share = "#4ADE80",
+	onShare = "#12151C", -- dark ink: the light green is too light for white text
 })
 
 -- Minimum colour distances the spec enforces. Kept here so a designer
@@ -145,7 +146,9 @@ Tokens.contrast = table.freeze({
 --   `icon`:  a key into the icon atlas, which doesn't exist yet (P6-2
 --            owns art); P6-1's harness draws the shapes as stand-ins.
 Tokens.decision = table.freeze({
-	steal = table.freeze({ color = "steal", on = "onSteal", shape = "Diamond", icon = "grab-hand", label = "STEAL" }),
+	-- One shape for both since 2026-09-26 (the owner's call): the pair
+	-- reads as two equal options, and icon, word and side carry the rest.
+	steal = table.freeze({ color = "steal", on = "onSteal", shape = "Pill", icon = "grab-hand", label = "STEAL" }),
 	share = table.freeze({ color = "share", on = "onShare", shape = "Pill", icon = "open-hands", label = "SHARE" }),
 })
 

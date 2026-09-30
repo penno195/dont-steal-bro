@@ -14,10 +14,12 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local TaskInsight: Validate.PowerUpDef = {
 	id = "task-insight",
 	displayName = "Task Insight",
+	description = "Your next task attempt is easier",
 	kind = "Buff",
+	role = "Utility",
 	target = "Self",
 	durationSeconds = 15,
-	cooldownSeconds = 25,
+	cooldownSeconds = 12,
 	rarity = "Uncommon",
 	hardControl = false,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },

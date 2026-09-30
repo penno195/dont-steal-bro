@@ -69,6 +69,16 @@ type Session = {
 local activeSessions: { [Player]: Session } = {}
 local attemptCounters: { [Player]: number } = {}
 
+-- Task Insight used away from a station: the next attempt started
+-- before this server time rolls easy, then the window is spent.
+local insightUntil: { [Player]: number } = {}
+-- Task Scramble's added time per player this round (powerups.md rule 5).
+local scrambleExposure: { [Player]: number } = {}
+-- powerups.md #9's "~4s added" per re-roll, and the round cap. Insight
+-- "halves the added time cost": a scrambled easy attempt re-rolls easy.
+local SCRAMBLE_COST_SECONDS = 4
+local SCRAMBLE_EXPOSURE_CAP_SECONDS = 15
+
 local function now(): number
 	return Workspace:GetServerTimeNow()
 end
@@ -107,7 +117,9 @@ local function endSession(player: Player, notify: boolean?)
 	StationOccupancy.leave(player.UserId)
 end
 
-local function beginInteraction(player: Player, stationId: string)
+-- `forceEasy` is set by a power-up restarting the current attempt;
+-- a player's own interaction leaves it nil and takes any Insight window.
+local function beginInteraction(player: Player, stationId: string, forceEasy: boolean?)
 	local TaskService = Loader.get("TaskService") :: any
 
 	-- A new interaction (at this station or any other) always supersedes
@@ -139,6 +151,14 @@ local function beginInteraction(player: Player, stationId: string)
 	end
 
 	local startedAt = now()
+	local easy = forceEasy
+	if easy == nil then
+		local window = insightUntil[player]
+		easy = window ~= nil and startedAt <= window
+	end
+	if easy then
+		insightUntil[player] = nil -- one easy attempt per Insight
+	end
 	local ctx: Types.TaskContext = {
 		player = player,
 		stationId = stationId,
@@ -151,6 +171,7 @@ local function beginInteraction(player: Player, stationId: string)
 		elapsedSeconds = function()
 			return now() - startedAt
 		end,
+		easy = easy == true,
 	}
 
 	local challenge, state = handler.start(ctx)
@@ -245,9 +266,64 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 	end)
 end
 
+-- ===== task power-ups (powerups.md #3 Task Insight, #9 Task Scramble) ====
+--
+-- Both re-roll the player's CURRENT attempt by starting a fresh one at
+-- the same station - the same path a new interaction takes, so the old
+-- view gets TaskEnded and the new TaskChallenge replaces it, and every
+-- range/assignment check runs again. StatusEffects calls these after its
+-- own gates (a bot caster, Phase Step, Second Wind); only the session
+-- rules live here.
+
+-- True if a new attempt replaced the one in progress.
+local function restartAttempt(player: Player, easy: boolean): boolean
+	local session = activeSessions[player]
+	if session == nil or session.completing then
+		return false
+	end
+	beginInteraction(player, session.ctx.stationId, easy)
+	local replaced = activeSessions[player]
+	return replaced ~= nil and replaced ~= session
+end
+
+-- Mid-task: the attempt restarts on its easy tier. Otherwise the next
+-- attempt started within `windowSeconds` rolls easy.
+local function grantInsight(player: Player, windowSeconds: number): (boolean, string)
+	if restartAttempt(player, true) then
+		insightUntil[player] = nil
+		return true, "current task re-rolled easy"
+	end
+	insightUntil[player] = now() + windowSeconds
+	return true, string.format("next task within %gs rolls easy", windowSeconds)
+end
+
+-- Re-rolls the victim's current attempt from scratch. Away from a
+-- station there's nothing to scramble ("disengaging from the station
+-- before the cast lands avoids it entirely"), and past rule 5's cap the
+-- cast fails - either way the caster's item is already spent.
+local function scramble(player: Player): (boolean, string)
+	local session = activeSessions[player]
+	if session == nil or session.completing then
+		return false, "target isn't at a task"
+	end
+	local spent = scrambleExposure[player] or 0
+	if spent >= SCRAMBLE_EXPOSURE_CAP_SECONDS then
+		return false, "target is scramble-immune this round"
+	end
+	local easy = session.ctx.easy
+	if not restartAttempt(player, easy) then
+		return false, "target isn't at a task"
+	end
+	scrambleExposure[player] = spent + (if easy then SCRAMBLE_COST_SECONDS / 2 else SCRAMBLE_COST_SECONDS)
+	return true, "task re-rolled"
+end
+
 local TaskHandlerService: Loader.Service = {
 	name = "TaskHandlerService",
 	dependencies = { "NetGuard", "ConfigValidator", "TaskService", "RoundService" },
+
+	grantInsight = grantInsight,
+	scramble = scramble,
 }
 
 function TaskHandlerService:init()
@@ -291,6 +367,8 @@ function TaskHandlerService:init()
 	Players.PlayerRemoving:Connect(function(player: Player)
 		endSession(player)
 		attemptCounters[player] = nil
+		insightUntil[player] = nil
+		scrambleExposure[player] = nil
 	end)
 
 	-- A real server only ever runs one round (architecture.md - Cleanup
@@ -307,6 +385,8 @@ function TaskHandlerService:init()
 			endSession(player, true)
 		end
 		StationOccupancy.clear()
+		table.clear(insightUntil)
+		table.clear(scrambleExposure)
 	end)
 end
 

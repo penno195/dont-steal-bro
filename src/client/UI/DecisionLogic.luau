@@ -47,10 +47,15 @@ DecisionLogic.TIMING = table.freeze({
 	holdSeconds = 0.8, -- hold-to-confirm; long enough that a brushed thumb can't lock
 	ackTimeout = 1.5, -- resend the same choice if no DecisionLockedIn came back
 	ackRetries = 2,
-	lead = 1.0, -- the beat of silence before the first card
-	cardGap = 1.4, -- between cards
-	outcomeAfter = 1.2, -- last card -> outcome banner
-	resultAfter = 2.2, -- outcome banner -> result panel
+	-- Slowed 2026-09-26 for suspense: each card comes up face down in the
+	-- middle of the screen, sits there `suspense` seconds, then turns.
+	-- The whole reveal is ~11 s, which GameConfig.roundTimers.
+	-- resultsSeconds has to outlast (Cleanup sends everyone home).
+	lead = 2.0, -- revealAt -> the first card TURNS (it comes up face down `suspense` before)
+	cardGap = 2.6, -- between turns
+	suspense = 1.3, -- face down, name showing, before each turn
+	outcomeAfter = 1.6, -- last turn -> outcome
+	resultAfter = 2.4, -- outcome -> result panel
 })
 
 -- PAYLOADS -----------------------------------------------------------
@@ -138,23 +143,33 @@ end
 
 -- REPUTATION ---------------------------------------------------------
 
--- design-decisions.md Q5's line. Lifetime counts, not a rolling window
--- (the profile keeps totals). Under ten decisions a percentage is noise
--- that reads like a verdict ("100%" after one steal), so small samples
--- show the raw count instead. 0/0 reads the same for an NPC and for a
+-- design-decisions.md Q5's line, drawn over each finalist's head as
+-- "Steal 60%  40% Share" (2026-09-26: moved off the seat cards to free
+-- the screen, and always a percentage, at the owner's call - the old
+-- "Stole 2 of 5" small-sample form is gone). Lifetime counts, not a
+-- rolling window (the profile keeps totals). The two always add to 100.
+-- nil means no history: 0/0 reads the same for an NPC and for a
 -- first-timer on purpose - see DecisionService's DecisionParticipants.
-local PERCENT_FROM = 10
+export type ReputationSplit = { steal: number, share: number }
 
-function DecisionLogic.reputationLabel(rep: Reputation?): string
-	local steals = if rep then rep.steals else 0
+function DecisionLogic.reputationSplit(rep: Reputation?): ReputationSplit?
 	local total = if rep then rep.steals + rep.shares else 0
-	if total == 0 then
-		return "No history yet"
-	elseif total < PERCENT_FROM then
-		return string.format("Stole %d of %d", steals, total)
+	if rep == nil or total <= 0 then
+		return nil
 	end
-	return string.format("Steals %d%% of %d", math.floor(steals / total * 100 + 0.5), total)
+	local steal = math.floor(rep.steals / total * 100 + 0.5)
+	return { steal = steal, share = 100 - steal }
 end
+
+DecisionLogic.NO_HISTORY = "No history yet"
+
+-- QUICK CHAT -----------------------------------------------------------
+
+-- One-tap lines under the Studio's chat box, for a finalist who'd
+-- rather not type on a phone. Sent as ordinary chat - the same channel,
+-- filter and rate limit as anything typed - so a button can say nothing
+-- a keyboard couldn't. Four fit one row at the chat line's width.
+DecisionLogic.QUICK_PHRASES = table.freeze({ "Share", "Steal", "Please", "Don't" })
 
 -- PAYOFF TABLE -------------------------------------------------------
 
@@ -220,6 +235,39 @@ local PRIZE_LABEL: { [Prize]: string } = table.freeze({
 	Nothing = "NOTHING",
 })
 DecisionLogic.PRIZE_LABEL = PRIZE_LABEL
+
+-- THE FINALE LOADING CARD (2026-09-26). One tile per prize a finalist
+-- can come away with, best first, each with the one way to get it. Read
+-- from prizeFor like everything else here, so a retuned table retunes
+-- the card. NOTHING is its own tile, because it's most of the table.
+export type RewardTile = { prize: Prize, how: string }
+
+local PRIZE_ORDER: { Prize } = { "Big", "Medium", "Small" }
+
+function DecisionLogic.rewardTiles(seats: number): { RewardTile }
+	if seats <= 1 then
+		return {
+			{ prize = DecisionLogic.prizeFor("Share", 0, 1) :: Prize, how = "Just you. Any pick" },
+		}
+	end
+	local tiles: { RewardTile } = {}
+	for _, prize in PRIZE_ORDER do
+		local how: string? = nil
+		for _, choice: Choice in { "Steal", "Share" } :: { Choice } do
+			for stealing = 0, seats - 1 do
+				if how == nil and DecisionLogic.prizeFor(choice, stealing, seats) == prize then
+					local mine = if choice == "Steal" then "You steal" else "You share"
+					how = mine .. ", " .. string.lower(othersPhrase(stealing, seats - 1))
+				end
+			end
+		end
+		if how ~= nil then
+			table.insert(tiles, { prize = prize :: Prize, how = how :: string })
+		end
+	end
+	table.insert(tiles, { prize = "Nothing" :: Prize, how = "Any other way" })
+	return tiles
+end
 
 -- THE EXPLAINER (P6-8, docs/onboarding.md). The "How it works" sheet
 -- walks the four ways a table can go, one line each, written for a
@@ -322,6 +370,32 @@ function DecisionLogic.stage(phase: Phase?, reveal: Reveal?, selfLocked: boolean
 	return "Waiting"
 end
 
+-- THE READY-UP NOTICE --------------------------------------------------
+
+-- Shown once you've closed the loading card during the Intro, so a
+-- quiet room reads as "waiting on the others", not "stalled". A seat
+-- that left is never waited on (the server marks it ready too).
+function DecisionLogic.waitingNotice(
+	isFinalist: boolean,
+	finalistIds: { number },
+	readyIds: { [number]: boolean },
+	leftIds: { [number]: boolean }
+): string
+	if not isFinalist then
+		return "Waiting for the finalists…"
+	end
+	local waiting = 0
+	for _, id in finalistIds do
+		if not readyIds[id] and not leftIds[id] then
+			waiting += 1
+		end
+	end
+	if waiting == 0 then
+		return "Everyone's ready. Starting…"
+	end
+	return string.format("Waiting for %d more %s…", waiting, if waiting == 1 then "player" else "players")
+end
+
 -- HOLD TO CONFIRM ----------------------------------------------------
 
 -- Open -> Holding(choice) on press; back to Open if released early;
@@ -368,7 +442,16 @@ end
 
 -- REVEAL TIMELINE ----------------------------------------------------
 
-export type RevealStep = { cardsShown: number, outcomeShown: boolean, resultShown: boolean }
+-- cardsShown: how many cards have turned. current: the card in the
+-- middle of the screen (0 = none yet), and faceUp: whether it has
+-- turned. Card numbers are positions in revealOrder, not seats.
+export type RevealStep = {
+	cardsShown: number,
+	current: number,
+	faceUp: boolean,
+	outcomeShown: boolean,
+	resultShown: boolean,
+}
 
 -- A function of (server now - revealAt) ONLY. Every client computes the
 -- same step at the same server time whenever its packet happened to
@@ -378,15 +461,53 @@ function DecisionLogic.revealStep(elapsed: number, seats: number): RevealStep
 	local t = DecisionLogic.TIMING
 	local shown = 0
 	if elapsed >= t.lead then
-		shown = math.min(seats, 1 + math.floor((elapsed - t.lead) / t.cardGap))
+		-- The epsilon keeps a turn exactly on its beat: (4.6 - 2.0) / 2.6
+		-- is a hair under 1 in floating point.
+		shown = math.min(seats, 1 + math.floor((elapsed - t.lead) / t.cardGap + 1e-9))
+	end
+	local current = 0
+	for i = 1, seats do
+		if elapsed >= t.lead + (i - 1) * t.cardGap - t.suspense then
+			current = i
+		end
 	end
 	local lastCard = t.lead + math.max(0, seats - 1) * t.cardGap
 	local outcomeAt = lastCard + t.outcomeAfter
 	return {
 		cardsShown = shown,
+		current = current,
+		faceUp = current > 0 and shown >= current,
 		outcomeShown = elapsed >= outcomeAt,
 		resultShown = elapsed >= outcomeAt + t.resultAfter,
 	}
+end
+
+-- The order the cards turn, which is different on every screen. A
+-- finalist sees their own card first (they know it already, so it
+-- costs no suspense), then someone who chose the OPPOSITE if anyone
+-- did, then the rest. That keeps the outcome open until the last card
+-- wherever it can be: a stealer who next saw another steal would know
+-- it was over; seeing a share first, they wait to learn whether they
+-- took it all. A spectator gets seat order. Only reorders ids that
+-- have a choice; anything else keeps its seat position at the end.
+function DecisionLogic.revealOrder(seatIds: { number }, choices: { [number]: Choice }, selfId: number): { number }
+	local mine = choices[selfId]
+	if mine == nil or table.find(seatIds, selfId) == nil then
+		return table.clone(seatIds)
+	end
+	local order = { selfId }
+	for _, id in seatIds do
+		if id ~= selfId and choices[id] ~= nil and choices[id] ~= mine then
+			table.insert(order, id)
+			break
+		end
+	end
+	for _, id in seatIds do
+		if table.find(order, id) == nil then
+			table.insert(order, id)
+		end
+	end
+	return order
 end
 
 function DecisionLogic.revealLength(seats: number): number

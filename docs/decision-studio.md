@@ -43,7 +43,7 @@ change never rebuilds the seats mid-sentence:
 
 | Stage | Seats show | Middle | Bottom |
 |---|---|---|---|
-| Intro | name, reputation | "MEET THE FINALISTS", countdown | payoff table; Steal/Share dimmed so the thumb learns where they are |
+| Intro | name (all under the loading card, see below) | "MEET THE FINALISTS", countdown | payoff table; Steal/Share dimmed so the thumb learns where they are |
 | Negotiate | + 🎙 Speaking / 💬 Typing… | "NEGOTIATE", countdown | same |
 | Choose | + 🔒 Locked / Deciding… | "CHOOSE", countdown | payoff table; Steal/Share live, hold to lock |
 | Locked | same | "LOCKED IN" | payoff table; your choice under a lock, "FINAL", "Waiting for N more" |
@@ -52,13 +52,84 @@ change never rebuilds the seats mid-sentence:
 A spectator (in the room but not a finalist) sees everything except the
 buttons, with "You're watching this one."
 
-**Reputation line.** Lifetime counts from the profile's `steals`/`shares`,
-since the profile keeps totals, not a window. Under 10 decisions it reads
-"Stole 2 of 5". A percentage of five is noise that reads like a verdict.
-From 10 up it reads "Steals 62% of 40". 0/0 reads "No history yet", and
-the server sends 0/0 for an NPC, so the line can't be used to spot a bot.
-(The missing headshot can, but the bots stand in the room in plain sight;
-DecisionService already treats "which one is the NPC" as public.)
+**Reputation, over their heads (2026-09-26).** No longer on the seat
+cards, which freed the screen. `FinalistTagController` floats
+"Steal 60%   40% Share" over each finalist's head, above where Roblox
+draws the name, with Steal in red and Share in green (the words carry
+the meaning too). Lifetime counts from the profile's `steals`/`shares`,
+since the profile keeps totals, not a window. It is always a percentage,
+at the owner's call. The earlier "Stole 2 of 5" form for small samples
+is gone, so one steal from one decision shows as 100%. 0/0 reads
+"No history yet", and the server sends 0/0 for an NPC, so the line
+can't be used to spot a bot. (The missing headshot can, but the bots
+stand in the room in plain sight; DecisionService already treats
+"which one is the NPC" as public.) The tags stay up through Results.
+
+**The loading card (2026-09-26).** `UI/Screens/FinaleLoading.luau`
+covers the gap from the race resolving (`Qualified`) to the end of the
+Studio's Intro, about 8 s, so the move onto the set happens behind it
+and the Studio opens on Negotiate. Everyone sees it. It shows who made
+the final (from `TaskQualificationResult`, then `DecisionParticipants`),
+one tile per prize on the table (`DecisionLogic.rewardTiles`, read from
+`prizeFor`), the one-line lesson, and a spinner. The prize icons are
+stand-in glyphs until `RewardTables` (Q1) gives the packages real art.
+
+**Ready-up (2026-09-28).** The loading card is the finale's explainer,
+so the Negotiate clock must never run while someone is still reading it.
+The clock is shared and can't pause for one player. Instead:
+
+- The Intro is sized for the newest finalist:
+  `studioTimers.introNewPlayerSeconds` (12 s) if anyone has fewer than
+  `newPlayerFinales` (3) lifetime steals + shares, else `introSeconds`
+  (5 s). The length is the same for everyone. It hints that someone is
+  new, but "No history yet" already says that. NPCs never lengthen it.
+- Once the Intro starts, the spinner becomes **Got it**. A finalist's tap
+  sends `DecisionReadyIntent`. The Intro ends early only when every
+  finalist still seated is ready (`FinaleRoster.allReady`; bots and
+  leavers count as ready), and never before `introMinSeconds` (2 s), so
+  staging still lands behind the card. Skipping saves you nothing on
+  your own. You just wait in the room.
+- After closing the card you see a pill with a spinner, driven by
+  `DecisionReadyState`: "Waiting for 2 more players…", or "Waiting for
+  the finalists…" for a spectator, so the quiet room doesn't look
+  stalled.
+- The early end re-sends only the new deadline, not `broadcastPhase`,
+  which would re-fire Intro's enter signal and re-run staging.
+
+**Decluttered layout (2026-09-26, supersedes the Stages table above).**
+The middle of the screen stays clear for the finalists and their chat
+bubbles. Top-left: the stage title, a (i) for How it works, and the
+countdown. The seat cards show only at the Reveal, to flip. The payoff
+table is gone from the Studio because the loading card carries the
+prizes. STEAL sits bottom-left and SHARE bottom-right. They are the same
+rounded shape, red and green, with a HOLD chip inside that also names
+the key. The chat line sits between them when there's room, otherwise
+above them. The red/green pair is split by lightness (#C62828 / #4ADE80),
+so it still passes `tests/Theme.spec.luau`'s colour-blind checks. While
+the overhead tags are up, bubble chat is lifted 1.2 studs to clear them.
+
+**The reveal, centre stage (2026-09-26).** One big card at a time in
+the middle of the screen. It comes up face down under the finalist's
+name ("Rival chose…"), holds 1.3 s, then turns. After the last card,
+the outcome line takes its place, big, until the result panel. The seat
+row at the top becomes the tally: a STEAL/SHARE chip under each name,
+never over it. **The order is per screen** (`DecisionLogic.revealOrder`):
+a finalist sees their own card first, then someone who chose the
+opposite if anyone did, then the rest. That keeps the result open until
+the last card wherever it can be: a stealer who saw a second steal next
+would already know it was over. A spectator gets seat order. The turns
+keep one shared server clock, so all three cards land on the same beats
+on every screen even though the faces differ. Timing: first turn at
+2.0 s, then every 2.6 s, outcome 1.6 s after the last, result 2.4 s
+later, about 11 s in all. `roundTimers.resultsSeconds` went from 8 to 16
+so Cleanup's teleport home doesn't cut it off.
+
+**Held on the podium.** Anchoring a finalist mid-stride left the run
+animation playing all finale: an anchored root stops the Humanoid
+stepping, so the Animate script never hears the speed-0 `Running` that
+switches it to idle. While its own root is anchored, the client turns
+off its movement input (`InputLock.holdMovement`, camera left free),
+stops the walk/run tracks and plays the rig's idle.
 
 **Payoff table.** Always visible until the outcome shows. Words only: BIG,
 MEDIUM, SMALL, ✕ NOTHING. Never the VU numbers, which are an internal
@@ -245,6 +316,9 @@ Studio markers; the map validator treats them as optional.
   also pointed at the Negotiate channel while it's open
   (`StudioChatController`), so typing there reaches the other finalists
   instead of the general channel, which finalists are cut out of.
+  Under the box, four quick buttons (`DecisionLogic.QUICK_PHRASES`:
+  Share, Steal, Please, Don't) send that word in one tap, through the
+  same send as typed text, so the filter and rate limit still apply.
 
 ## After the finale
 
@@ -263,12 +337,19 @@ don't work, so everyone respawns at the place's spawn instead.
   on the podium matching their seat, facing the centre, so the three face
   each other. They're held there by anchoring the root part, and released
   when the round leaves `DecisionStudio`.
-- **Everyone else** goes to a lookout on the walkway behind the east
-  fence, facing the podiums. Anyone whose root leaves the
-  `StudioSpectatorArea` box around that walkway is put straight back,
-  checked 4 times a second. That covers climbing over the fence onto the
-  rocks, dropping off the north end onto the terraces, and walking round
-  the corner onto the south walkway.
+- **Everyone else** goes to a lookout on the balcony, facing the podiums.
+  Since 2026-09-29 the balcony is the whole U round the cave - the east
+  walkway, the north leg and the west leg, one `StudioSpectatorArea` box
+  each, with three more lookouts on the north leg. Anyone whose root
+  leaves every box is put straight back, checked 4 times a second: over
+  the fence onto the rocks, or down to the cave floor.
+- **Spectators can watch up close.** A "Watch up close" button (bottom
+  right, where a finalist's Share button sits) moves only that
+  spectator's camera to 22 studs from the stage centre, on the line to
+  their own head so it stays clear of rock. Roblox hears through an
+  `AudioListener` on the camera, so the finalists' voices get louder
+  along with the bubbles and records becoming readable. The character
+  stays on the balcony; the server still holds it there.
 - **A respawn** mid-finale goes back to the same podium or lookout.
 - **Humans** have the spot streamed to them before they're moved
   (`MapStreaming.streamAround`), so nobody lands on unloaded floor.

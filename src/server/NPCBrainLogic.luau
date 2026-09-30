@@ -161,6 +161,28 @@ function NPCBrainLogic.rollChoice(personality: Personality, roll: number): "Stea
 	return if roll < personality.stealProbability then "Steal" else "Share"
 end
 
+-- A bot's made-up past for the Studio's reputation line: a small number
+-- of finales, each one decided by rollChoice. So a Greedy bot's history
+-- leans steal and a Loyal one's leans share, but a short history is noisy
+-- enough that the line is only a hint, the same as a real player's.
+-- Rolled once per bot and kept, so it never changes mid-finale.
+function NPCBrainLogic.staticHistory(
+	personality: Personality,
+	nextRandom: () -> number,
+	minFinales: number,
+	maxFinales: number
+): { steals: number, shares: number }
+	local span = math.max(0, maxFinales - minFinales)
+	local finales = minFinales + math.min(span, math.floor(nextRandom() * (span + 1)))
+	local steals = 0
+	for _ = 1, finales do
+		if NPCBrainLogic.rollChoice(personality, nextRandom()) == "Steal" then
+			steals += 1
+		end
+	end
+	return { steals = steals, shares = finales - steals }
+end
+
 -- ===== Decision Studio: timing ==============================================
 
 -- Where inside the Choose window this bot commits, in seconds from the

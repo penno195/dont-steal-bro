@@ -113,15 +113,21 @@ describe("DecisionLogic.parseReveal", function()
 	end)
 end)
 
-describe("DecisionLogic.reputationLabel", function()
+describe("DecisionLogic.reputationSplit", function()
 	it("says nothing damning about a first-timer (or an NPC)", function()
-		expect(DecisionLogic.reputationLabel(nil)):toBe("No history yet")
-		expect(DecisionLogic.reputationLabel({ steals = 0, shares = 0 })):toBe("No history yet")
+		expect(DecisionLogic.reputationSplit(nil)):toBe(nil)
+		expect(DecisionLogic.reputationSplit({ steals = 0, shares = 0 })):toBe(nil)
 	end)
 
-	it("shows raw counts for a small sample and a percentage after", function()
-		expect(DecisionLogic.reputationLabel({ steals = 1, shares = 0 })):toBe("Stole 1 of 1")
-		expect(DecisionLogic.reputationLabel({ steals = 8, shares = 5 })):toBe("Steals 62% of 13")
+	it("splits into two rounded percentages that add to 100", function()
+		local s = DecisionLogic.reputationSplit({ steals = 8, shares = 5 }) :: DecisionLogic.ReputationSplit
+		expect(s.steal):toBe(62)
+		expect(s.share):toBe(38)
+		local third = DecisionLogic.reputationSplit({ steals = 1, shares = 2 }) :: DecisionLogic.ReputationSplit
+		expect(third.steal + third.share):toBe(100)
+		local all = DecisionLogic.reputationSplit({ steals = 1, shares = 0 }) :: DecisionLogic.ReputationSplit
+		expect(all.steal):toBe(100)
+		expect(all.share):toBe(0)
 	end)
 
 	it("parses the participants list and ignores junk", function()
@@ -132,6 +138,28 @@ describe("DecisionLogic.reputationLabel", function()
 		})
 		expect(reps[5].steals):toBe(2)
 		expect(DecisionLogic.parseReputation(nil)[5]):toBe(nil)
+	end)
+end)
+
+describe("DecisionLogic.rewardTiles", function()
+	it("lists every prize the table can pay, best first, then nothing", function()
+		local tiles = DecisionLogic.rewardTiles(3)
+		expect(#tiles):toBe(4)
+		expect(tiles[1].prize):toBe("Big")
+		expect(tiles[1].how):toBe("You steal, both share")
+		expect(tiles[2].prize):toBe("Medium")
+		expect(tiles[2].how):toBe("You share, both steal")
+		expect(tiles[3].prize):toBe("Small")
+		expect(tiles[4].prize):toBe("Nothing")
+	end)
+
+	it("drops a prize the seat count can't reach", function()
+		-- Two seats: there is no lone sharer between two thieves.
+		local tiles = DecisionLogic.rewardTiles(2)
+		expect(#tiles):toBe(3)
+		expect(tiles[1].prize):toBe("Big")
+		expect(tiles[2].prize):toBe("Small")
+		expect(DecisionLogic.rewardTiles(1)[1].prize):toBe("Small")
 	end)
 end)
 
@@ -214,6 +242,21 @@ describe("DecisionLogic.revealStep", function()
 		expect(DecisionLogic.revealStep(length, 3).resultShown):toBe(true)
 	end)
 
+	it("brings each card up face down, then turns it", function()
+		local before = DecisionLogic.revealStep(t.lead - t.suspense - 0.01, 3)
+		expect(before.current):toBe(0)
+		local down = DecisionLogic.revealStep(t.lead - t.suspense, 3)
+		expect(down.current):toBe(1)
+		expect(down.faceUp):toBe(false)
+		local up = DecisionLogic.revealStep(t.lead, 3)
+		expect(up.current):toBe(1)
+		expect(up.faceUp):toBe(true)
+		local second = DecisionLogic.revealStep(t.lead + t.cardGap - t.suspense, 3)
+		expect(second.current):toBe(2)
+		expect(second.faceUp):toBe(false)
+		expect(second.cardsShown):toBe(1)
+	end)
+
 	it("depends on elapsed server time alone, so every client agrees", function()
 		-- Two clients whose packets landed 0.4s apart still compute the
 		-- same step at the same server time: revealStep takes no receive time.
@@ -221,6 +264,31 @@ describe("DecisionLogic.revealStep", function()
 		local b = DecisionLogic.revealStep(3.3, 3)
 		expect(a.cardsShown):toBe(b.cardsShown)
 		expect(a.outcomeShown):toBe(b.outcomeShown)
+	end)
+end)
+
+describe("DecisionLogic.revealOrder", function()
+	local seats = { 10, 20, 30 }
+
+	it("shows your own card first, then the one who chose the opposite", function()
+		local order = DecisionLogic.revealOrder(seats, { [10] = "Share", [20] = "Share", [30] = "Steal" }, 20)
+		expect(order[1]):toBe(20)
+		expect(order[2]):toBe(30)
+		expect(order[3]):toBe(10)
+	end)
+
+	it("keeps seat order for the rest when nobody went the other way", function()
+		local order = DecisionLogic.revealOrder(seats, { [10] = "Steal", [20] = "Steal", [30] = "Steal" }, 30)
+		expect(order[1]):toBe(30)
+		expect(order[2]):toBe(10)
+		expect(order[3]):toBe(20)
+	end)
+
+	it("gives a spectator seat order", function()
+		local order = DecisionLogic.revealOrder(seats, { [10] = "Steal", [20] = "Share", [30] = "Steal" }, 99)
+		expect(order[1]):toBe(10)
+		expect(order[2]):toBe(20)
+		expect(order[3]):toBe(30)
 	end)
 end)
 
@@ -309,5 +377,26 @@ describe("DecisionLogic.keyboardLift", function()
 
 	it("caps the lift so the stack stays on screen", function()
 		expect(DecisionLogic.keyboardLift(100, usable, 16, 0.6)):toBe(480)
+	end)
+end)
+
+describe("DecisionLogic.waitingNotice", function()
+	local ids = { 1, 2, 3 }
+
+	it("counts the finalists still reading", function()
+		expect(DecisionLogic.waitingNotice(true, ids, { [1] = true }, {})):toBe("Waiting for 2 more players…")
+		expect(DecisionLogic.waitingNotice(true, ids, { [1] = true, [2] = true }, {})):toBe(
+			"Waiting for 1 more player…"
+		)
+	end)
+
+	it("never waits on a seat that left", function()
+		expect(DecisionLogic.waitingNotice(true, ids, { [1] = true, [2] = true }, { [3] = true })):toBe(
+			"Everyone's ready. Starting…"
+		)
+	end)
+
+	it("tells a spectator who they're waiting on", function()
+		expect(DecisionLogic.waitingNotice(false, ids, {}, {})):toBe("Waiting for the finalists…")
 	end)
 end)

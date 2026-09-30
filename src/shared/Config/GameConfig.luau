@@ -22,7 +22,12 @@ local GameConfig: Validate.GameConfig = {
 
 	-- architecture.md §6's network trace, verbatim.
 	studioTimers = {
-		introSeconds = 5,
+		-- The Intro is the loading card's reading time, and ends early
+		-- once every finalist taps "Got it" (FinaleRoster.introSeconds).
+		introSeconds = 5, -- every finalist is a veteran
+		introNewPlayerSeconds = 12, -- PLACEHOLDER: anyone at the table has < newPlayerFinales
+		introMinSeconds = 2, -- floor before an early start, so staging lands behind the card
+		newPlayerFinales = 3, -- PLACEHOLDER: lifetime steals + shares
 		negotiateSeconds = 20, -- cut from 45 after the 2026-09-25 playtest
 		chooseSeconds = 15,
 		revealDelaySeconds = 1,
@@ -34,7 +39,7 @@ local GameConfig: Validate.GameConfig = {
 		loadingSeconds = 5,
 		introSeconds = 5,
 		qualifiedSeconds = 3,
-		resultsSeconds = 8,
+		resultsSeconds = 16, -- must outlast DecisionLogic.revealLength (~11 s) plus reading the result; was 8
 		cleanupSeconds = 5,
 	},
 
@@ -76,9 +81,9 @@ local GameConfig: Validate.GameConfig = {
 	-- rarer tier respawns more slowly by default, without any map needing
 	-- to override anything.
 	powerUpRotationTimers = {
-		Common = 20,
-		Uncommon = 40,
-		Rare = 75,
+		Common = 10,
+		Uncommon = 20,
+		Rare = 35,
 	},
 
 	-- P2-9: MovementWatch's thresholds. All PLACEHOLDER - no real logged
@@ -155,6 +160,100 @@ local GameConfig: Validate.GameConfig = {
 		-- biggest NPC cost on the server (docs/npc-notes.md).
 		repathAfterStuckSeconds = 1.5,
 		maxRepathsPerStation = 5,
+
+		-- PLACEHOLDER. How many past finales a bot's reputation line
+		-- shows, each one rolled from its personality (NPCBrainLogic.
+		-- staticHistory). Kept small so a bot reads as a fairly new
+		-- player rather than a veteran with a telling record.
+		historyFinales = { min = 1, max = 8 },
+
+		-- What a bot wears, so it passes for a real player. Each bot draws
+		-- one of each from these lists (NPCLogic.pickAppearance). IDs are
+		-- live catalog assets, checked in Studio on 2026-09-29 (hair,
+		-- shirts, pants and hats from AvatarEditorService:SearchCatalogAsync,
+		-- faces by MarketplaceService:GetProductInfo). A bad ID only costs
+		-- that one bot its look - NPCService falls back to the plain rig.
+		appearance = {
+			hair = {
+				63690008, -- Pal Hair (the "bacon")
+				63690008, -- listed twice: it's the most common hair in any lobby
+				451221329, -- True Blue Hair
+				451220849, -- Lavender Updo
+				9243992729, -- Short and Sleek - Black
+				3814474927, -- Cool Side Shave
+				9244021842, -- Side Part - Black
+				376524487, -- Blonde Spiked Hair
+				376526888, -- Straight Blonde Hair
+				7193442167, -- Pony Tail - Black
+				9174355709, -- Sideswept Dreads - Black
+				3814476174, -- Colorful Braids
+				7193448258, -- Wavy Middle Part - Brown
+				6993754725, -- Straight Bangs - Black
+				9174354743, -- Top Knot - Black
+				7193401217, -- Short Fringe - Black
+				9244038785, -- Surfer - Red
+				7193450455, -- Curly Afro - Black
+				1103003368, -- Orange Beanie with Black Hair
+			},
+			faces = {
+				144075659, -- Smile
+				144075659, -- listed twice: the default face
+				7699174, -- Silly Fun
+				20418658, -- Err...
+				12145366, -- Freckles
+				15432080, -- :3
+				7074836, -- Classic Vampire
+				7074944, -- Uh Oh
+				16101765, -- Tango
+			},
+			shirts = {
+				607785314, -- ROBLOX Jacket
+				3670737444, -- Roblox Shirt - Simple Pattern
+				144076358, -- Blue and Black Motorcycle Shirt
+				398633584, -- Denim Jacket with White Hoodie
+				382538059, -- Green Jersey
+				398635081, -- Blue Plaid Shirt
+				398634295, -- Pastel Starburst Top with Gray Jacket
+				4047886060, -- Purple and Teal Top
+				4047884939, -- My Favorite Pizza Shirt
+				4047884046, -- Guitar Tee with Black Jacket
+				144076436, -- Grey Striped Shirt with Denim Jacket
+				382537702, -- Teal Shirt
+			},
+			pants = {
+				398633812, -- Black Jeans with White Shoes
+				398635338, -- Ripped Skater Pants
+				398634487, -- Beautiful You Jeans
+				144076760, -- Dark Green Jeans
+				382538503, -- Black Jeans with Sneakers
+				382537569, -- Black Jeans
+				382537950, -- Jean Shorts with White Shoes
+				382537806, -- Jean Shorts
+			},
+			hats = {
+				417457461, -- ROBLOX 'R' Baseball Cap
+				607702162, -- Roblox Baseball Cap
+				2646473721, -- Roblox Visor
+				607700713, -- Roblox Logo Visor
+				48474313, -- Red Roblox Cap
+				4324158403, -- International Fedora - Japan
+			},
+			hatChance = 0.3, -- PLACEHOLDER: share of bots that also wear a hat
+			-- 0-255 RGB, from the BrickColor skin palette (Light orange,
+			-- Nougat, Pastel brown, Brown, Reddish brown, Cork, Brick
+			-- yellow, Burlap, Bright yellow).
+			skinTones = {
+				{ 234, 184, 146 },
+				{ 204, 142, 105 },
+				{ 255, 204, 153 },
+				{ 124, 92, 70 },
+				{ 105, 64, 40 },
+				{ 188, 155, 93 },
+				{ 215, 197, 154 },
+				{ 199, 172, 120 },
+				{ 245, 205, 48 },
+			},
+		},
 	},
 
 	-- P4-3: the all-time leaderboard. EVERY NUMBER IN THIS BLOCK THAT

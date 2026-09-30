@@ -41,7 +41,8 @@ local source = vide.source
 local Env = C.Env
 local selfId = Players.LocalPlayer.UserId
 
-local CARD_WIDTH = 260
+local CARD_WIDTH = 200 -- was 260; cut after the 2026-09-29 playtest, it covered too much of the view
+local CARD_PAD = Theme.spacing.sm
 -- Portrait's top-centre info bar spans the full width, so there the
 -- card drops below it (Layout.THUMB_ZONES: Info is the top 16%).
 local PORTRAIT_TOP = 0.16
@@ -122,16 +123,16 @@ local function card(): TextButton
 		end,
 		Base.corner(Theme.radius.lg),
 		create("UIStroke")({ Color = Theme.color.brand, Thickness = 2 }),
-		Base.padding(Theme.spacing.md),
+		Base.padding(CARD_PAD),
 		create("UIListLayout")({
-			Padding = UDim.new(0, Theme.spacing.xs),
+			Padding = UDim.new(0, Theme.spacing.xxs),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
 		}),
-		Base.text("title", {
+		Base.text("label", {
 			Name = "Title",
 			LayoutOrder = 1,
-			Size = UDim2.new(1, 0, 0, Theme.type.title.size + Theme.spacing.xxs),
+			Size = UDim2.new(1, 0, 0, Theme.type.label.size + Theme.spacing.xxs),
 			Text = function()
 				local t = tip()
 				return if t then t.title else ""
@@ -143,7 +144,7 @@ local function card(): TextButton
 			Size = UDim2.fromScale(1, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
 			TextScaled = false,
-			TextSize = Theme.type.body.size,
+			TextSize = Theme.type.caption.size,
 			TextColor3 = Theme.color.inkMuted,
 			Text = function()
 				local t = tip()
@@ -163,7 +164,7 @@ local function card(): TextButton
 				label = "How it works",
 				icon = "info",
 				variant = "secondary",
-				width = CARD_WIDTH - 2 * Theme.spacing.md,
+				width = CARD_WIDTH - 2 * CARD_PAD,
 				onActivate = openExplainer,
 				anchorPoint = Vector2.new(0.5, 0.5),
 				position = UDim2.fromScale(0.5, 0.5),

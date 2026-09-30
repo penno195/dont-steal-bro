@@ -73,7 +73,6 @@ function DecisionStudioPreview.mount(controller: any): () -> ()
 			name = "You",
 			isSelf = true,
 			isNPC = false,
-			reputation = "Stole 2 of 5",
 			left = false,
 		}),
 		table.freeze({
@@ -81,7 +80,6 @@ function DecisionStudioPreview.mount(controller: any): () -> ()
 			name = "Rival",
 			isSelf = false,
 			isNPC = false,
-			reputation = "Steals 71% of 24",
 			left = false,
 		}),
 		table.freeze({
@@ -89,7 +87,6 @@ function DecisionStudioPreview.mount(controller: any): () -> ()
 			name = "Bot",
 			isSelf = false,
 			isNPC = true,
-			reputation = "No history yet",
 			left = false,
 		}),
 	} :: { DecisionStudio.Seat })

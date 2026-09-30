@@ -147,7 +147,7 @@ local TAG_RULES: { TagRule } = {
 	{ tag = "StudioAnchor", class = "BasePart", min = 0, max = 1 },
 	{ tag = "StudioPodiumSlot", class = "BasePart", min = 0, max = 3 },
 	{ tag = "StudioBoundary", class = "BasePart", min = 0, max = 1 },
-	{ tag = "StudioSpectatorArea", class = "BasePart", min = 0, max = 1 },
+	{ tag = "StudioSpectatorArea", class = "BasePart", min = 0, max = 8 },
 }
 
 local CONTRACT_TAGS: { [string]: boolean } = {}

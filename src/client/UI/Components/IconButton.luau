@@ -24,6 +24,9 @@ export type Props = {
 	-- is the string a future tooltip/accessibility pass will read.
 	label: string,
 	onActivate: () -> (),
+	-- Icon edge in reference px. Default Theme.spacing.xl; a full-colour
+	-- icon that is itself a button (close-button) fills the whole edge.
+	iconSize: number?,
 	variant: ComponentLogic.Variant?, -- default "ghost"
 	disabled: (boolean | Base.Source<boolean>)?,
 	loading: (boolean | Base.Source<boolean>)?,
@@ -37,6 +40,7 @@ local function IconButton(props: Props): TextButton
 	local variant: ComponentLogic.Variant = props.variant or "ghost"
 	local loading: Base.Source<boolean> = Base.read(props.loading or false)
 	local edge = Theme.touch.iconButton
+	local iconSize = props.iconSize or Theme.spacing.xl
 
 	local button = Base.interactive({
 		name = "IconButton",
@@ -80,12 +84,12 @@ local function IconButton(props: Props): TextButton
 						Name = "IconSlot",
 						AnchorPoint = Vector2.new(0.5, 0.5),
 						Position = UDim2.fromScale(0.5, 0.5),
-						Size = UDim2.fromOffset(Theme.spacing.xl, Theme.spacing.xl),
+						Size = UDim2.fromOffset(iconSize, iconSize),
 						BackgroundTransparency = 1,
 						Visible = function()
 							return not loading()
 						end,
-						Icons.view(props.icon, Theme.spacing.xl, ink),
+						Icons.view(props.icon, iconSize, ink),
 					}),
 					vide.show(loading, function()
 						return Base.spinner(Theme.spacing.lg, ink)

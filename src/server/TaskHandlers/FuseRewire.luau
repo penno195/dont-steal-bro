@@ -27,6 +27,7 @@
 local Types = require(script.Parent.Types)
 
 local SLOT_COUNT = 4 -- tasks-catalogue.md: "fewer, larger drop targets than Lock Tumbler" (which uses 3-4)
+local EASY_SLOT_COUNT = 3 -- Task Insight's easy tier
 
 -- Amperage ratings a panel draws its 4 from, rolled per attempt.
 local AMPERAGES = { 5, 10, 15, 20, 25, 30 }
@@ -70,9 +71,10 @@ local function shuffledCopy(list: { string }, rng: Random): { string }
 end
 
 local function start(ctx: Types.TaskContext): (Challenge, State)
+	local slotCount = if ctx.easy then EASY_SLOT_COUNT else SLOT_COUNT
 	local fuseIds = {}
 	local slotIds = {}
-	for i = 1, SLOT_COUNT do
+	for i = 1, slotCount do
 		table.insert(fuseIds, string.format("fuse-%d", i))
 		table.insert(slotIds, string.format("slot-%d", i))
 	end
@@ -98,7 +100,7 @@ local function start(ctx: Types.TaskContext): (Challenge, State)
 	end
 
 	local challenge: Challenge = { fuseIds = fuseIds, slotIds = slotIds, fuseAmps = fuseAmps, slotAmps = slotAmps }
-	local state: State = { mapping = mapping, filledSlots = {}, remainingCount = SLOT_COUNT }
+	local state: State = { mapping = mapping, filledSlots = {}, remainingCount = slotCount }
 	return challenge, state
 end
 

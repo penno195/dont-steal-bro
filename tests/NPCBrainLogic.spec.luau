@@ -205,6 +205,50 @@ TestRunner.describe("NPCBrainLogic.rollChoice", function()
 	end)
 end)
 
+TestRunner.describe("NPCBrainLogic.staticHistory", function()
+	TestRunner.it("keeps the number of finales inside [min, max]", function()
+		local rng = NPCLogic.newRng(7)
+		local seenMin, seenMax = false, false
+		for _ = 1, 500 do
+			local history = NPCBrainLogic.staticHistory(personality(0.5), rng, 1, 8)
+			local total = history.steals + history.shares
+			assert(total >= 1 and total <= 8, string.format("%d finales is outside 1-8", total))
+			seenMin = seenMin or total == 1
+			seenMax = seenMax or total == 8
+		end
+		TestRunner.expect(seenMin and seenMax):toBeTruthy()
+	end)
+
+	TestRunner.it("gives exactly min finales when min equals max", function()
+		local history = NPCBrainLogic.staticHistory(personality(0.5), NPCLogic.newRng(3), 4, 4)
+		TestRunner.expect(history.steals + history.shares):toBe(4)
+	end)
+
+	TestRunner.it("leans the way the personality does", function()
+		-- Pooled over many bots, a Greedy record steals about 70% of the
+		-- time and a Loyal one about 20% - the traits show through.
+		local function pooledStealRate(stealProbability: number): number
+			local rng = NPCLogic.newRng(2024)
+			local steals, total = 0, 0
+			for _ = 1, 1000 do
+				local history = NPCBrainLogic.staticHistory(personality(stealProbability), rng, 1, 8)
+				steals += history.steals
+				total += history.steals + history.shares
+			end
+			return steals / total
+		end
+		TestRunner.expect(pooledStealRate(0.7)):toBeCloseTo(0.7, 0.04)
+		TestRunner.expect(pooledStealRate(0.2)):toBeCloseTo(0.2, 0.04)
+	end)
+
+	TestRunner.it("is the same for the same stream", function()
+		local a = NPCBrainLogic.staticHistory(personality(0.5), NPCLogic.newRng(11), 1, 8)
+		local b = NPCBrainLogic.staticHistory(personality(0.5), NPCLogic.newRng(11), 1, 8)
+		TestRunner.expect(a.steals):toBe(b.steals)
+		TestRunner.expect(a.shares):toBe(b.shares)
+	end)
+end)
+
 TestRunner.describe("NPCBrainLogic.lockInOffsetSeconds", function()
 	TestRunner.it("never lands at or after the deadline, at any roll", function()
 		-- The guarantee that matters: a lock-in racing the phase timer

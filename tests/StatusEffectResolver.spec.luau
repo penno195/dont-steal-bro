@@ -43,6 +43,41 @@ local function activeEffect(
 	}
 end
 
+TestRunner.describe("StatusEffectResolver wards (Second Wind, Phase Step, Overclock)", function()
+	local secondWind =
+		def({ id = "second-wind", kind = "Buff", stat = "DebuffImmunity", operation = "Override", magnitude = 1 })
+	local phaseStep =
+		def({ id = "phase-step", kind = "Buff", stat = "Untargetable", operation = "Override", magnitude = 1 })
+	local overclock =
+		def({ id = "overclock", kind = "Buff", stat = "CooldownRate", operation = "Multiply", magnitude = 0.5 })
+
+	TestRunner.it("starts with no ward and a 1.0 cooldown rate", function()
+		local stats = StatusEffectResolver.resolve({})
+		TestRunner.expect(stats.DebuffImmunity):toBe(false)
+		TestRunner.expect(stats.Untargetable):toBe(false)
+		TestRunner.expect(stats.CooldownRate):toBeCloseTo(1.0)
+		TestRunner.expect(StatusEffectResolver.debuffBlockReason(stats, true)):toBeFalsy()
+	end)
+
+	TestRunner.it("Second Wind blocks targeted and zone debuffs alike", function()
+		local stats = StatusEffectResolver.resolve({ activeEffect("a", secondWind, 0, nil) })
+		TestRunner.expect(StatusEffectResolver.debuffBlockReason(stats, true)):toBeTruthy()
+		TestRunner.expect(StatusEffectResolver.debuffBlockReason(stats, false)):toBeTruthy()
+	end)
+
+	TestRunner.it("Phase Step blocks a targeted debuff but not a zone", function()
+		local stats = StatusEffectResolver.resolve({ activeEffect("a", phaseStep, 0, nil) })
+		TestRunner.expect(StatusEffectResolver.debuffBlockReason(stats, true)):toBeTruthy()
+		TestRunner.expect(StatusEffectResolver.debuffBlockReason(stats, false)):toBeFalsy()
+	end)
+
+	TestRunner.it("Overclock halves the cooldown rate and wards nothing", function()
+		local stats = StatusEffectResolver.resolve({ activeEffect("a", overclock, 0, nil) })
+		TestRunner.expect(stats.CooldownRate):toBeCloseTo(0.5)
+		TestRunner.expect(StatusEffectResolver.debuffBlockReason(stats, true)):toBeFalsy()
+	end)
+end)
+
 TestRunner.describe("StatusEffectResolver.resolve - overlapping speed buffs and slows", function()
 	TestRunner.it("combines a Sprint Boost buff and a Slow Field debuff multiplicatively", function()
 		local sprintBoost = def({ id = "sprint-boost", stat = "MoveSpeed", operation = "Multiply", magnitude = 1.35 })

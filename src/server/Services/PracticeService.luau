@@ -39,6 +39,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local ServerStorage = game:GetService("ServerStorage")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
@@ -140,6 +141,90 @@ local function itemSpawnPoints(): { any }
 	return points
 end
 
+-- TRAINING DUMMIES: a still rig on each HubPracticeDummy part, so a lone
+-- player can see what an item does without a second player. Each one is
+-- an ordinary NPC participant (isNPC, no Player), which is all the real
+-- targeting and StatusEffects need - there is no dummy branch in either.
+-- The client finds it for lock-on and effect labels by its
+-- PracticeDummy tag and ParticipantId attribute.
+local DUMMY_NAME = "Training Dummy"
+local DUMMY_HOME_DRIFT_STUDS = 4 -- knocked further than this, it's put back...
+local DUMMY_RESET_SECONDS = 3 -- ...after this long, so the knockback is seen first
+
+type Dummy = { id: number, model: Model, root: BasePart, home: CFrame, awaySince: number? }
+local dummies: { Dummy } = {}
+
+local function spawnDummies()
+	local hub = Workspace:FindFirstChild("Hub")
+	if hub == nil then
+		return
+	end
+	local anchors = {}
+	for _, instance in CollectionService:GetTagged("HubPracticeDummy") do
+		if instance:IsA("BasePart") and instance:IsDescendantOf(hub) then
+			table.insert(anchors, instance)
+		end
+	end
+	if #anchors == 0 then
+		return
+	end
+	-- Its own rig if one is built, else the NPC one.
+	local template = ServerStorage:FindFirstChild("PracticeDummy") or ServerStorage:FindFirstChild("NPCRig")
+	if template == nil or not template:IsA("Model") then
+		warn("PracticeService: HubPracticeDummy placed but no ServerStorage.PracticeDummy/NPCRig - no dummies")
+		return
+	end
+
+	local folder = Instance.new("Folder")
+	folder.Name = "PracticeDummies"
+	folder.Parent = Workspace
+	for _, anchor in anchors do
+		local model = template:Clone()
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		local root = model:FindFirstChild("HumanoidRootPart")
+		if humanoid == nil or root == nil or not root:IsA("BasePart") then
+			warn("PracticeService: dummy rig has no Humanoid/HumanoidRootPart - skipped")
+			model:Destroy()
+			continue
+		end
+		local id = Participants.allocateNPCId()
+		local home = anchor.CFrame + Vector3.new(0, anchor.Size.Y / 2 + root.Size.Y / 2 + humanoid.HipHeight, 0)
+		model.Name = DUMMY_NAME
+		humanoid.DisplayName = DUMMY_NAME
+		humanoid.BreakJointsOnDeath = false
+		humanoid:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+		model:PivotTo(home)
+		model:SetAttribute("ParticipantId", id)
+		model.Parent = folder
+		CollectionService:AddTag(model, "PracticeDummy")
+		root:SetNetworkOwner(nil) -- server physics, so a push lands the same for everyone
+		Participants.register({ id = id, displayName = DUMMY_NAME, isNPC = true, player = nil, character = model })
+		table.insert(dummies, { id = id, model = model, root = root, home = home, awaySince = nil })
+	end
+end
+
+-- A dummy knocked off its spot walks nowhere on its own, so put it back
+-- once it has been away a moment and nothing is still acting on it.
+local function returnDummies()
+	local StatusEffects = Loader.get("StatusEffects") :: any
+	local t = os.clock()
+	for _, dummy in dummies do
+		local away = (dummy.root.Position - dummy.home.Position).Magnitude > DUMMY_HOME_DRIFT_STUDS
+		if not away then
+			dummy.awaySince = nil
+		elseif dummy.awaySince == nil then
+			dummy.awaySince = t
+		elseif
+			t - (dummy.awaySince :: number) >= DUMMY_RESET_SECONDS
+			and #StatusEffects.getActiveEffectsFor(dummy.id) == 0
+		then
+			dummy.root.AssemblyLinearVelocity = Vector3.zero
+			dummy.model:PivotTo(dummy.home)
+			dummy.awaySince = nil
+		end
+	end
+end
+
 local function isHubServer(): boolean
 	local hubPlaceId = GameConfig.matchmaking.hubPlaceId
 	if hubPlaceId == 0 then
@@ -187,6 +272,7 @@ function PracticeService:start()
 	PowerUpService.setSpawnPoints(itemSpawnPoints())
 	PowerUpService.setMapRarityWeights(config.respawnMultipliers)
 	PowerUpService.startPickups()
+	spawnDummies()
 
 	-- No PlayerRemoving handler: PowerUpService and StatusEffects already
 	-- drop a leaver's state, and clearing here would recreate it.
@@ -194,6 +280,7 @@ function PracticeService:start()
 		while true do
 			task.wait(config.zoneCheckSeconds)
 			checkZones()
+			returnDummies()
 		end
 	end)
 end

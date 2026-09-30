@@ -10,10 +10,12 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local PhaseStep: Validate.PowerUpDef = {
 	id = "phase-step",
 	displayName = "Phase Step",
+	description = "Rivals can't target you for a moment",
 	kind = "Buff",
+	role = "Defence",
 	target = "Self",
 	durationSeconds = 3,
-	cooldownSeconds = 30,
+	cooldownSeconds = 15,
 	rarity = "Rare",
 	hardControl = false,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },

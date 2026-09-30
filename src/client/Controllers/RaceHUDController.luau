@@ -17,7 +17,7 @@
 -- Nearest item is selected, a per-frame loop runs the SAME
 -- PowerUpLogic targeting the server runs, and highlights the result:
 -- faintly for what a quick fire would hit (the character's facing),
--- strongly while aiming (the first-person camera on hold-right-click /
+-- strongly while aiming (the first-person camera on hold-left-click /
 -- L2, or the drag from the slot on touch). What's highlighted is what's sent, so
 -- what you see is what you hit, or a refusal that keeps the item.
 
@@ -68,6 +68,15 @@ end
 local powerUpDefs: { [string]: Validate.PowerUpDef } = {}
 for _, entry in PowerUps do
 	powerUpDefs[entry.def.id] = entry.def
+end
+-- Power-up ids whose description has been toasted this session. The
+-- first pickup of each type explains it once; after that it's just
+-- the slot icon, so a long race doesn't nag.
+local explained: { [string]: boolean } = {}
+
+local function roleColor(role: string): Color3?
+	local rgb = PowerUpLogic.ROLE_RGB[role]
+	return if rgb then Color3.fromRGB(rgb[1], rgb[2], rgb[3]) else nil
 end
 
 type Route = { stationId: string, taskId: string, completed: boolean }
@@ -128,8 +137,24 @@ end
 -- A racer's rig: a player's Character, or for an NPC (negative id) the
 -- rig NPCService named after it under Workspace.NPCs - the same route
 -- NametagController takes.
+-- Hub training dummies (PracticeService), by participant id.
+local function practiceDummies(): { [number]: Model }
+	local found: { [number]: Model } = {}
+	for _, instance in CollectionService:GetTagged("PracticeDummy") do
+		local id = instance:GetAttribute("ParticipantId")
+		if instance:IsA("Model") and type(id) == "number" then
+			found[id] = instance
+		end
+	end
+	return found
+end
+
 local function characterFor(racerId: number): Model?
 	if racerId < 0 then
+		local dummy: Model? = practiceDummies()[racerId]
+		if dummy ~= nil then
+			return dummy
+		end
 		local folder = Workspace:FindFirstChild("NPCs")
 		local name = (Loader.get("NPCBubbleController") :: any).getNPCName(racerId) :: string?
 		local rig = if folder ~= nil and name ~= nil then folder:FindFirstChild(name) else nil
@@ -341,6 +366,9 @@ local function updateLock()
 		for _, player in Players:GetPlayers() do
 			table.insert(ids, player.UserId)
 		end
+		for id in practiceDummies() do
+			table.insert(ids, id)
+		end
 	else
 		for _, entry in progress() do
 			table.insert(ids, entry.playerId)
@@ -437,7 +465,7 @@ local function fire()
 	end)
 end
 
--- FIRST PERSON WHILE AIMING. Camera aim (hold right-click / L2) pulls
+-- FIRST PERSON WHILE AIMING. Camera aim (hold left-click / L2) pulls
 -- the camera into first person, so the aim is simply where you look:
 -- the mouse (locked to the centre) or right stick turns the view and
 -- the character with it, and movement keeps working. Done by pinning
@@ -489,8 +517,8 @@ local function startAim(mode: RaceHUD.AimMode)
 	aimMode = mode
 	dragX, dragY = 0, 0
 	aiming(true)
-	-- Right-click with nothing aimable selected stays an ordinary
-	-- camera turn.
+	-- L2 with nothing aimable selected stays an ordinary trigger (the
+	-- HUD only starts a left-click aim for an aimable item).
 	local def = selectedDef()
 	if mode == "Camera" and def ~= nil and def.target == "Aimed" then
 		enterFirstPerson()
@@ -515,6 +543,14 @@ local function endAim(fireIfLocked: boolean?)
 	leaveFirstPerson()
 end
 
+-- The server empties the slot and answers with the new inventory; the
+-- HUD changes only when that arrives.
+local function discard(index: number)
+	if index >= 1 and index <= SLOT_COUNT and slots()[index].id ~= nil then
+		Net.fireServer("PowerUpDiscardIntent", { slotIndex = index })
+	end
+end
+
 local store: RaceHUD.Store = {
 	selfId = selfId,
 	qualifierCount = GameConfig.qualifierCount,
@@ -533,6 +569,7 @@ local store: RaceHUD.Store = {
 	startAim = startAim,
 	dragAim = dragAim,
 	endAim = endAim,
+	discard = discard,
 }
 
 local function trackStation(instance: Instance)
@@ -589,11 +626,16 @@ local function onInventory(payload: any)
 			list[index] = previous[index] -- same frozen table, so Vide leaves the slot alone
 		else
 			local def = if id ~= nil then powerUpDefs[id] else nil
+			if def ~= nil and not explained[def.id] then
+				explained[def.id] = true
+				Toast.show(string.format("%s: %s", def.displayName, def.description), "info")
+			end
 			list[index] = table.freeze({
 				index = index,
 				id = id,
 				name = if def ~= nil then def.displayName else id,
 				aimable = def ~= nil and def.target == "Aimed",
+				roleColor = if def ~= nil then roleColor(def.role) else nil,
 			})
 		end
 	end
@@ -631,6 +673,16 @@ local function onUseResult(payload: any)
 	if message ~= nil then
 		Toast.show(message, "warning")
 	end
+end
+
+-- A rival's power-up landed on you. Named, so a sudden freeze reads as
+-- a play someone made rather than lag.
+local function onHitYou(payload: any)
+	local def = powerUpDefs[payload.powerUpId]
+	if def == nil or type(payload.casterName) ~= "string" then
+		return
+	end
+	Toast.show(string.format("%s used %s on you", payload.casterName, def.displayName), "danger")
 end
 
 -- The objective arrow, while mounted. Returns the stop function.
@@ -779,6 +831,7 @@ function RaceHUDController:init()
 	Net.onClientEvent("StatusEffectsChanged", onEffects)
 	Net.onClientEvent("PowerUpInventoryChanged", onInventory)
 	Net.onClientEvent("PowerUpUseResult", onUseResult)
+	Net.onClientEvent("PowerUpHitYou", onHitYou)
 end
 
 function RaceHUDController:start()

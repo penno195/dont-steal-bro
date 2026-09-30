@@ -217,4 +217,48 @@ function FinaleRoster.shutdownPolicy(outcomeWritten: boolean): ShutdownPolicy
 	return if outcomeWritten then "KeepWrittenResult" else "PreserveStreaks"
 end
 
+-- ===== the Intro: reading time, and ending it early =====================
+--
+-- The loading card is the finale's explainer, and the Negotiate clock
+-- must never run while someone is still reading it (2026-09-28). The
+-- clock is shared, so it can't pause for one player - instead Intro is
+-- long enough to read, and ends early only once EVERY finalist has
+-- tapped "Got it". Skipping buys nothing on its own: a veteran who
+-- closes the card just waits in the room with everyone else.
+
+export type IntroTimers = {
+	introSeconds: number, -- every finalist is a veteran
+	introNewPlayerSeconds: number, -- anyone at the table is new
+	introMinSeconds: number, -- floor before an all-ready early start
+	newPlayerFinales: number, -- fewer finales than this = new
+}
+
+-- The window is sized for the newest player at the table, and the same
+-- for everyone - so it's fair, at the small cost of hinting someone is
+-- new (which "No history yet" over their head already says). An NPC's
+-- entry is nil and never lengthens it.
+function FinaleRoster.introSeconds(finalesPlayed: { number? }, timers: IntroTimers): number
+	for _, played in finalesPlayed do
+		if played ~= nil and played < timers.newPlayerFinales then
+			return timers.introNewPlayerSeconds
+		end
+	end
+	return timers.introSeconds
+end
+
+-- Everyone still in the seat has said they're ready. A finalist who has
+-- left counts as ready: a forfeited seat has nobody to wait for.
+function FinaleRoster.allReady(
+	qualifierIds: { number },
+	ready: { [number]: boolean },
+	isPresent: (racerId: number) -> boolean
+): boolean
+	for _, id in qualifierIds do
+		if not ready[id] and isPresent(id) then
+			return false
+		end
+	end
+	return true
+end
+
 return FinaleRoster

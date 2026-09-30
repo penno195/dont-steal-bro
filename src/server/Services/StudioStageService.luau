@@ -14,9 +14,9 @@
 --     face each other - and are held there by anchoring the root part.
 --     NPC finalists too: a bot is just a rig here.
 --   - Everyone else, human or NPC, goes to a StudioSpectatorSpawn on the
---     walkway behind the fence, and anyone whose root leaves the
---     StudioSpectatorArea box around that walkway - over the fence onto
---     the rocks, down the terraces at its end, round the corner - is put
+--     balcony, and may walk anywhere inside the StudioSpectatorArea boxes
+--     (one per leg of the balcony). Anyone whose root leaves all of them
+--     - over the fence onto the rocks, down to the floor - is put
 --     straight back.
 --   - A character that respawns mid-finale is put back in its place.
 -- Leaving DecisionStudio releases the anchors. The set stays until the
@@ -55,7 +55,7 @@ type Stage = {
 	anchor: BasePart,
 	podiums: { [number]: BasePart }, -- SlotIndex -> podium
 	lookouts: { BasePart },
-	area: BasePart?, -- nil = no StudioSpectatorArea, no containment
+	areas: { BasePart }, -- empty = no StudioSpectatorArea, no containment
 }
 
 local stage: Stage? = nil
@@ -136,7 +136,7 @@ local function loadStage(): Stage?
 		anchor = anchors[1],
 		podiums = podiums,
 		lookouts = lookouts,
-		area = areas[1],
+		areas = areas,
 	}
 	return stage
 end
@@ -233,10 +233,22 @@ end
 
 -- ===== the finale ===========================================================
 
+-- Inside ANY of the set's StudioSpectatorArea boxes counts - the
+-- balcony runs round three sides of the cave, and one box per leg lets
+-- spectators walk the whole of it.
+local function insideAnyArea(areas: { BasePart }, position: Vector3): boolean
+	for _, area in areas do
+		local at = area.CFrame:PointToObjectSpace(position)
+		if StudioStageLogic.isInsideArea(at.X, at.Y, at.Z, area.Size.X, area.Size.Y, area.Size.Z) then
+			return true
+		end
+	end
+	return false
+end
+
 local function contain()
 	local s = stage
-	local area = if s ~= nil then s.area else nil
-	if area == nil then
+	if s == nil or #s.areas == 0 then
 		return
 	end
 	for _, racer in Participants.all() do
@@ -247,8 +259,7 @@ local function contain()
 		if root == nil then
 			continue
 		end
-		local at = area.CFrame:PointToObjectSpace(root.Position)
-		if not StudioStageLogic.isInsideArea(at.X, at.Y, at.Z, area.Size.X, area.Size.Y, area.Size.Z) then
+		if not insideAnyArea(s.areas, root.Position) then
 			place(racer)
 		end
 	end

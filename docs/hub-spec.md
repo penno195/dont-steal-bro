@@ -17,6 +17,7 @@ geometry is ever cloned into a match server.
 | `HubLeaderboardSurface` | BasePart | exactly 3 | `Period` (`"Daily"`, `"Weekly"`, `"AllTime"`) |
 | `HubPracticeArea` | BasePart (volume) | exactly 1 | — |
 | `HubPracticeItemSpawn` | BasePart | 4–8 | — |
+| `HubPracticeDummy` | BasePart (floor spot) | 0+ (optional) | — |
 | `HubSoftBarrier` | BasePart | 1+ | — |
 
 `ZoneId` is one of `SpawnPlaza`, `QueuePad`, `StoreFront`,
@@ -29,6 +30,14 @@ to use the zone. Walk times are measured to it, and wayfinding can reuse it.
   `CanCollide`/`CanTouch`/`CanQuery` all off, so it never blocks movement
   or camera and click rays. It marks where practice pickups live; held
   items work anywhere in the hub (`practice-area.md`).
+- **Training dummies:** `PracticeService` stands a still, straw-coloured
+  rig (`ServerStorage.PracticeDummy`, built by
+  `scripts/build-powerup-models.luau`) on the top face of each
+  `HubPracticeDummy` part. It's an ordinary NPC participant, so it can be
+  targeted and hit like a player, and it's put back on its spot if it's
+  knocked away. Keep the spots inside the practice area, a few studs
+  apart, facing where players approach from (the chest target is on the
+  rig's front).
 - **No queue pad.** Joining the queue is the `QueueJoinIntent` UI intent
   (the Play card, `MatchmakingService`), so the hub has no floor pad to
   stand on and no no-effect zone. The `QueuePad` zone is just the

@@ -11,8 +11,8 @@
 -- `applyEffectFor` below is wired in as PowerUpService's own
 -- `EffectApplier` at the bottom of this file's init(), which is what
 -- turns "no effect resolver wired in yet" into a real effect for the
--- six power-ups StatusEffectDefs.luau covers (see that file's own header
--- comment for which four still aren't character-stat effects, and why).
+-- eight power-ups StatusEffectDefs.luau covers (see that file's own
+-- header comment for the two task items it leaves out, and why).
 --
 -- The pure resolver, stacking rules, and the central hard-control
 -- anti-frustration gate live in src/shared/StatusEffectResolver.luau;
@@ -40,6 +40,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
+local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
 local RoundStates = require(ReplicatedStorage.Shared.RoundStates)
 local StatusEffectResolver = require(ReplicatedStorage.Shared.StatusEffectResolver)
 local StatusEffectDefs = require(ServerScriptService.Server.Services.StatusEffectDefs)
@@ -166,13 +167,19 @@ local function replicate(racerId: number, state: RacerState)
 	-- spent on one reads as a power-up that did nothing.
 	local seenCategories: { [string]: boolean } = {}
 	local categories = {}
+	-- Movement alone can't tell a Slow Field from a Sprint Boost, and
+	-- EffectLabelController labels only the slow. Still no durations.
+	local slowed = false
 	for _, effect in state.activeEffects do
 		if not seenCategories[effect.def.category] then
 			seenCategories[effect.def.category] = true
 			table.insert(categories, effect.def.category)
 		end
+		if effect.def.category == "Movement" and effect.def.kind == "Debuff" then
+			slowed = true
+		end
 	end
-	Net.fireAllClients("StatusEffectsVisual", { playerId = racerId, categories = categories })
+	Net.fireAllClients("StatusEffectsVisual", { playerId = racerId, categories = categories, slowed = slowed })
 end
 
 -- The one place `recomputeAndApply` is ever skipped is a racer with no
@@ -202,19 +209,54 @@ local function clearEveryRacer()
 	end
 end
 
+-- Expiry is otherwise lazy (pruneExpired only runs when something asks),
+-- so without this a Freeze's WalkSpeed = 0 outlives the effect until the
+-- next death, respawn or state change. A stale timer (the effect was
+-- refreshed, cleansed or cleared) is harmless: prune + recompute is
+-- idempotent. The pad covers task.delay vs GetServerTimeNow drift.
+local EXPIRY_PAD_SECONDS = 0.05
+
+local function scheduleExpiry(racerId: number, durationSeconds: number)
+	task.delay(durationSeconds + EXPIRY_PAD_SECONDS, function()
+		-- Left mid-effect: don't resurrect state PlayerRemoving dropped.
+		if racerStates[racerId] == nil then
+			return
+		end
+		pruneExpired(racerId)
+		recomputeAndApply(racerId)
+	end)
+end
+
 -- ===== applying an effect ===================================================
 
-local function applyEffect(targetId: number, def: StatusEffectResolver.EffectDef, casterId: number?): (boolean, string)
+-- `targeted`: the debuff was cast AT this racer (Freeze, Blind...) rather
+-- than met in a zone - only targeted debuffs are stopped by Phase Step.
+local function applyEffect(
+	targetId: number,
+	def: StatusEffectResolver.EffectDef,
+	casterId: number?,
+	targeted: boolean
+): (boolean, string, string?)
 	-- P5-5: the last line of defence for hub practice. PowerUpService
-	-- already filters targets, but an Area item lands on its caster, and
-	-- nothing may land on anyone the practice gate refuses. Always true
-	-- in a round.
+	-- already filters targets, but a zone slows whoever walks into it,
+	-- and nothing may land on anyone the practice gate refuses. Always
+	-- true in a round.
 	if not EffectContext.mayAct(targetId) then
 		return false, "target is not practising"
 	end
 
 	pruneExpired(targetId)
 	local state = ensureState(targetId)
+
+	-- Before the hard-control gate, like the practice cap below: a warded
+	-- hit never happened, so it mustn't count toward diminishing returns.
+	if def.kind == "Debuff" then
+		local blockReason =
+			StatusEffectResolver.debuffBlockReason(StatusEffectResolver.resolve(state.activeEffects), targeted)
+		if blockReason ~= nil then
+			return false, blockReason
+		end
+	end
 
 	-- P5-5: the practice cap is checked before the hard-control gate,
 	-- which records every application it sees - a capped-out attempt
@@ -270,17 +312,198 @@ local function applyEffect(targetId: number, def: StatusEffectResolver.EffectDef
 
 	state.activeEffects = StatusEffectResolver.applyStacking(state.activeEffects, newEffect)
 	recomputeAndApply(targetId)
+	scheduleExpiry(targetId, effectiveDuration)
 
+	-- The third return is for the zone loop, which keeps hold of the
+	-- instance it placed so it can stretch or cut it rather than stack
+	-- a new one every tick.
 	return true,
 		if effectiveDef.id ~= def.id
 			then string.format("applied as %s (downgraded from %s)", effectiveDef.id, def.id)
-			else "applied"
+			else "applied",
+		newEffect.instanceId
 end
 
--- Second Wind isn't a stat modifier (see StatusEffectDefs.luau's own
--- header comment) - it strips every currently-active DEBUFF from the
--- caster's own list and recomputes. Always targets the caster - it's a
--- Self buff, never something aimed at anyone else.
+-- ===== area zones (Slow Field) =============================================
+--
+-- An Area item drops a zone at the caster's feet: a flat disc of
+-- def.areaRadiusStuds that lasts the item's duration and slows everyone
+-- standing in it but the caster. A loop checks who's inside every
+-- ZONE_TICK. Each zone places ONE effect instance per victim, which runs
+-- to the zone's end while they stay in and is cut to ZONE_EXIT_LINGER
+-- when they step out, so standing in a zone never stacks it on itself -
+-- only a second zone does (powerups.md rule 4's floor bounds that).
+-- Replication happens on entry and exit only, not every tick.
+
+local ZONE_TICK = 0.2
+local ZONE_EXIT_LINGER = 0.3
+local ZONE_COLOR = Color3.fromRGB(235, 70, 70)
+local ZONE_THICKNESS = 0.3
+
+type Zone = {
+	casterId: number,
+	def: StatusEffectResolver.EffectDef,
+	floor: Vector3,
+	radius: number,
+	endsAt: number,
+	part: BasePart,
+	-- racer id -> the effect instance this zone placed on them.
+	placed: { [number]: string },
+}
+
+local zones: { Zone } = {}
+local zoneLoopRunning = false
+local zoneFolder: Folder? = nil
+
+local function rootOf(participant: Participants.Participant): BasePart?
+	local character = participant.character
+	local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") else nil
+	return if root ~= nil and root:IsA("BasePart") then root else nil
+end
+
+local function toVec3(v: Vector3): PowerUpLogic.Vec3
+	return { x = v.X, y = v.Y, z = v.Z }
+end
+
+local function findActive(racerId: number, instanceId: string): StatusEffectResolver.ActiveEffect?
+	for _, effect in ensureState(racerId).activeEffects do
+		if effect.instanceId == instanceId then
+			return effect
+		end
+	end
+	return nil
+end
+
+-- Moves one placed instance's end, then re-resolves (the HUD countdown
+-- changes even when the stats don't).
+local function setExpiry(racerId: number, effect: StatusEffectResolver.ActiveEffect, expiresAt: number)
+	effect.expiresAt = expiresAt
+	recomputeAndApply(racerId)
+	scheduleExpiry(racerId, math.max(0, expiresAt - now()))
+end
+
+local function tickZone(zone: Zone, t: number)
+	local floor = toVec3(zone.floor)
+	for _, racer in Participants.all() do
+		if racer.id == zone.casterId then
+			continue -- the caster is immune to their own zone
+		end
+		local root = rootOf(racer)
+		local inside = root ~= nil and PowerUpLogic.isInsideZone(floor, zone.radius, toVec3(root.Position))
+
+		pruneExpired(racer.id)
+		local instanceId = zone.placed[racer.id]
+		local effect = if instanceId ~= nil then findActive(racer.id, instanceId) else nil
+
+		if inside then
+			if effect ~= nil then
+				-- Back in before the exit linger ran out.
+				if effect.expiresAt < zone.endsAt then
+					setExpiry(racer.id, effect, zone.endsAt)
+				end
+			else
+				local timed = table.clone(zone.def)
+				timed.durationSeconds = zone.endsAt - t
+				-- Refused (Second Wind's window, the practice gate) is
+				-- simply retried next tick.
+				local applied, _, placedId = applyEffect(racer.id, timed, zone.casterId, false)
+				if applied and placedId ~= nil then
+					zone.placed[racer.id] = placedId
+				end
+			end
+		elseif effect ~= nil and effect.expiresAt > t + ZONE_EXIT_LINGER then
+			setExpiry(racer.id, effect, t + ZONE_EXIT_LINGER)
+		end
+	end
+end
+
+local function runZones()
+	if zoneLoopRunning then
+		return
+	end
+	zoneLoopRunning = true
+	task.spawn(function()
+		while #zones > 0 do
+			local t = now()
+			for index = #zones, 1, -1 do
+				local zone = zones[index]
+				if t >= zone.endsAt then
+					zone.part:Destroy()
+					table.remove(zones, index)
+				else
+					tickZone(zone, t)
+				end
+			end
+			task.wait(ZONE_TICK)
+		end
+		zoneLoopRunning = false
+	end)
+end
+
+local function clearZones()
+	for _, zone in zones do
+		zone.part:Destroy()
+	end
+	table.clear(zones)
+end
+
+local function zonePart(floor: Vector3, radius: number): BasePart
+	local folder = zoneFolder
+	if folder == nil then
+		local created = Instance.new("Folder")
+		created.Name = "PowerUpZones"
+		created.Parent = Workspace
+		zoneFolder = created
+		folder = created
+	end
+	-- A cylinder's axis is its X, so it's rolled onto its side to lie flat.
+	local part = Instance.new("Part")
+	part.Name = "SlowFieldZone"
+	part.Shape = Enum.PartType.Cylinder
+	part.Size = Vector3.new(ZONE_THICKNESS, radius * 2, radius * 2)
+	part.CFrame = CFrame.new(floor + Vector3.new(0, ZONE_THICKNESS / 2, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Material = Enum.Material.ForceField
+	part.Color = ZONE_COLOR
+	part.Transparency = 0.2
+	part.Parent = folder
+	return part
+end
+
+local function dropZone(caster: Participants.Participant, powerUpDef: Validate.PowerUpDef): (boolean, string)
+	local effectDef = StatusEffectDefs[powerUpDef.id]
+	local radius = powerUpDef.areaRadiusStuds
+	local root = rootOf(caster)
+	if effectDef == nil or radius == nil then
+		return false, string.format("%s has no zone effect defined", powerUpDef.id)
+	end
+	if root == nil then
+		return false, "caster has no character to drop a zone at"
+	end
+	local humanoid = if root.Parent ~= nil then root.Parent:FindFirstChildOfClass("Humanoid") else nil
+	local floor = root.Position
+		- Vector3.new(0, root.Size.Y / 2 + (if humanoid ~= nil then humanoid.HipHeight else 2), 0)
+	table.insert(zones, {
+		casterId = caster.id,
+		def = effectDef,
+		floor = floor,
+		radius = radius,
+		endsAt = now() + EffectContext.effectDuration(powerUpDef.durationSeconds),
+		part = zonePart(floor, radius),
+		placed = {},
+	})
+	runZones()
+	return true, "zone dropped"
+end
+
+-- Second Wind's cleanse isn't a stat modifier (see StatusEffectDefs.
+-- luau's own header comment) - it strips every currently-active DEBUFF
+-- from the caster's own list, then leaves its immunity-window ward.
+-- Always targets the caster - it's a Self buff, never aimed at anyone.
 local function applySecondWind(casterId: number): (boolean, string)
 	pruneExpired(casterId)
 	local state = ensureState(casterId)
@@ -296,17 +519,18 @@ local function applySecondWind(casterId: number): (boolean, string)
 	end
 
 	state.activeEffects = kept
-	recomputeAndApply(casterId)
+	-- applyEffect recomputes and replicates; the ward is a Buff, so the
+	-- debuff gate it's about to arm can't refuse it.
+	local _ = applyEffect(casterId, StatusEffectDefs["second-wind"], casterId, false)
 
 	return true, string.format("cleansed %d active debuff(s)", cleansedCount)
 end
 
 -- The seam P2-7's PowerUpService calls into - matches PowerUpService.
--- EffectApplier's own declared signature exactly. A power-up id with no
--- entry in StatusEffectDefs.luau (task-insight, phase-step, overclock,
--- task-scramble) still succeeds - consuming the cooldown and logging a
--- clear reason - rather than silently rejecting a use that looks correct
--- from the player's side.
+-- EffectApplier's own declared signature exactly. The two task items
+-- aren't character stats: TaskHandlerService owns the task session they
+-- change, so they're handed over to it (after the same debuff gate a
+-- targeted stat effect meets, for Scramble).
 local function applyEffectFor(
 	caster: Participants.Participant,
 	target: Participants.Participant?,
@@ -314,6 +538,34 @@ local function applyEffectFor(
 ): (boolean, string)
 	if powerUpDef.id == "second-wind" then
 		return applySecondWind(caster.id)
+	end
+
+	local TaskHandlerService = Loader.get("TaskHandlerService") :: any
+	if powerUpDef.id == "task-insight" then
+		if caster.player == nil then
+			return false, "a bot has no task view to make easy"
+		end
+		return TaskHandlerService.grantInsight(caster.player, powerUpDef.durationSeconds)
+	elseif powerUpDef.id == "task-scramble" then
+		if target == nil or target.player == nil then
+			return false, "target has no task view to scramble"
+		end
+		if not EffectContext.mayAct(target.id) then
+			return false, "target is not practising"
+		end
+		pruneExpired(target.id)
+		local blockReason = StatusEffectResolver.debuffBlockReason(
+			StatusEffectResolver.resolve(ensureState(target.id).activeEffects),
+			true
+		)
+		if blockReason ~= nil then
+			return false, blockReason
+		end
+		return TaskHandlerService.scramble(target.player)
+	end
+
+	if powerUpDef.target == "Area" then
+		return dropZone(caster, powerUpDef)
 	end
 
 	local effectDef = StatusEffectDefs[powerUpDef.id]
@@ -326,14 +578,22 @@ local function applyEffectFor(
 	end
 
 	local actualTarget = if target ~= nil then target else caster
-	return applyEffect(actualTarget.id, effectDef, caster.id)
+	local applied, description = applyEffect(actualTarget.id, effectDef, caster.id, true)
+	return applied, description
 end
 
 -- ===== service =============================================================
 
 local StatusEffects: Loader.Service = {
 	name = "StatusEffects",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "PowerUpService", "ParticipantService" },
+	dependencies = {
+		"NetGuard",
+		"ConfigValidator",
+		"RoundService",
+		"PowerUpService",
+		"ParticipantService",
+		"TaskHandlerService",
+	},
 
 	-- Exposed so a consumer (P2-9's MovementWatch, comparing observed
 	-- movement against "the maximum the status effect resolver says they
@@ -380,6 +640,7 @@ function StatusEffects:init()
 	local RoundService = Loader.get("RoundService") :: any
 	for _, state in RoundStates.ALL do
 		RoundService.onExit(state, function()
+			clearZones()
 			clearEveryRacer()
 		end)
 		RoundService.onEnter(state, function()
@@ -414,6 +675,12 @@ function StatusEffects:init()
 
 	local PowerUpService = Loader.get("PowerUpService") :: any
 	PowerUpService.setEffectApplier(applyEffectFor)
+	-- Overclock: PowerUpService owns cooldowns but can't depend on this
+	-- service (this one depends on it), so the rate comes in as a seam.
+	PowerUpService.setCooldownRateSource(function(racerId: number): number
+		pruneExpired(racerId)
+		return StatusEffectResolver.resolve(ensureState(racerId).activeEffects).CooldownRate
+	end)
 end
 
 return StatusEffects

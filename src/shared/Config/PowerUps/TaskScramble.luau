@@ -16,10 +16,12 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local TaskScramble: Validate.PowerUpDef = {
 	id = "task-scramble",
 	displayName = "Task Scramble",
+	description = "Rerolls a rival's current task",
 	kind = "Debuff",
+	role = "Attack",
 	target = "Aimed",
 	durationSeconds = 0.1,
-	cooldownSeconds = 20,
+	cooldownSeconds = 10,
 	rarity = "Common",
 	hardControl = false,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },

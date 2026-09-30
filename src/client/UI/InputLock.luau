@@ -32,6 +32,7 @@ type Controls = { Enable: (any, boolean?) -> (), Disable: (any) -> () }
 
 local set = TaskViewLogic.newLockSet()
 local savedCameraType: Enum.CameraType? = nil
+local movementHeld = false
 
 -- The ControlModule, or nil if this place forked/removed PlayerModule.
 -- Resolved lazily (PlayerScripts fills in after the client script
@@ -82,7 +83,26 @@ function InputLock.release(token: any)
 	end
 	savedCameraType = nil
 	local c = getControls()
-	if c ~= nil then
+	if c ~= nil and not movementHeld then
+		c:Enable()
+	end
+end
+
+-- Character input only, camera left free: a finalist held on a podium
+-- (DecisionStudioController). Composes with the token locks - whichever
+-- lets go last turns the controls back on.
+function InputLock.holdMovement(held: boolean)
+	if held == movementHeld then
+		return
+	end
+	movementHeld = held
+	local c = getControls()
+	if c == nil then
+		return
+	end
+	if held then
+		c:Disable()
+	elseif set.count == 0 then
 		c:Enable()
 	end
 end

@@ -300,6 +300,9 @@ local NametagController: Loader.Controller = {
 	getTitleFor = function(racerId: number): TitleInfo?
 		return titlesByRacerId[racerId]
 	end,
+
+	-- A racer's rig, human or NPC. FinalistTagController uses it too.
+	characterFor = characterFor,
 }
 
 function NametagController:init()

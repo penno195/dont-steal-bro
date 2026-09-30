@@ -198,3 +198,27 @@ TestRunner.describe("PowerUpLogic.isWithinPickupReach (P8-1)", function()
 		TestRunner.expect(PowerUpLogic.isWithinPickupReach({ x = 200, y = 2, z = 40 }, pickup, 10)):toBe(false)
 	end)
 end)
+
+TestRunner.describe("PowerUpLogic.isInsideZone (Slow Field)", function()
+	local floor = { x = 0, y = 0, z = 0 }
+
+	TestRunner.it("contains a racer standing inside the radius", function()
+		TestRunner.expect(PowerUpLogic.isInsideZone(floor, 15, { x = 10, y = 3, z = 5 })):toBe(true)
+	end)
+
+	TestRunner.it("contains a racer exactly on the rim", function()
+		TestRunner.expect(PowerUpLogic.isInsideZone(floor, 15, { x = 15, y = 3, z = 0 })):toBe(true)
+	end)
+
+	TestRunner.it("excludes a racer just outside the radius", function()
+		TestRunner.expect(PowerUpLogic.isInsideZone(floor, 15, { x = 12, y = 3, z = 10 })):toBe(false)
+	end)
+
+	TestRunner.it("excludes a racer on a walkway far above", function()
+		TestRunner.expect(PowerUpLogic.isInsideZone(floor, 15, { x = 0, y = 30, z = 0 })):toBe(false)
+	end)
+
+	TestRunner.it("excludes a racer on a floor below", function()
+		TestRunner.expect(PowerUpLogic.isInsideZone(floor, 15, { x = 0, y = -10, z = 0 })):toBe(false)
+	end)
+end)

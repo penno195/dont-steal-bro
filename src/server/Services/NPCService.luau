@@ -52,6 +52,7 @@ local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Participants = require(ServerScriptService.Server.Participants)
 local NPCLogic = require(ServerScriptService.Server.NPCLogic)
+local NPCAnimator = require(ServerScriptService.Server.NPCAnimator)
 local StationOccupancy = require(ServerScriptService.Server.StationOccupancy)
 
 local taskDefsById: { [string]: Validate.TaskDef } = {}
@@ -68,6 +69,20 @@ local WAYPOINT_REACHED_STUDS = 4
 -- progress, for the stuck timer's purposes. Small enough that a bot
 -- shuffling on the spot against a wall still counts as stuck.
 local PROGRESS_EPSILON_STUDS = 0.5
+-- A hop to a nav node no further than this, along a clear line with
+-- continuous floor, is walked straight instead of pathfound. Covers the
+-- node spacing on ramps (~15 studs) with room to spare, while leaving
+-- long hops to PathfindingService, which routes round what a straight
+-- line can't see. See canWalkStraight.
+local DIRECT_WALK_MAX_STUDS = 24
+-- Floor is sampled this often along a straight-walk line...
+local DIRECT_WALK_SAMPLE_STUDS = 2
+-- ...and two neighbouring samples may differ by at most this much: about
+-- what a Humanoid steps up without jumping. More is a ledge or a gap.
+local DIRECT_WALK_MAX_STEP_STUDS = 1.2
+-- The body clearance swept along the line. Just under AgentRadius so a
+-- lane the navmesh would accept isn't rejected here.
+local DIRECT_WALK_CLEARANCE_STUDS = 1.5
 
 export type NavNodeRecord = {
 	nodeId: string,
@@ -201,6 +216,18 @@ local function navGraph(): NPCLogic.NavGraph
 	return graph
 end
 
+local function toPoint(position: Vector3): NPCLogic.Point
+	return { x = position.X, y = position.Y, z = position.Z }
+end
+
+local function navPoints(): { [string]: NPCLogic.Point }
+	local points: { [string]: NPCLogic.Point } = {}
+	for nodeId, node in navNodes do
+		points[nodeId] = toPoint(node.position)
+	end
+	return points
+end
+
 local function nearestNodeId(position: Vector3): string?
 	local bestId: string? = nil
 	local bestDistance = math.huge
@@ -271,6 +298,37 @@ local function buildFallbackRig(): Model
 
 	model.PrimaryPart = root
 	return model
+end
+
+-- A real R15 avatar dressed from GameConfig.npc.appearance, so a bot
+-- looks like any other player in the lobby. Yields on a web call to
+-- build the model, and returns nil if that fails (a bad asset id, the
+-- avatar service being down) - the caller falls back to the plain rig
+-- rather than losing the bot.
+local function buildAvatarRig(appearance: NPCLogic.Appearance): Model?
+	local description = Instance.new("HumanoidDescription")
+	description.HairAccessory = tostring(appearance.hair)
+	description.HatAccessory = if appearance.hat ~= nil then tostring(appearance.hat) else ""
+	description.Face = appearance.face
+	description.Shirt = appearance.shirt
+	description.Pants = appearance.pants
+	local tone = Color3.fromRGB(appearance.skinTone[1], appearance.skinTone[2], appearance.skinTone[3])
+	description.HeadColor = tone
+	description.TorsoColor = tone
+	description.LeftArmColor = tone
+	description.RightArmColor = tone
+	description.LeftLegColor = tone
+	description.RightLegColor = tone
+
+	local ok, result = pcall(function()
+		return Players:CreateHumanoidModelFromDescriptionAsync(description, Enum.HumanoidRigType.R15)
+	end)
+	description:Destroy()
+	if not ok then
+		warn(string.format("NPCService: avatar build failed, using the plain rig - %s", tostring(result)))
+		return nil
+	end
+	return result
 end
 
 -- Every performance measure architecture.md §4 asks for, in one place:
@@ -347,24 +405,39 @@ local function spawnNPC(index: number): NPCRecord?
 	-- Seeded from the round seed and the NPC's own id, so one bot's
 	-- draws never shift another's - see NPCLogic.newRng's own comment.
 	local nextRandom = NPCLogic.newRng(roundSeed + id * 7919)
+	-- Named before the avatar build yields, so bots spawning side by side
+	-- (fillSeats) each see the others' names as taken.
+	local displayName = NPCLogic.generateDisplayName(nextRandom, nameIsTaken)
+	Participants.register({
+		id = id,
+		displayName = displayName,
+		isNPC = true,
+		player = nil,
+		character = nil,
+	})
 
+	-- A real avatar first, then a hand-built "NPCRig" in ServerStorage,
+	-- then the code-built block - each only if the one before it fails.
+	local appearance = NPCLogic.pickAppearance(GameConfig.npc.appearance, nextRandom)
 	local template = ServerStorage:FindFirstChild("NPCRig")
-	local model = if template ~= nil and template:IsA("Model") then template:Clone() else buildFallbackRig()
+	local model = buildAvatarRig(appearance)
+		or if template ~= nil and template:IsA("Model") then template:Clone() else buildFallbackRig()
 
 	local humanoid = model:FindFirstChildOfClass("Humanoid")
 	local root = model:FindFirstChild("HumanoidRootPart")
 	if humanoid == nil or root == nil or not root:IsA("BasePart") then
 		warn("NPCService: rig template has no Humanoid/HumanoidRootPart - skipping this NPC")
 		model:Destroy()
+		Participants.unregister(id)
 		return nil
 	end
 
-	local displayName = NPCLogic.generateDisplayName(nextRandom, nameIsTaken)
 	model.Name = displayName
 	model:PivotTo(chooseSpawnCFrame(index))
 	model.Parent = ensureFolder()
 
 	configureRigForPerformance(model, humanoid, root)
+	NPCAnimator.start(model, humanoid)
 
 	local profile = NPCLogic.pickSkillProfile(GameConfig.npc.skillProfiles, nextRandom())
 	humanoid.WalkSpeed = 16 * profile.moveSpeedScale
@@ -395,13 +468,7 @@ local function spawnNPC(index: number): NPCRecord?
 	}
 
 	npcs[id] = record
-	Participants.register({
-		id = id,
-		displayName = displayName,
-		isNPC = true,
-		player = nil,
-		character = model,
-	})
+	Participants.setCharacter(id, model)
 
 	return record
 end
@@ -464,6 +531,61 @@ local function currentTargetPosition(record: NPCRecord): Vector3?
 	return if part ~= nil then part.Position else nil
 end
 
+-- Whether a bot can walk straight from `from` to `to` with no pathfinding:
+-- short enough, nothing solid in the way at body height, and floor under
+-- every sample with no ledge or gap between them. Only collidable parts
+-- count (RespectCanCollide), and rigs are ignored so a bot is never
+-- blocked by itself or a rival.
+--
+-- WHY THIS EXISTS: the engine's navmesh can silently drop a walkable
+-- surface. On SpaceStation the south central ramp gets no navmesh at all
+-- at its built position (the identical north ramp is fine, and the same
+-- part shifted 12 studs sideways is fine too), so ComputeAsync snapped
+-- bots on it to the floor underneath and sent them on a 280-stud detour.
+-- A PathfindingLink across it was ignored as well. Ramps are exactly
+-- where map-kit-spec.md puts nav nodes (top, bottom and along), so hops
+-- between them are short straight lines this check can vouch for itself.
+local function canWalkStraight(from: Vector3, to: Vector3): boolean
+	local offset = to - from
+	local flat = Vector3.new(offset.X, 0, offset.Z)
+	if flat.Magnitude > DIRECT_WALK_MAX_STUDS then
+		return false
+	end
+
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.RespectCanCollide = true
+	local ignore: { Instance } = {}
+	if npcFolder ~= nil then
+		table.insert(ignore, npcFolder)
+	end
+	for _, player in Players:GetPlayers() do
+		if player.Character ~= nil then
+			table.insert(ignore, player.Character)
+		end
+	end
+	params.FilterDescendantsInstances = ignore
+
+	if flat.Magnitude > 0.1 and Workspace:Spherecast(from, DIRECT_WALK_CLEARANCE_STUDS, offset, params) ~= nil then
+		return false
+	end
+
+	-- Both ends sit about a hip height above their floor, so a ray from
+	-- just above each sample down 6 studs finds this floor and never the
+	-- level below a ramp or a catwalk.
+	local samples = math.max(2, math.ceil(flat.Magnitude / DIRECT_WALK_SAMPLE_STUDS) + 1)
+	local heights: { number } = {}
+	for i = 0, samples - 1 do
+		local point = from:Lerp(to, i / (samples - 1))
+		local hit = Workspace:Raycast(point + Vector3.new(0, 1, 0), Vector3.new(0, -6, 0), params)
+		if hit == nil then
+			return false
+		end
+		table.insert(heights, hit.Position.Y)
+	end
+	return NPCLogic.isContinuousFloor(heights, DIRECT_WALK_MAX_STEP_STUDS)
+end
+
 -- One ComputeAsync per hop, and only when something actually needs one:
 -- a new hop, a Blocked signal, or the stuck timer. Never per tick and
 -- never per frame - architecture.md §4's "recompute only when blocked."
@@ -476,6 +598,17 @@ local function computePath(record: NPCRecord): boolean
 	if record.blockedConnection ~= nil then
 		record.blockedConnection:Disconnect()
 		record.blockedConnection = nil
+	end
+
+	-- A short, clear hop is walked straight - see canWalkStraight for why
+	-- this can't be left to the navmesh. Cheaper than ComputeAsync too.
+	-- The stuck timer still covers it if something moves into the way.
+	if canWalkStraight(record.root.Position, target) then
+		record.waypoints = { target }
+		record.jumpWaypoints = {}
+		record.waypointIndex = 1
+		record.blocked = false
+		return true
 	end
 
 	local path = PathfindingService:CreatePath({
@@ -623,7 +756,9 @@ local function chooseNextStation(record: NPCRecord)
 		local fromNode = nearestNodeId(record.root.Position)
 		local toNode = nearestNodeId(TaskServicePart.Position)
 		if fromNode ~= nil and toNode ~= nil then
-			record.nodeRoute = NPCLogic.findNodePath(navGraph(), fromNode, toNode) or {}
+			local route = NPCLogic.findNodePath(navGraph(), fromNode, toNode) or {}
+			record.nodeRoute =
+				NPCLogic.trimRoute(route, navPoints(), toPoint(record.root.Position), toPoint(TaskServicePart.Position))
 		end
 	end
 
@@ -828,8 +963,20 @@ local function fillSeats()
 		fillCount = 0
 	end
 
+	-- Side by side: each spawn yields on its avatar build, and one after
+	-- another would stack five web calls into the Loading window.
+	local pending = fillCount
 	for index = 1, fillCount do
-		spawnNPC(index + humansPresent)
+		task.spawn(function()
+			local ok, err = pcall(spawnNPC, index + humansPresent)
+			if not ok then
+				warn(string.format("NPCService: spawning NPC %d failed - %s", index, tostring(err)))
+			end
+			pending -= 1
+		end)
+	end
+	while pending > 0 do
+		task.wait()
 	end
 
 	broadcastRoster()

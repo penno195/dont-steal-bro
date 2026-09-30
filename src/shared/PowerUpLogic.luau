@@ -22,6 +22,15 @@ local PowerUpLogic = {}
 
 export type Vec3 = { x: number, y: number, z: number }
 
+-- The role colour family (powerups.md): the pickup orb's glow and the
+-- HUD slot's tint. Plain RGB, not Color3, so this module stays loadable
+-- under Lune. One table so the world and the HUD can't disagree.
+PowerUpLogic.ROLE_RGB = table.freeze({
+	Attack = table.freeze({ 235, 70, 70 }),
+	Defence = table.freeze({ 70, 145, 240 }),
+	Utility = table.freeze({ 250, 200, 55 }),
+}) :: { [string]: { number } }
+
 local function subtract(a: Vec3, b: Vec3): Vec3
 	return { x = a.x - b.x, y = a.y - b.y, z = a.z - b.z }
 end
@@ -210,10 +219,27 @@ function PowerUpLogic.aimForward(aimX: number?, aimZ: number?): Vec3?
 end
 
 -- Pure: the nearest candidate within range only, no cone constraint -
--- "Nearest"-target power-ups (Blind, Push/Trip per powerups.md) auto-
--- target without requiring the caster to actually aim.
+-- "Nearest"-target power-ups auto-target without requiring the caster
+-- to actually aim. No shipped config uses it any more (Blind and
+-- Push/Trip became Aimed), but the target kind stays valid.
 function PowerUpLogic.nearestInRange(caster: Vec3, candidates: { TargetCandidate }, maxRangeStuds: number): number?
 	return PowerUpLogic.nearestInCone(caster, { x = 0, y = 0, z = 0 }, candidates, maxRangeStuds, 360)
+end
+
+-- ===== area zones =========================================================
+
+-- Pure: is a racer whose root is at `position` inside an Area item's
+-- zone (Slow Field)? The zone is a squat cylinder standing on the floor
+-- at `floor`: `radiusStuds` across the ground, and as tall as it is
+-- wide, so a racer jumping through it is still in it but one on a
+-- walkway far above isn't. Being below the floor never counts.
+function PowerUpLogic.isInsideZone(floor: Vec3, radiusStuds: number, position: Vec3): boolean
+	local height = position.y - floor.y
+	if height < -1 or height > radiusStuds then
+		return false
+	end
+	local dx, dz = position.x - floor.x, position.z - floor.z
+	return dx * dx + dz * dz <= radiusStuds * radiusStuds
 end
 
 return PowerUpLogic

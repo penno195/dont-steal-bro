@@ -587,6 +587,21 @@ Net.Remotes = {
 		practice = true,
 	} :: RemoteDef,
 
+	-- Throw away a held item (the HUD's drag-to-bin, or X): only a slot
+	-- index, which PowerUpService only ever reads from the SENDER'S own
+	-- server-held slots. Emptying a slot has no effect on anyone else and
+	-- sets no cooldown, so there is nothing here to gain by spamming it.
+	PowerUpDiscardIntent = {
+		name = "PowerUpDiscardIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			slotIndex = Net.number({ min = 1, integer = true }),
+		}),
+		rateLimit = { capacity = 5, refillPerSecond = 2 },
+		states = { "Race" },
+		practice = true,
+	} :: RemoteDef,
+
 	-- Server -> client (targeted, never fireAllClients - see
 	-- PowerUpService.luau): a player's own current inventory, for HUD
 	-- display. `{ slotCount, inventory = { { slotIndex, powerUpId } } }`,
@@ -607,6 +622,20 @@ Net.Remotes = {
 	-- applied effect is P2-8's job (Status Effects), not this remote's.
 	PowerUpUseResult = {
 		name = "PowerUpUseResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the VICTIM only): a rival's aimed or
+	-- nearest-target power-up just landed on you. `{ powerUpId,
+	-- casterName }`, so the HUD can say "Freeze from Alex" plus the item's
+	-- one-line description - playtests showed a hit with no explanation
+	-- reads as lag. Only fired when the effect actually applied; a zone
+	-- (Slow Field) is visible on the ground and doesn't fire it.
+	PowerUpHitYou = {
+		name = "PowerUpHitYou",
 		direction = "ServerBroadcast",
 		schema = nil,
 		rateLimit = nil,
@@ -813,6 +842,29 @@ Net.Remotes = {
 		schema = Net.struct({ choice = Net.stringEnum({ "Steal", "Share" }) }),
 		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
 		states = { "DecisionStudio" },
+	} :: RemoteDef,
+
+	-- Client -> server: a finalist tapped "Got it" on the loading card.
+	-- Bare - who is asking is the sender. DecisionService checks it's the
+	-- Intro phase and a finalist; when every finalist is ready the Intro
+	-- ends early (FinaleRoster.allReady).
+	DecisionReadyIntent = {
+		name = "DecisionReadyIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = { "DecisionStudio" },
+	} :: RemoteDef,
+
+	-- Server -> client (broadcast): { readyIds } - which finalists are
+	-- ready during the Intro, for the "Waiting for 2 more…" notice. Not
+	-- secret: it says who has finished reading, nothing about a choice.
+	DecisionReadyState = {
+		name = "DecisionReadyState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
 	} :: RemoteDef,
 
 	-- Server -> client (broadcast): every choice and the computed

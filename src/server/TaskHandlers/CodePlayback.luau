@@ -37,11 +37,12 @@ type Submission = {
 }
 
 local CODE_LENGTH = 4
+local EASY_CODE_LENGTH = 3
 local DISPLAY_SECONDS = 3
 
 local function start(ctx: Types.TaskContext): (Challenge, State)
 	local code = {}
-	for _ = 1, CODE_LENGTH do
+	for _ = 1, if ctx.easy then EASY_CODE_LENGTH else CODE_LENGTH do
 		table.insert(code, ctx.rng:NextInteger(0, 9))
 	end
 
@@ -50,23 +51,32 @@ local function start(ctx: Types.TaskContext): (Challenge, State)
 	return challenge, state
 end
 
-local function validate(_ctx: Types.TaskContext, state: State, submission: Submission): (boolean, State)
+-- Feedback describes only the digit the player just pressed - right or
+-- wrong, and how many are in so far - so the calculator display can
+-- type along and clear on a miss. The code itself went out at start()
+-- to be flashed; nothing here names a digit the player hasn't pressed.
+local function validate(
+	_ctx: Types.TaskContext,
+	state: State,
+	submission: Submission
+): (boolean, State, Types.TaskFeedback)
 	local expectedDigit = state.code[state.nextIndex]
 
 	if submission.digit ~= expectedDigit then
 		-- Wrong digit: restart progress on the SAME rolled code (this
 		-- file's header comment covers the catalogue's fuller mercy-
 		-- reroll rule, not implemented here). Never reveals which digit
-		-- was expected - the boolean is the only signal that crosses back.
-		return false, { code = state.code, nextIndex = 1 }
+		-- was expected.
+		return false, { code = state.code, nextIndex = 1 }, { accepted = false, entered = 0, digit = submission.digit }
 	end
 
 	local nextIndex = state.nextIndex + 1
+	local feedback = { accepted = true, entered = state.nextIndex, digit = submission.digit }
 	if nextIndex > #state.code then
-		return true, state -- every digit entered correctly, in order - done
+		return true, state, feedback -- every digit entered correctly, in order - done
 	end
 
-	return false, { code = state.code, nextIndex = nextIndex }
+	return false, { code = state.code, nextIndex = nextIndex }, feedback
 end
 
 local function cleanup(_ctx: Types.TaskContext, _state: State)

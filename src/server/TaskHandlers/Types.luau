@@ -33,6 +33,11 @@ export type TaskContext = {
 	-- CURRENT elapsed time at the moment it actually checks one, not
 	-- whatever it was when the ctx was first built.
 	elapsedSeconds: () -> number,
+
+	-- Roll this attempt one difficulty tier down (Task Insight, powerups.
+	-- md #3): fewer digits, taps or fuses. Each handler decides what its
+	-- own easy tier is; the dispatcher only decides WHEN.
+	easy: boolean,
 }
 
 -- start() generates the challenge - "returns only what the client needs

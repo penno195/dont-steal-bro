@@ -73,9 +73,9 @@ describe("Tokens: the Steal/Share pair", function()
 		expect(ColorVision.contrast(hex("steal"), hex("share")) >= Tokens.contrast.decisionPairMinLuminanceRatio):toBeTruthy()
 	end)
 
-	it("pairs each with a different shape and icon", function()
-		expect(Tokens.decision.steal.shape ~= Tokens.decision.share.shape):toBeTruthy()
+	it("pairs each with a different icon and word", function()
 		expect(Tokens.decision.steal.icon ~= Tokens.decision.share.icon):toBeTruthy()
+		expect(Tokens.decision.steal.label ~= Tokens.decision.share.label):toBeTruthy()
 	end)
 
 	it("keeps each button's label readable on its fill", function()

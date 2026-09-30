@@ -4,37 +4,28 @@
 -- duration, stacking rule... priority, and a category" (the task's own
 -- requirement, verbatim) - this is that data, one entry per effect.
 --
--- SCOPE: only the subset of powerups.md's 10 items that are genuinely
--- continuous CHARACTER-STAT modifiers get a real entry here - sprint-
--- boost, slow-field, freeze, push-trip, blind (plus one shared soft-
--- control fallback, not tied to any single power-up id). The other five
--- aren't character-stat effects at all, and forcing them through this
--- resolver would be the wrong shape for what they actually do:
+-- SCOPE: sprint-boost, slow-field, freeze, push-trip and blind are
+-- character-stat modifiers (plus one shared soft-control fallback, not
+-- tied to any single power-up id). second-wind, phase-step and overclock
+-- are WARDS - resolver stats StatusEffects and PowerUpService consult
+-- rather than a Humanoid property (second-wind's entry is only its
+-- post-cleanse immunity window; the cleanse itself is a bespoke action
+-- in StatusEffects.applyEffectFor). The two task items stay out:
 --
---   - second-wind: a cleanse of active debuffs, not a stat modifier -
---     StatusEffects.luau handles it as a small bespoke action against
---     its own active-effect list (see applyEffectFor's own comment)
---     rather than as an EffectDef, since a "remove everything else"
---     action doesn't fit "one more row of stat data" at all.
 --   - task-insight: modifies a TASK CHALLENGE'S rolled difficulty
---     (TaskHandlerService's job, P2-5), not a character stat - wiring
---     that up needs TaskHandlerService to query StatusEffects, which is
---     real cross-service integration this task doesn't do.
---   - phase-step: an "untargetable" flag PowerUpService's own
---     resolveTarget (P2-7) would need to consult - same kind of gap.
---   - overclock: modifies COOLDOWN duration, a PowerUpService concept
---     (P2-7's `cooldownSeconds`/`lastUsedAt`), not a character stat.
+--     (TaskHandlerService's job, P2-5), not a character stat.
 --   - task-scramble: an instant, one-off task-reroll with its own 15s
 --     cumulative-EXPOSURE cap (powerups.md rule 5, measured in accrued
 --     time cost, not disable time) - not a duration-bearing character-
 --     stat effect at all, and a different cap shape than HardControl's.
 --
--- Each of these belongs with whichever system actually owns the thing
--- it modifies, once that integration is built - not shoehorned in here
--- just to claim coverage of all 10.
+-- Both live with the system that owns what they change: StatusEffects.
+-- applyEffectFor hands them to TaskHandlerService (grantInsight,
+-- scramble) rather than resolving a def from this table.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StatusEffectResolver = require(ReplicatedStorage.Shared.StatusEffectResolver)
+local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 
 -- Freeze and Push/Trip share ONE soft-control fallback rather than each
 -- getting a near-identical duplicate - both downgrade to the same
@@ -118,6 +109,50 @@ local defs: { [string]: StatusEffectResolver.EffectDef } = {
 		hardControlSoftFallbackId = nil,
 	},
 
+	-- Second Wind's 2.5s post-cleanse immunity. The cleanse itself is a
+	-- bespoke action in StatusEffects; this is the window it leaves.
+	["second-wind"] = {
+		id = "second-wind",
+		kind = "Buff",
+		stat = "DebuffImmunity",
+		operation = "Override",
+		magnitude = 1,
+		durationSeconds = 2.5,
+		stackingRule = "Refresh",
+		stackCap = nil,
+		priority = 0,
+		category = "Ward",
+		hardControlSoftFallbackId = nil,
+	},
+
+	["phase-step"] = {
+		id = "phase-step",
+		kind = "Buff",
+		stat = "Untargetable",
+		operation = "Override",
+		magnitude = 1,
+		durationSeconds = 3,
+		stackingRule = "Refresh",
+		stackCap = nil,
+		priority = 0,
+		category = "Ward",
+		hardControlSoftFallbackId = nil,
+	},
+
+	overclock = {
+		id = "overclock",
+		kind = "Buff",
+		stat = "CooldownRate",
+		operation = "Multiply",
+		magnitude = 0.5, -- powerups.md: "halves the cooldown on the player's other equipped power-ups"
+		durationSeconds = 10,
+		stackingRule = "Refresh", -- two Overclocks refresh, never quarter a cooldown
+		stackCap = nil,
+		priority = 0,
+		category = "Utility",
+		hardControlSoftFallbackId = nil,
+	},
+
 	[HARD_CONTROL_SOFT_FALLBACK_ID] = {
 		id = HARD_CONTROL_SOFT_FALLBACK_ID,
 		kind = "Debuff",
@@ -132,5 +167,16 @@ local defs: { [string]: StatusEffectResolver.EffectDef } = {
 		hardControlSoftFallbackId = nil,
 	},
 }
+
+-- The power-up config is the one source of every duration: a def named
+-- after a power-up id takes that item's durationSeconds, so retuning
+-- an item is still a one-file change (Ground Rule 2). The soft fallback
+-- has no power-up of its own and keeps the number above.
+for _, entry in PowerUps do
+	local def = defs[entry.def.id]
+	if def ~= nil then
+		def.durationSeconds = entry.def.durationSeconds
+	end
+end
 
 return defs

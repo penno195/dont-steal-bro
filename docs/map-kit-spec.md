@@ -23,7 +23,7 @@ build correctly today without either tool existing yet.
 | `StudioAnchor` | BasePart | exactly 1 (shared set only) |
 | `StudioPodiumSlot` | BasePart | exactly 3 (shared set only) |
 | `StudioBoundary` | BasePart | exactly 1 (shared set only) |
-| `StudioSpectatorArea` | BasePart | 0–1 (shared set only) |
+| `StudioSpectatorArea` | BasePart | 0–8 (shared set only) |
 | `StudioSpectatorSpawn` | BasePart | 1+ (shared set only) |
 
 The last five exist for `design-decisions.md` Q3: all up to 6 finalists
@@ -202,7 +202,8 @@ to constrain it explicitly rather than defaulting to "anywhere inside
 `PlayableBounds` but outside `StudioBoundary`."
 
 - **Attributes:** none required.
-- **Count:** 0 or 1.
+- **Count:** 0 to 8. A spectator inside any one of them is allowed, so a
+  balcony that turns corners gets one box per straight leg.
 - **What breaks if missing:** nothing — this is a convenience tag for
   designers who want tighter control over where spectators can wander;
   its absence just means the default (bounds minus boundary) applies.

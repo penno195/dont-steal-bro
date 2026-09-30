@@ -9,9 +9,10 @@
 -- The match is visible: each fuse and its socket show the same amperage
 -- (and colour stripe). Either row can be picked first - drag a fuse onto
 -- a socket or a socket onto a fuse, or tap one then the other. The held
--- piece lights red; hovering it over a piece on the other row flashes
--- green if the amps match and red if not; a drop only SENDS the pair,
--- and the socket turns solid green once the server accepts it.
+-- piece lights red and a live wire in its stripe colour follows the
+-- thumb; hovering a piece on the other row flashes green if the amps
+-- match and red if not. A drop only SENDS the pair; once the server
+-- accepts it a wire stays strung between the two and both turn green.
 --
 -- Right and wrong are never colour alone: amps are printed on every
 -- piece, a wired socket shows a check, a rejected one a cross.
@@ -51,6 +52,9 @@ local GAP = Theme.spacing.md
 local STRIPE = 8
 local REJECT_SECONDS = 0.4
 local BLINK_HZ = 6
+local WIRE = 6 -- wire thickness
+local PLUG = 18 -- the plug on the end of a wire being dragged
+local WIRE_OUTLINE = Color3.fromHex("#0B0E14")
 
 -- Stripe per rating, kept clear of the red/green feedback fills. The
 -- printed amps are the real cue; the stripe just speeds up the scan.
@@ -90,6 +94,7 @@ end
 return TaskViewBase.define({
 	taskId = "fuse-rewire",
 	title = "Fuse Rewire",
+	explainer = "Drag a wire from each fuse to the socket with the same amps. Wire all four to restore power.",
 
 	build = function(ctx)
 		local challenge = ctx.challenge :: Challenge
@@ -155,7 +160,7 @@ return TaskViewBase.define({
 		end
 
 		local function fill(id: string, idle: Color3): Color3
-			if kinds[id] == "slot" and isPlaced(id) then
+			if isPlaced(id) then
 				return Theme.color.success
 			elseif held() == id then
 				return Theme.color.danger
@@ -223,16 +228,16 @@ return TaskViewBase.define({
 								BackgroundTransparency = 1,
 								AnchorPoint = Vector2.new(1, 1),
 								Position = UDim2.new(1, -2, 1, -2),
-								Size = UDim2.fromOffset(20, 20),
+								Size = UDim2.fromOffset(22, 22),
 								vide.show(function()
 									return kinds[id] == "slot" and isPlaced(id)
 								end, function()
-									return Icons.view("check", 18, Theme.color.inkOnLight)
+									return Icons.view("check-badge", 22, Theme.color.inkOnLight)
 								end) :: any,
 								vide.show(function()
 									return rejected() == id or hoverMatch(id) == false
 								end, function()
-									return Icons.view("close", 18, Theme.color.inkOnLight)
+									return Icons.view("cross-badge", 22, Theme.color.inkOnLight)
 								end) :: any,
 							}),
 						}),
@@ -248,25 +253,11 @@ return TaskViewBase.define({
 			table.insert(socketList, cell(slotId, i, Theme.color.surface))
 		end
 
+		-- A wired fuse stays put, strung to its socket: pieces never move
+		-- under a thumb mid-reach.
 		local fuseList: { Instance } = {}
 		for i, fuseId in challenge.fuseIds do
-			local button = cell(fuseId, i, Theme.color.surfaceRaised)
-			-- A wired fuse leaves the tray (its amps show in the socket).
-			-- The empty holder keeps its place so the others don't shift
-			-- under a thumb mid-reach.
-			vide.effect(function()
-				button.Visible = placed()[fuseId] == nil
-			end)
-			local holder = create("Frame")({
-				Name = fuseId .. "Holder",
-				BackgroundTransparency = 1,
-				LayoutOrder = i,
-				Size = UDim2.fromOffset(CELL, CELL),
-			})
-			button.AnchorPoint = Vector2.new(0.5, 0.5)
-			button.Position = UDim2.fromScale(0.5, 0.5)
-			button.Parent = holder
-			table.insert(fuseList, holder)
+			table.insert(fuseList, cell(fuseId, i, Theme.color.surfaceRaised))
 		end
 
 		local socketRow = row("Sockets", socketList, 0)
@@ -324,31 +315,115 @@ return TaskViewBase.define({
 
 		ctx.setStatus("Match the amps: drag each fuse to its socket")
 
-		local ghost = create("Frame")({
-			Name = "DragGhost",
-			AnchorPoint = Vector2.new(0.5, 0.5),
-			Size = UDim2.fromOffset(CELL, CELL),
-			BackgroundColor3 = Theme.color.danger,
-			BackgroundTransparency = 0.15,
-			ZIndex = 10,
-			Visible = function()
-				return drag.ghost() ~= nil
-			end,
-			Position = function()
-				return drag.ghost() or UDim2.new()
-			end,
-			Base.corner(Theme.radius.md),
-			Base.text("title", {
-				Size = UDim2.fromScale(1, 1),
-				ZIndex = 11,
-				Text = function()
-					return ampText(drag.held())
-				end,
-				TextColor3 = Theme.color.inkOnLight,
-			}),
+		-- WIRES. Laid out from the pieces' absolute positions every frame
+		-- (a handful of frames; the card's enter scale and a rotate both
+		-- move the pieces). Everything is in scale units of the area -
+		-- like the Drag adapter's ghost - so the area's UIScale can't
+		-- throw the ends off the pieces; only the thickness is an offset.
+		local wireLayer = create("Frame")({
+			Name = "Wires",
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = 0,
 		}) :: Frame
 
-		return { socketRow :: Instance, fuseRow :: Instance, ghost :: Instance }
+		local function wireFrame(name: string, color: Color3): Frame
+			return create("Frame")({
+				Name = name,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				BorderSizePixel = 0,
+				BackgroundColor3 = color,
+				Visible = false,
+				Base.corner(Theme.radius.pill),
+				create("UIStroke")({
+					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+					Color = WIRE_OUTLINE,
+					Thickness = 1.5,
+				}),
+				Parent = wireLayer,
+			}) :: Frame
+		end
+
+		-- Where a wire meets a piece: the socket's bottom edge or the
+		-- fuse's top edge, the sides that face each other.
+		local function endOf(id: string): Vector2
+			local g = buttons[id]
+			local p, s = g.AbsolutePosition, g.AbsoluteSize
+			return Vector2.new(p.X + s.X / 2, if kinds[id] == "slot" then p.Y + s.Y else p.Y)
+		end
+
+		local function lay(wire: Frame, from: Vector2, to: Vector2)
+			local a, s = ctx.area.AbsolutePosition, ctx.area.AbsoluteSize
+			if s.X <= 0 or s.Y <= 0 then
+				wire.Visible = false
+				return
+			end
+			local mid, delta = (from + to) / 2 - a, to - from
+			wire.Position = UDim2.fromScale(mid.X / s.X, mid.Y / s.Y)
+			wire.Size = UDim2.new(delta.Magnitude / s.X, 0, 0, WIRE)
+			wire.Rotation = math.deg(math.atan2(delta.Y, delta.X))
+			wire.Visible = true
+		end
+
+		local wires: { [string]: Frame } = {}
+		for _, fuseId in challenge.fuseIds do
+			wires[fuseId] = wireFrame(fuseId .. "Wire", AMP_COLORS[amps[fuseId]] or Theme.color.line)
+		end
+		-- The wire being dragged draws over the pieces, not under them.
+		local liveLayer = create("Frame")({
+			Name = "LiveWire",
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = 10,
+		}) :: Frame
+		local liveWire = wireFrame("Wire", Theme.color.line)
+		liveWire.Parent = liveLayer
+		local plug = create("Frame")({
+			Name = "Plug",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Size = UDim2.fromOffset(PLUG, PLUG),
+			ZIndex = 2,
+			Visible = false,
+			Base.corner(Theme.radius.pill),
+			create("UIStroke")({
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = WIRE_OUTLINE,
+				Thickness = 2,
+			}),
+			Parent = liveLayer,
+		}) :: Frame
+
+		local wireConn = RunService.Heartbeat:Connect(function()
+			local current = placed()
+			for fuseId, wire in wires do
+				local slotId = current[fuseId]
+				if slotId ~= nil then
+					lay(wire, endOf(fuseId), endOf(slotId))
+				else
+					wire.Visible = false
+				end
+			end
+			-- The live wire: from the held piece to the dragged ghost.
+			local h, at = drag.held(), drag.ghost()
+			if h ~= nil and at ~= nil and not isPlaced(h) then
+				local a, s = ctx.area.AbsolutePosition, ctx.area.AbsoluteSize
+				local tip = Vector2.new(a.X + at.X.Scale * s.X, a.Y + at.Y.Scale * s.Y)
+				local color = AMP_COLORS[amps[h]] or Theme.color.line
+				liveWire.BackgroundColor3 = color
+				plug.BackgroundColor3 = color
+				plug.Position = at
+				plug.Visible = true
+				lay(liveWire, endOf(h), tip)
+			else
+				liveWire.Visible = false
+				plug.Visible = false
+			end
+		end)
+		vide.cleanup(function()
+			wireConn:Disconnect()
+		end)
+
+		return { wireLayer :: Instance, socketRow :: Instance, fuseRow :: Instance, liveLayer :: Instance }
 	end,
 
 	-- Feedback-less results are the shell's default "Keep going".

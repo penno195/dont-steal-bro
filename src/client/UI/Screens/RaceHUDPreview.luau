@@ -141,6 +141,11 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 		endAim = function(_fireIfLocked: boolean?)
 			aiming(false)
 		end,
+		discard = function(index: number)
+			local list = table.clone(slots())
+			list[index] = table.freeze({ index = index })
+			slots(list)
+		end,
 	}
 
 	local running = true

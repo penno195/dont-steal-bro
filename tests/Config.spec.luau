@@ -16,7 +16,15 @@ local function validGameConfig(): Validate.GameConfig
 		streakLossWeight = 2,
 		npcSeatStreakCreditThreshold = 3,
 		raceDurationSeconds = 300,
-		studioTimers = { introSeconds = 5, negotiateSeconds = 45, chooseSeconds = 15, revealDelaySeconds = 1 },
+		studioTimers = {
+			introSeconds = 5,
+			introNewPlayerSeconds = 12,
+			introMinSeconds = 2,
+			newPlayerFinales = 3,
+			negotiateSeconds = 45,
+			chooseSeconds = 15,
+			revealDelaySeconds = 1,
+		},
 		roundTimers = {
 			loadingSeconds = 5,
 			introSeconds = 5,
@@ -57,6 +65,16 @@ local function validGameConfig(): Validate.GameConfig
 			nextStationTopK = 2,
 			repathAfterStuckSeconds = 1.5,
 			maxRepathsPerStation = 5,
+			historyFinales = { min = 1, max = 8 },
+			appearance = {
+				hair = { 63690008 },
+				faces = { 144075659 },
+				shirts = { 607785314 },
+				pants = { 398633812 },
+				hats = {},
+				hatChance = 0.3,
+				skinTones = { { 234, 184, 146 } },
+			},
 		},
 		npcBrain = {
 			decisionHz = 2,
@@ -218,7 +236,9 @@ local function validPowerUp(id: string): Validate.PowerUpDef
 	return {
 		id = id,
 		displayName = "Test Power-Up",
+		description = "Does a test thing",
 		kind = "Buff",
+		role = "Utility",
 		target = "Self",
 		durationSeconds = 6,
 		cooldownSeconds = 20,
@@ -367,6 +387,87 @@ TestRunner.describe("Validate.checkPowerUp (design-decisions.md Q8)", function()
 		local issues = {}
 		local powerUp = validPowerUp("p")
 		powerUp.acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = false, robuxPrice = 99 }
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+end)
+
+TestRunner.describe("Validate.checkPowerUp (areaRadiusStuds)", function()
+	TestRunner.it("rejects an Area item with no radius", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.target = "Area"
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("accepts an Area item with a positive radius", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.target = "Area"
+		powerUp.areaRadiusStuds = 15
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects a radius on a non-Area item", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.areaRadiusStuds = 15
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+end)
+
+TestRunner.describe("Validate.checkPowerUp (description)", function()
+	TestRunner.it("rejects an empty description", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.description = ""
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("rejects a description too long for one phone line", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.description = string.rep("x", 49)
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+end)
+
+TestRunner.describe("Validate.checkPowerUp (role)", function()
+	TestRunner.it("rejects a Buff wearing the Attack role", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.role = "Attack"
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("rejects a Debuff with a non-Attack role", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.kind = "Debuff"
+		powerUp.role = "Defence"
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("rejects an unknown role", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.role = "Healer" :: any
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		TestRunner.expect(#issues):toBe(1)
+	end)
+
+	TestRunner.it("accepts a Debuff with the Attack role", function()
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.kind = "Debuff"
+		powerUp.role = "Attack"
 		Validate.checkPowerUp("P.luau", powerUp, issues)
 		TestRunner.expect(#issues):toBe(0)
 	end)
@@ -629,6 +730,27 @@ TestRunner.describe("Validate.checkGameConfig (P3-5 npc block)", function()
 			end,
 			function(config)
 				config.npc.maxRepathsPerStation = 0
+			end,
+			function(config)
+				config.npc.historyFinales = { min = 5, max = 2 }
+			end,
+			function(config)
+				config.npc.historyFinales = { min = -1, max = 2 }
+			end,
+			function(config)
+				config.npc.appearance.hair = {}
+			end,
+			function(config)
+				config.npc.appearance.shirts = { 0 }
+			end,
+			function(config)
+				config.npc.appearance.hatChance = 1.5
+			end,
+			function(config)
+				config.npc.appearance.skinTones = { { 300, 0, 0 } }
+			end,
+			function(config)
+				config.npc.appearance.skinTones = { { 10, 20 } }
 			end,
 		}
 

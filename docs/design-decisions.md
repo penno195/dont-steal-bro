@@ -153,9 +153,17 @@ a specific player" lens).
 **Open detail resolved (P6-5, 2026-09-23): Studio room only.** Reputation
 is sent in `DecisionParticipants`, to the people in the Studio, while it
 runs. It is not a public profile stat, and no hub or leaderboard surface
-shows it. It is lifetime `steals`/`shares` counts from the profile, and
-an NPC sends 0/0, which reads the same as a first-timer. Making it public
-later would need its own review under Q7.
+shows it. It is lifetime `steals`/`shares` counts from the profile.
+Making it public later would need its own review under Q7.
+
+**NPC history (2026-09-29, user decision):** bots must be
+indistinguishable from humans, so an NPC no longer sends 0/0. Each bot
+gets a small fixed history - `npc.historyFinales` (1-8) past finales,
+each rolled from its hidden personality's steal probability
+(`NPCBrainLogic.staticHistory`) - so a Greedy bot's line usually leans
+steal and a Loyal one's leans share, with the noise a short record has.
+Bots also wear real avatars drawn from `npc.appearance`, not a
+placeholder rig.
 
 **Reversal cost:** Cheap — additive UI and a counter field; doesn't touch
 resolution logic.

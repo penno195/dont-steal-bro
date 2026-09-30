@@ -6,7 +6,7 @@ for the handler, config and remote. This page covers only the view.
 
 | File | What it owns |
 |---|---|
-| `src/client/UI/TaskViewBase.luau` | The shell: sheet/window, transitions, header (title, timer, close), status line, play area, input lock, submit |
+| `src/client/UI/TaskViewBase.luau` | The shell: sheet/window, transitions, header ((i) explainer, timer), the corner close button, status line, play area, input lock, submit |
 | `src/client/UI/InputAdapters.luau` | One adapter per verb: Tap, Hold, Drag, Sequence, Timing, Aim |
 | `src/client/UI/InputLock.luau` | Freezes camera + character input; restores exactly, reference-counted |
 | `src/client/UI/TaskViewLogic.luau` | The pure maths behind all of the above (tested headlessly) |
@@ -18,8 +18,10 @@ for the handler, config and remote. This page covers only the view.
 1. **Server half first** — config, handler, submission remote, per
    `how-to-add-a-task.md`. Your `TaskDef.verb` picks your adapter.
 2. **Create `src/client/TaskViews/<Name>.luau`** and return
-   `TaskViewBase.define({ taskId, title, build, onProgress? })`. The
-   registry picks it up; nothing else is edited.
+   `TaskViewBase.define({ taskId, title, explainer, build, onProgress? })`.
+   The card shows no title; `title` and `explainer` (a sentence or two
+   on how to play) appear behind the header's (i). The registry picks
+   it up; nothing else is edited.
 3. **In `build(ctx)`, read `ctx.challenge`** (cast it to your handler's
    challenge type) and return your content. It's parented into
    `ctx.area`, the play area, which is already inset from every edge.
@@ -149,9 +151,6 @@ in portrait before building more tasks on the base:
 
 ## Migrating the older views
 
-`PressureValve` (Tap) and `FuseRewire` (Drag) are still plain Instances.
-Their camera freeze now goes through `InputLock`, and the controller's
-guards close them like any other view. Move them onto the base (with
-`InputAdapters.Tap` and `InputAdapters.Drag`) when they're next touched.
-Until then they don't get the sheet or the header. P6-7 did move them onto
-`createScreen` safe-area screens, bottom-anchored (`docs/mobile-audit.md` #3–4).
+Done: `FuseRewire` (Drag) and then `PressureValve` (Tap) are both on the
+base now, so every task view gets the sheet/window, the (i) explainer
+and the corner close button.

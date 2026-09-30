@@ -27,6 +27,49 @@ describe("TaskViewLogic.presentation", function()
 	end)
 end)
 
+describe("TaskViewLogic.windowSize", function()
+	local WANT = { width = 520, height = 560 }
+
+	it("shrinks the window to fit a monitor's ~360 reference-px short axis", function()
+		-- 1280x720 at scale 2 is 640x360 reference px.
+		local w, h = TaskViewLogic.windowSize(WANT, 640, 360, 16)
+		expect(w):toBe(520)
+		expect(h):toBe(328)
+	end)
+
+	it("keeps the token size when there's room", function()
+		local w, h = TaskViewLogic.windowSize(WANT, 1400, 900, 16)
+		expect(w):toBe(520)
+		expect(h):toBe(560)
+	end)
+
+	it("never goes negative", function()
+		local w, h = TaskViewLogic.windowSize(WANT, 10, 10, 16)
+		expect(w):toBe(0)
+		expect(h):toBe(0)
+	end)
+end)
+
+describe("TaskViewLogic.flash", function()
+	it("blanks between items so a repeated digit reads as two flashes", function()
+		-- 1s per item, lit for the first 60%.
+		expect(select(2, TaskViewLogic.flash(0.1, 1, 4, 0.6))):toBe(true)
+		expect(select(2, TaskViewLogic.flash(0.8, 1, 4, 0.6))):toBe(false)
+		local index, lit = TaskViewLogic.flash(1.1, 1, 4, 0.6)
+		expect(index):toBe(2)
+		expect(lit):toBe(true)
+	end)
+
+	it("ends after the last item", function()
+		expect(TaskViewLogic.flash(4.01, 1, 4, 0.6)):toBe(nil)
+	end)
+
+	it("returns nothing for a bad period or negative time", function()
+		expect(TaskViewLogic.flash(0.5, 0, 4, 0.6)):toBe(nil)
+		expect(TaskViewLogic.flash(-1, 1, 4, 0.6)):toBe(nil)
+	end)
+end)
+
 describe("TaskViewLogic edge margin", function()
 	it("flags a rect inside the margin on any side", function()
 		expect(TaskViewLogic.violatesEdge({ x = 10, y = 100, width = 50, height = 50 }, PHONE, 24)):toBe(true)

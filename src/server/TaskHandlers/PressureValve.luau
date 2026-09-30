@@ -20,11 +20,10 @@
 local Types = require(script.Parent.Types)
 
 type Challenge = {
-	-- Deliberately NOT the rolled target count - "returns only what the
-	-- client needs to render it, never the answer" (Types.luau's own
-	-- contract). The client only needs to know a tap loop has started;
-	-- tasks-catalogue.md's own client view never shows the target either
-	-- (a real gauge fills from FEEL, not a visible counter).
+	-- Not the rolled target count: the view never needs it up front.
+	-- Per-tap feedback (validate) does let a client infer it from the
+	-- needle's step size, and that's fine - knowing the target skips
+	-- nothing, since every tap is still counted and rate-limited here.
 	meterFillSeconds: number,
 }
 
@@ -39,13 +38,18 @@ type Submission = {} -- TapSubmit's payload carries only stationId, already cons
 
 local MIN_TARGET_TAPS = 18
 local MAX_TARGET_TAPS = 24
+-- Task Insight's easy tier: the same gauge budget, far fewer taps.
+local EASY_MIN_TARGET_TAPS = 10
+local EASY_MAX_TARGET_TAPS = 14
 local MIN_TAP_INTERVAL_SECONDS = 0.07 -- tasks-catalogue.md's own "~70ms"
 local METER_FILL_SECONDS = 6 -- the time budget a cycle has to reach the target before the gauge maxes and resets
 
 local function start(ctx: Types.TaskContext): (Challenge, State)
 	local challenge: Challenge = { meterFillSeconds = METER_FILL_SECONDS }
 	local state: State = {
-		targetTapCount = ctx.rng:NextInteger(MIN_TARGET_TAPS, MAX_TARGET_TAPS),
+		targetTapCount = if ctx.easy
+			then ctx.rng:NextInteger(EASY_MIN_TARGET_TAPS, EASY_MAX_TARGET_TAPS)
+			else ctx.rng:NextInteger(MIN_TARGET_TAPS, MAX_TARGET_TAPS),
 		tapCount = 0,
 		cycleStartedAtElapsed = 0,
 		lastAcceptedTapElapsed = nil,
@@ -53,7 +57,16 @@ local function start(ctx: Types.TaskContext): (Challenge, State)
 	return challenge, state
 end
 
-local function validate(ctx: Types.TaskContext, state: State, _submission: Submission): (boolean, State)
+-- Feedback is the needle: how far THIS player's accepted taps have
+-- pushed it (0..1), and whether this tap landed after the gauge maxed
+-- and started a fresh cycle. It describes taps already made, never the
+-- target count's future - progress only ever moves by what was tapped.
+-- A dropped (too-fast) tap sends none, so the needle doesn't twitch.
+local function validate(
+	ctx: Types.TaskContext,
+	state: State,
+	_submission: Submission
+): (boolean, State, Types.TaskFeedback?)
 	local nowElapsed = ctx.elapsedSeconds()
 
 	-- "server increments its own counter only if the elapsed time since
@@ -79,7 +92,8 @@ local function validate(ctx: Types.TaskContext, state: State, _submission: Submi
 				tapCount = 1,
 				cycleStartedAtElapsed = nowElapsed,
 				lastAcceptedTapElapsed = nowElapsed,
-			}
+			},
+			{ progress = 1 / state.targetTapCount, reset = true }
 	end
 
 	local newTapCount = state.tapCount + 1
@@ -90,7 +104,9 @@ local function validate(ctx: Types.TaskContext, state: State, _submission: Submi
 		lastAcceptedTapElapsed = nowElapsed,
 	}
 
-	return newTapCount >= state.targetTapCount, nextState
+	return newTapCount >= state.targetTapCount,
+		nextState,
+		{ progress = math.min(1, newTapCount / state.targetTapCount), reset = false }
 end
 
 local function cleanup(_ctx: Types.TaskContext, _state: State)

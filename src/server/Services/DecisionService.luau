@@ -24,7 +24,8 @@
 --   Intro / Negotiate: the client has received DecisionParticipants (the
 --   3 qualifier ids, plus each one's lifetime steal/share counts for the
 --   P6-5 reputation line - past rounds only, and never a streak) and
---   DecisionPhaseChanged (phase name + deadline).
+--   DecisionPhaseChanged (phase name + deadline), and during Intro
+--   DecisionReadyState (who has closed the loading card).
 --   No choice exists server-side yet at all (`choices` is empty) - there
 --   is nothing to leak because nothing has been decided.
 --
@@ -177,6 +178,11 @@ local personalResults: { [number]: PersonalResult } = {}
 
 local pendingPhaseTimerThread: thread? = nil
 
+-- The Intro's ready-up (FinaleRoster.allReady): who has tapped "Got it",
+-- and when the Intro began, for the introMinSeconds floor.
+local ready: { [number]: boolean } = {}
+local introStartedAt = 0
+
 local function now(): number
 	return Workspace:GetServerTimeNow()
 end
@@ -196,6 +202,16 @@ local function isPresent(racerId: number): boolean
 		return Participants.get(racerId) ~= nil
 	end
 	return Players:GetPlayerByUserId(racerId) ~= nil
+end
+
+local function broadcastReady()
+	local readyIds: { number } = {}
+	for _, id in qualifierIds do
+		if ready[id] then
+			table.insert(readyIds, id)
+		end
+	end
+	Net.fireAllClients("DecisionReadyState", { readyIds = readyIds })
 end
 
 local function allLocked(): boolean
@@ -471,14 +487,69 @@ enterNegotiate = function()
 	end)
 end
 
+-- The Intro is the loading card's reading time. Its length is set for
+-- the newest finalist; it ends early once every finalist is ready, but
+-- never before introMinSeconds (staging runs behind the card).
 enterIntro = function()
-	local duration = GameConfig.studioTimers.introSeconds
-	broadcastPhase("Intro", now() + duration)
+	local DataService = Loader.get("DataService") :: any
+	local finalesPlayed: { number } = {}
+	for _, id in qualifierIds do
+		local player = Players:GetPlayerByUserId(id)
+		local stats = if player ~= nil then DataService.getStats(player) else nil
+		if stats ~= nil then
+			table.insert(finalesPlayed, stats.steals + stats.shares)
+		end
+	end
+	local duration = FinaleRoster.introSeconds(finalesPlayed, GameConfig.studioTimers)
+
+	-- A bot has nothing to read.
+	for _, id in qualifierIds do
+		if Participants.isNPCId(id) then
+			ready[id] = true
+		end
+	end
+
+	introStartedAt = now()
+	broadcastPhase("Intro", introStartedAt + duration)
+	broadcastReady()
 
 	pendingPhaseTimerThread = task.delay(duration, function()
 		pendingPhaseTimerThread = nil
 		enterNegotiate()
 	end)
+end
+
+-- Ends the Intro now if every finalist is ready, or at the floor if
+-- they got there first. Safe to call more than once: it only ever
+-- shortens the pending timer.
+local function checkIntroReady()
+	if currentPhase ~= "Intro" or not FinaleRoster.allReady(qualifierIds, ready, isPresent) then
+		return
+	end
+	local wait = math.max(0, introStartedAt + GameConfig.studioTimers.introMinSeconds - now())
+	cancelPendingPhaseTimer()
+	if wait == 0 then
+		enterNegotiate()
+		return
+	end
+	-- The new deadline only, so countdowns show the real, shorter wait.
+	-- Not broadcastPhase: that would re-fire Intro's enter signal and
+	-- re-run staging.
+	Net.fireAllClients("DecisionPhaseChanged", { phase = "Intro", endsAt = now() + wait })
+	pendingPhaseTimerThread = task.delay(wait, function()
+		pendingPhaseTimerThread = nil
+		enterNegotiate()
+	end)
+end
+
+-- Same silent-drop stance as lockIn: nothing goes back to the sender.
+local function handleReadyIntent(player: Player)
+	if currentPhase ~= "Intro" or not isQualifier(player.UserId) or ready[player.UserId] then
+		return
+	end
+	ready[player.UserId] = true
+	broadcastReady()
+	checkIntroReady()
 end
 
 -- ===== submission + disconnect handling ====================================
@@ -596,6 +667,15 @@ local function handleQualifierLeaving(userId: number)
 
 	if decision.mayCompleteRound and currentPhase == "Choose" and allLocked() then
 		resolveAndReveal()
+	end
+
+	-- Nobody to wait for in an empty seat. Marked ready outright rather
+	-- than left to isPresent: the player is still in Players until
+	-- PlayerRemoving finishes.
+	if currentPhase == "Intro" then
+		ready[userId] = true
+		broadcastReady()
+		checkIntroReady()
 	end
 end
 
@@ -719,6 +799,7 @@ local function beginDecisionStudio()
 
 	choices = {}
 	locked = {}
+	ready = {}
 	personalResults = {}
 	outcomeWritten = false
 	currentPhase = nil
@@ -779,13 +860,18 @@ local function beginDecisionStudio()
 	-- counts, for the Studio's reputation line. Sent here and nowhere else
 	-- (Q5's scope, resolved in P6-5: "Studio room only", never a public
 	-- profile stat). A list, not a map keyed by id - a RemoteEvent turns
-	-- non-sequential number keys into strings. An NPC or an absent
-	-- player sends 0/0, which reads exactly like a first-timer's, so the
-	-- line never becomes an NPC detector.
+	-- non-sequential number keys into strings. An NPC sends a small
+	-- history rolled from its hidden personality (NPCBrain.historyFor),
+	-- so its line reads like a light player's and never becomes an NPC
+	-- detector. An absent player sends 0/0, a first-timer's line.
+	local NPCBrain = Loader.get("NPCBrain") :: any
 	local reputation: { { playerId: number, steals: number, shares: number } } = {}
 	for _, id in qualifierIds do
 		local player = Players:GetPlayerByUserId(id)
-		local stats = if player ~= nil then DataService.getStats(player) else nil
+		local stats = if player ~= nil
+			then DataService.getStats(player)
+			elseif Participants.isNPCId(id) then NPCBrain.historyFor(id)
+			else nil
 		table.insert(reputation, {
 			playerId = id,
 			steals = if stats ~= nil then stats.steals else 0,
@@ -873,6 +959,10 @@ function DecisionService:init()
 
 	NetGuard.on("DecisionChooseIntent", function(player: Player, payload: any)
 		handleChooseIntent(player, payload.choice)
+	end)
+
+	NetGuard.on("DecisionReadyIntent", function(player: Player, _payload: any)
+		handleReadyIntent(player)
 	end)
 
 	NetGuard.on("DecisionDebugForceOutcome", function(player: Player, payload: any)

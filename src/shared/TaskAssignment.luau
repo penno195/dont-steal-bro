@@ -96,21 +96,47 @@ function TaskAssignment.assign(
 		alreadyAssigned[playerId] = {}
 	end
 
+	-- How many times each player has been dealt each task so far. Every
+	-- pick goes to the least-dealt task on any station that still has
+	-- room, so nobody repeats a task until every task on offer has come
+	-- up once, and after that repeats stay spread evenly.
+	local taskCounts: { [number]: { [string]: number } } = {}
+	for _, playerId in playerIds do
+		taskCounts[playerId] = {}
+	end
+
 	local orderedPlayerIds = shuffledCopy(playerIds, nextRandom)
 
 	for _ = 1, tasksPerPlayer do
 		for _, playerId in orderedPlayerIds do
+			local counts = taskCounts[playerId]
 			local pool = shuffledCopy(stations, nextRandom)
+
+			local fewest = math.huge
 			for _, station in pool do
 				if remainingCapacity[station.stationId] > 0 and not alreadyAssigned[playerId][station.stationId] then
-					local taskIndex = math.floor(nextRandom() * #station.acceptedTaskIds) + 1
-					table.insert(
-						result[playerId],
-						{ stationId = station.stationId, taskId = station.acceptedTaskIds[taskIndex] }
-					)
-					alreadyAssigned[playerId][station.stationId] = true
-					remainingCapacity[station.stationId] -= 1
-					break
+					for _, taskId in station.acceptedTaskIds do
+						fewest = math.min(fewest, counts[taskId] or 0)
+					end
+				end
+			end
+
+			for _, station in pool do
+				if remainingCapacity[station.stationId] > 0 and not alreadyAssigned[playerId][station.stationId] then
+					local candidates: { string } = {}
+					for _, taskId in station.acceptedTaskIds do
+						if (counts[taskId] or 0) == fewest then
+							table.insert(candidates, taskId)
+						end
+					end
+					if #candidates > 0 then
+						local taskId = candidates[math.floor(nextRandom() * #candidates) + 1]
+						table.insert(result[playerId], { stationId = station.stationId, taskId = taskId })
+						alreadyAssigned[playerId][station.stationId] = true
+						remainingCapacity[station.stationId] -= 1
+						counts[taskId] = (counts[taskId] or 0) + 1
+						break
+					end
 				end
 			end
 		end

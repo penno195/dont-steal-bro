@@ -13,10 +13,12 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Freeze: Validate.PowerUpDef = {
 	id = "freeze",
 	displayName = "Freeze",
+	description = "Freezes a rival in place",
 	kind = "Debuff",
+	role = "Attack",
 	target = "Aimed",
 	durationSeconds = 2.5,
-	cooldownSeconds = 25,
+	cooldownSeconds = 12,
 	rarity = "Uncommon",
 	hardControl = true,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },

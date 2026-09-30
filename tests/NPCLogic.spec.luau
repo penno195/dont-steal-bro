@@ -326,4 +326,157 @@ TestRunner.describe("NPCLogic.newRng", function()
 		local second = NPCLogic.newRng(1000 + -2 * 7919)
 		assert(first() ~= second(), "expected two NPCs to draw independently")
 	end)
+
+	TestRunner.it("doesn't line up the same draw across bots seeded a fixed step apart", function()
+		-- Regression: before the seed was scrambled, bots seeded
+		-- `roundSeed + id * 7919` agreed on a 30% roll in 3 rounds of 4.
+		-- Independent bots all agree (0 or 5 of 5 under 0.3) about 17% of
+		-- the time.
+		local agreed = 0
+		local rounds = 400
+		for round = 1, rounds do
+			local roundSeed = round * 1234577
+			local under = 0
+			for id = -1, -5, -1 do
+				local rng = NPCLogic.newRng(roundSeed + id * 7919)
+				for _ = 1, 5 do
+					rng()
+				end
+				if rng() < 0.3 then
+					under += 1
+				end
+			end
+			if under == 0 or under == 5 then
+				agreed += 1
+			end
+		end
+		assert(agreed / rounds < 0.3, string.format("bots agreed in %d of %d rounds", agreed, rounds))
+	end)
+end)
+
+TestRunner.describe("NPCLogic.trimRoute", function()
+	-- A straight corridor along z: A(0) - B(10) - C(20) - D(30).
+	local POINTS: { [string]: NPCLogic.Point } = {
+		A = { x = 0, y = 0, z = 0 },
+		B = { x = 0, y = 0, z = 10 },
+		C = { x = 0, y = 0, z = 20 },
+		D = { x = 0, y = 0, z = 30 },
+	}
+	local function at(z: number): NPCLogic.Point
+		return { x = 0, y = 0, z = z }
+	end
+
+	TestRunner.it("skips a first node that is behind the bot", function()
+		-- The spawn case: the bot stands at z=4, past A, heading for D.
+		local route = NPCLogic.trimRoute({ "A", "B", "C", "D" }, POINTS, at(4), at(30))
+		TestRunner.expect(route[1]):toBe("B")
+		TestRunner.expect(#route):toBe(3)
+	end)
+
+	TestRunner.it("keeps a first node that is ahead of the bot", function()
+		local route = NPCLogic.trimRoute({ "A", "B", "C", "D" }, POINTS, at(-5), at(30))
+		TestRunner.expect(route[1]):toBe("A")
+	end)
+
+	TestRunner.it("skips a last node that is past the station", function()
+		local route = NPCLogic.trimRoute({ "A", "B", "C", "D" }, POINTS, at(-5), at(26))
+		TestRunner.expect(route[#route]):toBe("C")
+	end)
+
+	TestRunner.it("never trims below one node and never mutates the input", function()
+		local input = { "A", "B" }
+		local route = NPCLogic.trimRoute(input, POINTS, at(8), at(1))
+		TestRunner.expect(#route):toBe(1)
+		TestRunner.expect(#input):toBe(2)
+		TestRunner.expect(#NPCLogic.trimRoute({ "A" }, POINTS, at(8), at(1))):toBe(1)
+	end)
+end)
+
+TestRunner.describe("NPCLogic.isContinuousFloor", function()
+	TestRunner.it("accepts flat floor and a ramp's steady climb", function()
+		TestRunner.expect(NPCLogic.isContinuousFloor({ 0, 0, 0, 0 }, 1.2)):toBe(true)
+		-- A 14-degree ramp sampled every 2 studs rises ~0.5 per sample.
+		TestRunner.expect(NPCLogic.isContinuousFloor({ 0, 0.5, 1, 1.5, 2 }, 1.2)):toBe(true)
+		TestRunner.expect(NPCLogic.isContinuousFloor({ 2, 1.5, 1, 0.5, 0 }, 1.2)):toBe(true)
+	end)
+
+	TestRunner.it("rejects a ledge or a drop to a lower level", function()
+		TestRunner.expect(NPCLogic.isContinuousFloor({ 0, 0, 3, 3 }, 1.2)):toBe(false)
+		TestRunner.expect(NPCLogic.isContinuousFloor({ 14, 14, 0, 0 }, 1.2)):toBe(false)
+	end)
+
+	TestRunner.it("rejects fewer than two samples", function()
+		TestRunner.expect(NPCLogic.isContinuousFloor({}, 1.2)):toBe(false)
+		TestRunner.expect(NPCLogic.isContinuousFloor({ 0 }, 1.2)):toBe(false)
+	end)
+end)
+
+TestRunner.describe("NPCLogic.pickAppearance", function()
+	local POOLS: NPCLogic.AppearancePools = {
+		hair = { 1, 2, 3 },
+		faces = { 10, 11 },
+		shirts = { 20, 21, 22 },
+		pants = { 30 },
+		hats = { 40, 41 },
+		hatChance = 0.3,
+		skinTones = { { 1, 2, 3 }, { 4, 5, 6 } },
+	}
+
+	local function contains(list: { any }, value: any): boolean
+		return table.find(list, value) ~= nil
+	end
+
+	TestRunner.it("always draws every slot from its own pool", function()
+		local rng = NPCLogic.newRng(3)
+		for _ = 1, 200 do
+			local look = NPCLogic.pickAppearance(POOLS, rng)
+			assert(contains(POOLS.hair, look.hair), "hair outside its pool")
+			assert(contains(POOLS.faces, look.face), "face outside its pool")
+			assert(contains(POOLS.shirts, look.shirt), "shirt outside its pool")
+			assert(contains(POOLS.pants, look.pants), "pants outside its pool")
+			assert(contains(POOLS.skinTones, look.skinTone), "skin tone outside its pool")
+			assert(look.hat == nil or contains(POOLS.hats, look.hat), "hat outside its pool")
+		end
+	end)
+
+	TestRunner.it("gives roughly hatChance of bots a hat", function()
+		local rng = NPCLogic.newRng(17)
+		local hats = 0
+		for _ = 1, 2000 do
+			if NPCLogic.pickAppearance(POOLS, rng).hat ~= nil then
+				hats += 1
+			end
+		end
+		local rate = hats / 2000
+		assert(rate > 0.25 and rate < 0.35, string.format("hat rate %.3f is far from 0.3", rate))
+	end)
+
+	TestRunner.it("never gives a hat when the hat pool is empty", function()
+		local noHats = table.clone(POOLS)
+		noHats.hats = {}
+		noHats.hatChance = 1
+		TestRunner.expect(NPCLogic.pickAppearance(noHats, NPCLogic.newRng(1)).hat):toBe(nil)
+	end)
+
+	TestRunner.it("draws the same number of rolls with or without a hat", function()
+		-- Same seed, hatChance 0 then 1: the hat differs, but the roll
+		-- after the pick must be the same.
+		local function streamAfter(chance: number): number
+			local pools = table.clone(POOLS)
+			pools.hatChance = chance
+			local rng = NPCLogic.newRng(99)
+			NPCLogic.pickAppearance(pools, rng)
+			return rng()
+		end
+		TestRunner.expect(streamAfter(0)):toBe(streamAfter(1))
+	end)
+
+	TestRunner.it("uses every option in a pool over enough draws", function()
+		local rng = NPCLogic.newRng(5)
+		local seen: { [number]: boolean } = {}
+		for _ = 1, 200 do
+			seen[NPCLogic.pickAppearance(POOLS, rng).hair] = true
+		end
+		TestRunner.expect(seen[1] and seen[2] and seen[3]):toBeTruthy()
+	end)
 end)

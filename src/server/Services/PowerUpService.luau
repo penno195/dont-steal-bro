@@ -79,6 +79,7 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local ServerStorage = game:GetService("ServerStorage")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -203,6 +204,20 @@ local function setEffectApplier(fn: EffectApplier)
 	effectApplier = fn
 end
 
+-- Overclock's seam, same shape as the applier's: StatusEffects supplies
+-- a racer's resolved CooldownRate. 1.0 until it's wired in.
+local cooldownRateSource: (racerId: number) -> number = function(_racerId: number): number
+	return 1
+end
+
+local function setCooldownRateSource(fn: (racerId: number) -> number)
+	cooldownRateSource = fn
+end
+
+local function cooldownSecondsFor(racerId: number, def: Validate.PowerUpDef): number
+	return def.cooldownSeconds * cooldownRateSource(racerId)
+end
+
 -- ===== audit log ===========================================================
 
 export type AuditEntry = {
@@ -299,11 +314,108 @@ end
 -- and anything within 10 studs was going to reach the pickup anyway.
 local PICKUP_REACH_STUDS = 10
 
-local RARITY_COLOR: { [string]: Color3 } = {
-	Common = Color3.fromRGB(180, 180, 180),
-	Uncommon = Color3.fromRGB(80, 170, 90),
-	Rare = Color3.fromRGB(90, 120, 220),
-}
+-- THE PICKUP LOOK. The orb is the claimable part but is never drawn:
+-- what players see is `Haze`, a slightly larger ForceField-material
+-- shell in the item's role colour (PowerUpLogic.ROLE_RGB). ForceField
+-- draws mostly at the rim, so it reads as a force field around the icon
+-- rather than a tinted bubble hiding it (a ForceField ORB at 0.5
+-- transparency was tried before and swallowed the icon; the rim-only
+-- shell at full opacity doesn't). The item's own model -
+-- ServerStorage.PowerUpModels[<id>], built by
+-- scripts/build-powerup-models.luau - is cloned in as `Visual`, and
+-- PickupController spins it and breathes the haze client-side (a
+-- server-side animation would replicate every frame). Two lights: a
+-- role-coloured glow at the centre that spills onto the floor, and a
+-- near-white key light above so the icon's non-neon faces aren't
+-- black in a dark map. The energy-shield look comes from two additive,
+-- lighting-independent sprites layered over that rim: a soft `Glow`
+-- halo and a fast-turning `Vortex` swirl, both the engine's own legacy
+-- ForceField textures (shipped in every client's content folder, so no
+-- upload and no moderation). No model for an id is fine: the haze alone
+-- still reads as a pickup.
+local ORB_SIZE = 3.2 -- the invisible touch/claim ball
+local HAZE_DIAMETER = 4.6
+local HAZE_TRANSPARENCY = 0
+local HAZE_WHITENESS = 0.35 -- rim and sprites: role colour lifted toward white
+local VISUAL_FIT_STUDS = 2.4 -- the model's longest side, inside the orb
+local KEY_LIGHT_HEIGHT = 2.4 -- studs above the orb centre
+local KEY_LIGHT_WHITENESS = 0.7 -- lerp from role colour toward white
+local MOTE_TEXTURE = "rbxasset://textures/particles/sparkles_main.dds"
+local GLOW_TEXTURE = "rbxasset://textures/particles/forcefield_glow_main.dds"
+local VORTEX_TEXTURE = "rbxasset://textures/particles/forcefield_vortex_main.dds"
+
+-- One of the shield sprites: spawned at the orb centre, locked to it,
+-- fading in and out while it spins so overlapping copies read as a
+-- continuous shimmer rather than a blinking decal.
+local function shieldSprite(
+	parent: Instance,
+	name: string,
+	texture: string,
+	size: number,
+	peakOpacity: number,
+	spin: number,
+	rate: number
+): ParticleEmitter
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Name = name
+	emitter.Texture = texture
+	emitter.LightEmission = 1
+	emitter.LightInfluence = 0
+	emitter.LockedToPart = true
+	emitter.Size = NumberSequence.new(size)
+	emitter.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.4, 1 - peakOpacity),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	emitter.Lifetime = NumberRange.new(1.2, 1.6)
+	emitter.Rate = rate
+	emitter.Speed = NumberRange.new(0)
+	emitter.Rotation = NumberRange.new(0, 360)
+	emitter.RotSpeed = NumberRange.new(-spin, spin)
+	emitter.Enabled = false
+	emitter.Parent = parent
+	return emitter
+end
+
+local function roleColor(role: string): Color3
+	local rgb = PowerUpLogic.ROLE_RGB[role]
+	return if rgb then Color3.fromRGB(rgb[1], rgb[2], rgb[3]) else Color3.fromRGB(255, 255, 255)
+end
+
+local function clearVisual(part: BasePart)
+	local visual = part:FindFirstChild("Visual")
+	if visual ~= nil then
+		visual:Destroy()
+	end
+end
+
+local function attachVisual(part: BasePart, powerUpId: string)
+	clearVisual(part)
+	local folder = ServerStorage:FindFirstChild("PowerUpModels")
+	local source = if folder ~= nil then folder:FindFirstChild(powerUpId) else nil
+	if source == nil or not source:IsA("Model") then
+		return
+	end
+	local visual = source:Clone()
+	visual.Name = "Visual"
+	for _, d in visual:GetDescendants() do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanCollide = false
+			d.CanTouch = false
+			d.CanQuery = false
+			d.CastShadow = false
+		end
+	end
+	local extents = visual:GetExtentsSize()
+	local longest = math.max(extents.X, extents.Y, extents.Z)
+	if longest > 0 then
+		visual:ScaleTo(visual:GetScale() * VISUAL_FIT_STUDS / longest)
+	end
+	visual:PivotTo(part.CFrame)
+	visual.Parent = part
+end
 
 -- STUDIO ONLY playtest override: set Workspace attribute
 -- DebugPowerUpTarget to a target kind ("Aimed", "Nearest", "Self",
@@ -361,9 +473,21 @@ local function hideLivePickup(point: SpawnPointRecord)
 	livePickups[point] = nil
 	local part: BasePart? = pickupParts[point]
 	if part ~= nil then
-		part.Transparency = 1
 		part.CanTouch = false
 		part.CanQuery = false
+		local haze = part:FindFirstChild("Haze")
+		if haze ~= nil and haze:IsA("BasePart") then
+			haze.Transparency = 1
+		end
+		for _, d in part:GetDescendants() do
+			if d:IsA("Light") then
+				d.Enabled = false
+			elseif d:IsA("ParticleEmitter") then
+				d.Enabled = false
+				d:Clear()
+			end
+		end
+		clearVisual(part)
 	end
 end
 
@@ -376,12 +500,77 @@ local function pickupPartFor(point: SpawnPointRecord): BasePart
 	end
 	local part = Instance.new("Part")
 	part.Shape = Enum.PartType.Ball
-	part.Size = Vector3.new(2.5, 2.5, 2.5)
+	part.Size = Vector3.new(ORB_SIZE, ORB_SIZE, ORB_SIZE)
 	part.Anchored = true
 	part.CanCollide = false
-	part.Material = Enum.Material.Neon
-	part.Color = RARITY_COLOR[point.rarity] or Color3.fromRGB(255, 255, 255)
-	part.CFrame = point.part.CFrame + Vector3.new(0, 2, 0)
+	part.CastShadow = false
+	part.Transparency = 1
+	part.CFrame = point.part.CFrame + Vector3.new(0, 2.5, 0)
+
+	local haze = Instance.new("Part")
+	haze.Name = "Haze"
+	haze.Shape = Enum.PartType.Ball
+	haze.Size = Vector3.new(HAZE_DIAMETER, HAZE_DIAMETER, HAZE_DIAMETER)
+	haze.Material = Enum.Material.ForceField
+	haze.Transparency = 1
+	haze.Anchored = true
+	haze.CanCollide = false
+	haze.CanTouch = false
+	haze.CanQuery = false
+	haze.CastShadow = false
+	haze.CFrame = part.CFrame
+	haze:SetAttribute("BaseDiameter", HAZE_DIAMETER) -- PickupController breathes around this
+	haze.Parent = part
+
+	local glow = Instance.new("PointLight")
+	glow.Name = "Glow"
+	glow.Range = 10
+	glow.Brightness = 1.5
+	glow.Shadows = false
+	glow.Enabled = false
+	glow.Parent = part
+
+	local keyAttachment = Instance.new("Attachment")
+	keyAttachment.Name = "KeyLight"
+	keyAttachment.Position = Vector3.new(0, KEY_LIGHT_HEIGHT, 0)
+	keyAttachment.Parent = part
+	local key = Instance.new("PointLight")
+	key.Range = 5
+	key.Brightness = 3
+	key.Shadows = false
+	key.Enabled = false
+	key.Parent = keyAttachment
+
+	local motes = Instance.new("ParticleEmitter")
+	motes.Name = "Motes"
+	motes.Texture = MOTE_TEXTURE
+	motes.LightEmission = 1
+	motes.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(0.3, 0.35),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	motes.Transparency = NumberSequence.new(0.2)
+	motes.Lifetime = NumberRange.new(1, 1.6)
+	motes.Rate = 8
+	motes.Speed = NumberRange.new(0.3, 0.6)
+	motes.SpreadAngle = Vector2.new(180, 180)
+	motes.Shape = Enum.ParticleEmitterShape.Sphere
+	motes.ShapeStyle = Enum.ParticleEmitterShapeStyle.Volume
+	motes.Enabled = false
+	motes.Parent = part
+
+	-- An attachment emits from a point, so the sprites sit dead centre.
+	local core = Instance.new("Attachment")
+	core.Name = "Core"
+	core.Parent = part
+	-- Sizes tuned by eye in playtest: the glow texture is a soft centre
+	-- blob so it matches the shell at ~HAZE_DIAMETER, but the vortex's
+	-- swirl reaches the sprite edge, so it needs a much smaller size to
+	-- sit just outside the rim instead of drawing a second ring.
+	shieldSprite(core, "Glow", GLOW_TEXTURE, HAZE_DIAMETER - 0.2, 0.6, 20, 3)
+	shieldSprite(core, "Vortex", VORTEX_TEXTURE, 3.6, 0.85, 120, 5)
+
 	part.Parent = pickupsFolder
 	-- Connected once for the part's life. It reads the live record at
 	-- touch time, so a touch while hidden finds nothing to claim.
@@ -521,9 +710,43 @@ spawnAt = function(point: SpawnPointRecord)
 
 	local part = pickupPartFor(point)
 	part.Name = string.format("PowerUpPickup_%s", def.id)
-	part.Transparency = 0
+	local color = roleColor(def.role)
+	part.Color = color
+	local shieldColor = color:Lerp(Color3.new(1, 1, 1), HAZE_WHITENESS)
+	local haze = part:FindFirstChild("Haze")
+	if haze ~= nil and haze:IsA("BasePart") then
+		haze.Color = shieldColor
+		haze.Transparency = HAZE_TRANSPARENCY
+	end
+	local core = part:FindFirstChild("Core")
+	if core ~= nil then
+		for _, sprite in core:GetChildren() do
+			if sprite:IsA("ParticleEmitter") then
+				sprite.Color = ColorSequence.new(shieldColor)
+				sprite.Enabled = true
+				sprite:Emit(6) -- start full rather than fading in from empty
+			end
+		end
+	end
+	local glow = part:FindFirstChild("Glow")
+	if glow ~= nil and glow:IsA("PointLight") then
+		glow.Color = color
+		glow.Enabled = true
+	end
+	local keyAttachment = part:FindFirstChild("KeyLight")
+	local key = if keyAttachment ~= nil then keyAttachment:FindFirstChildOfClass("PointLight") else nil
+	if key ~= nil then
+		key.Color = color:Lerp(Color3.new(1, 1, 1), KEY_LIGHT_WHITENESS)
+		key.Enabled = true
+	end
+	local motes = part:FindFirstChild("Motes")
+	if motes ~= nil and motes:IsA("ParticleEmitter") then
+		motes.Color = ColorSequence.new(color:Lerp(Color3.new(1, 1, 1), 0.3))
+		motes.Enabled = true
+	end
 	part.CanTouch = true
 	part.CanQuery = true
+	attachVisual(part, def.id)
 
 	livePickups[point] = { part = part, def = def, claimed = false }
 end
@@ -707,7 +930,7 @@ local function useFor(
 		return
 	end
 
-	if PowerUpLogic.isOnCooldown(state.lastUsedAt[def.id], def.cooldownSeconds, now()) then
+	if PowerUpLogic.isOnCooldown(state.lastUsedAt[def.id], cooldownSecondsFor(racer.id, def), now()) then
 		audit(racer, def.id, nil, "Rejected", "on cooldown")
 		sendResult(racer, false, def.id, nil, "on cooldown")
 		return
@@ -765,6 +988,11 @@ local function useFor(
 
 	audit(racer, def.id, resolvedTargetId, "Applied", description)
 	sendResult(racer, true, def.id, resolvedTargetId, description)
+
+	local victim = if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then resolvedTarget.player else nil
+	if victim ~= nil then
+		Net.fireClient("PowerUpHitYou", victim, { powerUpId = def.id, casterName = racer.displayName })
+	end
 end
 
 -- The client remote's entry point: authenticate the Player into a
@@ -776,6 +1004,22 @@ local function handleUseIntent(player: Player, slotIndex: number?, targetPlayerI
 		return
 	end
 	useFor(racer, slotIndex, targetPlayerId, aim)
+end
+
+-- The HUD's drag-to-bin. Only ever empties one of the SENDER'S own
+-- slots (header exploit #3/#6): no cooldown, no effect, no audit-worthy
+-- outcome - the slot is simply free for the next pickup.
+local function handleDiscardIntent(player: Player, slotIndex: number)
+	local racer = Participants.fromPlayer(player)
+	local state = if racer ~= nil then racerStates[racer.id] else nil
+	if racer == nil or state == nil or slotIndex > GameConfig.powerUpInventorySlots then
+		return
+	end
+	if state.inventory[slotIndex] == nil then
+		return
+	end
+	state.inventory[slotIndex] = nil -- a hole, like a use
+	broadcastInventory(racer)
 end
 
 -- P3-6's entry point. Takes an ID, not a participant, so NPCBrain can't
@@ -899,6 +1143,7 @@ local PowerUpService: Loader.Service = {
 	debugLoadSpawnPointsFromMap = debugLoadSpawnPointsFromMap,
 	setMapRarityWeights = setMapRarityWeights,
 	setEffectApplier = setEffectApplier,
+	setCooldownRateSource = setCooldownRateSource,
 	setAuditSink = setAuditSink,
 	getAuditLog = function(): { AuditEntry }
 		return auditLog
@@ -935,7 +1180,7 @@ local PowerUpService: Loader.Service = {
 		if state == nil or def == nil then
 			return false
 		end
-		return PowerUpLogic.isOnCooldown(state.lastUsedAt[powerUpId], def.cooldownSeconds, now())
+		return PowerUpLogic.isOnCooldown(state.lastUsedAt[powerUpId], cooldownSecondsFor(racerId, def), now())
 	end,
 
 	-- Same shape as getInventoryFor.
@@ -962,6 +1207,9 @@ function PowerUpService:init()
 			payload.targetPlayerId,
 			PowerUpLogic.aimForward(payload.aimX, payload.aimZ)
 		)
+	end)
+	NetGuard.on("PowerUpDiscardIntent", function(player: Player, payload: any)
+		handleDiscardIntent(player, payload.slotIndex)
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)

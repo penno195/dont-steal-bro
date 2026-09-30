@@ -78,6 +78,9 @@ type BrainRecord = {
 	-- roll and the lock-in can read a line and change the answer.
 	choice: ("Steal" | "Share")?,
 	saidLines: { [string]: boolean },
+	-- The past the Studio's reputation line shows for this bot, rolled
+	-- from its personality once and then fixed.
+	history: { steals: number, shares: number },
 }
 
 local brains: { [number]: BrainRecord } = {}
@@ -107,12 +110,15 @@ local function ensureBrain(npcId: number): BrainRecord?
 	end
 
 	local nextRandom = NPCLogic.newRng(npcId * 104729 + 17)
+	local personality = NPCBrainLogic.pickPersonality(personalities, nextRandom())
+	local historyFinales = GameConfig.npc.historyFinales
 	local record: BrainRecord = {
 		id = npcId,
-		personality = NPCBrainLogic.pickPersonality(personalities, nextRandom()),
+		personality = personality,
 		nextRandom = nextRandom,
 		choice = nil,
 		saidLines = {},
+		history = NPCBrainLogic.staticHistory(personality, nextRandom, historyFinales.min, historyFinales.max),
 	}
 	brains[npcId] = record
 	return record
@@ -417,6 +423,14 @@ local NPCBrain: Loader.Service = {
 	debugGetPersonality = function(npcId: number): string?
 		local record = brains[npcId]
 		return if record ~= nil then record.personality.id else nil
+	end,
+
+	-- A bot's steal/share counts for the Studio's reputation line, in the
+	-- same shape as a human's profile stats. Nil only when no personality
+	-- is configured at all.
+	historyFor = function(npcId: number): { steals: number, shares: number }?
+		local record = ensureBrain(npcId)
+		return if record ~= nil then record.history else nil
 	end,
 }
 

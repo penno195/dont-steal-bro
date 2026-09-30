@@ -138,10 +138,17 @@ export type TaskDef = {
 export type PowerUpKind = "Buff" | "Debuff"
 export type PowerUpTarget = "Self" | "Aimed" | "Area" | "Nearest"
 export type PowerUpRarity = "Common" | "Uncommon" | "Rare"
+-- The HUD/pickup colour family. Attack is exactly the Debuffs; Buffs
+-- split into Defence (protects you) and Utility (speeds you up) - a
+-- presentation split `kind` alone cannot express. Rarity is a secondary
+-- ring, never the main colour.
+export type PowerUpRole = "Attack" | "Defence" | "Utility"
 
 local POWERUP_KINDS: { PowerUpKind } = { "Buff", "Debuff" }
+local POWERUP_ROLES: { PowerUpRole } = { "Attack", "Defence", "Utility" }
 local POWERUP_TARGETS: { PowerUpTarget } = { "Self", "Aimed", "Area", "Nearest" }
 local POWERUP_RARITIES: { PowerUpRarity } = { "Common", "Uncommon", "Rare" }
+local POWERUP_DESCRIPTION_MAX = 48
 
 -- Two acquisition paths per powerups.md's intro. `robuxPrice` is only
 -- ever a convenience purchase, never exclusive - design-decisions.md Q8:
@@ -159,12 +166,20 @@ export type PowerUpAcquisition = {
 export type PowerUpDef = {
 	id: string,
 	displayName: string,
+	-- One plain line saying what it does, shown on first pickup, on
+	-- long-press of the slot and in the "hit by" banner. Capped at
+	-- POWERUP_DESCRIPTION_MAX chars so it fits one line on a phone.
+	description: string,
 	kind: PowerUpKind,
+	role: PowerUpRole,
 	target: PowerUpTarget,
 	durationSeconds: number,
 	cooldownSeconds: number,
 	rarity: PowerUpRarity,
 	hardControl: boolean, -- Freeze/Push-Trip = true; powerups.md's anti-frustration caps apply only to these
+	-- Required for target "Area" (the zone's radius on the ground, in
+	-- studs), and meaningless for anything else.
+	areaRadiusStuds: number?,
 	acquisition: PowerUpAcquisition,
 }
 
@@ -473,6 +488,9 @@ export type BountyTier = {
 
 export type StudioTimers = {
 	introSeconds: number,
+	introNewPlayerSeconds: number,
+	introMinSeconds: number,
+	newPlayerFinales: number,
 	negotiateSeconds: number,
 	chooseSeconds: number,
 	revealDelaySeconds: number,
@@ -729,6 +747,22 @@ export type NPCConfig = {
 	-- stalling the round forever.
 	repathAfterStuckSeconds: number,
 	maxRepathsPerStation: number,
+	-- How many past finales a bot's rolled reputation covers (inclusive).
+	historyFinales: { min: number, max: number },
+	appearance: NPCAppearance,
+}
+
+-- The pools a bot's avatar is drawn from - catalog asset ids, one of
+-- each per bot. A hat is added only `hatChance` of the time. Skin tones
+-- are 0-255 RGB triples so this stays free of the Color3 datatype.
+export type NPCAppearance = {
+	hair: { number },
+	faces: { number },
+	shirts: { number },
+	pants: { number },
+	hats: { number },
+	hatChance: number,
+	skinTones: { { number } },
 }
 
 -- ===== NPCPersonalityDef: architecture.md §4 =============================
@@ -1032,8 +1066,32 @@ function Validate.checkPowerUp(fileName: string, def: PowerUpDef, issues: { Issu
 	if not isNonEmptyString(def.id) then
 		issue(issues, "PowerUp", fileName, "id", "id must be a non-empty string")
 	end
+	if not isNonEmptyString(def.description) then
+		issue(issues, "PowerUp", fileName, "description", "description must be a non-empty string")
+	elseif (utf8.len(def.description) or #def.description) > POWERUP_DESCRIPTION_MAX then
+		issue(
+			issues,
+			"PowerUp",
+			fileName,
+			"description",
+			string.format("must be at most %d chars to fit one phone line", POWERUP_DESCRIPTION_MAX)
+		)
+	end
 	if not inSet(def.kind, POWERUP_KINDS) then
 		issue(issues, "PowerUp", fileName, "kind", string.format("expected Buff or Debuff, got %s", tostring(def.kind)))
+	end
+	if not inSet(def.role, POWERUP_ROLES) then
+		issue(
+			issues,
+			"PowerUp",
+			fileName,
+			"role",
+			string.format("expected one of [%s], got %s", table.concat(POWERUP_ROLES, ", "), tostring(def.role))
+		)
+	elseif (def.role == "Attack") ~= (def.kind == "Debuff") then
+		-- Attack <=> Debuff: the red colour promises "this hurts someone
+		-- else", so a Buff wearing it (or a Debuff in blue/yellow) lies.
+		issue(issues, "PowerUp", fileName, "role", "role Attack must be used exactly for kind Debuff")
 	end
 	if not inSet(def.target, POWERUP_TARGETS) then
 		issue(
@@ -1058,6 +1116,12 @@ function Validate.checkPowerUp(fileName: string, def: PowerUpDef, issues: { Issu
 	end
 	if def.cooldownSeconds <= 0 then
 		issue(issues, "PowerUp", fileName, "cooldownSeconds", "must be positive")
+	end
+	local radius = def.areaRadiusStuds
+	if def.target == "Area" and (radius == nil or radius <= 0) then
+		issue(issues, "PowerUp", fileName, "areaRadiusStuds", "an Area item needs a positive radius")
+	elseif def.target ~= "Area" and radius ~= nil then
+		issue(issues, "PowerUp", fileName, "areaRadiusStuds", "only an Area item has a radius")
 	end
 
 	-- design-decisions.md Q8: a Robux price is only ever a convenience
@@ -1399,6 +1463,77 @@ local function checkNPCConfig(npc: NPCConfig, issues: { Issue })
 	end
 	if npc.maxRepathsPerStation < 1 then
 		issue(issues, "GameConfig", "GameConfig.luau", "npc.maxRepathsPerStation", "must be at least 1")
+	end
+
+	local history = npc.historyFinales
+	if
+		history == nil
+		or history.min < 0
+		or history.max < history.min
+		or history.min % 1 ~= 0
+		or history.max % 1 ~= 0
+	then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"npc.historyFinales",
+			"must be whole numbers with 0 <= min <= max"
+		)
+	end
+
+	local appearance = npc.appearance
+	if appearance == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.appearance", "the NPC appearance block is missing")
+	else
+		-- Hats may be empty (then no bot wears one); every other slot
+		-- needs at least one option.
+		for _, slot in { "hair", "faces", "shirts", "pants", "hats" } do
+			local ids = (appearance :: any)[slot] :: { number }
+			if #ids == 0 and slot ~= "hats" then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"npc.appearance." .. slot,
+					"must list at least one asset id"
+				)
+			end
+			for index, id in ids do
+				if type(id) ~= "number" or id <= 0 or id % 1 ~= 0 then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						string.format("npc.appearance.%s[%d]", slot, index),
+						"must be a positive whole asset id"
+					)
+				end
+			end
+		end
+		if appearance.hatChance < 0 or appearance.hatChance > 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "npc.appearance.hatChance", "must be between 0 and 1")
+		end
+		if #appearance.skinTones == 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", "npc.appearance.skinTones", "must list at least one tone")
+		end
+		for index, tone in appearance.skinTones do
+			local valid = #tone == 3
+			for _, channel in tone do
+				if type(channel) ~= "number" or channel < 0 or channel > 255 then
+					valid = false
+				end
+			end
+			if not valid then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					string.format("npc.appearance.skinTones[%d]", index),
+					"must be three 0-255 numbers"
+				)
+			end
+		end
 	end
 
 	if #npc.skillProfiles == 0 then
@@ -2347,6 +2482,31 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		if type(value) ~= "number" or value <= 0 then
 			issue(issues, "GameConfig", "GameConfig.luau", "roundTimers." .. field, "must be a positive number")
 		end
+	end
+
+	-- The early start can't come before the floor, and a new player's
+	-- window can't be shorter than a veteran's.
+	local studio = config.studioTimers
+	if not (studio.introMinSeconds >= 0 and studio.introMinSeconds <= studio.introSeconds) then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"studioTimers.introMinSeconds",
+			"must be between 0 and introSeconds"
+		)
+	end
+	if studio.introNewPlayerSeconds < studio.introSeconds then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"studioTimers.introNewPlayerSeconds",
+			"must be at least introSeconds"
+		)
+	end
+	if studio.newPlayerFinales < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "studioTimers.newPlayerFinales", "must not be negative")
 	end
 
 	if #config.bountyTiers == 0 then

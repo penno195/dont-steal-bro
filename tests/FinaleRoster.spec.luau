@@ -207,3 +207,41 @@ TestRunner.describe("FinaleRoster.shutdownPolicy - case 6", function()
 		TestRunner.expect(FinaleRoster.shutdownPolicy(true)):toBe("KeepWrittenResult")
 	end)
 end)
+
+local TIMERS: FinaleRoster.IntroTimers = {
+	introSeconds = 5,
+	introNewPlayerSeconds = 12,
+	introMinSeconds = 2,
+	newPlayerFinales = 3,
+}
+
+TestRunner.describe("FinaleRoster.introSeconds - reading time", function()
+	TestRunner.it("is short when every finalist is a veteran", function()
+		TestRunner.expect(FinaleRoster.introSeconds({ 3, 10, 40 }, TIMERS)):toBe(5)
+	end)
+
+	TestRunner.it("is long when anyone at the table is new", function()
+		TestRunner.expect(FinaleRoster.introSeconds({ 30, 2, 40 }, TIMERS)):toBe(12)
+		TestRunner.expect(FinaleRoster.introSeconds({ 0 }, TIMERS)):toBe(12)
+	end)
+
+	TestRunner.it("never lengthens it for an NPC seat", function()
+		TestRunner.expect(FinaleRoster.introSeconds({ 10, nil, 20 }, TIMERS)):toBe(5)
+	end)
+end)
+
+TestRunner.describe("FinaleRoster.allReady - ending the Intro early", function()
+	TestRunner.it("waits while anyone present hasn't tapped ready", function()
+		TestRunner.expect(FinaleRoster.allReady({ 1, 2, 3 }, { [1] = true, [2] = true }, allPresent)):toBe(false)
+	end)
+
+	TestRunner.it("goes once everyone has", function()
+		TestRunner.expect(FinaleRoster.allReady({ 1, 2, 3 }, { [1] = true, [2] = true, [3] = true }, allPresent))
+			:toBe(true)
+	end)
+
+	TestRunner.it("doesn't wait on a finalist who has left", function()
+		TestRunner.expect(FinaleRoster.allReady({ 1, 2, 3 }, { [1] = true, [2] = true }, presentExcept({ 3 })))
+			:toBe(true)
+	end)
+end)

@@ -111,3 +111,39 @@ TestRunner.describe("TaskAssignment.assign - infeasible input fails loudly", fun
 		TestRunner.expect(ok):toBe(false)
 	end)
 end)
+
+-- The SpaceStation shape: 16 stations, each offering 2 of 3 tasks.
+local function overlappingPool(): { TaskAssignment.StationInfo }
+	local pairs_ = {
+		{ "code-playback", "pressure-valve" },
+		{ "pressure-valve", "fuse-rewire" },
+		{ "fuse-rewire", "code-playback" },
+		{ "vent-purge", "pressure-valve" },
+	}
+	local stations = {}
+	for i = 1, 16 do
+		table.insert(stations, { stationId = string.format("s-%02d", i), acceptedTaskIds = pairs_[(i % 4) + 1] })
+	end
+	return stations
+end
+
+TestRunner.describe("TaskAssignment.assign - task variety", function()
+	TestRunner.it("never repeats a task until every task on offer has been dealt, then spreads repeats", function()
+		for seed = 1, 50 do
+			local result = TaskAssignment.assign(seed, overlappingPool(), { 1, 2, 3, 4, 5, 6 }, 6, 4)
+			for _, route in result do
+				local counts: { [string]: number } = {}
+				for index, assignment in route do
+					counts[assignment.taskId] = (counts[assignment.taskId] or 0) + 1
+					if index <= 4 then
+						-- 4 distinct tasks exist, so the first 4 picks are all different.
+						TestRunner.expect(counts[assignment.taskId]):toBe(1)
+					end
+				end
+				for _, count in counts do
+					TestRunner.expect(count <= 2):toBe(true)
+				end
+			end
+		end
+	end)
+end)
