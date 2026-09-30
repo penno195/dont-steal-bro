@@ -458,7 +458,10 @@ end
 -- REVEAL TIMELINE ----------------------------------------------------
 
 export type RevealTiming = { lead: number, cardGap: number, outcomeAfter: number, resultAfter: number }
-export type ScheduledCue = { at: number, cue: string }
+-- `card` is set on each RevealCard cue: its position in the screen's
+-- reveal order (1 = first to turn), so a finalist's Reveal cosmetic sound
+-- can stand in for that one card's cue.
+export type ScheduledCue = { at: number, cue: string, card: number? }
 
 -- Seconds after revealAt for each reveal sound, lined up with
 -- DecisionLogic.revealStep so a card's sound lands on the frame it turns.
@@ -467,7 +470,7 @@ export type ScheduledCue = { at: number, cue: string }
 function AudioLogic.revealSchedule(seats: number, timing: RevealTiming): ({ ScheduledCue }, number)
 	local out: { ScheduledCue } = { { at = 0, cue = "RevealRiser" } }
 	for i = 0, math.max(0, seats - 1) do
-		table.insert(out, { at = timing.lead + i * timing.cardGap, cue = "RevealCard" })
+		table.insert(out, { at = timing.lead + i * timing.cardGap, cue = "RevealCard", card = i + 1 })
 	end
 	local outcomeAt = timing.lead + math.max(0, seats - 1) * timing.cardGap + timing.outcomeAfter
 	table.insert(out, { at = outcomeAt, cue = "RevealOutcome" })

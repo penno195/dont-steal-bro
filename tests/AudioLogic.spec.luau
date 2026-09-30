@@ -188,6 +188,7 @@ describe("AudioLogic.revealSchedule", function()
 		for _, entry in schedule do
 			if entry.cue == "RevealCard" then
 				cards += 1
+				expect(entry.card):toBe(cards)
 				expect(DecisionLogic.revealStep(entry.at, 3).cardsShown):toBe(cards)
 				expect(DecisionLogic.revealStep(entry.at - 0.01, 3).cardsShown):toBe(cards - 1)
 			elseif entry.cue == "RevealOutcome" then

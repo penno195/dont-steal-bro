@@ -126,11 +126,15 @@ local function newSound(cueId: string, def: AudioLogic.CueDef, assetId: string):
 	return sound
 end
 
-local function acquire(cueId: string, def: AudioLogic.CueDef): Sound
-	local pool = pools[cueId]
+-- `assetId` defaults to the cue's own; an override gets a pool of its
+-- own, so a pooled Sound never has to swap its SoundId (and reload).
+local function acquire(cueId: string, def: AudioLogic.CueDef, assetId: string?): Sound
+	local soundId = assetId or def.assetId
+	local key = if assetId ~= nil then cueId .. "|" .. assetId else cueId
+	local pool = pools[key]
 	if pool == nil then
 		pool = {}
-		pools[cueId] = pool
+		pools[key] = pool
 	end
 	for _, sound in pool do
 		if not sound.IsPlaying then
@@ -138,7 +142,7 @@ local function acquire(cueId: string, def: AudioLogic.CueDef): Sound
 		end
 	end
 	if #pool < POOL_PER_CUE then
-		local sound = newSound(cueId, def, def.assetId)
+		local sound = newSound(cueId, def, soundId)
 		table.insert(pool, sound)
 		return sound
 	end
@@ -154,9 +158,16 @@ end
 -- Plays a one-shot cue. `at` places a spatial cue on a part; a 2D cue
 -- ignores it. Silent (and harmless) for a cue whose asset is still a
 -- placeholder, so the game runs fine before any sound exists.
-local function play(cueId: string, at: BasePart?)
+--
+-- `assetId` swaps in a different sound for this one play (a Reveal
+-- cosmetic's own sound for a RevealCard), keeping the cue's volume,
+-- SoundGroup, priority and ducking - so it still obeys the SFX slider.
+local function play(cueId: string, at: BasePart?, assetId: string?)
 	local def = CUES[cueId]
-	if def == nil or def.looped or AudioLogic.isPlaceholder(def.assetId) then
+	if def == nil or def.looped then
+		return
+	end
+	if assetId == nil and AudioLogic.isPlaceholder(def.assetId) then
 		return
 	end
 	local now = Clock.now()
@@ -174,7 +185,7 @@ local function play(cueId: string, at: BasePart?)
 	end
 	lastPlayed[cueId] = now
 
-	local sound = acquire(cueId, def)
+	local sound = acquire(cueId, def, assetId)
 	if def.spatial and at ~= nil then
 		sound.Parent = at
 	end
@@ -352,9 +363,14 @@ local function onReveal(payload: any)
 			end
 		end)
 	end
+	-- A finalist's Reveal cosmetic sound replaces their card's RevealCard.
+	local revealCosmetics = Loader.get("RevealCosmeticController") :: any
+	local cardSounds = revealCosmetics.soundsByCard(payload, reveal) :: { [number]: number }
 	for _, entry in schedule do
+		local override = if entry.card ~= nil then cardSounds[entry.card] else nil
+		local assetId = if override ~= nil then string.format("rbxassetid://%d", override) else nil
 		at(entry.at, function()
-			play(entry.cue)
+			play(entry.cue, nil, assetId)
 		end)
 	end
 	-- Read at resultAt, not now: DecisionPersonalResult may land after
@@ -371,7 +387,7 @@ end
 
 local AudioController: Loader.Controller = {
 	name = "AudioController",
-	dependencies = { "SettingsController" },
+	dependencies = { "SettingsController", "RevealCosmeticController" },
 }
 
 -- Public: plays a one-shot cue by AudioLogic.CUES key. For a moment this

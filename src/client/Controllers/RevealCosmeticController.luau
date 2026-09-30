@@ -12,6 +12,10 @@
 -- something, so the item only supplies the texture (and optionally a
 -- sound).
 --
+-- SOUND: not played here. AudioController plays it IN PLACE OF that
+-- card's RevealCard cue (soundsByCard below), through the SFX group, so
+-- it replaces the default rather than doubling it and obeys the slider.
+--
 -- Purely visual and client-side. Which item each finalist wears comes in
 -- DecisionReveal from the server, read from their own profile.
 
@@ -73,20 +77,31 @@ local function burst(racerId: number, item: RevealItem, isSteal: boolean)
 	emitter.Parent = root
 	emitter:Emit(BURST_PARTICLES)
 
-	if item.soundAssetId ~= nil then
-		local sound = Instance.new("Sound")
-		sound.Name = BURST_NAME
-		sound.SoundId = string.format("rbxassetid://%d", item.soundAssetId :: number)
-		sound.Parent = root
-		sound:Play()
-		task.delay(BURST_SECONDS + 3, function()
-			sound:Destroy()
-		end)
-	end
-
 	task.delay(BURST_SECONDS, function()
 		emitter:Destroy()
 	end)
+end
+
+type Card = { index: number, racerId: number, item: RevealItem, isSteal: boolean }
+
+-- Every card on THIS screen whose finalist wears an enabled Reveal item,
+-- by its position in this screen's reveal order.
+local function cardsFor(payload: any, reveal: DecisionLogic.Reveal): { Card }
+	local cards: { Card } = {}
+	local worn = DecisionLogic.parseRevealCosmetics(payload.revealCosmetics)
+	if next(worn) == nil then
+		return cards
+	end
+	local seatIds = (Loader.get("DecisionStudioController") :: any).getSeatIds() :: { number }
+	for index, racerId in DecisionLogic.revealOrder(seatIds, reveal.choices, selfId) do
+		local itemId = worn[racerId]
+		local item = if itemId ~= nil then revealDefs[itemId] else nil
+		local choice = reveal.choices[racerId]
+		if item ~= nil and choice ~= nil then
+			table.insert(cards, { index = index, racerId = racerId, item = item, isSteal = choice == "Steal" })
+		end
+	end
+	return cards
 end
 
 local function onReveal(payload: any)
@@ -94,28 +109,13 @@ local function onReveal(payload: any)
 	if reveal == nil then
 		return
 	end
-	local worn = DecisionLogic.parseRevealCosmetics(payload.revealCosmetics)
-	if next(worn) == nil then
-		return
-	end
-
-	local seatIds = (Loader.get("DecisionStudioController") :: any).getSeatIds() :: { number }
-	local order = DecisionLogic.revealOrder(seatIds, reveal.choices, selfId)
 	local token = roundToken
-	for index, racerId in order do
-		local itemId = worn[racerId]
-		local item = if itemId ~= nil then revealDefs[itemId] else nil
-		local choice = reveal.choices[racerId]
-		if item == nil or choice == nil then
-			continue
-		end
-		local delay = reveal.revealAt + DecisionLogic.cardTurnAt(index) - Clock.now()
+	for _, card in cardsFor(payload, reveal) do
+		local delay = reveal.revealAt + DecisionLogic.cardTurnAt(card.index) - Clock.now()
 		if delay >= -LATE_TOLERANCE then
-			local it: RevealItem = item
-			local isSteal = choice == "Steal"
 			task.delay(math.max(0, delay), function()
 				if token == roundToken then
-					burst(racerId, it, isSteal)
+					burst(card.racerId, card.item, card.isSteal)
 				end
 			end)
 		end
@@ -125,6 +125,19 @@ end
 local RevealCosmeticController: Loader.Controller = {
 	name = "RevealCosmeticController",
 	dependencies = { "NametagController", "DecisionStudioController" },
+
+	-- Card position -> the Reveal item's own sound asset id, for
+	-- AudioController to play in place of that card's RevealCard cue.
+	-- Cards with no item, or an item with no sound, are absent.
+	soundsByCard = function(payload: any, reveal: DecisionLogic.Reveal): { [number]: number }
+		local out: { [number]: number } = {}
+		for _, card in cardsFor(payload, reveal) do
+			if card.item.soundAssetId ~= nil then
+				out[card.index] = card.item.soundAssetId :: number
+			end
+		end
+		return out
+	end,
 }
 
 function RevealCosmeticController:init()
