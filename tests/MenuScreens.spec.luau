@@ -176,7 +176,20 @@ describe("StoreScreenLogic catalogue", function()
 	-- The client's slot map is a copy of the server's; an equip sent to
 	-- a slot the server doesn't recognise would silently do nothing.
 	it("uses the same equip slot as the server for every cosmetic category", function()
-		for _, category in { "Skin", "Trail", "Emote", "Podium", "NotACategory" } do
+		for _, category in
+			{
+				"Skin",
+				"Trail",
+				"Emote",
+				"Podium",
+				"Reveal",
+				"Projectile",
+				"StreakFlair",
+				"Nameplate",
+				"CallingCard",
+				"NotACategory",
+			}
+		do
 			expect(StoreScreenLogic.slotFor(category)):toBe(CosmeticLogic.slotFor(category))
 		end
 	end)

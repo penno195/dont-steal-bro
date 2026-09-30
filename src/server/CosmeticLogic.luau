@@ -25,7 +25,15 @@ local CosmeticLogic = {}
 -- with no cast at the call site.
 export type CosmeticDef = {
 	id: string,
-	category: "Skin" | "Trail" | "Emote" | "Podium",
+	category: "Skin"
+		| "Trail"
+		| "Emote"
+		| "Podium"
+		| "Reveal"
+		| "Projectile"
+		| "StreakFlair"
+		| "Nameplate"
+		| "CallingCard",
 	displayName: string,
 	description: string,
 	rarity: "Common" | "Uncommon" | "Rare",
@@ -39,6 +47,15 @@ export type CosmeticDef = {
 	animationAssetId: number?,
 	podiumTextureAssetId: number?,
 	podiumColorHex: string?,
+	revealTextureAssetId: number?,
+	revealSoundAssetId: number?,
+	projectileMeshAssetId: number?,
+	explosionTextureAssetId: number?,
+	flairTextureAssetId: number?,
+	flairColorHex: string?,
+	nameplateFrameAssetId: number?,
+	nameplateColorHex: string?,
+	cardImageAssetId: number?,
 	previewIconAssetId: number?,
 }
 
@@ -50,6 +67,11 @@ local SLOT_FOR_CATEGORY: { [string]: string } = {
 	Trail = "trail",
 	Emote = "emote",
 	Podium = "podium",
+	Reveal = "reveal",
+	Projectile = "projectile",
+	StreakFlair = "streakFlair",
+	Nameplate = "nameplate",
+	CallingCard = "callingCard",
 }
 
 function CosmeticLogic.slotFor(category: string): string?
@@ -72,6 +94,25 @@ function CosmeticLogic.findById(cosmetics: { CosmeticDef }, id: string?): Cosmet
 		end
 	end
 	return nil
+end
+
+-- What a player is wearing in `category`'s slot, or nil. A stale id - an
+-- item since removed, disabled, or of another category - reads as
+-- nothing equipped rather than as something half-drawn.
+function CosmeticLogic.equippedIn(
+	cosmetics: { CosmeticDef },
+	equipped: { [string]: string },
+	category: string
+): CosmeticDef?
+	local slot = SLOT_FOR_CATEGORY[category]
+	if slot == nil then
+		return nil
+	end
+	local def = CosmeticLogic.findById(cosmetics, equipped[slot])
+	if def == nil or def.category ~= category or not def.enabled then
+		return nil
+	end
+	return def
 end
 
 -- The one check CosmeticService needs before applying anything: the

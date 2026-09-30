@@ -948,6 +948,7 @@ local function launchThrow(
 		targetId = target.id,
 		powerUpId = def.id,
 		flightSeconds = flight,
+		projectileSkinId = (Loader.get("CosmeticService") :: any).projectileSkinFor(racer.player),
 	})
 	shove(racer, casterRoot, ThrowLogic.recoilVelocity(from, to, toVec3(casterRoot.CFrame.LookVector), config))
 	return flight
@@ -1296,6 +1297,7 @@ local PowerUpService: Loader.Service = {
 		"ParticipantService",
 		"LiveConfig",
 		"StoreService",
+		"CosmeticService",
 	},
 
 	setSpawnPoints = setSpawnPoints,

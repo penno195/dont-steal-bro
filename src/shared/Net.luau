@@ -653,8 +653,10 @@ Net.Remotes = {
 
 	-- Server -> ALL clients: a thrown item left the caster's hand, for the
 	-- projectile, the explosion and the caster's recoil. `{ casterId,
-	-- targetId, powerUpId, flightSeconds }` (participant ids, so NPCs and
-	-- dummies are negative). Cosmetic only: the server already picked the
+	-- targetId, powerUpId, flightSeconds, projectileSkinId? }` (participant
+	-- ids, so NPCs and dummies are negative; the skin id is the caster's
+	-- equipped Projectile cosmetic, read server-side from their profile).
+	-- Cosmetic only: the server already picked the
 	-- target, and applies the effect itself after flightSeconds. Every
 	-- client sees every throw anyway, so this leaks nothing.
 	PowerUpThrown = {

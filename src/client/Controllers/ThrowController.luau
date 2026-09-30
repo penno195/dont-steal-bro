@@ -10,13 +10,22 @@
 -- player's client owns its own character's physics - the server sends
 -- the shunt's velocity (PowerUpHitYou.shunt), and the recoil is the same
 -- ThrowLogic sum over the same GameConfig numbers the server uses.
+--
+-- A thrower's Projectile cosmetic (PowerUpThrown.projectileSkinId) swaps
+-- the orb's shape and adds a textured burst to the explosion - and
+-- nothing else. The role colour, the size and the flight are the same as
+-- the plain orb's, so a victim reads a rubber duck exactly as they'd read
+-- the orb (see Validate.CosmeticDef on why a skin has no colour field).
+-- A mesh that hasn't loaded yet, or failed to, throws the plain orb.
 
+local AssetService = game:GetService("AssetService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
+local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -38,6 +47,42 @@ local PROJECTILE_SIZE = 1.1
 local roleById: { [string]: string } = {}
 for _, entry in PowerUps do
 	roleById[entry.def.id] = entry.def.role
+end
+
+type ProjectileSkin = { meshAssetId: number, explosionTextureAssetId: number }
+
+local skinById: { [string]: ProjectileSkin } = {}
+for _, entry in Cosmetics do
+	local def = entry.def
+	if def.category == "Projectile" and def.enabled then
+		skinById[def.id] = {
+			meshAssetId = def.projectileMeshAssetId :: number,
+			explosionTextureAssetId = def.explosionTextureAssetId :: number,
+		}
+	end
+end
+
+-- Loaded once per mesh, then cloned per throw. `false` = still loading
+-- or failed - either way that throw uses the plain orb, and a failed
+-- mesh is never retried on every throw.
+local meshTemplates: { [number]: MeshPart | false } = {}
+
+local function loadMesh(assetId: number)
+	if meshTemplates[assetId] ~= nil then
+		return
+	end
+	meshTemplates[assetId] = false
+	local ok, result = pcall(function()
+		return AssetService:CreateMeshPartAsync(
+			Content.fromAssetId(assetId),
+			{ CollisionFidelity = Enum.CollisionFidelity.Box }
+		)
+	end)
+	if ok then
+		meshTemplates[assetId] = result
+	else
+		warn(string.format("[ThrowController] projectile mesh %d failed to load: %s", assetId, tostring(result)))
+	end
 end
 
 local fxFolder: Folder? = nil
@@ -115,7 +160,41 @@ end
 
 -- EXPLOSION ----------------------------------------------------------
 
-local function explode(position: Vector3, color: Color3)
+-- A skin's one-shot burst of its own texture, tinted with the role
+-- colour so it still says which item landed. Emitted from its own
+-- throwaway part because a ParticleEmitter's particles vanish with it.
+local SKIN_BURST_SECONDS = 0.45
+
+local function skinBurst(position: Vector3, color: Color3, textureAssetId: number, radius: number)
+	local holder = Instance.new("Part")
+	holder.Name = "ThrowSkinBurst"
+	holder.Transparency = 1
+	holder.Size = Vector3.one * 0.2
+	holder.Anchored = true
+	holder.CanCollide = false
+	holder.CanQuery = false
+	holder.CanTouch = false
+	holder.Position = position
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Texture = string.format("rbxassetid://%d", textureAssetId)
+	emitter.Color = ColorSequence.new(color)
+	emitter.LightEmission = 0.6
+	emitter.Rate = 0
+	emitter.Lifetime = NumberRange.new(SKIN_BURST_SECONDS * 0.6, SKIN_BURST_SECONDS)
+	-- Fast enough to carry a particle about to the blast's edge.
+	emitter.Speed = NumberRange.new(radius / SKIN_BURST_SECONDS * 0.6, radius / SKIN_BURST_SECONDS)
+	emitter.SpreadAngle = Vector2.new(180, 180)
+	emitter.Size = NumberSequence.new(1, 0)
+	emitter.Transparency = NumberSequence.new(0, 1)
+	emitter.Parent = holder
+	holder.Parent = folder()
+	emitter:Emit(12)
+	task.delay(SKIN_BURST_SECONDS, function()
+		holder:Destroy()
+	end)
+end
+
+local function explode(position: Vector3, color: Color3, skin: ProjectileSkin?)
 	local config = GameConfig.powerUpThrow
 	local radius = config.explosionRadiusStuds
 	local reduced = Env.reducedMotion()
@@ -129,6 +208,9 @@ local function explode(position: Vector3, color: Color3)
 		blast.ExplosionType = Enum.ExplosionType.NoCraters
 		blast.Position = position
 		blast.Parent = folder()
+		if skin ~= nil then
+			skinBurst(position, color, skin.explosionTextureAssetId, radius)
+		end
 	end
 
 	-- A role-coloured shell that swells and fades - under reduced motion
@@ -164,13 +246,34 @@ end
 
 -- PROJECTILE ---------------------------------------------------------
 
-local function projectile(color: Color3): BasePart
-	local orb = Instance.new("Part")
+-- The skin's mesh, sized to the orb's footprint, or nil to throw the orb.
+local function skinnedBody(skin: ProjectileSkin?): BasePart?
+	local template = if skin ~= nil then meshTemplates[skin.meshAssetId] else nil
+	if not template then
+		return nil
+	end
+	local body = (template :: MeshPart):Clone()
+	local s = ThrowLogic.fitSize(vec3(body.Size), PROJECTILE_SIZE)
+	-- Built from the mesh alone, so it carries no texture to fight the
+	-- role colour set below.
+	body.Size = Vector3.new(s.x, s.y, s.z)
+	return body
+end
+
+local function projectile(color: Color3, skin: ProjectileSkin?): BasePart
+	local orb: BasePart
+	local body = skinnedBody(skin)
+	if body ~= nil then
+		orb = body
+	else
+		local ball = Instance.new("Part")
+		ball.Shape = Enum.PartType.Ball
+		ball.Size = Vector3.one * PROJECTILE_SIZE
+		orb = ball
+	end
 	orb.Name = "ThrowOrb"
-	orb.Shape = Enum.PartType.Ball
 	orb.Material = Enum.Material.Neon
 	orb.Color = color
-	orb.Size = Vector3.one * PROJECTILE_SIZE
 	orb.Anchored = true
 	orb.CanCollide = false
 	orb.CanQuery = false
@@ -222,6 +325,7 @@ local function onThrown(payload: any)
 		return
 	end
 	local color = roleColor(powerUpId)
+	local skin = if type(payload.projectileSkinId) == "string" then skinById[payload.projectileSkinId] else nil
 
 	-- The thrower's own kick.
 	if casterId == selfId then
@@ -239,11 +343,11 @@ local function onThrown(payload: any)
 	end
 
 	if flight <= 0 then
-		explode(targetRoot.Position, color)
+		explode(targetRoot.Position, color, skin)
 		return
 	end
 
-	local orb = projectile(color)
+	local orb = projectile(color, skin)
 	orb.Position = startPosition
 	orb.Parent = folder()
 	local from = vec3(startPosition)
@@ -262,11 +366,18 @@ local function onThrown(payload: any)
 				connection:Disconnect()
 			end
 			orb:Destroy()
-			explode(lastTarget, color)
+			explode(lastTarget, color, skin)
 			return
 		end
 		local p = ThrowLogic.arcPoint(from, vec3(lastTarget), alpha, GameConfig.powerUpThrow.arcHeightStuds)
-		orb.Position = Vector3.new(p.x, p.y, p.z)
+		local nextPosition = Vector3.new(p.x, p.y, p.z)
+		-- Nose along the lob, so a shaped skin flies forwards.
+		local step = nextPosition - orb.Position
+		if step.Magnitude > 1e-3 then
+			orb.CFrame = CFrame.lookAt(nextPosition, nextPosition + step)
+		else
+			orb.Position = nextPosition
+		end
 	end)
 end
 
@@ -293,6 +404,11 @@ local ThrowController: Loader.Controller = {
 function ThrowController:init()
 	Net.onClientEvent("PowerUpThrown", onThrown)
 	Net.onClientEvent("PowerUpHitYou", onHitYou)
+	-- Every sellable skin, up front, so a first throw isn't the one that
+	-- falls back to the orb while its mesh downloads.
+	for _, skin in skinById do
+		task.spawn(loadMesh, skin.meshAssetId)
+	end
 end
 
 return ThrowController

@@ -257,6 +257,21 @@ local function refreshFor(player: Player)
 	end
 end
 
+-- ===== Projectile: an id for the throw broadcast ============================
+--
+-- ThrowController draws the skin; this only names it, for PowerUpService
+-- to put in PowerUpThrown. Read from the thrower's own profile, so a
+-- client can never make someone else's throw look like anything. NPCs
+-- and dummies (`player == nil`) have no profile and throw the plain orb.
+local function projectileSkinFor(player: Player?): string?
+	if player == nil then
+		return nil
+	end
+	local DataService = Loader.get("DataService") :: any
+	local def = CosmeticLogic.equippedIn(catalogue, DataService.getEquipped(player), "Projectile")
+	return if def ~= nil then def.id else nil
+end
+
 -- ===== the victory emote hook ==============================================
 
 -- Plays this player's equipped Emote once, if they have one enabled.
@@ -341,6 +356,7 @@ local CosmeticService: Loader.Service = {
 	canEquip = canEquip,
 	refreshFor = refreshFor,
 	playEquippedEmote = playEquippedEmote,
+	projectileSkinFor = projectileSkinFor,
 }
 
 function CosmeticService:init()

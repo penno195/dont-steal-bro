@@ -87,4 +87,17 @@ function ThrowLogic.arcPoint(from: Vec3, to: Vec3, alpha: number, arcHeightStuds
 	}
 end
 
+-- A projectile skin's mesh scaled, keeping its proportions, so its
+-- longest side is `longest` studs - a skin reads exactly as big as the
+-- default orb however large its mesh was modelled. A degenerate mesh
+-- falls back to a `longest`-sized cube.
+function ThrowLogic.fitSize(native: Vec3, longest: number): Vec3
+	local m = math.max(native.x, native.y, native.z)
+	if not (m > 0) or m == math.huge then
+		return { x = longest, y = longest, z = longest }
+	end
+	local k = longest / m
+	return { x = native.x * k, y = native.y * k, z = native.z * k }
+end
+
 return ThrowLogic

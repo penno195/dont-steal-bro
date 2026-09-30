@@ -223,10 +223,12 @@ export type TitleDef = {
 }
 
 -- ===== CosmeticDef: P4-6 ==================================================
--- gdd.md's cosmetics: a character skin, a trail, a victory emote, and a
--- podium decoration for the Decision Studio. One file per item (Ground
--- Rule 2) - adding a skin, trail, emote or podium flair is adding a
--- src/shared/Config/Cosmetics/<Name>.luau and nothing else.
+-- gdd.md's cosmetics: a character skin, a trail, a victory emote, a
+-- podium decoration and reveal burst for the Decision Studio, a thrown
+-- power-up's look, streak and nameplate styling, and a calling card. One
+-- file per item (Ground Rule 2) - adding one is adding a
+-- src/shared/Config/Cosmetics/<Name>.luau and nothing else. (A new
+-- CATEGORY is a service change too: something has to draw it.)
 --
 -- WHY THIS IS A FLAT TYPE WITH PER-CATEGORY OPTIONAL FIELDS, same
 -- reasoning as StoreGrant above: Luau doesn't narrow a union through a
@@ -246,9 +248,36 @@ export type TitleDef = {
 --
 -- `rarity` reuses PowerUpRarity rather than inventing a second tier
 -- system - one ladder of "how special is this" for the whole game.
-export type CosmeticCategory = "Skin" | "Trail" | "Emote" | "Podium"
+--
+-- WHY "Reveal" AND "Projectile" HAVE NO COLOUR FIELD, unlike every other
+-- visual category: their colour already MEANS something. A thrown
+-- power-up is tinted by its role (PowerUpLogic.ROLE_RGB) so a victim can
+-- read what's coming at them, and a Steal/Share reveal is coloured by the
+-- outcome. A cosmetic that could repaint either would sell confusion, so
+-- those two skins only ever change shape and texture - the renderer keeps
+-- supplying the colour. The type has nowhere to put one, by design.
+export type CosmeticCategory =
+	"Skin"
+	| "Trail"
+	| "Emote"
+	| "Podium"
+	| "Reveal"
+	| "Projectile"
+	| "StreakFlair"
+	| "Nameplate"
+	| "CallingCard"
 
-local COSMETIC_CATEGORIES: { CosmeticCategory } = { "Skin", "Trail", "Emote", "Podium" }
+local COSMETIC_CATEGORIES: { CosmeticCategory } = {
+	"Skin",
+	"Trail",
+	"Emote",
+	"Podium",
+	"Reveal",
+	"Projectile",
+	"StreakFlair",
+	"Nameplate",
+	"CallingCard",
+}
 
 export type CosmeticDef = {
 	id: string,
@@ -287,6 +316,35 @@ export type CosmeticDef = {
 	-- state the same way TitleLogic.isVisibleInState gates a title.
 	podiumTextureAssetId: number?,
 	podiumColorHex: string?,
+
+	-- Category "Reveal": the burst on a finalist's podium the moment their
+	-- Steal/Share is shown - never before, or it would leak the choice.
+	-- Tinted by the outcome, not by this item (see the header above).
+	revealTextureAssetId: number?,
+	revealSoundAssetId: number?, -- optional; 0/nil = the default reveal sound
+
+	-- Category "Projectile": what your thrown power-up looks like in the
+	-- air and where it lands. Tinted by the power-up's role, and sized by
+	-- ThrowController's own constant - a skin must never change how big
+	-- a throw reads. Purely client-side; the server never reads either.
+	projectileMeshAssetId: number?,
+	explosionTextureAssetId: number?,
+
+	-- Category "StreakFlair": the style of the win-streak counter above
+	-- your head and beside your name on the leaderboard. The NUMBER is
+	-- always the real streak - this only dresses it.
+	flairTextureAssetId: number?,
+	flairColorHex: string?,
+
+	-- Category "Nameplate": the frame around your name and Title. Titles
+	-- themselves stay earn-only (TitleDef) - this sells the frame, never
+	-- the words inside it.
+	nameplateFrameAssetId: number?,
+	nameplateColorHex: string?,
+
+	-- Category "CallingCard": the small card a victim sees for a moment
+	-- when your sabotage lands on them.
+	cardImageAssetId: number?,
 
 	-- Store UI thumbnail (P6-6's item grid). Optional: falls back to
 	-- whatever the category's own primary asset id would render as.
@@ -1233,6 +1291,12 @@ local function checkAssetId(issues: { Issue }, fileName: string, field: string, 
 	end
 end
 
+local function checkColorHex(issues: { Issue }, fileName: string, field: string, value: any)
+	if not isNonEmptyString(value) or not string.match(value, "^#%x%x%x%x%x%x$") then
+		issue(issues, "Cosmetic", fileName, field, string.format('expected "#rrggbb", got %s', tostring(value)))
+	end
+end
+
 function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: { Issue })
 	if not isNonEmptyString(def.id) then
 		issue(issues, "Cosmetic", fileName, "id", "id must be a non-empty string")
@@ -1268,15 +1332,7 @@ function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: 
 		checkAssetId(issues, fileName, "pantsAssetId", def.pantsAssetId, def.enabled)
 	elseif def.category == "Trail" then
 		checkAssetId(issues, fileName, "trailTextureAssetId", def.trailTextureAssetId, def.enabled)
-		if not isNonEmptyString(def.trailColorHex) or not string.match(def.trailColorHex :: any, "^#%x%x%x%x%x%x$") then
-			issue(
-				issues,
-				"Cosmetic",
-				fileName,
-				"trailColorHex",
-				string.format('expected "#rrggbb", got %s', tostring(def.trailColorHex))
-			)
-		end
+		checkColorHex(issues, fileName, "trailColorHex", def.trailColorHex)
 		if def.trailLifetime == nil or def.trailLifetime <= 0 then
 			issue(issues, "Cosmetic", fileName, "trailLifetime", "must be a positive number of seconds")
 		end
@@ -1284,17 +1340,24 @@ function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: 
 		checkAssetId(issues, fileName, "animationAssetId", def.animationAssetId, def.enabled)
 	elseif def.category == "Podium" then
 		checkAssetId(issues, fileName, "podiumTextureAssetId", def.podiumTextureAssetId, def.enabled)
-		if
-			not isNonEmptyString(def.podiumColorHex) or not string.match(def.podiumColorHex :: any, "^#%x%x%x%x%x%x$")
-		then
-			issue(
-				issues,
-				"Cosmetic",
-				fileName,
-				"podiumColorHex",
-				string.format('expected "#rrggbb", got %s', tostring(def.podiumColorHex))
-			)
+		checkColorHex(issues, fileName, "podiumColorHex", def.podiumColorHex)
+	elseif def.category == "Reveal" then
+		checkAssetId(issues, fileName, "revealTextureAssetId", def.revealTextureAssetId, def.enabled)
+		if def.revealSoundAssetId ~= nil then
+			-- Optional even when enabled: 0 means "keep the default sound".
+			checkAssetId(issues, fileName, "revealSoundAssetId", def.revealSoundAssetId, false)
 		end
+	elseif def.category == "Projectile" then
+		checkAssetId(issues, fileName, "projectileMeshAssetId", def.projectileMeshAssetId, def.enabled)
+		checkAssetId(issues, fileName, "explosionTextureAssetId", def.explosionTextureAssetId, def.enabled)
+	elseif def.category == "StreakFlair" then
+		checkAssetId(issues, fileName, "flairTextureAssetId", def.flairTextureAssetId, def.enabled)
+		checkColorHex(issues, fileName, "flairColorHex", def.flairColorHex)
+	elseif def.category == "Nameplate" then
+		checkAssetId(issues, fileName, "nameplateFrameAssetId", def.nameplateFrameAssetId, def.enabled)
+		checkColorHex(issues, fileName, "nameplateColorHex", def.nameplateColorHex)
+	elseif def.category == "CallingCard" then
+		checkAssetId(issues, fileName, "cardImageAssetId", def.cardImageAssetId, def.enabled)
 	end
 end
 

@@ -96,3 +96,25 @@ describe("ThrowLogic.arcPoint", function()
 		expect(ThrowLogic.arcPoint(origin, east, 2, 2.5).x):toBe(18)
 	end)
 end)
+
+describe("ThrowLogic.fitSize", function()
+	it("scales the longest side to the target, keeping proportions", function()
+		local s = ThrowLogic.fitSize({ x = 4, y = 2, z = 1 }, 1.1)
+		expect(s.x):toBeCloseTo(1.1)
+		expect(s.y):toBeCloseTo(0.55)
+		expect(s.z):toBeCloseTo(0.275)
+	end)
+
+	it("grows a tiny mesh up to the target too", function()
+		expect(ThrowLogic.fitSize({ x = 0.1, y = 0.2, z = 0.1 }, 1.1).y):toBeCloseTo(1.1)
+	end)
+
+	it("falls back to a cube for a degenerate mesh", function()
+		for _, native in { { x = 0, y = 0, z = 0 }, { x = 0 / 0, y = 0 / 0, z = 0 / 0 } } do
+			local s = ThrowLogic.fitSize(native, 1.1)
+			expect(s.x):toBe(1.1)
+			expect(s.y):toBe(1.1)
+			expect(s.z):toBe(1.1)
+		end
+	end)
+end)

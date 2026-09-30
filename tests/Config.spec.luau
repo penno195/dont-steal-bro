@@ -266,6 +266,18 @@ local function validTitle(id: string, minStreak: number): Validate.TitleDef
 	return { id = id, displayName = "Test Title", colorHex = "#1c6b67", minStreak = minStreak }
 end
 
+local COSMETIC_CATEGORIES = {
+	"Skin",
+	"Trail",
+	"Emote",
+	"Podium",
+	"Reveal",
+	"Projectile",
+	"StreakFlair",
+	"Nameplate",
+	"CallingCard",
+}
+
 local function validCosmetic(id: string, category: Validate.CosmeticCategory): Validate.CosmeticDef
 	local def: Validate.CosmeticDef = {
 		id = id,
@@ -288,6 +300,19 @@ local function validCosmetic(id: string, category: Validate.CosmeticCategory): V
 	elseif category == "Podium" then
 		def.podiumTextureAssetId = 115
 		def.podiumColorHex = "#66e0ff"
+	elseif category == "Reveal" then
+		def.revealTextureAssetId = 116
+	elseif category == "Projectile" then
+		def.projectileMeshAssetId = 117
+		def.explosionTextureAssetId = 118
+	elseif category == "StreakFlair" then
+		def.flairTextureAssetId = 119
+		def.flairColorHex = "#ff7a1a"
+	elseif category == "Nameplate" then
+		def.nameplateFrameAssetId = 120
+		def.nameplateColorHex = "#c0c0c0"
+	elseif category == "CallingCard" then
+		def.cardImageAssetId = 121
 	end
 	return def
 end
@@ -1339,10 +1364,37 @@ end
 
 TestRunner.describe("Validate.checkCosmeticItem (P4-6)", function()
 	TestRunner.it("accepts a well-formed item in each category", function()
-		for _, category in { "Skin", "Trail", "Emote", "Podium" } do
+		for _, category in COSMETIC_CATEGORIES do
 			local def = validCosmetic("t", category :: Validate.CosmeticCategory)
 			TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } })):toBe(0)
 		end
+	end)
+
+	TestRunner.it("refuses an ENABLED projectile skin missing its explosion", function()
+		local def = validCosmetic("t", "Projectile")
+		def.explosionTextureAssetId = 0
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("lets an enabled reveal keep the default sound", function()
+		local def = validCosmetic("t", "Reveal")
+		def.revealSoundAssetId = 0
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a reveal sound id that isn't an integer", function()
+		local def = validCosmetic("t", "Reveal")
+		def.revealSoundAssetId = 1.5
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses streak flair and nameplates with a malformed colour", function()
+		local flair = validCosmetic("t", "StreakFlair")
+		flair.flairColorHex = "orange"
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = flair } }) > 0):toBeTruthy()
+		local plate = validCosmetic("t", "Nameplate")
+		plate.nameplateColorHex = nil
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = plate } }) > 0):toBeTruthy()
 	end)
 
 	TestRunner.it("treats an omitted cosmetics registry as nothing registered, not an error", function()
