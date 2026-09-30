@@ -9,9 +9,10 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 
 ## Status
 
-**Phases 00–03 complete, Phase 04 underway — 34 of the tracker's 57
-tasks.** `lune run tests/run` currently passes 537 cases across 21 spec
-files.
+**All 57 tracker tasks are done (Phases 00–09), and the game is in
+Studio playtesting.** `lune run tests/run` passes 1,206 cases across 46
+spec files. What's still open is listed under [What's left](#whats-left)
+below; the phase-by-phase history follows.
 
 Pre-production (Phase 00) resolved all eight open design questions
 (`docs/design-decisions.md`) and wrote the task and power-up catalogues,
@@ -195,14 +196,91 @@ only place stock is ever decremented and it is written and tested, but
 nothing calls it: `powerups.md` describes both a 3-item pre-game
 loadout and a 1-slot in-round pickup inventory and never says how they
 coexist, and three items do not fit in one slot. That is a design call,
-not an implementation detail — see `docs/store-receipts.md` §5.
+not an implementation detail — see `docs/store-receipts.md` §5. (Since
+wired: `PowerUpService` now consumes the loadout at race start.)
 
-**Next: P4-6**, the cosmetics pipeline and equip application.
+P4-6 built the cosmetics pipeline: one config file per item in
+`src/shared/Config/Cosmetics/`, sold through a store entry rather than
+priced itself, and a category-aware equip gate so an owned item can't be
+equipped into the wrong slot. P4-7 added the analytics funnel and round
+telemetry (`docs/telemetry-schema.md`).
 
+Phase 05 connected the places. A cross-server queue forms groups in the
+Hub (`MatchmakingService`, `docs/matchmaking.md`) and teleports them to a
+reserved match server, recovering from a failed teleport
+(`MatchTeleportService`, `docs/teleport.md`). The map vote with a random
+tie-break (`docs/voting.md`) now runs as an 8-second overlay after each
+match. The Hub itself is hand-built in its own place against a tag contract
+(`docs/hub-spec.md`), and its practice area uses the same power-up code path
+as a real race (`docs/practice-area.md`).
 
-Client UI is still thin: `src/client/` has four controllers and the task
-views, and the whole of Phase 06 (theme, components, HUD, Studio UI) is
-still ahead.
+Phase 06 is the client UI, built on Vide: theme tokens, UI scale and safe
+areas (`docs/ui-foundation.md`), a component library
+(`docs/components.md`), the race HUD (`docs/race-hud.md`), the task view
+template with mobile input adapters (`docs/task-views.md`), the Decision
+Studio screen and its per-screen reveal order (`docs/decision-studio.md`),
+and the store, leaderboard, results and settings screens
+(`docs/menu-screens.md`). It closed with a mobile usability audit
+(`docs/mobile-audit.md`), an accessibility pass including reduced motion
+(`docs/accessibility.md`), and first-round onboarding
+(`docs/onboarding.md`).
+
+Phase 07 is map tooling. It includes a map validator that runs both as a
+Studio plugin and headlessly (`docs/map-validator.md`), and an asset pack
+sanitiser (`scripts/sanitise-pack.luau`). There is a definition file for
+each of the 11 maps, plus gray-box briefs for wave 1 (`docs/maps/`). It
+also adds per-map lighting and streaming presets
+(`docs/lighting-and-streaming.md`) and station readability markers
+(`docs/station-readability.md`).
+
+Phase 08 hardened the game. It covers a full audit of the remote surface
+with every finding closed (`docs/security-audit.md`), and a pooling and
+profiling pass (`docs/perf-report.md`). It adds audio and game feel
+(`docs/audio-and-feel.md`), a playtest protocol with bug triage
+(`docs/playtest-protocol.md`), and live-ops feature flags
+(`LiveConfig`, `docs/live-ops.md`). Phase 09 is the launch paperwork:
+the store page brief (`docs/store-page.md`), the soft-launch telemetry
+review loop (`docs/launch-review.md`), and the season plan
+(`docs/liveops-roadmap.md`).
+
+### Since the tracker
+
+Playtesting has driven the work since the tracker finished:
+
+- **Tasks:** a fourth mini-task, Vent Purge, joins Code Playback, Fuse
+  Rewire and Pressure Valve.
+- **Power-ups:** an overhaul colours items by role (Attack red, Defence
+  blue, Utility yellow). Items have 3D pickup models, click-to-aim, and a
+  drag-to-bin discard. Thrown items fly as a projectile, then explode,
+  shove the victim and recoil the thrower. A victim is always told who
+  hit them with what.
+- **NPCs:** bots can path up ramps.
+- **Finale:** the Decision Studio has staging and a loading screen.
+- **Hub:** a hotel lobby with working doors and a queue card. Its
+  practice area deals pickups from a deck, and its dummies fight back.
+  A task station there demos Task Insight and Task Scramble.
+- **Cosmetics:** nine categories, all drawn in game: Skin, Trail, Emote,
+  Podium, Reveal, Projectile, StreakFlair, Nameplate and CallingCard.
+  StreakFlair dresses a win-streak counter that exists on the **Hub
+  server only**, because design-decisions.md Q7 allows streaks there and
+  nowhere a rival you're about to race can read them (see that file's
+  applied cases).
+
+### What's left
+
+- **Maps.** All 11 map definitions exist, but every one is still
+  `enabled = false` until its geometry is built in `ServerStorage.Maps`.
+  The SpaceStation is the map in active playtesting.
+- **Assets and store products.** All placeholder cosmetics and store
+  items are disabled until they have real Roblox asset ids and products
+  in the Creator Dashboard. `GameConfig.matchmaking.hubPlaceId` is
+  unset until the Hub place is published.
+- **Economy numbers.** Every price and grant is still PLACEHOLDER. Those
+  numbers decide whether Q8's "Robux buys time, never power" rule holds
+  (`docs/store-receipts.md`).
+- **Platform assumptions.** The leaderboard and receipt docs flag
+  assumptions that must be checked against current Roblox documentation
+  before launch.
 
 ## Documents
 
@@ -211,7 +289,7 @@ still ahead.
 | [`docs/gdd.md`](docs/gdd.md) | The game design document. §7's open questions are resolved in `design-decisions.md`. |
 | [`docs/architecture.md`](docs/architecture.md) | Locked technical decisions, folder skeleton, and the NPC / mobile-UI / Decision Studio deep dives. |
 | [`docs/design-decisions.md`](docs/design-decisions.md) | The eight GDD §7 questions, resolved — bounty, qualification edge cases, streak-reset scope, Robux power-ups. |
-| [`docs/tasks-catalogue.md`](docs/tasks-catalogue.md) | 15 mini-tasks, server-validated, reskinned across all 11 map themes. |
+| [`docs/tasks-catalogue.md`](docs/tasks-catalogue.md) | 15 mini-tasks, server-validated, reskinned across all 11 map themes (four are built so far). |
 | [`docs/powerups.md`](docs/powerups.md) | 10 power-ups and the anti-frustration/counter-play matrix. |
 | [`docs/payoff-table.md`](docs/payoff-table.md) | The Steal/Share equilibrium maths and bounty-tier numbers. |
 | [`docs/map-kit-spec.md`](docs/map-kit-spec.md) | The CollectionService tag contract every map must satisfy. |
@@ -226,6 +304,15 @@ still ahead.
 | [`docs/finale-disconnect-tests.md`](docs/finale-disconnect-tests.md) | The two-client Studio plan for the finale's six disconnect/forfeit cases — including exactly when to close a window to trigger each. |
 | [`docs/leaderboard-scale.md`](docs/leaderboard-scale.md) | What the boards cost at 1,000 and 20,000 concurrent players, which limit is hit first, the UTC timezone policy for daily/weekly periods, and the nine platform assumptions that must be verified before launch. |
 | [`docs/store-receipts.md`](docs/store-receipts.md) | The receipt guarantee and every ordering that could break it, the eight-case Studio test plan, and a plain pay-to-win verdict on selling starting power-ups in a streak game. |
+| [`docs/matchmaking.md`](docs/matchmaking.md), [`docs/teleport.md`](docs/teleport.md), [`docs/voting.md`](docs/voting.md) | The Hub queue, the reserved-server teleport and its failure recovery, and the post-match map vote. |
+| [`docs/hub-spec.md`](docs/hub-spec.md), [`docs/practice-area.md`](docs/practice-area.md) | The Hub's tag contract and its practice area (deck, dummies, task station). |
+| [`docs/ui-foundation.md`](docs/ui-foundation.md), [`docs/components.md`](docs/components.md) | Theme tokens, UI scale, safe areas and the Vide component library. |
+| [`docs/race-hud.md`](docs/race-hud.md), [`docs/task-views.md`](docs/task-views.md), [`docs/decision-studio.md`](docs/decision-studio.md), [`docs/menu-screens.md`](docs/menu-screens.md) | Each screen: the race HUD, task views, the Decision Studio and reveal, and the menus. |
+| [`docs/mobile-audit.md`](docs/mobile-audit.md), [`docs/mobile-checklist.md`](docs/mobile-checklist.md), [`docs/accessibility.md`](docs/accessibility.md), [`docs/onboarding.md`](docs/onboarding.md) | The mobile usability audit and checklist, accessibility, and first-round onboarding. |
+| [`docs/map-validator.md`](docs/map-validator.md), [`docs/maps/`](docs/maps/), [`docs/lighting-and-streaming.md`](docs/lighting-and-streaming.md), [`docs/station-readability.md`](docs/station-readability.md) | Map tooling: the validator, wave 1 briefs and the map-building handoff, lighting presets, and station readability. |
+| [`docs/security-audit.md`](docs/security-audit.md), [`docs/perf-report.md`](docs/perf-report.md), [`docs/audio-and-feel.md`](docs/audio-and-feel.md) | The remote-surface audit, the performance pass, and audio and game feel. |
+| [`docs/playtest-protocol.md`](docs/playtest-protocol.md), [`docs/live-ops.md`](docs/live-ops.md) | How to run and triage a playtest, and the live-ops feature flags. |
+| [`docs/telemetry-schema.md`](docs/telemetry-schema.md), [`docs/launch-review.md`](docs/launch-review.md), [`docs/store-page.md`](docs/store-page.md), [`docs/liveops-roadmap.md`](docs/liveops-roadmap.md) | Launch: telemetry events, the soft-launch review loop, the store page brief, and the season plan. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture
@@ -298,8 +385,8 @@ pure-logic modules are required to make zero Roblox API calls anyway, they
 don't need Roblox emulation in the first place — `tests/TestRunner.luau`
 is a ~95-line hand-rolled runner that executes directly under Lune's real
 Luau runtime, with no third-party dependency. This was installed and run
-locally (not just researched): `lune run tests/run` passes 202 cases across
-the twelve spec files in `tests/`, and has run green from P1-6 onward
+locally (not just researched): `lune run tests/run` runs every spec file in
+`tests/` (the current count is under Status), and has run green from P1-6 onward
 (P1-1's original placeholder, `Example.spec.
 luau`, was deleted once a real pure-logic module had its own spec file,
 per its own header comment). See `docs/testing-conventions.md` (P1-6) for

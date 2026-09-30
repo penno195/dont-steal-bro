@@ -9,8 +9,9 @@ blindly choose **Steal** or **Share**, deciding who progresses with what
 bounty. The whole metagame is a win streak that only goes up and resets
 completely on any loss.
 
-This repo is **pre-production** — no game code exists yet. Design and
-architecture are written; nothing here should be treated as "in progress."
+All 57 tracker tasks (`docs/build-plan.html`) are built, and the game is
+in **Studio playtesting**; work now comes from playtest feedback. Current
+status and what's left: `README.md`.
 
 ## Ground rules (non-negotiable)
 
@@ -24,16 +25,18 @@ architecture are written; nothing here should be treated as "in progress."
    Android phone. A mini-game that needs two thumbs or camera control is cut.
 4. **`--!strict` everywhere.** Pure logic (outcome tables, pricing, ranking,
    tie-breaks, streak math) must stay free of any Roblox API calls, so it can
-   be unit-tested headlessly in CI (Jest-Lua via Lune).
+   be unit-tested headlessly in CI (`lune run tests/run`, a hand-rolled
+   runner in `tests/TestRunner.luau`; new specs are added to
+   `tests/run.luau` by hand).
 
-## Planned Rojo layout
+## Rojo layout
 
 ```
-src/shared/     -> ReplicatedStorage.Shared   (Config/, Net.luau, Types.luau)
-src/server/     -> ServerScriptService        (Services/, TaskHandlers/)
-src/client/     -> StarterPlayerScripts       (Controllers/, UI/, TaskViews/)
+src/shared/     -> ReplicatedStorage.Shared                  (Config/, Net.luau, Loader.luau)
+src/server/     -> ServerScriptService.Server                (Services/, TaskHandlers/, *Logic.luau)
+src/client/     -> StarterPlayer.StarterPlayerScripts.Client (Controllers/, UI/, TaskViews/)
 docs/           design and architecture
-tests/          Jest-Lua suites, run headlessly via Lune
+tests/          pure-logic specs, run headlessly via Lune
 ```
 
 **Maps are never synced by Rojo.** All 11 maps are built by hand in Studio and
@@ -41,15 +44,20 @@ live in `ServerStorage.Maps`, cloned into the round on load. The `.rbxl` is
 authoritative for map content; this repo is authoritative for everything
 else. Full details: `docs/architecture.md`.
 
-## Open design questions — do not silently answer
+## Design decisions — do not silently change or invent
 
-`docs/gdd.md` §7 lists eight unresolved design questions (bounty definition,
-round timeout, disconnect handling, NPC qualification, streak-reset scope,
-Robux power-ups, etc). Task **P0-1** resolves these into
-`docs/design-decisions.md`. Until that file exists, these questions are open.
+`docs/gdd.md` §7's eight design questions (bounty, round timeout,
+disconnects, NPC qualification, streak-reset scope, Robux power-ups, etc)
+are resolved in `docs/design-decisions.md`, with applied cases under each.
+Follow them. The one that bites most often is **Q7 condition 1: no
+player's streak may be visible to others during a live round** (hub and
+post-match only). This covers indirect tells such as titles and
+nameplates.
 
-If any task touches one of these questions, **stop and ask the user** —
-do not pick an answer and proceed, even a reasonable-sounding one.
+If a task would change or reinterpret a decision, or hits a design gap
+nothing there answers, **stop and ask the user**. Do not pick an answer
+and proceed, even a reasonable-sounding one. Record the user's answer as
+an applied case in `design-decisions.md`.
 
 ## Luau / Roblox API caution
 
