@@ -429,10 +429,27 @@ enterReveal = function(outcome: Outcomes.OutcomeResult)
 	local duration = GameConfig.studioTimers.revealDelaySeconds
 	broadcastPhase("Reveal", now() + duration)
 
+	-- Each finalist's Reveal cosmetic, read from their own profile. It
+	-- rides THIS packet rather than an earlier one only for tidiness - an
+	-- item id says nothing about a choice - and the client fires it when
+	-- that finalist's card turns (DecisionLogic.cardTurnAt), never before.
+	local CosmeticService = Loader.get("CosmeticService") :: any
+	local revealCosmetics = {}
+	for _, id in qualifierIds do
+		local participant = Participants.get(id)
+		local cosmeticId = if participant ~= nil
+			then CosmeticService.equippedIdFor(participant.player, "Reveal") :: string?
+			else nil
+		if cosmeticId ~= nil then
+			table.insert(revealCosmetics, { playerId = id, cosmeticId = cosmeticId })
+		end
+	end
+
 	Net.fireAllClients("DecisionReveal", {
 		choices = choices,
 		outcome = outcome,
 		revealAt = now() + REVEAL_ANIMATION_LEAD_SECONDS,
+		revealCosmetics = revealCosmetics,
 	})
 
 	-- P6-5: strictly AFTER the broadcast above - see personalResults.

@@ -519,6 +519,16 @@ local DecisionStudioController: Loader.Controller = {
 	isActive = function(): boolean
 		return unmount ~= nil
 	end,
+
+	-- The finalists in seat order - the order a spectator's cards turn
+	-- in, and the input to DecisionLogic.revealOrder for everyone else.
+	getSeatIds = function(): { number }
+		local seatIds: { number } = {}
+		for _, seat in seats() do
+			table.insert(seatIds, seat.id)
+		end
+		return seatIds
+	end,
 }
 
 function DecisionStudioController:init()

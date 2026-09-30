@@ -3,8 +3,8 @@
 -- is shown. Tinted by the outcome, never by this item - see
 -- Validate.CosmeticDef's header for why a reveal has no colour field.
 --
--- Disabled until it has a Roblox asset, a store product and a renderer
--- (no service draws the "Reveal" category yet).
+-- Drawn by RevealCosmeticController as the card turns. Disabled until it
+-- has a Roblox asset and a store product.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
@@ -16,7 +16,7 @@ local VaultDoorReveal: Validate.CosmeticDef = {
 	description = "Your choice is revealed from behind a vault door. Cosmetic only.",
 	rarity = "Rare",
 	sortOrder = 40,
-	enabled = false, -- PLACEHOLDER: no Roblox asset id, product or renderer yet
+	enabled = false, -- PLACEHOLDER: no Roblox asset id or product yet
 	revealTextureAssetId = 0,
 }
 

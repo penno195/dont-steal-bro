@@ -904,7 +904,10 @@ Net.Remotes = {
 	-- happened - see DecisionService.luau's own resolution-order
 	-- comment. `revealAt` is a shared absolute timestamp so all clients
 	-- animate the reveal in sync regardless of when each one's copy of
-	-- this event actually finished replicating.
+	-- this event actually finished replicating. `revealCosmetics` is a
+	-- list of `{ playerId, cosmeticId }`, each finalist's Reveal cosmetic
+	-- from their own profile (none for NPCs), fired on their podium as
+	-- their card turns.
 	DecisionReveal = {
 		name = "DecisionReveal",
 		direction = "ServerBroadcast",

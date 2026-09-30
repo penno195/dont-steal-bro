@@ -292,6 +292,37 @@ describe("DecisionLogic.revealOrder", function()
 	end)
 end)
 
+describe("DecisionLogic.cardTurnAt", function()
+	it("lands on the beat revealStep turns each card", function()
+		for index = 1, 3 do
+			local at = DecisionLogic.cardTurnAt(index)
+			expect(DecisionLogic.revealStep(at, 3).cardsShown):toBe(index)
+			expect(DecisionLogic.revealStep(at - 0.01, 3).cardsShown):toBe(index - 1)
+		end
+	end)
+end)
+
+describe("DecisionLogic.parseRevealCosmetics", function()
+	it("keys each finalist's cosmetic by id, NPC ids included", function()
+		local out = DecisionLogic.parseRevealCosmetics({
+			{ playerId = 10, cosmeticId = "reveal-vault-door" },
+			{ playerId = "20", cosmeticId = "reveal-other" },
+		})
+		expect(out[10]):toBe("reveal-vault-door")
+		expect(out[20]):toBe("reveal-other")
+	end)
+
+	it("drops malformed entries and non-tables", function()
+		local out = DecisionLogic.parseRevealCosmetics({
+			{ playerId = 1.5, cosmeticId = "x" },
+			{ playerId = 30 },
+			"junk",
+		})
+		expect(next(out)):toBe(nil)
+		expect(next(DecisionLogic.parseRevealCosmetics(nil))):toBe(nil)
+	end)
+end)
+
 describe("DecisionLogic.resultCopy", function()
 	local function reveal(branch: string, winners: { number }, losers: { number }): DecisionLogic.Reveal
 		return {

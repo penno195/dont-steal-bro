@@ -510,6 +510,33 @@ function DecisionLogic.revealOrder(seatIds: { number }, choices: { [number]: Cho
 	return order
 end
 
+-- Seconds after `revealAt` that card `index` (a position in revealOrder)
+-- turns face up - the beat revealStep counts `cardsShown` on. A Reveal
+-- cosmetic fires on its wearer's podium at exactly this moment, so the
+-- burst and the card land together and never before the choice shows.
+function DecisionLogic.cardTurnAt(index: number): number
+	local t = DecisionLogic.TIMING
+	return t.lead + (index - 1) * t.cardGap
+end
+
+-- DecisionReveal's `revealCosmetics`: a list of `{ playerId, cosmeticId }`,
+-- the Reveal cosmetic each finalist wears. A list, not a map, so the
+-- negative/userId keys don't come through as strings. Malformed entries
+-- are dropped - a finalist with none just gets the plain card.
+function DecisionLogic.parseRevealCosmetics(list: any): { [number]: string }
+	local out: { [number]: string } = {}
+	if type(list) ~= "table" then
+		return out
+	end
+	for _, entry in list :: { any } do
+		local id = if type(entry) == "table" then toId(entry.playerId) else nil
+		if id ~= nil and type(entry.cosmeticId) == "string" then
+			out[id] = entry.cosmeticId
+		end
+	end
+	return out
+end
+
 function DecisionLogic.revealLength(seats: number): number
 	local t = DecisionLogic.TIMING
 	return t.lead + math.max(0, seats - 1) * t.cardGap + t.outcomeAfter + t.resultAfter
