@@ -14,7 +14,7 @@ local SorryNotSorryCard: Validate.CosmeticDef = {
 	description = "Leave your mark on everyone you sabotage. Cosmetic only.",
 	rarity = "Common",
 	sortOrder = 80,
-	enabled = false, -- PLACEHOLDER: no Roblox asset id, product or renderer yet
+	enabled = false, -- PLACEHOLDER: no Roblox asset id or product yet
 	cardImageAssetId = 0,
 }
 

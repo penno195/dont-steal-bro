@@ -75,6 +75,7 @@ local StoreCatalogue = require(ReplicatedStorage.Shared.Config.Store)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
+local CosmeticLogic = require(ServerScriptService.Server.CosmeticLogic)
 
 type StoreItemDef = Validate.StoreItemDef
 
@@ -686,6 +687,11 @@ local function handleEquipIntent(player: Player, slot: string, itemId: string?)
 
 	pushState(player)
 	CosmeticService.refreshFor(player)
+	-- The Nameplate frame is drawn from TitleService's broadcast, not
+	-- from the character, so that's what has to go out again.
+	if slot == CosmeticLogic.slotFor("Nameplate") then
+		(Loader.get("TitleService") :: any).broadcast()
+	end
 end
 
 local function handleLoadoutIntent(player: Player, slotIndex: number, powerUpId: string?)

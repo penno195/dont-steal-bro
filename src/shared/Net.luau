@@ -728,7 +728,10 @@ Net.Remotes = {
 	-- Server -> client (broadcast): who is currently WEARING what, for
 	-- the nametags. Carries the title id, display text, colour and
 	-- effect - never a threshold and never a streak, so the payload
-	-- itself can't be mined for the number behind it.
+	-- itself can't be mined for the number behind it. `{ titles = {
+	-- { racerId, title?, nameplateId? } }, visible }`: `nameplateId` is
+	-- the racer's Nameplate cosmetic (the frame the tag is drawn in), so
+	-- an entry may carry a frame and no title.
 	--
 	-- The Q7 suppression is enforced HERE rather than on the client:
 	-- while a round is live the server simply doesn't send other

@@ -23,6 +23,8 @@
 --    shadow child. A UIStroke on the label costs nothing extra to
 --    batch; three stacked transparent frames cost three draws each.
 --    Readability at distance comes from the stroke, not from layering.
+--    The one exception is a Nameplate cosmetic: its frame is one
+--    ImageLabel behind the text, only on tags whose owner bought one.
 --
 -- 3. MaxDistance, set here to 60 studs. This is the single biggest
 --    win available: beyond it Roblox culls the gui entirely rather
@@ -53,6 +55,7 @@ local TextChatService = game:GetService("TextChatService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Env = require(script.Parent.Parent.UI.Components.Env)
@@ -74,8 +77,30 @@ type TitleInfo = {
 	effect: string?,
 }
 
+type Nameplate = { frameAssetId: number, colorHex: string }
+
 local titlesByRacerId: { [number]: TitleInfo } = {}
+-- The Nameplate cosmetic each racer wears, from the same TitleState
+-- broadcast - so a frame is suppressed mid-round exactly as a title is.
+local nameplatesByRacerId: { [number]: Nameplate } = {}
 local activeTweens: { [Instance]: Tween } = {}
+
+-- Nameplate id -> how to draw it. Enabled items only, so a disabled or
+-- unknown id draws the plain tag.
+local nameplateDefs: { [string]: Nameplate } = {}
+for _, entry in Cosmetics do
+	local def = entry.def
+	if def.category == "Nameplate" and def.enabled then
+		nameplateDefs[def.id] = {
+			frameAssetId = def.nameplateFrameAssetId :: number,
+			colorHex = def.nameplateColorHex :: string,
+		}
+	end
+end
+
+-- Inset of the text inside a frame, in the billboard's own offset units.
+local FRAME_INSET_X = 16
+local FRAME_INSET_Y = 6
 
 local function colorFromHex(hex: string): Color3
 	-- Config stores "#rrggbb" as a plain string so Validate.luau stays
@@ -145,7 +170,9 @@ local function removeNametag(character: Model)
 	end
 end
 
-local function buildNametag(character: Model, info: TitleInfo)
+-- `info` is nil for a racer who wears a Nameplate but no title: the frame
+-- then holds their display name, so the purchase still shows.
+local function buildNametag(character: Model, info: TitleInfo?, nameplate: Nameplate?, fallbackName: string)
 	local head = character:FindFirstChild("Head")
 	if head == nil or not head:IsA("BasePart") then
 		return
@@ -167,21 +194,37 @@ local function buildNametag(character: Model, info: TitleInfo)
 	billboard.Adornee = head
 	billboard.Parent = head
 
+	if nameplate ~= nil then
+		local frame = Instance.new("ImageLabel")
+		frame.Name = "NameplateFrame"
+		frame.Size = UDim2.fromScale(1, 1)
+		frame.BackgroundTransparency = 1
+		frame.Image = string.format("rbxassetid://%d", nameplate.frameAssetId)
+		frame.ImageColor3 = colorFromHex(nameplate.colorHex)
+		frame.ZIndex = 1
+		frame.Parent = billboard
+	end
+
 	local label = Instance.new("TextLabel")
 	label.Name = "TitleLabel"
-	label.Size = UDim2.fromScale(1, 1)
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = if nameplate ~= nil
+		then UDim2.new(1, -2 * FRAME_INSET_X, 1, -2 * FRAME_INSET_Y)
+		else UDim2.fromScale(1, 1)
+	label.ZIndex = 2
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.GothamBold
 	label.TextScaled = true
-	label.Text = info.displayName
-	label.TextColor3 = colorFromHex(info.colorHex)
+	label.Text = if info ~= nil then info.displayName else fallbackName
+	label.TextColor3 = if info ~= nil then colorFromHex(info.colorHex) else Color3.fromRGB(255, 255, 255)
 	-- Readability at distance comes from the stroke, not from stacked
 	-- frames - one label, one stroke, one draw.
 	label.TextStrokeTransparency = 0.4
 	label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 	label.Parent = billboard
 
-	applyEffect(label, info.effect)
+	applyEffect(label, if info ~= nil then info.effect else nil)
 end
 
 local function characterFor(racerId: number): Model?
@@ -225,10 +268,19 @@ local function refreshAllNametags()
 		end
 	end
 
-	for racerId, info in titlesByRacerId do
+	local racerIds: { [number]: true } = {}
+	for racerId in titlesByRacerId do
+		racerIds[racerId] = true
+	end
+	for racerId in nameplatesByRacerId do
+		racerIds[racerId] = true
+	end
+	for racerId in racerIds do
 		local character = characterFor(racerId)
 		if character ~= nil then
-			buildNametag(character, info)
+			local player = Players:GetPlayerByUserId(racerId)
+			local fallbackName = if player ~= nil then player.DisplayName else character.Name
+			buildNametag(character, titlesByRacerId[racerId], nameplatesByRacerId[racerId], fallbackName)
 		end
 	end
 end
@@ -310,8 +362,13 @@ function NametagController:init()
 
 	Net.onClientEvent("TitleState", function(payload: any)
 		titlesByRacerId = {}
+		nameplatesByRacerId = {}
 		for _, entry in payload.titles do
 			titlesByRacerId[entry.racerId] = entry.title
+			local nameplate = if type(entry.nameplateId) == "string" then nameplateDefs[entry.nameplateId] else nil
+			if nameplate ~= nil then
+				nameplatesByRacerId[entry.racerId] = nameplate
+			end
 		end
 		refreshAllNametags()
 	end)

@@ -96,15 +96,27 @@ end
 -- One broadcast describing who wears what. Called on every change and
 -- on every round-state change, because the round state is half of what
 -- decides the answer.
+--
+-- Each entry also names the racer's Nameplate cosmetic - the frame the
+-- nametag is drawn in. It rides this broadcast, and so this suppression,
+-- on purpose: Q7 condition 1 names "nameplate" as a surface, and a frame
+-- showing mid-round is a tag on a racer whether or not the words inside
+-- it are. Read from the profile (CosmeticService), so a client can't
+-- dress anyone else. `title` may be nil when only the frame is worn.
 local function broadcastTitles()
 	local visible = TitleLogic.isVisibleInState(currentRoundState(), GameConfig.titleDisplayDuringRound)
 
 	local entries = {}
 	if visible then
+		local CosmeticService = Loader.get("CosmeticService") :: any
 		for _, participant in Participants.all() do
 			local def = TitleLogic.findById(ladder, wornTitleId[participant.id])
-			if def ~= nil then
-				table.insert(entries, { racerId = participant.id, title = titlePayload(def) })
+			local nameplateId = CosmeticService.equippedIdFor(participant.player, "Nameplate") :: string?
+			if def ~= nil or nameplateId ~= nil then
+				table.insert(
+					entries,
+					{ racerId = participant.id, title = titlePayload(def), nameplateId = nameplateId }
+				)
 			end
 		end
 	end
@@ -242,6 +254,10 @@ local TitleService: Loader.Service = {
 	getWornTitleId = function(racerId: number): string?
 		return wornTitleId[racerId]
 	end,
+
+	-- Called by StoreService after a cosmetic equip, so a new Nameplate
+	-- frame shows without waiting for the next round-state change.
+	broadcast = broadcastTitles,
 
 	-- Called by ProgressionService after a streak change, so an unlock
 	-- notification lands in the same beat as the win that earned it
