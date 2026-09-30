@@ -449,6 +449,9 @@ export type PracticeConfig = {
 	itemSpawnRarities: { string }, -- cycled over HubPracticeItemSpawn parts, sorted by name
 	respawnMultipliers: PowerUpRarityWeights, -- on GameConfig.powerUpRotationTimers
 	zoneCheckSeconds: number, -- how often zone exits are noticed and effects cleared
+	bagCopiesByRole: { [string]: number }, -- copies of each item per shuffled deck, by role
+	dummyAttackSeconds: number, -- one training dummy throws at a player this often
+	dummyAttackPowerUpIds: { string }, -- what dummies throw; Aimed or Area items only; empty = off
 }
 
 -- Proximity doors. See GameConfig.doors.
@@ -2147,6 +2150,25 @@ local function checkPracticeConfig(pc: PracticeConfig, issues: { Issue })
 			bad("respawnMultipliers." .. rarity, "must be positive")
 		end
 	end
+
+	-- Every role needs at least one copy, or its items would never spawn
+	-- in the hub at all - that's removing them, which this knob isn't for.
+	for _, role in { "Attack", "Defence", "Utility" } do
+		local copies = if type(pc.bagCopiesByRole) == "table" then pc.bagCopiesByRole[role] else nil
+		if type(copies) ~= "number" or copies < 1 or copies % 1 ~= 0 then
+			bad("bagCopiesByRole." .. role, "must be a whole number, at least 1")
+		end
+	end
+
+	if type(pc.dummyAttackSeconds) ~= "number" or pc.dummyAttackSeconds < 2 then
+		bad("dummyAttackSeconds", "must be at least 2 - any faster and a player on the rug is never not hit")
+	end
+	-- Empty is allowed: it switches dummies fighting back off. Whether each
+	-- id names a real Aimed/Area item is checked in Validate.run, which
+	-- has the power-up list.
+	if type(pc.dummyAttackPowerUpIds) ~= "table" then
+		bad("dummyAttackPowerUpIds", "must be a list of power-up ids (empty turns dummy attacks off)")
+	end
 end
 
 -- Only shape is checked here. Whether `mapId` names a real model needs
@@ -2665,6 +2687,34 @@ function Validate.run(input: RegistryInput): { Issue }
 	checkDuplicateIds("PowerUp", input.powerUps :: any, issues)
 	checkDuplicateIds("Title", input.titles :: any, issues)
 	checkDuplicateIds("Cosmetic", (cosmetics or {}) :: any, issues)
+
+	-- A training dummy can only throw something that lands on someone
+	-- else: an Aimed item, or an Area one dropped at its feet.
+	local practice = input.gameConfig.practice
+	if practice ~= nil and type(practice.dummyAttackPowerUpIds) == "table" then
+		local targetById: { [string]: string } = {}
+		for _, entry in input.powerUps do
+			targetById[entry.def.id] = entry.def.target
+		end
+		for i, id in practice.dummyAttackPowerUpIds do
+			local target = targetById[id]
+			if target ~= "Aimed" and target ~= "Area" then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					string.format("practice.dummyAttackPowerUpIds[%d]", i),
+					if target == nil
+						then string.format("%q is not a power-up id", tostring(id))
+						else string.format(
+							"%q targets %s - a dummy can only throw Aimed or Area items",
+							id,
+							target
+						)
+				)
+			end
+		end
+	end
 
 	-- P4-2: two titles at the same threshold make "the highest title
 	-- you've unlocked" ambiguous, and which one a player sees would then

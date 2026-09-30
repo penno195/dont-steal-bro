@@ -51,7 +51,10 @@ coexist (`store-receipts.md` §5).
   hits. With no aim, the cone points where the character faces, and a
   faint highlight shows who a quick-fire would hit. To aim:
   - **PC:** hold left-click (right-click stays the camera's own look
-    control). The camera goes first person, so the cone points where you
+    control). The camera goes first person, facing whatever was under the
+    cursor when you clicked, so clicking on a rival puts them straight
+    under the crosshair with no flick (2026-09-30; it used to keep the
+    camera's old heading). The cone then points where you
     look: the mouse turns the view (and the character), and WASD still
     moves. The crosshair sits where you look until it locks on. Let go to
     fire: releasing fires if something is locked, and otherwise cancels.
@@ -219,6 +222,15 @@ player can still walk to a known task by memory/landmarks since movement
 is untouched; Task Insight reduces the effect on task precision; Phase
 Step blocks it outright if pre-empted. **Stacking:** reapplying refreshes
 duration only, never increases the visual obstruction magnitude.
+
+**As built (2026-09-30):** `BlindController` blurs the 3D world
+(`BlurEffect` size 24) and dims it with a black tint at 0.45
+transparency. The tint also covers phones whose graphics level drops
+post-processing. Both sit under the HUD, so task lists and slots stay
+readable. It's driven by the `StatusEffectsVisual` broadcast for your
+own id, so it works in races and in the hub practice area. Until then,
+the only sign of Blind was a thin HUD edge band, and in the hub there
+was nothing at all.
 
 ### 9. Task Scramble (Debuff, Aimed)
 

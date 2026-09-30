@@ -513,7 +513,38 @@ local function leaveFirstPerson()
 	end)
 end
 
-local function startAim(mode: RaceHUD.AimMode)
+-- AIM WHERE YOU CLICKED. In third person the mouse is free, so the
+-- thing you click on is rarely at the screen centre - and first person
+-- keeps the camera's old heading, which flicked the view away from it.
+-- Instead, turn the camera to look from the character's eyes at the
+-- point under the cursor. The default camera builds each frame from
+-- Camera.CFrame's look vector, so setting it once holds; the zoom pin
+-- then pulls in to first person along that heading, and the clicked
+-- spot ends up under the crosshair.
+local CLICK_AIM_REACH = 500
+
+local function faceScreenPoint(screenPoint: Vector2)
+	local camera = Workspace.CurrentCamera
+	local character = Players.LocalPlayer.Character
+	local head = if character ~= nil then character:FindFirstChild("Head") else nil
+	if camera == nil or head == nil or not head:IsA("BasePart") then
+		return
+	end
+	local ray = camera:ScreenPointToRay(screenPoint.X, screenPoint.Y)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { character :: Model }
+	local hit = Workspace:Raycast(ray.Origin, ray.Direction * CLICK_AIM_REACH, params)
+	local point = if hit ~= nil then hit.Position else ray.Origin + ray.Direction * CLICK_AIM_REACH
+	local direction = point - head.Position
+	if direction.Magnitude < 0.1 then
+		return
+	end
+	local from = camera.CFrame.Position
+	camera.CFrame = CFrame.lookAt(from, from + direction.Unit)
+end
+
+local function startAim(mode: RaceHUD.AimMode, screenPoint: Vector2?)
 	aimMode = mode
 	dragX, dragY = 0, 0
 	aiming(true)
@@ -521,6 +552,9 @@ local function startAim(mode: RaceHUD.AimMode)
 	-- HUD only starts a left-click aim for an aimable item).
 	local def = selectedDef()
 	if mode == "Camera" and def ~= nil and def.target == "Aimed" then
+		if screenPoint ~= nil then
+			faceScreenPoint(screenPoint)
+		end
 		enterFirstPerson()
 	end
 end

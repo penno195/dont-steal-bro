@@ -179,6 +179,19 @@ local function setMapRarityWeights(weights: Validate.PowerUpRarityWeights?)
 	mapRarityWeights = weights
 end
 
+-- The hub practice area deals pickups from one shuffled deck instead of
+-- rolling each spawn point's rarity pool, so every item turns up before
+-- any repeats (PowerUpLogic.drawFromBag). nil (the default, and always
+-- in a round) keeps per-point rarity rolls. Spawn points still keep
+-- their rarity for respawn timing.
+local bagCopiesByRole: { [string]: number }? = nil
+local bag = PowerUpLogic.newBag()
+
+local function setSelectionBag(copiesByRole: { [string]: number }?)
+	bagCopiesByRole = copiesByRole
+	bag = PowerUpLogic.newBag()
+end
+
 -- ===== effect application (P2-8's seam) ===================================
 
 -- Takes PARTICIPANTS, not Players (P3-5): a power-up's target may be an
@@ -456,6 +469,24 @@ local function eligiblePool(point: SpawnPointRecord): { Validate.PowerUpDef }
 	return pool
 end
 
+-- The deck's full contents: every enabled item, as many copies as its
+-- role gets. Rebuilt per deal, so a live-ops switch-off lands at once.
+local function bagContents(copiesByRole: { [string]: number }): { string }
+	local ids: { string } = {}
+	for id, def in powerUpDefsById do
+		if not Loader.get("LiveConfig").isPowerUpEnabled(id) then
+			continue
+		end
+		for _ = 1, copiesByRole[def.role] or 1 do
+			table.insert(ids, id)
+		end
+	end
+	-- Map iteration order isn't stable; the deck's shuffle comes from the
+	-- roll, so its starting order shouldn't depend on hashing.
+	table.sort(ids)
+	return ids
+end
+
 local function respawnSecondsFor(rarity: string): number
 	local base = (GameConfig.powerUpRotationTimers :: any)[rarity] :: number
 	local multiplier = if mapRarityWeights ~= nil then (mapRarityWeights :: any)[rarity] :: number else 1
@@ -700,13 +731,26 @@ end
 spawnAt = function(point: SpawnPointRecord)
 	hideLivePickup(point) -- defensive idempotency guard; shouldn't normally find one live
 
-	local pool = eligiblePool(point)
-	if #pool == 0 then
-		warn(string.format("PowerUpService: no eligible power-up defs for a %s spawn point - skipped", point.rarity))
-		return
+	local def: Validate.PowerUpDef
+	local copiesByRole = bagCopiesByRole
+	local contents = if copiesByRole ~= nil and debugTargetFilter() == nil then bagContents(copiesByRole) else {}
+	if #contents > 0 then
+		-- Never two of the same item out at once, while the deck allows.
+		local onField: { [string]: boolean } = {}
+		for _, live in livePickups do
+			onField[live.def.id] = true
+		end
+		def = powerUpDefsById[PowerUpLogic.drawFromBag(bag, contents, math.random(), onField)]
+	else
+		local pool = eligiblePool(point)
+		if #pool == 0 then
+			warn(
+				string.format("PowerUpService: no eligible power-up defs for a %s spawn point - skipped", point.rarity)
+			)
+			return
+		end
+		def = PowerUpLogic.selectUniform(pool, math.random())
 	end
-
-	local def = PowerUpLogic.selectUniform(pool, math.random())
 
 	local part = pickupPartFor(point)
 	part.Name = string.format("PowerUpPickup_%s", def.id)
@@ -1033,6 +1077,18 @@ local function useForRacer(racerId: number, slotIndex: number?, targetRacerId: n
 	useFor(racer, slotIndex, targetRacerId)
 end
 
+-- Puts `powerUpId` in slot 1, replacing whatever was there. Only for a
+-- hub training dummy about to throw it (PracticeService), which then
+-- spends it through useForRacer like any NPC - so the use is validated,
+-- rate-limited and audited exactly as a real one. Never reachable from a
+-- client.
+local function grantFor(racerId: number, powerUpId: string)
+	if powerUpDefsById[powerUpId] == nil or Participants.get(racerId) == nil then
+		return
+	end
+	stateFor(racerId).inventory[1] = { powerUpId = powerUpId, acquiredAt = now() }
+end
+
 -- ===== round lifecycle ======================================================
 
 -- Clears every pickup, timer and inventory, then spawns at every spawn
@@ -1151,6 +1207,8 @@ local PowerUpService: Loader.Service = {
 
 	-- P3-6's entry point into the one validated use path - see useFor.
 	useForRacer = useForRacer,
+	grantFor = grantFor,
+	setSelectionBag = setSelectionBag,
 
 	-- P5-5: PracticeService runs the same pickup lifecycle in the hub.
 	startPickups = startPickups,

@@ -96,7 +96,10 @@ export type Store = {
 	objective: () -> Objective?,
 	select: (index: number) -> (),
 	fire: () -> (), -- the selected slot, at whatever is locked on
-	startAim: (mode: AimMode) -> (),
+	-- screenPoint: where a mouse aim was clicked (InputObject.Position),
+	-- so first person opens looking there rather than wherever the
+	-- camera happened to face. nil for L2 and touch drags.
+	startAim: (mode: AimMode, screenPoint: Vector2?) -> (),
 	dragAim: (dx: number, dy: number) -> (), -- pixels from where the drag began
 	-- fireIfLocked: fire first if a target is locked (hold-to-aim release).
 	endAim: (fireIfLocked: boolean?) -> (),
@@ -867,7 +870,8 @@ local function bindPowerUpInput(store: Store, slotCount: number)
 			end
 		end
 		cameraAim = true
-		store.startAim("Camera")
+		local position = input.Position
+		store.startAim("Camera", if input.UserInputType == AIM_MOUSE then Vector2.new(position.X, position.Y) else nil)
 	end)
 	-- Only a release of the aim this binding began: a slot drag also
 	-- ends on a left-button release, and the panel owns that one (it

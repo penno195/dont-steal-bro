@@ -37,6 +37,9 @@ practice = {
 	itemSpawnRarities = { "Common", "Uncommon", "Rare" }, -- so every tier shows up to try
 	respawnMultipliers = { Common = 0.25, Uncommon = 0.25, Rare = 0.25 }, -- 4x faster than a round
 	zoneCheckSeconds = 0.2,
+	bagCopiesByRole = { Attack = 2, Defence = 1, Utility = 1 },
+	dummyAttackSeconds = 8,
+	dummyAttackPowerUpIds = { "push-trip", "freeze", "blind", "slow-field" },
 },
 ```
 
@@ -44,6 +47,23 @@ All values are placeholders, to be tuned in playtest.
 `Validate.checkPracticeConfig` enforces a `durationScale` in (0, 1] so
 practice can never outlast the real thing, a whole cap of at least 1,
 and a zone check of at most 1 s.
+
+**Pickups deal from a shuffled deck** (`PowerUpLogic.drawFromBag`), not
+per-point rarity rolls: every item turns up once before any repeats, and
+Attack items go in `bagCopiesByRole.Attack` times, since they're the ones
+a player can try on the dummies. A deal skips anything already on the
+field while the deck holds something else, so the same item is never out
+twice at once. Spawn points keep their rarity only for respawn timing.
+
+**Dummies fight back.** Every `dummyAttackSeconds`, one dummy throws one of
+`dummyAttackPowerUpIds` at a player inside `HubPracticeArea` it can
+reach (the same range and cone a player's throw gets; Slow Field only
+within its radius). You feel what the item does, and Second Wind and
+Phase Step get something to counter. The throw goes through
+`PowerUpService.grantFor` then `useForRacer`, the NPC use path, so every
+rule a real use obeys applies. A dummy under an effect doesn't throw.
+Validation requires each id to be an Aimed or Area item; an empty list
+turns dummy attacks off.
 
 ## Why practice can't reach a match server
 

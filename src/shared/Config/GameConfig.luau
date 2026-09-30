@@ -435,6 +435,17 @@ local GameConfig: Validate.GameConfig = {
 		itemSpawnRarities = { "Common", "Uncommon", "Rare" }, -- so every tier shows up to try
 		respawnMultipliers = { Common = 0.25, Uncommon = 0.25, Rare = 0.25 }, -- 4x faster than a round
 		zoneCheckSeconds = 0.2,
+		-- Pickups deal from a shuffled deck: every item turns up once before
+		-- any repeats. Attack (red) items go in twice - they're the ones a
+		-- player can actually try out here, on the dummies.
+		bagCopiesByRole = { Attack = 2, Defence = 1, Utility = 1 },
+		-- Dummies fight back: this often, one throws an attack at a player
+		-- in its range, so you feel what it does and have a reason to try
+		-- Second Wind (cleanse) and Phase Step (can't be touched).
+		dummyAttackSeconds = 8,
+		-- Attacks with something to see on a player. Not Task Scramble:
+		-- nobody has a task in the hub.
+		dummyAttackPowerUpIds = { "push-trip", "freeze", "blind", "slow-field" },
 	},
 
 	-- Proximity doors (DoorService / DoorController): any Model tagged

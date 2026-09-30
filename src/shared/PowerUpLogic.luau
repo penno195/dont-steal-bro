@@ -123,6 +123,62 @@ function PowerUpLogic.selectUniform<T>(pool: { T }, roll: number): T
 	return pool[index]
 end
 
+-- A shuffled deck ("bag") of power-up ids, for the hub practice area:
+-- every entry in `contents` is dealt once before any is dealt again.
+-- `contents` may list an id more than once to make it come up more often.
+export type Bag = { remaining: { string }, last: string? }
+
+function PowerUpLogic.newBag(): Bag
+	return { remaining = {}, last = nil }
+end
+
+-- Deals one id from `bag`, refilling it from `contents` when empty.
+-- MUTATES `bag`. Skips any id in `avoid` (the caller passes what is
+-- already on the field) and the id dealt last, as long as the deck
+-- holds anything else - so two of the same item are never out at once,
+-- including across the seam where a fresh deck starts with what the
+-- last one ended on. Entries no longer in `contents` (an item switched
+-- off by live ops mid-deck) are dropped rather than dealt. Errors on
+-- empty contents, like selectUniform.
+function PowerUpLogic.drawFromBag(bag: Bag, contents: { string }, roll: number, avoid: { [string]: boolean }?): string
+	assert(#contents > 0, "PowerUpLogic.drawFromBag: contents is empty")
+
+	local allowed: { [string]: boolean } = {}
+	for _, id in contents do
+		allowed[id] = true
+	end
+	local remaining: { string } = {}
+	for _, id in bag.remaining do
+		if allowed[id] then
+			table.insert(remaining, id)
+		end
+	end
+	if #remaining == 0 then
+		remaining = table.clone(contents)
+	end
+
+	local function avoided(id: string): boolean
+		return id == bag.last or (avoid ~= nil and avoid[id] == true)
+	end
+
+	local index = math.floor(math.clamp(roll, 0, 0.9999999) * #remaining) + 1
+	if avoided(remaining[index]) then
+		-- Step to the next entry that isn't avoided, if there is one.
+		for step = 1, #remaining - 1 do
+			local candidate = (index + step - 1) % #remaining + 1
+			if not avoided(remaining[candidate]) then
+				index = candidate
+				break
+			end
+		end
+	end
+
+	local id = table.remove(remaining, index) :: string
+	bag.remaining = remaining
+	bag.last = id
+	return id
+end
+
 -- ===== targeting ==========================================================
 
 -- Pure: is `target` within `maxRangeStuds` of `caster`, AND within

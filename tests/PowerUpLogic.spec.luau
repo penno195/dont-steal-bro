@@ -88,6 +88,69 @@ TestRunner.describe("PowerUpLogic.selectUniform", function()
 	end)
 end)
 
+TestRunner.describe("PowerUpLogic.drawFromBag", function()
+	local function dealAll(bag: PowerUpLogic.Bag, contents: { string }, count: number, roll: number): { string }
+		local dealt = {}
+		for _ = 1, count do
+			table.insert(dealt, PowerUpLogic.drawFromBag(bag, contents, roll))
+		end
+		return dealt
+	end
+
+	TestRunner.it("deals every item once before any repeats", function()
+		local contents = { "a", "b", "c", "d" }
+		for _, roll in { 0, 0.3, 0.7, 0.9999 } do
+			local seen: { [string]: number } = {}
+			for _, id in dealAll(PowerUpLogic.newBag(), contents, 4, roll) do
+				seen[id] = (seen[id] or 0) + 1
+			end
+			for _, id in contents do
+				TestRunner.expect(seen[id]):toBe(1)
+			end
+		end
+	end)
+
+	TestRunner.it("deals a listed-twice item twice per deck", function()
+		local seen: { [string]: number } = {}
+		for _, id in dealAll(PowerUpLogic.newBag(), { "a", "a", "b", "c" }, 4, 0.5) do
+			seen[id] = (seen[id] or 0) + 1
+		end
+		TestRunner.expect(seen.a):toBe(2)
+		TestRunner.expect(seen.b):toBe(1)
+		TestRunner.expect(seen.c):toBe(1)
+	end)
+
+	TestRunner.it("never deals the same item twice in a row while another is left", function()
+		-- roll = 0 always takes the first remaining entry, the worst case
+		-- for back-to-back duplicates and for the deck-to-deck seam.
+		local dealt = dealAll(PowerUpLogic.newBag(), { "a", "a", "b", "c" }, 12, 0)
+		for i = 2, #dealt do
+			TestRunner.expect(dealt[i] ~= dealt[i - 1]):toBe(true)
+		end
+	end)
+
+	TestRunner.it("skips anything already on the field while it can", function()
+		local bag = PowerUpLogic.newBag()
+		local onField = { a = true, b = true }
+		TestRunner.expect(PowerUpLogic.drawFromBag(bag, { "a", "b", "c" }, 0, onField)):toBe("c")
+		-- Only avoided entries left: dealt anyway rather than stalling.
+		TestRunner.expect(PowerUpLogic.drawFromBag(bag, { "a", "b", "c" }, 0, onField)):toBe("a")
+	end)
+
+	TestRunner.it("drops entries that are no longer in the contents", function()
+		local bag = PowerUpLogic.newBag()
+		bag.remaining = { "gone", "a" }
+		TestRunner.expect(PowerUpLogic.drawFromBag(bag, { "a", "b" }, 0)):toBe("a")
+	end)
+
+	TestRunner.it("errors on empty contents", function()
+		local ok = pcall(function()
+			PowerUpLogic.drawFromBag(PowerUpLogic.newBag(), {}, 0.5)
+		end)
+		TestRunner.expect(ok):toBe(false)
+	end)
+end)
+
 TestRunner.describe("PowerUpLogic.isWithinRangeAndCone", function()
 	local caster = { x = 0, y = 0, z = 0 }
 	local facingPositiveZ = { x = 0, y = 0, z = 1 }

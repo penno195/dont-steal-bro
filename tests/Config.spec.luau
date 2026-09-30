@@ -170,6 +170,9 @@ local function validGameConfig(): Validate.GameConfig
 			itemSpawnRarities = { "Common", "Uncommon", "Rare" },
 			respawnMultipliers = { Common = 0.25, Uncommon = 0.25, Rare = 0.25 },
 			zoneCheckSeconds = 0.2,
+			bagCopiesByRole = { Attack = 2, Defence = 1, Utility = 1 },
+			dummyAttackSeconds = 8,
+			dummyAttackPowerUpIds = {},
 		},
 		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
@@ -288,6 +291,34 @@ TestRunner.describe("Validate.run (happy path)", function()
 			titles = { { fileName = "TestTitle.luau", def = validTitle("test-title", 0) } },
 		})
 		TestRunner.expect(#issues):toBe(0)
+	end)
+end)
+
+TestRunner.describe("Validate.run (practice dummy attacks)", function()
+	local function issuesFor(ids: { string }): { Validate.Issue }
+		local config = validGameConfig()
+		config.practice.dummyAttackPowerUpIds = ids
+		local aimed = validPowerUp("test-aimed")
+		aimed.target = "Aimed"
+		return Validate.run({
+			gameConfig = config,
+			maps = { { fileName = "TestMap.luau", def = validMap("test-map", { "pressure-valve" }) } },
+			tasks = { { fileName = "PressureValve.luau", def = validTask("pressure-valve") } },
+			powerUps = {
+				{ fileName = "TestPowerUp.luau", def = validPowerUp("test-powerup") },
+				{ fileName = "TestAimed.luau", def = aimed },
+			},
+			titles = { { fileName = "TestTitle.luau", def = validTitle("test-title", 0) } },
+		})
+	end
+
+	TestRunner.it("accepts an Aimed item", function()
+		TestRunner.expect(#issuesFor({ "test-aimed" })):toBe(0)
+	end)
+
+	TestRunner.it("rejects a Self item and an unknown id", function()
+		TestRunner.expect(#issuesFor({ "test-powerup" })):toBe(1)
+		TestRunner.expect(#issuesFor({ "no-such-item" })):toBe(1)
 	end)
 end)
 
@@ -1764,6 +1795,23 @@ TestRunner.describe("Validate.checkGameConfig (P5-5 practice)", function()
 				pc.zoneCheckSeconds = seconds
 			end)):toBe(1)
 		end
+	end)
+
+	TestRunner.it("needs at least one whole deck copy for every role", function()
+		for _, copies in { 0, 1.5 } do
+			TestRunner.expect(#issuesWith(function(pc)
+				pc.bagCopiesByRole = { Attack = copies, Defence = 1, Utility = 1 }
+			end)):toBe(1)
+		end
+		TestRunner.expect(#issuesWith(function(pc)
+			pc.bagCopiesByRole = { Attack = 2, Defence = 1 }
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("keeps dummy attacks at least 2 seconds apart", function()
+		TestRunner.expect(#issuesWith(function(pc)
+			pc.dummyAttackSeconds = 1
+		end)):toBe(1)
 	end)
 
 	TestRunner.it("rejects an empty or unknown spawn rarity list", function()

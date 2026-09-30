@@ -43,10 +43,18 @@ local ServerStorage = game:GetService("ServerStorage")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
+local Validate = require(ReplicatedStorage.Shared.Config.Validate)
+local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
 local Participants = require(ServerScriptService.Server.Participants)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
 
 local config = GameConfig.practice
+
+local powerUpDefsById: { [string]: Validate.PowerUpDef } = {}
+for _, entry in PowerUps do
+	powerUpDefsById[entry.def.id] = entry.def
+end
 
 local active = false
 
@@ -225,6 +233,93 @@ local function returnDummies()
 	end
 end
 
+-- DUMMIES FIGHT BACK: every config.dummyAttackSeconds, one dummy throws
+-- an attack at a player in the practice area. You feel what Blind or
+-- Freeze does, and Second Wind and Phase Step - which do nothing with
+-- no attacker - get something to counter. It goes through the real use
+-- path (grantFor, then useForRacer, like an NPC), so range, the aim
+-- cone, practice's shortened durations and the "X used Y on you" toast
+-- all hold. Only players inside HubPracticeArea are targeted, so
+-- nobody idling elsewhere in the hub is disturbed. A dummy that is
+-- itself under an effect doesn't throw: you froze it, it's frozen.
+local practiceArea: BasePart? = nil
+
+local function toVec3(v: Vector3): PowerUpLogic.Vec3
+	return { x = v.X, y = v.Y, z = v.Z }
+end
+
+local function isInPracticeArea(position: Vector3): boolean
+	local area = practiceArea
+	if area == nil then
+		return false
+	end
+	local offset = area.CFrame:PointToObjectSpace(position)
+	return math.abs(offset.X) <= area.Size.X / 2
+		and math.abs(offset.Y) <= area.Size.Y / 2
+		and math.abs(offset.Z) <= area.Size.Z / 2
+end
+
+-- Would `def`, thrown by `dummy`, land on someone standing at `position`?
+-- The same limits a player's throw gets (resolveTarget), minus the
+-- lock-on slack, so a dummy never throws something that then misses.
+local function dummyCanReach(dummy: Dummy, def: Validate.PowerUpDef, position: Vector3): boolean
+	local from = dummy.root.Position
+	if def.target == "Area" then
+		return (position - from).Magnitude <= (def.areaRadiusStuds or 0)
+	end
+	return PowerUpLogic.isWithinRangeAndCone(
+		toVec3(from),
+		toVec3(dummy.root.CFrame.LookVector),
+		toVec3(position),
+		GameConfig.powerUpUseRangeStuds,
+		GameConfig.powerUpTargetConeDegrees
+	)
+end
+
+local function shuffled<T>(list: { T }): { T }
+	local copy = table.clone(list)
+	for i = #copy, 2, -1 do
+		local j = math.random(1, i)
+		copy[i], copy[j] = copy[j], copy[i]
+	end
+	return copy
+end
+
+local function dummyAttack()
+	local PowerUpService = Loader.get("PowerUpService") :: any
+	local StatusEffects = Loader.get("StatusEffects") :: any
+
+	local targets: { { id: number, position: Vector3 } } = {}
+	for _, participant in Participants.all() do
+		local position = rootPosition(participant)
+		if participant.player ~= nil and position ~= nil and gate(participant.id) and isInPracticeArea(position) then
+			table.insert(targets, { id = participant.id, position = position })
+		end
+	end
+	if #targets == 0 then
+		return
+	end
+
+	for _, dummy in shuffled(dummies) do
+		if #StatusEffects.getActiveEffectsFor(dummy.id) > 0 then
+			continue
+		end
+		for _, powerUpId in shuffled(config.dummyAttackPowerUpIds) do
+			local def = powerUpDefsById[powerUpId]
+			if def == nil or PowerUpService.isOnCooldownFor(dummy.id, powerUpId) then
+				continue
+			end
+			for _, target in shuffled(targets) do
+				if dummyCanReach(dummy, def, target.position) then
+					PowerUpService.grantFor(dummy.id, powerUpId)
+					PowerUpService.useForRacer(dummy.id, 1, if def.target == "Aimed" then target.id else nil)
+					return -- one throw per interval
+				end
+			end
+		end
+	end
+end
+
 local function isHubServer(): boolean
 	local hubPlaceId = GameConfig.matchmaking.hubPlaceId
 	if hubPlaceId == 0 then
@@ -271,7 +366,9 @@ function PracticeService:start()
 	local PowerUpService = Loader.get("PowerUpService") :: any
 	PowerUpService.setSpawnPoints(itemSpawnPoints())
 	PowerUpService.setMapRarityWeights(config.respawnMultipliers)
+	PowerUpService.setSelectionBag(config.bagCopiesByRole)
 	PowerUpService.startPickups()
+	practiceArea = findOne("HubPracticeArea")
 	spawnDummies()
 
 	-- No PlayerRemoving handler: PowerUpService and StatusEffects already
@@ -283,6 +380,14 @@ function PracticeService:start()
 			returnDummies()
 		end
 	end)
+	if #dummies > 0 and #config.dummyAttackPowerUpIds > 0 then
+		task.spawn(function()
+			while true do
+				task.wait(config.dummyAttackSeconds)
+				dummyAttack()
+			end
+		end)
+	end
 end
 
 return PracticeService
