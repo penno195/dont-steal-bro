@@ -469,6 +469,10 @@ Net.Remotes = {
 		schema = Net.struct({ stationId = Net.string({ maxLength = 64 }) }),
 		rateLimit = { capacity = 5, refillPerSecond = 1 },
 		states = { "Race" },
+		-- The hub's practice task station (practice-area.md). Outside a race
+		-- TaskHandlerService accepts only that station, and only from
+		-- someone practising; the same holds for the submission remotes.
+		practice = true,
 	} :: RemoteDef,
 
 	TaskChallenge = {
@@ -524,6 +528,7 @@ Net.Remotes = {
 		}),
 		rateLimit = { capacity = 10, refillPerSecond = 5 },
 		states = { "Race" },
+		practice = true,
 	} :: RemoteDef,
 
 	-- PressureValve's (P2-6's Tap reference task) own submission remote:
@@ -539,6 +544,7 @@ Net.Remotes = {
 		schema = Net.struct({ stationId = Net.string({ maxLength = 64 }) }),
 		rateLimit = { capacity = 20, refillPerSecond = 20 },
 		states = { "Race" },
+		practice = true,
 	} :: RemoteDef,
 
 	-- FuseRewire's (P2-6's Drag reference task) own submission remote:
@@ -555,6 +561,7 @@ Net.Remotes = {
 		}),
 		rateLimit = { capacity = 10, refillPerSecond = 3 },
 		states = { "Race" },
+		practice = true,
 	} :: RemoteDef,
 
 	-- P2-7's power-up remotes. Note what's deliberately NOT in

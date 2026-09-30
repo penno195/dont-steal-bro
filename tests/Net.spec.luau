@@ -187,9 +187,17 @@ TestRunner.describe("Net.isStateAllowed", function()
 		TestRunner.expect(Net.isStateAllowed(practice, "WaitingForPlayers")):toBe(false)
 	end)
 
-	TestRunner.it("opts in only the power-up use and discard intents", function()
+	TestRunner.it("opts in only the power-up intents and the practice station's task remotes", function()
+		local optedIn = {
+			PowerUpUseIntent = true,
+			PowerUpDiscardIntent = true,
+			TaskInteract = true,
+			KeypadDigitSubmit = true,
+			TapSubmit = true,
+			FuseDropSubmit = true,
+		}
 		for name, def in Net.Remotes :: { [string]: any } do
-			TestRunner.expect(def.practice == true):toBe(name == "PowerUpUseIntent" or name == "PowerUpDiscardIntent")
+			TestRunner.expect(def.practice == true):toBe(optedIn[name] == true)
 		end
 	end)
 end)

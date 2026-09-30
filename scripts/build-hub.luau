@@ -319,6 +319,25 @@ do
 	tagWith(itemSpawn, "HubPracticeItemSpawn")
 end
 
+-- The practice task station: the task-only items (Task Insight, Task
+-- Scramble) need a task to change. Laid out like a race-map station: the
+-- tagged part is the invisible spot the player stands on, with the
+-- console 5.28 studs ahead of it. PracticeService names it at runtime.
+local stationStand =
+	CFrame.lookAt(PRACTICE_CENTER + Vector3.new(-14, 2.6, 8), PRACTICE_CENTER + Vector3.new(-14, 2.6, 16))
+local taskInteract =
+	makePart("PracticeTaskInteract", Vector3.new(1.76, 0.88, 1.76), stationStand, practiceZone, false, false, 1)
+tagWith(taskInteract, "HubPracticeTask")
+local taskConsole = makePart(
+	"PracticeTaskConsole",
+	Vector3.new(5.28, 2.64, 1.76),
+	stationStand * CFrame.new(0, -1.32, -5.28),
+	practiceZone,
+	false,
+	false
+)
+taskConsole.Color = DARK_GREY
+
 -- ===== validation ============================================================
 
 local failures: { string } = {}
@@ -332,6 +351,7 @@ local TAG_COUNTS: { { tag: string, min: number, max: number } } = {
 	{ tag = "HubLeaderboardSurface", min = 3, max = 3 },
 	{ tag = "HubPracticeArea", min = 1, max = 1 },
 	{ tag = "HubPracticeItemSpawn", min = 4, max = 8 },
+	{ tag = "HubPracticeTask", min = 0, max = 1 },
 	{ tag = "HubSoftBarrier", min = 1, max = math.huge },
 }
 

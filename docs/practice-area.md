@@ -40,6 +40,8 @@ practice = {
 	bagCopiesByRole = { Attack = 2, Defence = 1, Utility = 1 },
 	dummyAttackSeconds = 8,
 	dummyAttackPowerUpIds = { "push-trip", "freeze", "blind", "slow-field" },
+	dummyTaskAttackPowerUpIds = { "task-scramble" },
+	taskId = "code-playback",
 },
 ```
 
@@ -57,13 +59,34 @@ twice at once. Spawn points keep their rarity only for respawn timing.
 
 **Dummies fight back.** Every `dummyAttackSeconds`, one dummy throws one of
 `dummyAttackPowerUpIds` at a player inside `HubPracticeArea` it can
-reach (the same range and cone a player's throw gets; Slow Field only
-within its radius). You feel what the item does, and Second Wind and
+reach (the same range a player's throw gets; Slow Field only within its
+radius). For an Aimed item it first turns to face its target, as a player
+turns to aim, then turns back to its spot's facing 1.5 s later. You feel what the item does, and Second Wind and
 Phase Step get something to counter. The throw goes through
 `PowerUpService.grantFor` then `useForRacer`, the NPC use path, so every
 rule a real use obeys applies. A dummy under an effect doesn't throw.
 Validation requires each id to be an Aimed or Area item; an empty list
 turns dummy attacks off.
+
+**Practice task station.** Task Insight and Task Scramble only change a
+task, so the hub has one: the `HubPracticeTask` console runs `taskId`
+through the real `TaskHandlerService` (same handler, view, range check and
+plausible-time floor as a race). Anyone practising can start it, as often
+as they like. What differs from a race station:
+
+| | Race station | Practice station |
+|---|---|---|
+| Who can start it | the player it's assigned to, once | anyone practising, any number of times |
+| A solve | `TaskService.recordCompletion` | the "Done!" result only; nothing is recorded |
+| Task Scramble exposure cap | counts | not counted (the hub has no round to reset it) |
+| Matched mid-attempt | — | the attempt ends with everything else |
+
+A player mid-attempt at the station is thrown only
+`dummyTaskAttackPowerUpIds` (Task Scramble), and is thrown at first: a push
+or freeze would just end the attempt. Task Insight works as in a race:
+used at the console it re-rolls the attempt easy; used before, the next
+attempt rolls easy. Overclock has nothing to do with tasks (it speeds up
+power-up cooldowns), so the station doesn't show it.
 
 ## Why practice can't reach a match server
 
@@ -109,7 +132,13 @@ server with 3 players:
 7. **No round in practice mode.** In the same place, force Race with
    RoundService's debug interface: it errors with "practice rules are
    active on a server running a round".
-8. **Match server is clean** (published places): arrive on the match
+8. **Practice task.** At the console, press Start: the Code Playback view
+   opens. Solve it: "Done!", and Start is offered again. Nothing is
+   recorded (no `TaskService` output, no progress broadcast).
+9. **Insight and Scramble.** Mid-attempt, use Task Insight: the attempt
+   restarts with a shorter code. Stay mid-attempt: within
+   `dummyAttackSeconds` a dummy throws Task Scramble and the code re-rolls.
+10. **Match server is clean** (published places): arrive on the match
    server from a practice scuffle. The command bar shows
    `EffectContext.mode()` is `"Round"` and `StatusEffects` has no active
    effects for anyone.

@@ -173,6 +173,8 @@ local function validGameConfig(): Validate.GameConfig
 			bagCopiesByRole = { Attack = 2, Defence = 1, Utility = 1 },
 			dummyAttackSeconds = 8,
 			dummyAttackPowerUpIds = {},
+			dummyTaskAttackPowerUpIds = {},
+			taskId = "pressure-valve",
 		},
 		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
@@ -295,9 +297,11 @@ TestRunner.describe("Validate.run (happy path)", function()
 end)
 
 TestRunner.describe("Validate.run (practice dummy attacks)", function()
-	local function issuesFor(ids: { string }): { Validate.Issue }
+	local function issuesFor(ids: { string }, taskIds: { string }?, taskId: string?): { Validate.Issue }
 		local config = validGameConfig()
 		config.practice.dummyAttackPowerUpIds = ids
+		config.practice.dummyTaskAttackPowerUpIds = taskIds or {}
+		config.practice.taskId = taskId or "pressure-valve"
 		local aimed = validPowerUp("test-aimed")
 		aimed.target = "Aimed"
 		return Validate.run({
@@ -319,6 +323,15 @@ TestRunner.describe("Validate.run (practice dummy attacks)", function()
 	TestRunner.it("rejects a Self item and an unknown id", function()
 		TestRunner.expect(#issuesFor({ "test-powerup" })):toBe(1)
 		TestRunner.expect(#issuesFor({ "no-such-item" })):toBe(1)
+	end)
+
+	TestRunner.it("holds the task-station attacks to the same rule", function()
+		TestRunner.expect(#issuesFor({}, { "test-aimed" })):toBe(0)
+		TestRunner.expect(#issuesFor({}, { "test-powerup" })):toBe(1)
+	end)
+
+	TestRunner.it("needs the practice station's task to be a real task", function()
+		TestRunner.expect(#issuesFor({}, {}, "no-such-task")):toBe(1)
 	end)
 end)
 

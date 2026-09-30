@@ -18,6 +18,7 @@ geometry is ever cloned into a match server.
 | `HubPracticeArea` | BasePart (volume) | exactly 1 | — |
 | `HubPracticeItemSpawn` | BasePart | 4–8 | — |
 | `HubPracticeDummy` | BasePart (floor spot) | 0+ (optional) | — |
+| `HubPracticeTask` | BasePart (stand spot) | 0–1 (optional) | — (the server sets `StationId`) |
 | `HubSoftBarrier` | BasePart | 1+ | — |
 
 `ZoneId` is one of `SpawnPlaza`, `QueuePad`, `StoreFront`,
@@ -38,6 +39,16 @@ to use the zone. Walk times are measured to it, and wayfinding can reuse it.
   knocked away. Keep the spots inside the practice area, a few studs
   apart, facing where players approach from (the chest target is on the
   rig's front).
+- **Practice task station:** the `HubPracticeTask` part runs
+  `GameConfig.practice.taskId` so Task Insight and Task Scramble have a task
+  to change (`practice-area.md`). Build it like a race-map station
+  (`map-kit-spec.md`): the tag goes on the invisible `Interact` part where
+  the player stands, with the console, pad and sign as untagged dressing.
+  The lobby's is a copy of SpaceStation's (no chair), in the corner by the
+  dummies. Keep the stand spot within a dummy's throw range
+  (`powerUpUseRangeStuds`); dummies turn to face whoever they throw at, so
+  their facing doesn't matter. Don't also tag it `TaskStation`: race HUD,
+  markers and audio read that tag.
 - **No queue pad.** Joining the queue is the `QueueJoinIntent` UI intent
   (the Play card, `MatchmakingService`), so the hub has no floor pad to
   stand on and no no-effect zone. The `QueuePad` zone is just the

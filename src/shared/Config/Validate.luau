@@ -452,6 +452,8 @@ export type PracticeConfig = {
 	bagCopiesByRole: { [string]: number }, -- copies of each item per shuffled deck, by role
 	dummyAttackSeconds: number, -- one training dummy throws at a player this often
 	dummyAttackPowerUpIds: { string }, -- what dummies throw; Aimed or Area items only; empty = off
+	dummyTaskAttackPowerUpIds: { string }, -- thrown only at a player mid-task at the practice station, same rule
+	taskId: string, -- the task the HubPracticeTask station runs; must be a task id
 }
 
 -- Proximity doors. See GameConfig.doors.
@@ -2169,6 +2171,13 @@ local function checkPracticeConfig(pc: PracticeConfig, issues: { Issue })
 	if type(pc.dummyAttackPowerUpIds) ~= "table" then
 		bad("dummyAttackPowerUpIds", "must be a list of power-up ids (empty turns dummy attacks off)")
 	end
+	if type(pc.dummyTaskAttackPowerUpIds) ~= "table" then
+		bad("dummyTaskAttackPowerUpIds", "must be a list of power-up ids (empty turns them off)")
+	end
+	-- Whether it names a real task is checked in Validate.run.
+	if type(pc.taskId) ~= "string" or pc.taskId == "" then
+		bad("taskId", "must be the id of the task the practice station runs")
+	end
 end
 
 -- Only shape is checked here. Whether `mapId` names a real model needs
@@ -2691,26 +2700,49 @@ function Validate.run(input: RegistryInput): { Issue }
 	-- A training dummy can only throw something that lands on someone
 	-- else: an Aimed item, or an Area one dropped at its feet.
 	local practice = input.gameConfig.practice
-	if practice ~= nil and type(practice.dummyAttackPowerUpIds) == "table" then
+	if practice ~= nil then
 		local targetById: { [string]: string } = {}
 		for _, entry in input.powerUps do
 			targetById[entry.def.id] = entry.def.target
 		end
-		for i, id in practice.dummyAttackPowerUpIds do
-			local target = targetById[id]
-			if target ~= "Aimed" and target ~= "Area" then
+		for _, field in { "dummyAttackPowerUpIds", "dummyTaskAttackPowerUpIds" } do
+			local ids = (practice :: any)[field]
+			if type(ids) ~= "table" then
+				continue
+			end
+			for i, id in ids do
+				local target = targetById[id]
+				if target ~= "Aimed" and target ~= "Area" then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						string.format("practice.%s[%d]", field, i),
+						if target == nil
+							then string.format("%q is not a power-up id", tostring(id))
+							else string.format(
+								"%q targets %s - a dummy can only throw Aimed or Area items",
+								id,
+								target
+							)
+					)
+				end
+			end
+		end
+
+		-- No task registry at all means nothing to check it against.
+		if type(practice.taskId) == "string" and #input.tasks > 0 then
+			local known = false
+			for _, entry in input.tasks do
+				known = known or entry.def.id == practice.taskId
+			end
+			if not known then
 				issue(
 					issues,
 					"GameConfig",
 					"GameConfig.luau",
-					string.format("practice.dummyAttackPowerUpIds[%d]", i),
-					if target == nil
-						then string.format("%q is not a power-up id", tostring(id))
-						else string.format(
-							"%q targets %s - a dummy can only throw Aimed or Area items",
-							id,
-							target
-						)
+					"practice.taskId",
+					string.format("%q is not a task id", practice.taskId)
 				)
 			end
 		end

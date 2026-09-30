@@ -79,6 +79,38 @@ local scrambleExposure: { [Player]: number } = {}
 local SCRAMBLE_COST_SECONDS = 4
 local SCRAMBLE_EXPOSURE_CAP_SECONDS = 15
 
+-- The hub's practice station (PracticeService.setPracticeStation): the
+-- same handler, view and checks as a race station, but nobody is
+-- assigned it. Anyone `mayUse` lets in can start it, a solve is only
+-- feedback (never TaskService.recordCompletion, so nothing reaches a
+-- stat - practice-area.md), and a scramble there costs no exposure,
+-- since the hub has no round to reset it.
+type PracticeStation = {
+	stationId: string,
+	part: BasePart,
+	taskId: string,
+	mayUse: (Player) -> boolean,
+}
+local practiceStation: PracticeStation? = nil
+
+local function practiceFor(stationId: string): PracticeStation?
+	local station = practiceStation
+	if station ~= nil and station.stationId == stationId then
+		return station
+	end
+	return nil
+end
+
+-- May `player` work on `stationId` right now: their own unfinished race
+-- station, or the practice station while practising.
+local function mayWork(player: Player, stationId: string): boolean
+	local practice = practiceFor(stationId)
+	if practice ~= nil then
+		return practice.mayUse(player)
+	end
+	return (Loader.get("TaskService") :: any).isAssignedAndIncomplete(player, stationId)
+end
+
 local function now(): number
 	return Workspace:GetServerTimeNow()
 end
@@ -130,16 +162,17 @@ local function beginInteraction(player: Player, stationId: string, forceEasy: bo
 	-- request fails the checks below, no challenge replaces the old view.
 	endSession(player, true)
 
-	if not TaskService.isAssignedAndIncomplete(player, stationId) then
+	if not mayWork(player, stationId) then
 		return
 	end
 
-	local stationPart = TaskService.getStationPart(stationId) :: BasePart?
+	local practice = practiceFor(stationId)
+	local stationPart = if practice ~= nil then practice.part else TaskService.getStationPart(stationId) :: BasePart?
 	if stationPart == nil or not isPlayerInRange(player, stationPart) then
 		return
 	end
 
-	local taskId = TaskService.getTaskIdFor(player, stationId) :: string?
+	local taskId = if practice ~= nil then practice.taskId else TaskService.getTaskIdFor(player, stationId) :: string?
 	if taskId == nil then
 		return
 	end
@@ -204,7 +237,7 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 	-- comment names - checked HERE, once, rather than left for every
 	-- handler author to remember. A handler's validate() is never even
 	-- called if any of these fail.
-	if not TaskService.isAssignedAndIncomplete(player, stationId) then
+	if not mayWork(player, stationId) then
 		endSession(player, true)
 		return
 	end
@@ -226,8 +259,11 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 		-- (P3-5): it's the only place a REAL human duration for this task
 		-- exists, and NPCService's fairness floor is measured against the
 		-- median of exactly these numbers. Nothing about qualification
-		-- reads it - see TaskService.recordCompletionFor.
-		TaskService.recordCompletion(player, stationId, session.ctx.elapsedSeconds())
+		-- reads it - see TaskService.recordCompletionFor. A practice solve
+		-- stops at the TaskResult above: it records nothing.
+		if practiceFor(stationId) == nil then
+			TaskService.recordCompletion(player, stationId, session.ctx.elapsedSeconds())
+		end
 		endSession(player)
 	end
 
@@ -260,7 +296,7 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 		{ stationId = stationId, success = false, attempt = session.attempt, feedback = feedback }
 	)
 	task.delay(wait, function()
-		if activeSessions[player] == session and TaskService.isAssignedAndIncomplete(player, stationId) then
+		if activeSessions[player] == session and mayWork(player, stationId) then
 			complete()
 		end
 	end)
@@ -311,11 +347,39 @@ local function scramble(player: Player): (boolean, string)
 		return false, "target is scramble-immune this round"
 	end
 	local easy = session.ctx.easy
+	local practice = practiceFor(session.ctx.stationId) ~= nil
 	if not restartAttempt(player, easy) then
 		return false, "target isn't at a task"
 	end
-	scrambleExposure[player] = spent + (if easy then SCRAMBLE_COST_SECONDS / 2 else SCRAMBLE_COST_SECONDS)
+	if not practice then
+		scrambleExposure[player] = spent + (if easy then SCRAMBLE_COST_SECONDS / 2 else SCRAMBLE_COST_SECONDS)
+	end
 	return true, "task re-rolled"
+end
+
+-- PracticeService registers the hub's one practice station here.
+local function setPracticeStation(stationId: string, part: BasePart, taskId: string, mayUse: (Player) -> boolean)
+	if handlers[taskId] == nil then
+		warn(string.format("TaskHandlerService: no handler for practice taskId %q - no practice station", taskId))
+		return
+	end
+	practiceStation = { stationId = stationId, part = part, taskId = taskId, mayUse = mayUse }
+end
+
+-- True while `player` has an attempt in progress at the practice station
+-- (not one already solved and waiting out the floor).
+local function isAtPracticeTask(player: Player): boolean
+	local session = activeSessions[player]
+	return session ~= nil and not session.completing and practiceFor(session.ctx.stationId) ~= nil
+end
+
+-- Ends a practice attempt whose player just stopped practising (a match
+-- claimed them). No-op for anything else.
+local function endPracticeFor(player: Player)
+	local session = activeSessions[player]
+	if session ~= nil and practiceFor(session.ctx.stationId) ~= nil then
+		endSession(player, true)
+	end
 end
 
 local TaskHandlerService: Loader.Service = {
@@ -324,6 +388,9 @@ local TaskHandlerService: Loader.Service = {
 
 	grantInsight = grantInsight,
 	scramble = scramble,
+	setPracticeStation = setPracticeStation,
+	isAtPracticeTask = isAtPracticeTask,
+	endPracticeFor = endPracticeFor,
 }
 
 function TaskHandlerService:init()

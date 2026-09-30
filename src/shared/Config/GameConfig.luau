@@ -443,9 +443,15 @@ local GameConfig: Validate.GameConfig = {
 		-- in its range, so you feel what it does and have a reason to try
 		-- Second Wind (cleanse) and Phase Step (can't be touched).
 		dummyAttackSeconds = 8,
-		-- Attacks with something to see on a player. Not Task Scramble:
-		-- nobody has a task in the hub.
+		-- Attacks with something to see on a player.
 		dummyAttackPowerUpIds = { "push-trip", "freeze", "blind", "slow-field" },
+		-- Thrown only at a player mid-task at the practice station, and
+		-- nothing else is: a push or freeze would just end the attempt.
+		dummyTaskAttackPowerUpIds = { "task-scramble" },
+		-- The practice station (HubPracticeTask) runs this task, so Task
+		-- Insight and Task Scramble have a task to change. A solve is
+		-- feedback only: it never reaches TaskService or any stat.
+		taskId = "code-playback",
 	},
 
 	-- Proximity doors (DoorService / DoorController): any Model tagged

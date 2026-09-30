@@ -27,7 +27,8 @@
 --
 -- WHAT PRACTICE NEVER WRITES: progression, stats or analytics. Nothing in
 -- the power-up path writes progression, and Telemetry.powerUpUsed and
--- PowerUpService's audit both check EffectContext.recordsStats().
+-- PowerUpService's audit both check EffectContext.recordsStats(). A solve
+-- at the practice task station never reaches TaskService.
 -- MovementWatch exempts practising players (EffectContext.inPracticeArea).
 --
 -- STUDIO: with matchmaking.hubPlaceId unset, this runs in Studio when
@@ -45,7 +46,6 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
-local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
 local Participants = require(ServerScriptService.Server.Participants)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
 
@@ -93,6 +93,10 @@ local function clear(id: number)
 	end
 	local PowerUpService = Loader.get("PowerUpService") :: any
 	PowerUpService.clearInventoryFor(id)
+	local participant = Participants.get(id)
+	if participant ~= nil and participant.player ~= nil then
+		(Loader.get("TaskHandlerService") :: any).endPracticeFor(participant.player)
+	end
 end
 
 -- MatchTeleportService calls this as a group leaves the hub. No-op on
@@ -244,10 +248,6 @@ end
 -- itself under an effect doesn't throw: you froze it, it's frozen.
 local practiceArea: BasePart? = nil
 
-local function toVec3(v: Vector3): PowerUpLogic.Vec3
-	return { x = v.X, y = v.Y, z = v.Z }
-end
-
 local function isInPracticeArea(position: Vector3): boolean
 	local area = practiceArea
 	if area == nil then
@@ -260,20 +260,35 @@ local function isInPracticeArea(position: Vector3): boolean
 end
 
 -- Would `def`, thrown by `dummy`, land on someone standing at `position`?
--- The same limits a player's throw gets (resolveTarget), minus the
--- lock-on slack, so a dummy never throws something that then misses.
+-- An Aimed throw turns the dummy to face its target first (faceTarget),
+-- as a player turns to aim, so only range limits it; the aim cone then
+-- holds by construction and a dummy never throws something that misses.
 local function dummyCanReach(dummy: Dummy, def: Validate.PowerUpDef, position: Vector3): boolean
 	local from = dummy.root.Position
 	if def.target == "Area" then
 		return (position - from).Magnitude <= (def.areaRadiusStuds or 0)
 	end
-	return PowerUpLogic.isWithinRangeAndCone(
-		toVec3(from),
-		toVec3(dummy.root.CFrame.LookVector),
-		toVec3(position),
-		GameConfig.powerUpUseRangeStuds,
-		GameConfig.powerUpTargetConeDegrees
-	)
+	return (position - from).Magnitude <= GameConfig.powerUpUseRangeStuds
+end
+
+local DUMMY_TURN_BACK_SECONDS = 1.5 -- long enough to see who threw it
+
+-- Turns the dummy (yaw only) to face `position`, then back to its spot's
+-- facing a moment later unless it has been knocked away meanwhile
+-- (returnDummies puts that one back).
+local function faceTarget(dummy: Dummy, position: Vector3)
+	local root = dummy.root
+	local flat = Vector3.new(position.X, root.Position.Y, position.Z)
+	if (flat - root.Position).Magnitude < 0.1 then
+		return
+	end
+	local pivotOffset = root.CFrame:ToObjectSpace(dummy.model:GetPivot())
+	dummy.model:PivotTo(CFrame.lookAt(root.Position, flat) * pivotOffset)
+	task.delay(DUMMY_TURN_BACK_SECONDS, function()
+		if (dummy.root.Position - dummy.home.Position).Magnitude <= DUMMY_HOME_DRIFT_STUDS then
+			dummy.model:PivotTo(dummy.home)
+		end
+	end)
 end
 
 local function shuffled<T>(list: { T }): { T }
@@ -285,39 +300,81 @@ local function shuffled<T>(list: { T }): { T }
 	return copy
 end
 
-local function dummyAttack()
+type Target = { id: number, position: Vector3 }
+
+-- Throws one of `powerUpIds` at one of `targets`, from any dummy that
+-- can reach. True if something was thrown.
+local function throwAt(targets: { Target }, powerUpIds: { string }): boolean
 	local PowerUpService = Loader.get("PowerUpService") :: any
 	local StatusEffects = Loader.get("StatusEffects") :: any
-
-	local targets: { { id: number, position: Vector3 } } = {}
-	for _, participant in Participants.all() do
-		local position = rootPosition(participant)
-		if participant.player ~= nil and position ~= nil and gate(participant.id) and isInPracticeArea(position) then
-			table.insert(targets, { id = participant.id, position = position })
-		end
-	end
-	if #targets == 0 then
-		return
-	end
 
 	for _, dummy in shuffled(dummies) do
 		if #StatusEffects.getActiveEffectsFor(dummy.id) > 0 then
 			continue
 		end
-		for _, powerUpId in shuffled(config.dummyAttackPowerUpIds) do
+		for _, powerUpId in shuffled(powerUpIds) do
 			local def = powerUpDefsById[powerUpId]
 			if def == nil or PowerUpService.isOnCooldownFor(dummy.id, powerUpId) then
 				continue
 			end
 			for _, target in shuffled(targets) do
 				if dummyCanReach(dummy, def, target.position) then
+					if def.target == "Aimed" then
+						faceTarget(dummy, target.position)
+					end
 					PowerUpService.grantFor(dummy.id, powerUpId)
 					PowerUpService.useForRacer(dummy.id, 1, if def.target == "Aimed" then target.id else nil)
-					return -- one throw per interval
+					return true
 				end
 			end
 		end
 	end
+	return false
+end
+
+-- A player mid-task at the practice station only ever gets a task attack
+-- (Task Scramble), and gets it first: that's the one thing the station
+-- is there to show, and a push or freeze would just end the attempt.
+local function dummyAttack()
+	local TaskHandlerService = Loader.get("TaskHandlerService") :: any
+
+	local atTask: { Target } = {}
+	local others: { Target } = {}
+	for _, participant in Participants.all() do
+		local player = participant.player
+		local position = rootPosition(participant)
+		if player ~= nil and position ~= nil and gate(participant.id) and isInPracticeArea(position) then
+			local list = if TaskHandlerService.isAtPracticeTask(player) then atTask else others
+			table.insert(list, { id = participant.id, position = position })
+		end
+	end
+
+	if #atTask > 0 and throwAt(atTask, config.dummyTaskAttackPowerUpIds) then
+		return -- one throw per interval
+	end
+	if #others > 0 then
+		throwAt(others, config.dummyAttackPowerUpIds)
+	end
+end
+
+-- PRACTICE TASK STATION: the HubPracticeTask part runs config.taskId
+-- through the real TaskHandlerService, so Task Insight and Task Scramble
+-- have a task to change. The server names it with a StationId attribute,
+-- which the client's prompt reads. Anyone practising can use it, as often
+-- as they like; a solve is only feedback (TaskHandlerService never calls
+-- TaskService for it).
+local PRACTICE_STATION_ID = "hub-practice-task"
+
+local function setUpTaskStation()
+	local part = findOne("HubPracticeTask")
+	if part == nil then
+		return
+	end
+	part:SetAttribute("StationId", PRACTICE_STATION_ID)
+	local TaskHandlerService = Loader.get("TaskHandlerService") :: any
+	TaskHandlerService.setPracticeStation(PRACTICE_STATION_ID, part, config.taskId, function(player: Player): boolean
+		return gate(player.UserId)
+	end)
 end
 
 local function isHubServer(): boolean
@@ -330,7 +387,14 @@ end
 
 local PracticeService: Loader.Service = {
 	name = "PracticeService",
-	dependencies = { "ConfigValidator", "ParticipantService", "PowerUpService", "StatusEffects", "MatchmakingService" },
+	dependencies = {
+		"ConfigValidator",
+		"ParticipantService",
+		"PowerUpService",
+		"StatusEffects",
+		"MatchmakingService",
+		"TaskHandlerService",
+	},
 
 	release = release,
 	isActive = function(): boolean
@@ -370,6 +434,7 @@ function PracticeService:start()
 	PowerUpService.startPickups()
 	practiceArea = findOne("HubPracticeArea")
 	spawnDummies()
+	setUpTaskStation()
 
 	-- No PlayerRemoving handler: PowerUpService and StatusEffects already
 	-- drop a leaver's state, and clearing here would recreate it.

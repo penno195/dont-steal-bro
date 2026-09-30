@@ -55,10 +55,15 @@ local prompts: { [string]: ProximityPrompt } = {}
 local route: { [string]: boolean } = {} -- stationId -> completed
 local racing = false
 
+-- The hub's practice station (HubPracticeTask, docs/practice-area.md):
+-- nobody is assigned it, so its prompt shows whenever there's no race.
+local PRACTICE_TAG = "HubPracticeTask"
+local practiceStations: { [string]: boolean } = {}
+
 local function refreshPrompt(stationId: string)
 	local prompt: ProximityPrompt? = prompts[stationId]
 	if prompt ~= nil then
-		prompt.Enabled = racing and route[stationId] == false
+		prompt.Enabled = if practiceStations[stationId] then not racing else racing and route[stationId] == false
 	end
 end
 
@@ -88,9 +93,11 @@ local function finish(tellServer: boolean)
 end
 
 local function stationPartFor(stationId: string): BasePart?
-	for _, instance in CollectionService:GetTagged("TaskStation") do
-		if instance:IsA("BasePart") and instance:GetAttribute("StationId") == stationId then
-			return instance
+	for _, tag in { "TaskStation", PRACTICE_TAG } do
+		for _, instance in CollectionService:GetTagged(tag) do
+			if instance:IsA("BasePart") and instance:GetAttribute("StationId") == stationId then
+				return instance
+			end
 		end
 	end
 	return nil
@@ -154,10 +161,15 @@ local function attachPrompt(stationPart: BasePart)
 		return
 	end
 
+	local practice = CollectionService:HasTag(stationPart, PRACTICE_TAG)
+	if practice then
+		practiceStations[stationId] = true
+	end
+
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "TaskInteractPrompt"
 	prompt.ActionText = "Start"
-	prompt.ObjectText = "Task"
+	prompt.ObjectText = if practice then "Practice task" else "Task"
 	prompt.HoldDuration = 0
 	prompt.MaxActivationDistance = PROMPT_MAX_DISTANCE
 	prompt.RequiresLineOfSight = false
@@ -270,6 +282,22 @@ function TaskStationController:start()
 			attachPrompt(instance)
 		end
 	end)
+
+	-- The server names the practice station (its StationId attribute)
+	-- once practice starts, which can land after the part streams in.
+	local function trackPractice(instance: Instance)
+		if not instance:IsA("BasePart") then
+			return
+		end
+		attachPrompt(instance)
+		instance:GetAttributeChangedSignal("StationId"):Connect(function()
+			attachPrompt(instance)
+		end)
+	end
+	for _, instance in CollectionService:GetTagged(PRACTICE_TAG) do
+		trackPractice(instance)
+	end
+	CollectionService:GetInstanceAddedSignal(PRACTICE_TAG):Connect(trackPractice)
 end
 
 return TaskStationController
