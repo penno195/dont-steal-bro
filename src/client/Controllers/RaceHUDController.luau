@@ -29,6 +29,7 @@ local Workspace = game:GetService("Workspace")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
+local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -68,6 +69,15 @@ end
 local powerUpDefs: { [string]: Validate.PowerUpDef } = {}
 for _, entry in PowerUps do
 	powerUpDefs[entry.def.id] = entry.def
+end
+-- CallingCard id -> image, for the hit toast. Enabled cards only, so a
+-- disabled or unknown id just shows the plain toast.
+local callingCardImage: { [string]: number } = {}
+for _, entry in Cosmetics do
+	local def = entry.def
+	if def.category == "CallingCard" and def.enabled then
+		callingCardImage[def.id] = def.cardImageAssetId :: number
+	end
 end
 -- Power-up ids whose description has been toasted this session. The
 -- first pickup of each type explains it once; after that it's just
@@ -710,13 +720,15 @@ local function onUseResult(payload: any)
 end
 
 -- A rival's power-up landed on you. Named, so a sudden freeze reads as
--- a play someone made rather than lag.
+-- a play someone made rather than lag. The caster's CallingCard, if
+-- they wear one, rides along on the same toast.
 local function onHitYou(payload: any)
 	local def = powerUpDefs[payload.powerUpId]
 	if def == nil or type(payload.casterName) ~= "string" then
 		return
 	end
-	Toast.show(string.format("%s used %s on you", payload.casterName, def.displayName), "danger")
+	local card = if type(payload.callingCardId) == "string" then callingCardImage[payload.callingCardId] else nil
+	Toast.show(string.format("%s used %s on you", payload.casterName, def.displayName), "danger", card)
 end
 
 -- The objective arrow, while mounted. Returns the stop function.

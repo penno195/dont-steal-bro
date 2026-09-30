@@ -1,8 +1,8 @@
 --!strict
--- The card a victim sees for a moment when your sabotage lands on them.
+-- The card a victim sees for a moment when your sabotage lands on them:
+-- the picture on their "X used Y on you" toast (RaceHUDController).
 --
--- Disabled until it has a Roblox asset, a store product and a renderer
--- (nothing draws the "CallingCard" slot yet).
+-- Disabled until it has a Roblox asset and a store product.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)

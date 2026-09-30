@@ -948,7 +948,7 @@ local function launchThrow(
 		targetId = target.id,
 		powerUpId = def.id,
 		flightSeconds = flight,
-		projectileSkinId = (Loader.get("CosmeticService") :: any).projectileSkinFor(racer.player),
+		projectileSkinId = (Loader.get("CosmeticService") :: any).equippedIdFor(racer.player, "Projectile"),
 	})
 	shove(racer, casterRoot, ThrowLogic.recoilVelocity(from, to, toVec3(casterRoot.CFrame.LookVector), config))
 	return flight
@@ -1123,11 +1123,12 @@ local function useFor(
 		local shunt = if thrownAt ~= nil then shuntFor(racer, thrownAt, def) else nil
 		local victim = if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then resolvedTarget.player else nil
 		if victim ~= nil then
-			Net.fireClient(
-				"PowerUpHitYou",
-				victim,
-				{ powerUpId = def.id, casterName = racer.displayName, shunt = shunt }
-			)
+			Net.fireClient("PowerUpHitYou", victim, {
+				powerUpId = def.id,
+				casterName = racer.displayName,
+				shunt = shunt,
+				callingCardId = (Loader.get("CosmeticService") :: any).equippedIdFor(racer.player, "CallingCard"),
+			})
 		end
 	end
 

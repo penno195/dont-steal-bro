@@ -637,9 +637,12 @@ Net.Remotes = {
 
 	-- Server -> client (targeted at the VICTIM only): a rival's aimed or
 	-- nearest-target power-up just landed on you. `{ powerUpId,
-	-- casterName, shunt? }`, so the HUD can say "Freeze from Alex" plus the
-	-- item's one-line description - playtests showed a hit with no
-	-- explanation reads as lag. `shunt` ({ x, y, z } studs/s) is the shove
+	-- casterName, shunt?, callingCardId? }`, so the HUD can say "Freeze
+	-- from Alex" plus the item's one-line description - playtests showed a
+	-- hit with no explanation reads as lag. `callingCardId` is the caster's
+	-- equipped CallingCard cosmetic, read server-side from their profile
+	-- (nil for NPCs, dummies and anyone without one); the toast shows its
+	-- image. `shunt` ({ x, y, z } studs/s) is the shove
 	-- a thrown item gives; the victim's client applies it because it owns
 	-- its character's physics. Only fired when the effect actually applied; a zone
 	-- (Slow Field) is visible on the ground and doesn't fire it.
