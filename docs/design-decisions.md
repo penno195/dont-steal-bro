@@ -52,6 +52,41 @@ per-player item reveals, not a shared number).
 outcome-resolution function itself is untouched — it only ever says which
 tier someone won.
 
+### Revision: currency, drops and pass tracks (2026-09-30, user decision)
+
+Q1's fixed-package bounty is replaced, before RewardTables was ever
+built. The user's reasoning: a streak is a run of coin flips, so long
+streaks will be rare and the tiers must be much tighter; and in-game
+drops should be rarer and worth more.
+
+- **Every win pays currency**, scaled by the winner's streak and outcome
+  tier (sole-stealer / minority-sharer / all-share). This is the same
+  `currency` field Q8's free path already uses.
+- **A win also rolls a chance at a random drop**: a power-up or cosmetic.
+  Rarer items are harder to roll, and the odds of rarer items improve
+  with the winner's streak. Random items exist **only** as win prizes.
+- **Nothing bought is ever random.** Currency buys specific named items
+  at fixed prices; there are no crates, for Robux or for currency. This
+  matters because currency is itself sold for Robux, so a currency crate
+  would be a paid random item. This keeps Q1's original reason (random
+  virtual item rules) intact. Verify the current Roblox policy before
+  launch.
+- **Game passes are time-limited reward tracks.** A pass lists specific
+  items unlocked at fixed win counts. Only wins between the purchase and
+  the pass's set end point count. A Roblox pass is owned forever, so the
+  window is ours to enforce: record when ownership is first seen, and a
+  new track needs a new pass. The game can't grant a pass itself, only
+  the items on its track. Q8 still applies: a power-up on a track must
+  also be earnable free.
+- **Leaderboards** (daily, weekly, all-time) pay currency and/or
+  limited-edition items. Limited items are cosmetic only, per Q8.
+- **The streak ladder** is one title per win from 1 to 10, then
+  12, 14, 16, 18, 20, then every 5 up to 50: 21 rungs. It replaces
+  P4-2's ten rungs (1…120), and it's also the streak-tier axis for
+  currency and drop odds. User chose: 50 is the top.
+
+All amounts and odds start as PLACEHOLDER, to be tuned in playtest.
+
 ## 2. Round timer expires with <3 finished
 
 **Decision:** Rank finishers by task-completion percentage (tiebreak:
