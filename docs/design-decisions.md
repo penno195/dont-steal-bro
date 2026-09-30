@@ -262,6 +262,17 @@ above. A finalist's own streak reaches only that finalist, and only after
 the reveal (`DecisionPersonalResult`, targeted), so the result screen can
 name the streak that just ended. See `docs/decision-studio.md`.
 
+### Applied case: the Hub streak counter and StreakFlair (P4-6)
+
+The StreakFlair cosmetic needed a streak counter to dress. Decided with the
+project owner (2026-09-30): **a counter over each player's head, on the Hub
+server only.** That is condition 1's own "hub" allowance, read strictly: a
+match server's pre-round lobby does not count, because everyone standing in
+it is about to race you. Enforced server-side: `StreakTagService` is inert
+unless `StreakTagLogic.isHub`, so a match server never sends
+`StreakTagState`. The number is always the real `currentStreak`; flair
+changes only its colour and backing texture.
+
 ## 8. Are starting power-ups sold for Robux?
 
 **Decision:** Power-ups may be purchased with Robux, provided **every**

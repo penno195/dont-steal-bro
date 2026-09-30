@@ -689,8 +689,11 @@ local function handleEquipIntent(player: Player, slot: string, itemId: string?)
 	CosmeticService.refreshFor(player)
 	-- The Nameplate frame is drawn from TitleService's broadcast, not
 	-- from the character, so that's what has to go out again.
+	-- Same for StreakFlair and the Hub's streak counter.
 	if slot == CosmeticLogic.slotFor("Nameplate") then
 		(Loader.get("TitleService") :: any).broadcast()
+	elseif slot == CosmeticLogic.slotFor("StreakFlair") then
+		(Loader.get("StreakTagService") :: any).broadcast()
 	end
 end
 

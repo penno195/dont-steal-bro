@@ -745,6 +745,21 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Server -> client (broadcast), HUB SERVER ONLY: the win-streak
+	-- counter over each player's head. `{ tags = { { racerId, streak,
+	-- flairId? } } }`, streak >= 1 only; `flairId` is their StreakFlair
+	-- cosmetic. The one remote that carries another player's streak, so
+	-- StreakTagService never fires it on a match server - design-
+	-- decisions.md Q7 condition 1 allows streaks in the hub and nowhere a
+	-- rival you're about to race can read them.
+	StreakTagState = {
+		name = "StreakTagState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: equip a title, or unequip with a nil id. Rate
 	-- limited because it writes to a profile, and validated against the
 	-- player's own unlocked list server-side - a client naming a title

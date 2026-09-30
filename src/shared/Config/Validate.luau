@@ -331,8 +331,8 @@ export type CosmeticDef = {
 	explosionTextureAssetId: number?,
 
 	-- Category "StreakFlair": the style of the win-streak counter above
-	-- your head and beside your name on the leaderboard. The NUMBER is
-	-- always the real streak - this only dresses it.
+	-- your head in the Hub (StreakTagController; Hub only, per Q7). The
+	-- NUMBER is always the real streak - this only dresses it.
 	flairTextureAssetId: number?,
 	flairColorHex: string?,
 
