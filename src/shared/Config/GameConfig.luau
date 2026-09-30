@@ -75,6 +75,17 @@ local GameConfig: Validate.GameConfig = {
 	-- target, never to the server's own pick.
 	powerUpLockOnSlackStuds = 4,
 	powerUpLockOnSlackDegrees = 20,
+	-- A thrown item's projectile, explosion, recoil and shunt. PLACEHOLDER
+	-- feel numbers: at 90 studs/s a max-range (24) throw lands in ~0.27s.
+	powerUpThrow = {
+		projectileSpeedStuds = 90,
+		maxFlightSeconds = 0.4,
+		arcHeightStuds = 2.5,
+		explosionRadiusStuds = 4,
+		shuntSpeed = 22,
+		shuntUpSpeed = 10,
+		recoilSpeed = 10,
+	},
 
 	-- Base respawn seconds per rarity tier - a MapDef may multiply these
 	-- (Validate.PowerUpRarityWeights' own doc comment). Ordered so a

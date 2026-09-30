@@ -637,12 +637,28 @@ Net.Remotes = {
 
 	-- Server -> client (targeted at the VICTIM only): a rival's aimed or
 	-- nearest-target power-up just landed on you. `{ powerUpId,
-	-- casterName }`, so the HUD can say "Freeze from Alex" plus the item's
-	-- one-line description - playtests showed a hit with no explanation
-	-- reads as lag. Only fired when the effect actually applied; a zone
+	-- casterName, shunt? }`, so the HUD can say "Freeze from Alex" plus the
+	-- item's one-line description - playtests showed a hit with no
+	-- explanation reads as lag. `shunt` ({ x, y, z } studs/s) is the shove
+	-- a thrown item gives; the victim's client applies it because it owns
+	-- its character's physics. Only fired when the effect actually applied; a zone
 	-- (Slow Field) is visible on the ground and doesn't fire it.
 	PowerUpHitYou = {
 		name = "PowerUpHitYou",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> ALL clients: a thrown item left the caster's hand, for the
+	-- projectile, the explosion and the caster's recoil. `{ casterId,
+	-- targetId, powerUpId, flightSeconds }` (participant ids, so NPCs and
+	-- dummies are negative). Cosmetic only: the server already picked the
+	-- target, and applies the effect itself after flightSeconds. Every
+	-- client sees every throw anyway, so this leaks nothing.
+	PowerUpThrown = {
+		name = "PowerUpThrown",
 		direction = "ServerBroadcast",
 		schema = nil,
 		rateLimit = nil,

@@ -163,6 +163,19 @@ export type PowerUpAcquisition = {
 	robuxPrice: number?, -- nil = not purchasable with Robux
 }
 
+-- How a thrown (Aimed/Nearest) power-up travels and lands. The target is
+-- still chosen on the server at throw time; the projectile homes on it,
+-- and the effect applies when it arrives (distance / speed, capped).
+export type PowerUpThrowConfig = {
+	projectileSpeedStuds: number, -- studs/second
+	maxFlightSeconds: number, -- cap on the flight, so a long throw can't sit uncommitted
+	arcHeightStuds: number, -- peak height of the lob above the straight line
+	explosionRadiusStuds: number, -- visual only; the effect still hits just the one target
+	shuntSpeed: number, -- horizontal studs/second the victim is shoved away from the thrower
+	shuntUpSpeed: number, -- small upward pop, so the shove clears the floor friction
+	recoilSpeed: number, -- the thrower is nudged backwards by this much
+}
+
 export type PowerUpDef = {
 	id: string,
 	displayName: string,
@@ -180,6 +193,10 @@ export type PowerUpDef = {
 	-- Required for target "Area" (the zone's radius on the ground, in
 	-- studs), and meaningless for anything else.
 	areaRadiusStuds: number?,
+	-- A thrown item (Aimed/Nearest) shoves the victim on impact by
+	-- GameConfig.powerUpThrow's shunt; this scales it for this item
+	-- (Push/Trip's whole point is the shove). nil = 1. Only on thrown items.
+	shuntScale: number?,
 	acquisition: PowerUpAcquisition,
 }
 
@@ -538,6 +555,7 @@ export type GameConfig = {
 	powerUpTargetConeDegrees: number, -- full cone width (not half-angle) of an Aimed power-up's lock-on cone
 	powerUpLockOnSlackStuds: number, -- extra range allowed when re-checking the client's locked target (latency)
 	powerUpLockOnSlackDegrees: number, -- extra cone width allowed for the same re-check
+	powerUpThrow: PowerUpThrowConfig, -- the projectile, explosion, recoil and shunt of a thrown item
 	powerUpRotationTimers: PowerUpRarityWeights, -- base respawn seconds per rarity tier; a MapDef may multiply these (see PowerUpRarityWeights' own doc comment)
 
 	-- P2-9: MovementWatch's thresholds - "configurable... not hard-coded"
@@ -1127,6 +1145,14 @@ function Validate.checkPowerUp(fileName: string, def: PowerUpDef, issues: { Issu
 		issue(issues, "PowerUp", fileName, "areaRadiusStuds", "an Area item needs a positive radius")
 	elseif def.target ~= "Area" and radius ~= nil then
 		issue(issues, "PowerUp", fileName, "areaRadiusStuds", "only an Area item has a radius")
+	end
+	local shuntScale = def.shuntScale
+	if shuntScale ~= nil then
+		if def.target ~= "Aimed" and def.target ~= "Nearest" then
+			issue(issues, "PowerUp", fileName, "shuntScale", "only a thrown (Aimed/Nearest) item has a shunt")
+		elseif shuntScale < 0 or shuntScale > 5 then
+			issue(issues, "PowerUp", fileName, "shuntScale", "must be between 0 and 5")
+		end
 	end
 
 	-- design-decisions.md Q8: a Robux price is only ever a convenience
@@ -2334,6 +2360,25 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	end
 	if config.powerUpLockOnSlackDegrees < 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "powerUpLockOnSlackDegrees", "must not be negative")
+	end
+	local throw = config.powerUpThrow
+	if type(throw) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "powerUpThrow", "must be a table")
+	else
+		if throw.projectileSpeedStuds <= 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", "powerUpThrow.projectileSpeedStuds", "must be positive")
+		end
+		-- The effect lands when the projectile does, so this is also the
+		-- longest a use can sit between being committed and applied.
+		if throw.maxFlightSeconds <= 0 or throw.maxFlightSeconds > 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "powerUpThrow.maxFlightSeconds", "must be > 0 and <= 1")
+		end
+		for _, key in { "arcHeightStuds", "shuntSpeed", "shuntUpSpeed", "recoilSpeed", "explosionRadiusStuds" } do
+			local v = (throw :: any)[key]
+			if type(v) ~= "number" or v < 0 then
+				issue(issues, "GameConfig", "GameConfig.luau", "powerUpThrow." .. key, "must be a non-negative number")
+			end
+		end
 	end
 	for _, rarity in { "Common", "Uncommon", "Rare" } do
 		local seconds = (config.powerUpRotationTimers :: any)[rarity]

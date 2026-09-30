@@ -87,6 +87,7 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
+local ThrowLogic = require(ReplicatedStorage.Shared.ThrowLogic)
 local Participants = require(ServerScriptService.Server.Participants)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
 
@@ -907,6 +908,73 @@ local function sendResult(
 	})
 end
 
+-- THROWS -------------------------------------------------------------
+--
+-- An Aimed/Nearest item is thrown: every client draws a projectile from
+-- the caster to the target (PowerUpThrown), and the effect applies when
+-- it lands, flightSeconds later. The target was already chosen above,
+-- so nothing can dodge it - the flight only lines the effect up with
+-- what everyone sees. Both ends get shoved. A player's own client owns
+-- its character's physics, so a player is shoved by their client (the
+-- recoil from PowerUpThrown, the shunt from PowerUpHitYou's `shunt`);
+-- a server-owned rig (NPC, practice dummy) is shoved here. Either way
+-- MovementWatch skips that player's next sample, so being shoved never
+-- reads as speed hacking.
+
+local function shove(participant: Participants.Participant, root: BasePart, velocity: PowerUpLogic.Vec3)
+	if participant.player ~= nil then
+		(Loader.get("MovementWatch") :: any).suppressNextSample(participant.player)
+		return
+	end
+	root.AssemblyLinearVelocity = Vector3.new(velocity.x, velocity.y, velocity.z)
+end
+
+-- Announces the throw and recoils the caster. Returns the flight time.
+local function launchThrow(
+	racer: Participants.Participant,
+	target: Participants.Participant,
+	def: Validate.PowerUpDef
+): number
+	local casterRoot = characterRoot(racer.character)
+	local targetRoot = characterRoot(target.character)
+	if casterRoot == nil or targetRoot == nil then
+		return 0
+	end
+	local config = GameConfig.powerUpThrow
+	local from, to = toVec3(casterRoot.Position), toVec3(targetRoot.Position)
+	local flight = ThrowLogic.flightSeconds(from, to, config)
+	Net.fireAllClients("PowerUpThrown", {
+		casterId = racer.id,
+		targetId = target.id,
+		powerUpId = def.id,
+		flightSeconds = flight,
+	})
+	shove(racer, casterRoot, ThrowLogic.recoilVelocity(from, to, toVec3(casterRoot.CFrame.LookVector), config))
+	return flight
+end
+
+-- The victim's shove, from where both stand at impact. nil if either
+-- character is gone.
+local function shuntFor(
+	racer: Participants.Participant,
+	victim: Participants.Participant,
+	def: Validate.PowerUpDef
+): PowerUpLogic.Vec3?
+	local casterRoot = characterRoot(racer.character)
+	local victimRoot = characterRoot(victim.character)
+	if victimRoot == nil then
+		return nil
+	end
+	local from = if casterRoot ~= nil then toVec3(casterRoot.Position) else toVec3(victimRoot.Position)
+	local fallback = if casterRoot ~= nil
+		then toVec3(casterRoot.CFrame.LookVector)
+		else toVec3(-victimRoot.CFrame.LookVector)
+	local velocity =
+		ThrowLogic.shuntVelocity(from, toVec3(victimRoot.Position), fallback, GameConfig.powerUpThrow, def.shuntScale)
+	shove(victim, victimRoot, velocity)
+	return velocity
+end
+
 -- THE one validated use path, for every caster there is (P3-6).
 --
 -- "Route every use through the existing validated server path, never a
@@ -1022,20 +1090,55 @@ local function useFor(
 	broadcastInventory(racer)
 
 	local resolvedTargetId = if resolvedTarget ~= nil then resolvedTarget.id else nil
-	local applied, description = effectApplier(racer, resolvedTarget, def)
+	local thrownAt = if resolvedTarget ~= nil
+			and resolvedTarget.id ~= racer.id
+			and ThrowLogic.isThrown(def.target)
+		then resolvedTarget
+		else nil
 
-	if not applied then
-		audit(racer, def.id, resolvedTargetId, "Rejected", description)
-		sendResult(racer, false, def.id, resolvedTargetId, description)
-		return
+	local function land()
+		-- A throw lands a moment after it was committed: the target may
+		-- have left, or (in practice) walked out of the area, mid-flight.
+		-- The item is already spent, same as any other miss.
+		if thrownAt ~= nil and (Participants.get(thrownAt.id) == nil or not EffectContext.mayAct(thrownAt.id)) then
+			audit(racer, def.id, resolvedTargetId, "Rejected", "target gone before impact")
+			sendResult(racer, false, def.id, resolvedTargetId, "target gone before impact")
+			return
+		end
+
+		local applied, description = effectApplier(racer, resolvedTarget, def)
+
+		if not applied then
+			audit(racer, def.id, resolvedTargetId, "Rejected", description)
+			sendResult(racer, false, def.id, resolvedTargetId, description)
+			return
+		end
+
+		audit(racer, def.id, resolvedTargetId, "Applied", description)
+		sendResult(racer, true, def.id, resolvedTargetId, description)
+
+		-- Only a hit that landed shoves: a Shield or an immunity window
+		-- blocks the push along with the effect.
+		local shunt = if thrownAt ~= nil then shuntFor(racer, thrownAt, def) else nil
+		local victim = if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then resolvedTarget.player else nil
+		if victim ~= nil then
+			Net.fireClient(
+				"PowerUpHitYou",
+				victim,
+				{ powerUpId = def.id, casterName = racer.displayName, shunt = shunt }
+			)
+		end
 	end
 
-	audit(racer, def.id, resolvedTargetId, "Applied", description)
-	sendResult(racer, true, def.id, resolvedTargetId, description)
-
-	local victim = if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then resolvedTarget.player else nil
-	if victim ~= nil then
-		Net.fireClient("PowerUpHitYou", victim, { powerUpId = def.id, casterName = racer.displayName })
+	if thrownAt == nil then
+		land()
+		return
+	end
+	local flight = launchThrow(racer, thrownAt, def)
+	if flight <= 0 then
+		land()
+	else
+		task.delay(flight, land)
 	end
 end
 

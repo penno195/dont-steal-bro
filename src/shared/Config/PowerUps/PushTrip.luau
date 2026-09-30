@@ -20,6 +20,7 @@ local PushTrip: Validate.PowerUpDef = {
 	cooldownSeconds = 7,
 	rarity = "Common",
 	hardControl = true,
+	shuntScale = 2, -- the shove IS this item; the other throws only nudge
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

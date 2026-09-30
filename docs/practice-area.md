@@ -88,6 +88,18 @@ used at the console it re-rolls the attempt easy; used before, the next
 attempt rolls easy. Overclock has nothing to do with tasks (it speeds up
 power-up cooldowns), so the station doesn't show it.
 
+## Layout in the hotel lobby (Lobby.rbxl)
+
+The place file is authoritative and git-ignored; this records the intent.
+The area is `Hub.Zones.PracticeArea` (x 272–328, z −10–46, floor y ≈ 15.2).
+Players enter through the sign arch on the west edge (x ≈ 270, z 6–30),
+the dummies stand on the east edge (x = 322, z = 10/18/26, facing −X),
+and the task station is in the south-east corner (pad x 316–325, z 34–43).
+
+The six `PracticeItemSpawn01–06` pads sit in two rows either side of the
+entrance-to-dummies lane (z = 8 and z = 28, at x = 282/292/302), so the
+lane stays open and nothing sits on the station pad or a dummy spot.
+
 ## Why practice can't reach a match server
 
 1. Practice state is plain memory on the hub server. Nothing saves it.

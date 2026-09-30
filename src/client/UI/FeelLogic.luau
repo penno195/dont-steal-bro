@@ -9,10 +9,21 @@
 -- locking in a choice, and the reveal. Reveal has two beats: a small one
 -- per card and the big one on the outcome. Nothing else gets a punch - if
 -- everything shakes, nothing does.
+--
+-- Plus the two ends of a thrown power-up (ThrowController): a small kick
+-- for the thrower's recoil and a harder jolt for the one it hit. Shake
+-- only - neither punches a UI element.
 
 local FeelLogic = {}
 
-export type Moment = "TaskComplete" | "Qualified" | "LockIn" | "RevealCard" | "RevealOutcome"
+export type Moment =
+	"TaskComplete"
+	| "Qualified"
+	| "LockIn"
+	| "RevealCard"
+	| "RevealOutcome"
+	| "ThrowRecoil"
+	| "Shunted"
 
 -- Camera shake through Humanoid.CameraOffset, in studs. `frequency` is
 -- Hz; the shake decays quadratically to zero over `duration`.
@@ -67,6 +78,15 @@ local FULL: { [Moment]: Spec } = {
 		punch = { peak = 1.15, attack = 0.08, release = 0.45 },
 		burst = { count = 40, speed = 18, lifetime = 1.2, colorToken = "brand" },
 	},
+	ThrowRecoil = {
+		shake = { amplitude = 0.1, frequency = 20, duration = 0.14 },
+		hitStop = 0,
+	},
+	Shunted = {
+		shake = { amplitude = 0.28, frequency = 16, duration = 0.3 },
+		hitStop = 0.05,
+		burst = { count = 16, speed = 12, lifetime = 0.4, colorToken = "danger" },
+	},
 }
 
 -- Reduced motion: no shake, no scale, no hit-stop (a frozen character is
@@ -87,6 +107,8 @@ local REDUCED: { [Moment]: Spec } = {
 		flash = { transparency = 0.6, duration = 0.6, colorToken = "brand" },
 		burst = { count = 10, speed = 0, lifetime = 1.2, colorToken = "brand" },
 	},
+	ThrowRecoil = { hitStop = 0, flash = { transparency = 0.9, duration = 0.12, colorToken = "ink" } },
+	Shunted = { hitStop = 0, flash = { transparency = 0.7, duration = 0.3, colorToken = "danger" } },
 }
 
 for _, t in { FULL, REDUCED } do
@@ -96,7 +118,15 @@ for _, t in { FULL, REDUCED } do
 	table.freeze(t)
 end
 
-FeelLogic.MOMENTS = table.freeze({ "TaskComplete", "Qualified", "LockIn", "RevealCard", "RevealOutcome" } :: { Moment })
+FeelLogic.MOMENTS = table.freeze({
+	"TaskComplete",
+	"Qualified",
+	"LockIn",
+	"RevealCard",
+	"RevealOutcome",
+	"ThrowRecoil",
+	"Shunted",
+} :: { Moment })
 
 function FeelLogic.spec(moment: Moment, reducedMotion: boolean): Spec
 	return (if reducedMotion then REDUCED else FULL)[moment]
@@ -111,6 +141,9 @@ FeelLogic.CHANNEL = table.freeze({
 	LockIn = "Locked",
 	RevealCard = "Reveal",
 	RevealOutcome = "Reveal",
+	-- Neither punches; named only so every moment has a channel.
+	ThrowRecoil = "PowerUps",
+	Shunted = "PowerUps",
 } :: { [Moment]: string })
 
 -- CURVES -------------------------------------------------------------

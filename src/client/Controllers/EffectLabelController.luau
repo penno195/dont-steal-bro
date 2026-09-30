@@ -98,6 +98,8 @@ end
 local EffectLabelController: Loader.Controller = {
 	name = "EffectLabelController",
 	dependencies = { "NPCBubbleController" },
+	-- Participant id (player, NPC or practice dummy) -> its rig. ThrowController reuses it.
+	characterFor = characterFor,
 }
 
 function EffectLabelController:init()
