@@ -191,13 +191,10 @@ all PLACEHOLDER — are what actually decide whether Q8's rule holds**,
 and a bought loadout is not "convenience" in a game whose whole
 metagame is a streak that resets on one loss.
 
-**One seam is deliberately left unwired.** `consumeLoadoutFor` is the
-only place stock is ever decremented and it is written and tested, but
-nothing calls it: `powerups.md` describes both a 3-item pre-game
-loadout and a 1-slot in-round pickup inventory and never says how they
-coexist, and three items do not fit in one slot. That is a design call,
-not an implementation detail — see `docs/store-receipts.md` §5. (Since
-wired: `PowerUpService` now consumes the loadout at race start.)
+`consumeLoadoutFor` is the only place stock is ever decremented;
+`PowerUpService` calls it at race start. It shipped unwired at first,
+because `powerups.md` never said how a 3-item loadout and a 1-slot
+pickup inventory coexist (`docs/store-receipts.md` §5).
 
 P4-6 built the cosmetics pipeline: one config file per item in
 `src/shared/Config/Cosmetics/`, sold through a store entry rather than
@@ -273,8 +270,15 @@ Playtesting has driven the work since the tracker finished:
   The SpaceStation is the map in active playtesting.
 - **Assets and store products.** All placeholder cosmetics and store
   items are disabled until they have real Roblox asset ids and products
-  in the Creator Dashboard. `GameConfig.matchmaking.hubPlaceId` is
-  unset until the Hub place is published.
+  in the Creator Dashboard. `GameConfig.matchmaking.hubPlaceId` and
+  `GameConfig.teleport.matchPlaceId` are both `0` until the Hub and
+  Match places are published, so matchmaking runs in Studio only and
+  teleporting is off.
+- **Bounty rewards.** `RewardTables` (design-decisions.md Q1: streak
+  tier × outcome tier → a fixed item set) isn't built. A win records a
+  package reference but grants no items, the daily/weekly board reward
+  hook has no receiver, and the finale shows stand-in glyphs. The tiers
+  and package contents are a design call that's still open.
 - **Economy numbers.** Every price and grant is still PLACEHOLDER. Those
   numbers decide whether Q8's "Robux buys time, never power" rule holds
   (`docs/store-receipts.md`).
@@ -331,12 +335,12 @@ itself changes.
 
 ## Layout
 
-This is now the Rojo project root (`default.project.json`, task P1-1):
+The repo root is the Rojo project (`default.project.json`):
 
 ```
-src/shared/     -> ReplicatedStorage.Shared   (config, types, Net)
-src/server/     -> ServerScriptService.Server (services, task handlers)
-src/client/     -> StarterPlayer.StarterPlayerScripts.Client
+src/shared/     -> ReplicatedStorage.Shared   (Config/, Net, Loader)
+src/server/     -> ServerScriptService.Server (Services/, TaskHandlers/, *Logic)
+src/client/     -> StarterPlayer.StarterPlayerScripts.Client (Controllers/, UI/, TaskViews/)
 docs/           design and architecture
 tests/          pure-logic specs, run headlessly via `lune run tests/run`
 ```
@@ -386,17 +390,13 @@ don't need Roblox emulation in the first place — `tests/TestRunner.luau`
 is a ~95-line hand-rolled runner that executes directly under Lune's real
 Luau runtime, with no third-party dependency. This was installed and run
 locally (not just researched): `lune run tests/run` runs every spec file in
-`tests/` (the current count is under Status), and has run green from P1-6 onward
-(P1-1's original placeholder, `Example.spec.
-luau`, was deleted once a real pure-logic module had its own spec file,
-per its own header comment). See `docs/testing-conventions.md` (P1-6) for
-what belongs in a pure module versus a Studio integration test, and how
-to fake a service dependency reached through the loader. Along the way,
-`luau-lsp analyze` (see below) caught a real strict-mode typing bug in
-the runner's own
-`xpcall` usage, since fixed. See `tests/TestRunner.luau`'s header comment
-for the full reasoning, and revisit this if Jest-Lua ships real Lune
-support later.
+`tests/` (the current count is under Status). New spec files must be
+added to `tests/run.luau` by hand; there is no auto-discovery. See
+`docs/testing-conventions.md` for what belongs in a pure module versus a
+Studio integration test, and how to fake a service dependency reached
+through the loader. See `tests/TestRunner.luau`'s header comment for the
+full reasoning, and revisit this if Jest-Lua ships real Lune support
+later.
 
 ### Type checking
 
