@@ -103,6 +103,12 @@ do
 	end)
 end
 
+-- For keys that come from data (a drop's power-up id), so a caller can
+-- fall back rather than trip `get`'s assert.
+function Icons.has(key: string): boolean
+	return ICONS[key] ~= nil
+end
+
 function Icons.get(key: string): Icon
 	local icon = ICONS[key]
 	assert(icon ~= nil, string.format("Icons: no icon %q", key))

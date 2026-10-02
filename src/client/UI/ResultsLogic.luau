@@ -15,11 +15,13 @@
 local ResultsLogic = {}
 
 -- The server's win reward (ProgressionService's RoundRecap), already
--- granted by the time this arrives.
+-- granted by the time this arrives. The same shape as
+-- PayoutLogic.Payout, which words it.
 export type RecapReward = {
 	currency: number,
 	rung: number,
 	drop: { kind: string, id: string, rarity: string, duplicate: boolean }?,
+	dropAmount: number?,
 }
 
 export type Recap = {
@@ -119,7 +121,7 @@ end
 
 -- ===== sequencing ===========================================================
 
-export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Streak"
+export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Drop" | "Streak"
 
 export type Beat = { id: BeatId, at: number }
 
@@ -132,7 +134,8 @@ ResultsLogic.STREAK_PAUSE = 0.9
 -- The recap's beats in order, each with its start time from when the
 -- screen opens. The streak is always last - P6-6's one sequencing rule.
 -- Finale appears only for someone who reached the Studio, Rewards only
--- for a win that paid something, Streak only when there is a
+-- for a win that paid something, Drop only when that win also dropped
+-- an item (its own card, for its icon), Streak only when there is a
 -- recap at all (a spectator has no streak change this round).
 --
 -- Reduced motion keeps the SAME order and timing. Reduced motion is
@@ -145,8 +148,12 @@ function ResultsLogic.beats(recap: Recap?): { Beat }
 		if ResultsLogic.finaleLine(recap.reason) ~= nil then
 			table.insert(ids, "Finale")
 		end
-		if recap.reward ~= nil and ResultsLogic.isWin(recap.reason) then
+		local reward = recap.reward
+		if reward ~= nil and ResultsLogic.isWin(recap.reason) then
 			table.insert(ids, "Rewards")
+			if reward.drop ~= nil then
+				table.insert(ids, "Drop")
+			end
 		end
 		table.insert(ids, "Streak")
 	end
@@ -163,23 +170,6 @@ function ResultsLogic.beats(recap: Recap?): { Beat }
 		end
 	end
 	return out
-end
-
--- The Rewards beat's text. Plain on purpose: rewards-roadmap.md step 3
--- gives the drop its real name and art, and the finale its reveal.
-function ResultsLogic.rewardLine(reward: RecapReward?): string
-	if reward == nil then
-		return ""
-	end
-	local line = string.format("+%d coins", reward.currency)
-	local drop = reward.drop
-	if drop == nil then
-		return line
-	end
-	if drop.duplicate then
-		return string.format("%s, and a %s drop you already own (paid in coins)", line, drop.rarity)
-	end
-	return string.format("%s, and a %s drop: %s", line, drop.rarity, drop.id)
 end
 
 -- How many beats are showing at `elapsed` seconds in. `skipped` (a tap

@@ -16,6 +16,7 @@ local GildedNameplate: Validate.CosmeticDef = {
 	rarity = "Rare",
 	sortOrder = 70,
 	enabled = false, -- PLACEHOLDER: no Roblox asset id or product yet
+	winDrop = true, -- design-decisions.md Q1 applied case (2026-10-02): no pass grants it, so wins can drop it
 	nameplateFrameAssetId = 0,
 	nameplateColorHex = "#d4af37",
 }

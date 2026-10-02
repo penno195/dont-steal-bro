@@ -409,19 +409,16 @@ describe("ResultsLogic.beats", function()
 		expect(ids(ResultsLogic.beats(r))):toBe("Placement,Tasks,PowerUps,Finale,Streak")
 	end)
 
-	it("words the reward: coins alone, a new drop, and an owned one", function()
-		expect(ResultsLogic.rewardLine(nil)):toBe("")
-		expect(ResultsLogic.rewardLine({ currency = 110, rung = 1 })):toBe("+110 coins")
-		expect(ResultsLogic.rewardLine({
-			currency = 50,
-			rung = 0,
-			drop = { kind = "PowerUp", id = "SprintBoost", rarity = "Common", duplicate = false },
-		})):toBe("+50 coins, and a Common drop: SprintBoost")
-		expect(ResultsLogic.rewardLine({
-			currency = 50,
-			rung = 0,
-			drop = { kind = "Cosmetic", id = "GoldTrail", rarity = "Rare", duplicate = true },
-		})):toBe("+50 coins, and a Rare drop you already own (paid in coins)")
+	it("gives a win's drop its own beat, after the coins", function()
+		local r = recap("StudioWinAllShare", 1, 2, {
+			reward = {
+				currency = 50,
+				rung = 2,
+				drop = { kind = "PowerUp", id = "freeze", rarity = "Common", duplicate = false },
+				dropAmount = 1,
+			},
+		})
+		expect(ids(ResultsLogic.beats(r))):toBe("Placement,Tasks,PowerUps,Finale,Rewards,Drop,Streak")
 	end)
 
 	it("has no streak beat for a spectator with no recap", function()

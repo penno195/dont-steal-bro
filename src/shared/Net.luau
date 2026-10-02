@@ -932,6 +932,9 @@ Net.Remotes = {
 	-- that just died. Targeted because it is a streak number (Q7
 	-- condition 1), and fired only AFTER DecisionReveal because "you
 	-- won" plus your own choice is enough to work out the others'.
+	-- A winner's `reward` rides along (rewards-roadmap.md step 3):
+	-- { currency, rung, drop, dropAmount }, their own payout only. The
+	-- reveal never shows another finalist's (user decision, Q7).
 	DecisionPersonalResult = {
 		name = "DecisionPersonalResult",
 		direction = "ServerBroadcast",

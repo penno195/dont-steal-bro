@@ -46,6 +46,7 @@ local Feel = require(script.Parent.Parent.Components.Feel)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
 local Layout = require(script.Parent.Parent.Layout)
 local PayoffExplainer = require(script.Parent.PayoffExplainer)
+local PayoutLogic = require(script.Parent.Parent.PayoutLogic)
 local Theme = require(script.Parent.Parent.Theme)
 
 local create = vide.create
@@ -92,6 +93,11 @@ export type Store = {
 	acked: () -> boolean, -- the server has echoed our own lock
 	reveal: () -> DecisionLogic.Reveal?,
 	personal: () -> DecisionLogic.Personal?,
+	-- Your own win's payout (rewards-roadmap.md step 3), from the same
+	-- targeted packet as `personal`; nil on a loss or while watching.
+	-- Never another finalist's (user decision, Q7's 2026-10-02 case).
+	payout: (() -> PayoutLogic.Payout?)?,
+	nameOf: PayoutLogic.NameOf?, -- a drop's display name, from config
 	chat: () -> DecisionLogic.Rect?, -- Roblox's chat window, screen pixels
 	keyboard: (() -> number?)?, -- on-screen keyboard's top edge, screen pixels; nil when closed
 	-- The ready-up notice (DecisionLogic.waitingNotice); nil hides it.
@@ -841,7 +847,55 @@ end
 
 local TONE_COLOR: { [DecisionLogic.Tone]: string } = { win = "success", loss = "danger", neutral = "line" }
 
+local DROP_ICON = 24
+
+-- A winner's drop under the coins: its icon, then "Rare drop: 2x
+-- Freeze". Built once per drop (it only ever arrives once a round), so
+-- the icon, which Icons.view takes as a key, is fixed for the row.
+local function dropRow(drop: PayoutLogic.Drop, payout: () -> PayoutLogic.Payout?, store: Store): Frame
+	local key = PayoutLogic.dropIcon(drop)
+	local icon = C.Icons.view(if C.Icons.has(key) then key else "gem", DROP_ICON, Theme.color.brand)
+	icon.LayoutOrder = 1
+	return create("Frame")({
+		Name = "Drop",
+		LayoutOrder = 3,
+		Size = UDim2.new(1, 0, 0, DROP_ICON),
+		BackgroundTransparency = 1,
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, Theme.spacing.xs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		icon,
+		Base.text("label", {
+			Name = "Text",
+			LayoutOrder = 2,
+			-- Sized to its text so the row centres as one piece.
+			TextScaled = false,
+			TextWrapped = false,
+			TextSize = Theme.type.label.size,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, DROP_ICON),
+			Text = function()
+				local p = payout()
+				local line = if p then PayoutLogic.dropLine(p, store.nameOf) else nil
+				return if line then string.format("%s: %s", PayoutLogic.dropLabel(drop), line) else ""
+			end,
+		}),
+	}) :: Frame
+end
+
 local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, order: number): Frame
+	local payoutSource = store.payout
+	local function payout(): PayoutLogic.Payout?
+		return if payoutSource then payoutSource() else nil
+	end
+	local drops = derive(function(): { PayoutLogic.Drop }
+		local p = payout()
+		return if p and p.drop then { p.drop } else {}
+	end)
 	return create("Frame")({
 		Name = "Result",
 		LayoutOrder = order,
@@ -876,8 +930,14 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 			Name = "Bounty",
 			LayoutOrder = 2,
 			Size = UDim2.new(1, 0, 0, Theme.type.title.size + Theme.spacing.xxs),
+			-- A winner's own coins once the payout lands (rewards step
+			-- 3); the prize word until then, and for everyone else.
 			Text = function()
 				local c = copy()
+				local p = payout()
+				if c and c.tone == "win" and p then
+					return PayoutLogic.coinsLine(p)
+				end
 				return if c then c.detail else ""
 			end,
 			TextColor3 = function()
@@ -888,9 +948,12 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 		-- The streak line: for a loser, the number that just died. Same
 		-- size and weight as the bounty line - not hidden in a caption,
 		-- not blown up into a headline.
+		indexes(drops, function(drop: () -> PayoutLogic.Drop)
+			return dropRow(drop(), payout, store)
+		end) :: any,
 		Base.text("title", {
 			Name = "Streak",
-			LayoutOrder = 3,
+			LayoutOrder = 4,
 			Size = UDim2.new(1, 0, 0, Theme.type.title.size + Theme.spacing.xxs),
 			Text = function()
 				local c = copy()
@@ -902,7 +965,7 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 			end,
 			TextColor3 = Theme.color.inkMuted,
 		}),
-		C.Button({ label = "Continue", onActivate = store.dismiss, variant = "primary", layoutOrder = 4, order = 1 }),
+		C.Button({ label = "Continue", onActivate = store.dismiss, variant = "primary", layoutOrder = 5, order = 1 }),
 	}) :: Frame
 end
 

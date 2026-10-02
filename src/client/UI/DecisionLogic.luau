@@ -11,11 +11,11 @@
 -- SECRECY: nothing here can hold another player's choice before the
 -- reveal, because the only function that ever produces one is
 -- parseReveal, and the only input to it is the DecisionReveal packet.
--- The packet carries no reward amounts today; a player's own pay
--- arrives at Results, in RoundRecap. Amounts and levels could ride the
--- reveal (design-decisions.md Q7's 2026-10-02 applied case: they may
--- show once every choice is locked in). See docs/decision-studio.md
--- "Secrecy audit".
+-- The packet carries no reward amounts. A winner's own payout arrives
+-- just after it, in the targeted DecisionPersonalResult, and is worded
+-- by PayoutLogic (design-decisions.md Q7's 2026-10-02 applied case:
+-- amounts may show once every choice is locked in, and only your own).
+-- See docs/decision-studio.md "Secrecy audit".
 
 local DecisionLogic = {}
 
@@ -567,16 +567,11 @@ local function streakLine(personal: Personal?): string?
 	if personal == nil then
 		return nil
 	end
-	local before, after = personal.streakBefore, personal.streakAfter
+	local before = personal.streakBefore
 	if personal.won then
-		if after > before then
-			return string.format("Streak %d", after)
-		end
-		return "No streak credit this round"
+		return string.format("Streak %d", personal.streakAfter)
 	end
-	if after == before and before > 0 then
-		return string.format("Streak %d kept - no streak credit this round", before)
-	elseif before > 0 then
+	if before > 0 then
 		return string.format("Your %d-win streak ends here", before)
 	end
 	return "No streak on the line"

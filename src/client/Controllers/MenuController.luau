@@ -41,6 +41,7 @@ local ResultsLogic = require(script.Parent.Parent.UI.ResultsLogic)
 local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local LeaderboardsScreen = require(script.Parent.Parent.UI.Screens.Leaderboards)
+local DropNames = require(script.Parent.Parent.UI.DropNames)
 local ResultsScreen = require(script.Parent.Parent.UI.Screens.Results)
 local SettingsScreen = require(script.Parent.Parent.UI.Screens.Settings)
 local StoreScreen = require(script.Parent.Parent.UI.Screens.Store)
@@ -203,7 +204,12 @@ local function open(menu: Menu)
 		unmountMenu =
 			LeaderboardsScreen.mount(UIScaleController, { selfId = selfId, boards = boards, close = closeMenu })
 	elseif menu == "Results" then
-		unmountMenu = ResultsScreen.mount(UIScaleController, { recap = recap, tally = tally, close = closeMenu })
+		unmountMenu = ResultsScreen.mount(UIScaleController, {
+			recap = recap,
+			tally = tally,
+			close = closeMenu,
+			nameOf = DropNames,
+		})
 	else
 		unmountMenu = SettingsScreen.mount(UIScaleController, {
 			settings = SettingsController.settings,

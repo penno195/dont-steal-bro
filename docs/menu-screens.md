@@ -20,7 +20,7 @@ them touches a remote.
 | | `StoreState` (currency, stock, owned, equipped, passes) | **Live**, targeted; pushed on profile load and after every change |
 | | `StorePurchaseResult` + `MarketplaceService.Prompt*PurchaseFinished` | Per request. They only move the spinner; ownership comes from `StoreState` alone |
 | Leaderboards | `LeaderboardState` (all-time), `PeriodBoardState` (daily/weekly) | **Cached** server-side, broadcast every 60–120 s, kept by MenuController for the session. There's no request remote. Staleness comes with the entries |
-| Results | `RoundRecap` (reason, streak before/after, bounty, streak credit) | **Per round**, targeted, sent on entering Results |
+| Results | `RoundRecap` (reason, streak before/after, win reward: coins and drop) | **Per round**, targeted, sent on entering Results |
 | | Tally: placement, tasks from `TaskQualificationResult`, power-ups from own successful `PowerUpUseResult`s | Counted locally, display only |
 | Settings | `SettingsState` | **Live**, targeted; applied locally first, then the server's copy wins |
 

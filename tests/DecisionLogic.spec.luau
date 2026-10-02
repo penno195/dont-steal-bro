@@ -352,21 +352,6 @@ describe("DecisionLogic.resultCopy", function()
 		expect(copy.streak):toBe("Streak 3")
 	end)
 
-	it("says so when the round carried no streak credit", function()
-		local won = DecisionLogic.resultCopy(reveal("AllShare", { 1, 2, 3 }, {}), 1, {
-			streakBefore = 4,
-			streakAfter = 4,
-			won = true,
-		})
-		expect(won.streak):toBe("No streak credit this round")
-		local lost = DecisionLogic.resultCopy(reveal("AllSteal", {}, { 1, 2, 3 }), 1, {
-			streakBefore = 4,
-			streakAfter = 4,
-			won = false,
-		})
-		expect(lost.streak):toBe("Streak 4 kept - no streak credit this round")
-	end)
-
 	it("shows a spectator the outcome and no streak", function()
 		local copy = DecisionLogic.resultCopy(reveal("AllSteal", {}, { 1, 2, 3 }), 99, nil)
 		expect(copy.headline):toBe("Nobody wins")

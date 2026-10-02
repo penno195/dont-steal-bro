@@ -110,6 +110,14 @@ anything already unlocked is kept. NPC bots now skip the top 6 rungs
   pays a fixed currency amount by rarity instead. The odds never shift
   with what a player owns.
 
+*Applied (2026-10-02, user decision):* **which cosmetics can drop.**
+Every cosmetic that no pass grants sets `winDrop = true`: Champion's
+Flare, Gilded Frame, Rubber Duck, Sorry Not Sorry, Vault Door and
+Wildfire. Founder's Kit and Founder's Trail (FounderPass) and Victory
+Flex (VictoryEmotePass) stay pass-only. All nine are disabled until
+they get assets, so until then only power-ups actually drop. A new
+cosmetic opts in, or doesn't, in its own file.
+
 ## 2. Round timer expires with <3 finished
 
 **Decision:** Rank finishers by task-completion percentage (tiebreak:
@@ -356,8 +364,13 @@ hidden through the intro, Negotiate and Choose.
 - "Locked in" means every choice is final: all three finalists
   submitted, or the Choose timer filled in the defaults (Q4). In code,
   that is the moment DecisionService computes the outcome.
+- **Applied (2026-10-02, user decision): the reveal shows only your
+  own payout.** A winner sees their own coins and drop on the result
+  panel. Another finalist's payout is never sent to your client, even
+  though this case would allow it. Built in rewards-roadmap.md step 3
+  (`DecisionPersonalResult.reward`, targeted).
 - This permits, but doesn't require, showing amounts or levels in the
-  reveal (rewards-roadmap.md step 3 can use it). It widens the P4-2
+  reveal. It widens the P4-2
   titles case's "after the result is in" to this slightly earlier
   moment, but doesn't change `TitleService` by itself.
 

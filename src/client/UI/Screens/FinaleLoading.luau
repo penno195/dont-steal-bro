@@ -44,14 +44,30 @@ local CHIP_H = 32
 local SPINNER = 24
 local BUTTON_H = 48
 
--- Stand-in glyphs until RewardTables (design-decisions.md Q1) gives the
--- packages real art. Tinted so the tiers read at a glance.
-local PRIZE_ICON: { [string]: { icon: string, color: string } } = {
-	Big = { icon = "trophy", color = "warning" },
-	Medium = { icon = "gem", color = "brand" },
-	Small = { icon = "star", color = "ink" },
-	Nothing = { icon = "close", color = "inkMuted" },
-}
+-- Every prize is coins now (design-decisions.md Q1's 2026-10-02 case),
+-- so a tier is a pile of coin icons: three, two, one, or a cross for
+-- nothing (rewards-roadmap.md step 3). How many coins is the tier, never
+-- an amount: this card is up before lock-in, where Q7 allows words only.
+local PRIZE_COINS: { [string]: number } = { Big = 3, Medium = 2, Small = 1 }
+local COIN = 20
+local COIN_STEP = (ICON - COIN) / 2 -- three coins fill the icon square
+
+local function coinPile(count: number): Instance
+	local coins = {}
+	for i = 1, count do
+		local coin = Icons.view("coin", COIN, Theme.color.warning)
+		-- Bottom-left to top-right, so the pile grows up and across.
+		coin.Position = UDim2.fromOffset((i - 1) * COIN_STEP, (3 - i) * COIN_STEP)
+		coin.ZIndex = i
+		table.insert(coins, coin)
+	end
+	return create("Frame")({
+		Name = "Coins",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(ICON, ICON),
+		coins,
+	})
+end
 
 local FinaleLoading = {}
 
@@ -71,10 +87,14 @@ local function tile(entry: () -> DecisionLogic.RewardTile, order: number): Frame
 	end
 	-- Icons.view takes a key, not a source, so the icon is switched per
 	-- prize (the tile list only changes if the seat count does).
-	local views: { [string]: () -> Instance } = {}
-	for prize, style in PRIZE_ICON do
+	local views: { [string]: () -> Instance } = {
+		Nothing = function()
+			return Icons.view("close", ICON, Theme.color.inkMuted)
+		end,
+	}
+	for prize, count in PRIZE_COINS do
 		views[prize] = function()
-			return Icons.view(style.icon, ICON, Theme.color[style.color])
+			return coinPile(count)
 		end
 	end
 	local prize = derive(function(): string

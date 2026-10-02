@@ -22,6 +22,7 @@ local ChampionPodiumFlare: Validate.CosmeticDef = {
 	rarity = "Rare",
 	sortOrder = 30,
 	enabled = false, -- PLACEHOLDER: no Roblox asset id and no store product yet
+	winDrop = true, -- design-decisions.md Q1 applied case (2026-10-02): no pass grants it, so wins can drop it
 	podiumTextureAssetId = 0,
 	podiumColorHex = "#66e0ff",
 }

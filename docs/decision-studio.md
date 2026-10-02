@@ -71,8 +71,10 @@ Studio's Intro, about 8 s, so the move onto the set happens behind it
 and the Studio opens on Negotiate. Everyone sees it. It shows who made
 the final (from `TaskQualificationResult`, then `DecisionParticipants`),
 one tile per prize on the table (`DecisionLogic.rewardTiles`, read from
-`prizeFor`), the one-line lesson, and a spinner. The prize icons are
-stand-in glyphs until `RewardTables` (Q1) gives the packages real art.
+`prizeFor`), the one-line lesson, and a spinner. Every prize is coins,
+so each tile's icon is a pile of three, two or one coin, or a cross for
+nothing (rewards step 3). It shows the tier, never an amount: the card
+is up before lock-in, where Q7 allows words only.
 
 **Ready-up (2026-09-28).** The loading card is the finale's explainer,
 so the Negotiate clock must never run while someone is still reading it.
@@ -194,13 +196,19 @@ WINS/LOSES is a word on a badge as well as a stroke colour.
 ## Result
 
 The personal panel shows the headline for your side of the branch, the
-bounty tier in words, and the streak line:
+prize line, and the streak line:
 
-- Win: "MEDIUM bounty", "Streak 3".
+- Win: "+110 coins", then the drop if there was one (its icon and
+  "Common drop: 2x Freeze"), then "Streak 3". Until the payout lands a
+  moment after the reveal, the prize line shows the tier in words
+  ("MEDIUM bounty"). Rewards step 3; the wording is `PayoutLogic`'s,
+  shared with the results screen.
 - Loss: "No bounty", "**Your 7-win streak ends here**". It's the same size
   as the bounty line, neither hidden in a caption nor blown up into a
   headline. It offers no consolation and takes no cheap shot.
-- A round with no streak credit (NPC-heavy) says so, on a win or a loss.
+- You only ever see your **own** payout. Another finalist's coins and
+  drop never reach your client (user decision, recorded under
+  design-decisions.md Q7's 2026-10-02 applied case).
 
 The streak numbers come from the new **`DecisionPersonalResult`**, fired by
 `DecisionService.enterReveal` to each human finalist **alone** and **only
@@ -247,6 +255,7 @@ against a full memory dump of it:
 | Its own choice | `confirm` (a Vide source) | from its own completed hold |
 | Everyone's choices | `reveal` | from `DecisionReveal` and nowhere else; `DecisionLogic.parseReveal` is the only function that produces a choice for another id |
 | Its own streak before/after | `personal` | from `DecisionPersonalResult`, targeted, fired after the reveal |
+| Its own win's payout (coins, rung, drop) | `payout` | the same `DecisionPersonalResult`; nobody else's is ever sent |
 
 - **Attributes / ValueObjects / replicated instances:** none written.
   Everything is Lua locals and Vide sources.

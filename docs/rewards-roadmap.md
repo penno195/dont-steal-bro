@@ -58,18 +58,25 @@ and ask the user (CLAUDE.md).
   - threat-model.md §8, npc-notes.md and launch-review.md record the
     mitigation as retired. Bot-lobby farming is now watched by
     telemetry only (`NPCService.getNPCSeatCount`).
+- [x] **3. Show win rewards.**
+  - User decisions (design-decisions.md Q1 and Q7 applied cases): the
+    reveal shows only your own payout, and the six cosmetics no pass
+    grants set `winDrop = true` (all still disabled pending assets).
+  - `DecisionPersonalResult` carries a winner's own `reward`
+    (`ProgressionService.rewardFor`, after the reveal, targeted). The
+    ledger also keeps `dropAmount`, the drop grant's count or coins.
+  - `UI/PayoutLogic.luau` parses and words a payout for both screens
+    (`tests/PayoutLogic.spec.luau`). `UI/DropNames.luau` names drops
+    from config.
+  - The Studio's result panel shows "+N coins" and a drop row with the
+    item's icon. Results splits the payout into a Coins card and its own
+    Drop beat. `FinaleLoading`'s stand-in glyphs became coin piles (3/2/1),
+    still no amounts before lock-in.
+  - Also cleared 2d leftovers: DecisionLogic's "no streak credit" copy,
+    decision-studio.md and store-receipts.md.
 
 ## Next
 
-- [ ] **3. Show win rewards.**
-  - Results and the finale show the currency and the drop. This
-    replaces `FinaleLoading`'s stand-in glyphs.
-  - The reveal may show everyone's amounts and levels, since it follows
-    lock-in (Q7's 2026-10-02 applied case). Before lock-in, prizes stay
-    words only. **Ask the user** whether the reveal should show other
-    finalists' payouts or just your own.
-  - **Ask the user** which cosmetics set `winDrop = true`. None do yet,
-    so today only power-ups can drop.
 - [ ] **4. Leaderboard payouts.**
   - Give LeaderboardService's daily/weekly reward hook a receiver. It
     has none today.

@@ -18,6 +18,7 @@ local WildfireStreakFlair: Validate.CosmeticDef = {
 	rarity = "Uncommon",
 	sortOrder = 60,
 	enabled = false, -- PLACEHOLDER: no Roblox asset id or product yet
+	winDrop = true, -- design-decisions.md Q1 applied case (2026-10-02): no pass grants it, so wins can drop it
 	flairTextureAssetId = 0,
 	flairColorHex = "#ff7a1a",
 }

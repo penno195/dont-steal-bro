@@ -11,8 +11,9 @@
 --     ever {playerId}.
 --   - everyone's choices from DecisionReveal, the first and only packet
 --     that carries them.
---   - its own streak before/after from DecisionPersonalResult, which the
---     server fires to this player alone, after the reveal.
+--   - its own streak before/after, and a win's payout, from
+--     DecisionPersonalResult, which the server fires to this player
+--     alone, after the reveal.
 -- Nothing is written to an Attribute, a ValueObject or anything else
 -- that replicates; it's all Lua locals and Vide sources.
 --
@@ -37,8 +38,10 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local DecisionLogic = require(script.Parent.Parent.UI.DecisionLogic)
 local DecisionStudio = require(script.Parent.Parent.UI.Screens.DecisionStudio)
+local DropNames = require(script.Parent.Parent.UI.DropNames)
 local FinaleLoading = require(script.Parent.Parent.UI.Screens.FinaleLoading)
 local InputLock = require(script.Parent.Parent.UI.InputLock)
+local PayoutLogic = require(script.Parent.Parent.UI.PayoutLogic)
 local NPCBubbleController = require(script.Parent.NPCBubbleController)
 local StudioChatController = require(script.Parent.StudioChatController)
 local UIScaleController = require(script.Parent.UIScaleController)
@@ -64,6 +67,7 @@ local talk: DecisionStudio.Settable<{ [number]: DecisionStudio.Talk }> = source(
 local acked = source(false)
 local reveal = source(nil :: DecisionLogic.Reveal?)
 local personal = source(nil :: DecisionLogic.Personal?)
+local payout = source(nil :: PayoutLogic.Payout?)
 local chat = source(nil :: DecisionLogic.Rect?)
 local keyboard = source(nil :: number?)
 
@@ -185,6 +189,7 @@ local function resetStudio()
 	acked(false)
 	reveal(nil)
 	personal(nil)
+	payout(nil)
 	confirm(DecisionLogic.OPEN)
 end
 
@@ -232,6 +237,8 @@ local store: DecisionStudio.Store = {
 	acked = acked,
 	reveal = reveal,
 	personal = personal,
+	payout = payout,
+	nameOf = DropNames,
 	chat = chat,
 	keyboard = keyboard,
 	waiting = function(): string?
@@ -641,6 +648,7 @@ function DecisionStudioController:init()
 
 	Net.onClientEvent("DecisionPersonalResult", function(payload: any)
 		personal(DecisionLogic.parsePersonal(payload))
+		payout(if type(payload) == "table" then PayoutLogic.parse(payload.reward) else nil)
 	end)
 end
 

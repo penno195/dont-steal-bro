@@ -15,6 +15,7 @@ local SorryNotSorryCard: Validate.CosmeticDef = {
 	rarity = "Common",
 	sortOrder = 80,
 	enabled = false, -- PLACEHOLDER: no Roblox asset id or product yet
+	winDrop = true, -- design-decisions.md Q1 applied case (2026-10-02): no pass grants it, so wins can drop it
 	cardImageAssetId = 0,
 }
 

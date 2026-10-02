@@ -172,7 +172,9 @@ local outcomeWritten = false
 -- broadcast DecisionReveal. Sending it any earlier would tell a client
 -- whether it won - and so, with its own choice, what the others picked
 -- - before the reveal packet, which is the one thing this file forbids.
-type PersonalResult = { streakBefore: number, streakAfter: number, won: boolean }
+-- `reward` (rewards-roadmap.md step 3) is a winner's own payout, from
+-- ProgressionService.rewardFor; nil on a loss. Only its owner gets it.
+type PersonalResult = { streakBefore: number, streakAfter: number, won: boolean, reward: { [string]: any }? }
 local personalResults: { [number]: PersonalResult } = {}
 
 local pendingPhaseTimerThread: thread? = nil
@@ -312,8 +314,9 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 		local RoundService = Loader.get("RoundService") :: any
 
 		local streakBefore = DataService.getStreak(player)
+		local roundId = RoundService.getRoundId()
 		local after = ProgressionService.applyRoundResult(player, {
-			roundId = RoundService.getRoundId(),
+			roundId = roundId,
 			reason = ProgressionService.reasonForOutcome(outcome.branch, won),
 			outcomeTag = outcomeTag,
 		})
@@ -321,6 +324,7 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			streakBefore = streakBefore,
 			streakAfter = after.currentStreak,
 			won = won,
+			reward = ProgressionService.rewardFor(roundId, player.UserId),
 		}
 
 		DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")

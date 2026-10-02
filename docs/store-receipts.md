@@ -314,10 +314,10 @@ two players can attempt a high-stakes round.
 Roughly in order of how much they cost:
 
 1. **Cheapest, and I would do this one regardless: exclude bought stock
-   from streak-credited rounds above a threshold.** The machinery
-   already exists — `threat-model.md` §8's NPC-seat rule already gates
-   streak credit on round conditions, and `ProgressionService.
-   shouldCreditStreak` is the single place it is asked. Either a round
+   from streak-credited rounds above a threshold.** When this was
+   written, `threat-model.md` §8's NPC-seat rule already gated streak
+   credit on round conditions; that gate was retired on 2026-10-02
+   (rewards-roadmap.md step 2d), so this would now need its own. Either a round
    entered with a purchased loadout earns no streak credit above some
    streak, or loadouts are simply disabled above it. High-streak rounds
    become skill-only; the store keeps its whole audience, which is the

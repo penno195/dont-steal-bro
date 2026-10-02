@@ -73,6 +73,11 @@ type LedgerEntry = {
 	-- What this round paid. Rolled once and kept here, so a retry
 	-- returns the same reward rather than rolling a second one.
 	reward: ProfileLogic.WinRewardRecord?,
+	-- The drop grant's amount: a power-up drop's stock count, or what a
+	-- duplicate cosmetic paid in coins instead. Read off the grants so
+	-- the screens show what was granted rather than recomputing it from
+	-- a config LiveConfig can retune between roll and screen.
+	dropAmount: number?,
 }
 
 -- ===== win rewards (rewards-roadmap.md step 2b) ============================
@@ -222,7 +227,8 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	-- bots (design-decisions.md Q5's 2026-10-02 applied case).
 	local after = ProgressionLogic.applyResult(before, result.reason)
 
-	-- Every win pays (design-decisions.md Q1 revision). Rolled before the ledger entry so the entry carries it.
+	-- Every win pays (design-decisions.md Q1 revision). Rolled before
+	-- the ledger entry so the entry carries it.
 	local rewardRecord: ProfileLogic.WinRewardRecord? = nil
 	local rewardGrants: { RewardLogic.Grant } = {}
 	if ProgressionLogic.isWin(result.reason) then
@@ -250,11 +256,15 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	-- double-count. A failed write is a lost result; a double-counted
 	-- one is a corrupted streak (or a win paid twice), and of the two,
 	-- the second is far worse for a leaderboard nobody can audit.
+	-- rollWinReward lists the currency grant first, then the drop's.
+	local dropGrant = if rewardRecord ~= nil and rewardRecord.drop ~= nil then rewardGrants[2] else nil
+	local dropAmount = if dropGrant ~= nil then dropGrant.amount else nil
 	ledger[key] = {
 		reason = result.reason,
 		after = after,
 		before = before,
 		reward = rewardRecord,
+		dropAmount = dropAmount,
 	}
 
 	local write = writeProgressionState
@@ -340,6 +350,31 @@ local function hasResultFor(roundId: string, userId: number): boolean
 	return ledger[ledgerKey(roundId, userId)] ~= nil
 end
 
+-- A win's reward as the client sees it (ResultsLogic.RecapReward /
+-- DecisionLogic.Payout), from the ledger rather than the profile, so it
+-- is this round's reward even if the write was skipped. Only ever sent
+-- to its owner, and only after every choice is locked in (Q7's
+-- 2026-10-02 applied case): your own rung is your own streak.
+local function rewardPayload(entry: LedgerEntry): { [string]: any }?
+	local reward = entry.reward
+	if reward == nil then
+		return nil
+	end
+	return {
+		currency = reward.currency,
+		rung = reward.rung,
+		drop = reward.drop,
+		dropAmount = entry.dropAmount,
+	}
+end
+
+-- rewards-roadmap.md step 3: DecisionService adds this to a finalist's
+-- DecisionPersonalResult, which only goes out after DecisionReveal.
+local function rewardFor(roundId: string, userId: number): { [string]: any }?
+	local entry = ledger[ledgerKey(roundId, userId)]
+	return if entry ~= nil then rewardPayload(entry) else nil
+end
+
 -- ===== design-decisions.md Q7's missing half ===============================
 
 -- "Everyone but the winner(s) resets the streak, including failing to
@@ -400,16 +435,7 @@ local function sendRecaps()
 			streakAfter = entry.after.currentStreak,
 			bestStreakBefore = entry.before.bestStreak,
 			bestStreakAfter = entry.after.bestStreak,
-			-- What this win paid, from the ledger rather than the profile,
-			-- so it is this round's reward even if the write was skipped.
-			-- Q7: only ever sent here, at Results, never mid-round.
-			reward = if entry.reward ~= nil
-				then {
-					currency = entry.reward.currency,
-					rung = entry.reward.rung,
-					drop = entry.reward.drop,
-				}
-				else nil,
+			reward = rewardPayload(entry),
 		})
 	end
 end
@@ -422,6 +448,7 @@ local ProgressionService: Loader.Service = {
 
 	applyRoundResult = applyRoundResult,
 	hasResultFor = hasResultFor,
+	rewardFor = rewardFor,
 
 	-- Re-exported so a caller (DecisionService) maps an outcome branch
 	-- to a reason code through the same function the tests cover,
