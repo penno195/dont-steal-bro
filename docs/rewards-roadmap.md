@@ -88,9 +88,12 @@ and ask the user (CLAUDE.md).
     because winners are usually offline. DataService routes profile
     messages by `type` (`routeProfileMessages` / `sendProfileMessage`),
     and applies the grants and the processed mark in one step.
-  - Not verified in Studio yet: Rojo wasn't syncing into the open place.
-    There's no on-screen "you placed #N" notice yet either. The coins
-    just arrive and StoreState refreshes.
+  - Verified in Studio (mock ProfileStore) with an online player:
+    Daily #1 paid 500, Weekly #5 paid 400, and a malformed message was
+    dropped. Delivery to an offline player, picked up when they next
+    join, needs a published place to test.
+  - There's no on-screen "you placed #N" notice yet. The coins just
+    arrive and StoreState refreshes.
 
 ## Next
 - [ ] **5. Pass reward tracks.**
