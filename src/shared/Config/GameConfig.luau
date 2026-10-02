@@ -60,6 +60,30 @@ local GameConfig: Validate.GameConfig = {
 		{ tier = 5, minStreak = 15, soleStealerVU = 36, loneSharerVU = 18, allShareVU = 9 },
 	},
 
+	-- What a win pays (design-decisions.md Q1, revised 2026-09-30 and
+	-- applied 2026-10-02): currency for the outcome tier, scaled by the
+	-- winner's title-ladder rung after this win, plus a chance at a random
+	-- drop. Replaces bountyTiers above once the services use it. Every
+	-- number is PLACEHOLDER until playtest.
+	winRewards = {
+		-- Rung 0 pays the base; rung 21 (streak 50) pays 3.1x.
+		currency = { soleStealer = 100, loneSharer = 50, allShare = 25, perRungBonus = 0.1 },
+		drop = {
+			-- 10% at rung 0, up to the 50% cap by rung 20.
+			baseChance = 0.1,
+			perRungChance = 0.02,
+			maxChance = 0.5,
+			-- At rung 0: 70/25/5. At rung 21: about 48/35/18.
+			rarityWeights = {
+				Common = { weight = 70, perRungGrowth = 0 },
+				Uncommon = { weight = 25, perRungGrowth = 0.05 },
+				Rare = { weight = 5, perRungGrowth = 0.2 },
+			},
+			powerUpAmount = 1,
+			duplicateCurrency = { Common = 50, Uncommon = 100, Rare = 250 },
+		},
+	},
+
 	-- P2-7: PowerUpService's in-round inventory. The pre-game loadout
 	-- starts in these slots and field pickups fill whatever is empty
 	-- (powerups.md "Inventory and aiming", decided 2026-09-25). Range,

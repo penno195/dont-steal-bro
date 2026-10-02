@@ -349,6 +349,12 @@ export type CosmeticDef = {
 	-- Store UI thumbnail (P6-6's item grid). Optional: falls back to
 	-- whatever the category's own primary asset id would render as.
 	previewIconAssetId: number?,
+
+	-- Whether a win can drop this (design-decisions.md Q1, applied
+	-- 2026-10-02). Opt-in, so founder, paid-only and limited cosmetics
+	-- stay out of the win pool unless their own file says otherwise.
+	-- Disabled cosmetics never drop, whatever this says.
+	winDrop: boolean?,
 }
 
 -- ===== StoreItemDef: P4-5 ================================================
@@ -566,6 +572,40 @@ export type BountyTier = {
 	allShareVU: number, -- S
 }
 
+-- What a win pays: design-decisions.md Q1's 2026-09-30 revision and its
+-- 2026-10-02 applied case. A "rung" is how many title-ladder rungs the
+-- winner's streak reaches AFTER this win (0-21; RewardLogic.rungFor).
+-- Every number is PLACEHOLDER until playtest. Replaces bountyTiers once
+-- the services are wired to it.
+export type WinCurrencyConfig = {
+	-- The base for each outcome tier. Validate keeps soleStealer >
+	-- loneSharer > allShare > 0, the ordering bountyTiers had, so Steal
+	-- and Share both stay live choices (payoff-table.md §1).
+	soleStealer: number,
+	loneSharer: number,
+	allShare: number,
+	perRungBonus: number, -- paid = floor(base * (1 + perRungBonus * rung))
+}
+
+export type DropRarityWeight = {
+	weight: number, -- relative weight at rung 0
+	perRungGrowth: number, -- weight * (1 + perRungGrowth * rung); higher on rarer tiers so they catch up
+}
+
+export type WinDropConfig = {
+	baseChance: number, -- chance of any drop at rung 0, 0-1
+	perRungChance: number, -- added per rung
+	maxChance: number, -- cap, 0-1
+	rarityWeights: { Common: DropRarityWeight, Uncommon: DropRarityWeight, Rare: DropRarityWeight },
+	powerUpAmount: number, -- loadout stock granted by a power-up drop
+	duplicateCurrency: PowerUpRarityWeights, -- paid instead of a cosmetic the winner already owns
+}
+
+export type WinRewardsConfig = {
+	currency: WinCurrencyConfig,
+	drop: WinDropConfig,
+}
+
 export type StudioTimers = {
 	introSeconds: number,
 	introNewPlayerSeconds: number,
@@ -603,6 +643,7 @@ export type GameConfig = {
 	studioTimers: StudioTimers,
 	roundTimers: RoundTimers,
 	bountyTiers: { BountyTier },
+	winRewards: WinRewardsConfig,
 
 	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
 	-- loadout (StoreService) starts in these slots; field pickups fill
@@ -2709,6 +2750,83 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 			)
 		end
 		previousMinStreak = tier.minStreak
+	end
+
+	-- design-decisions.md Q1, applied 2026-10-02: the same steal-beats-
+	-- share ordering bountyTiers enforced, now on the currency bases.
+	local winCurrency = config.winRewards.currency
+	if
+		not (
+			winCurrency.soleStealer > winCurrency.loneSharer
+			and winCurrency.loneSharer > winCurrency.allShare
+			and winCurrency.allShare > 0
+		)
+	then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"winRewards.currency",
+			string.format(
+				"ordering broken: expected soleStealer (%s) > loneSharer (%s) > allShare (%s) > 0",
+				tostring(winCurrency.soleStealer),
+				tostring(winCurrency.loneSharer),
+				tostring(winCurrency.allShare)
+			)
+		)
+	end
+	if winCurrency.perRungBonus < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.currency.perRungBonus", "must not be negative")
+	end
+
+	local drop = config.winRewards.drop
+	for _, field in { "baseChance", "maxChance" } do
+		local value = (drop :: any)[field] :: number
+		if value < 0 or value > 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop." .. field, "must be between 0 and 1")
+		end
+	end
+	if drop.baseChance > drop.maxChance then
+		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop.baseChance", "must not exceed maxChance")
+	end
+	if drop.perRungChance < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop.perRungChance", "must not be negative")
+	end
+	local totalWeight = 0
+	for _, rarity in { "Common", "Uncommon", "Rare" } do
+		local entry = (drop.rarityWeights :: any)[rarity] :: DropRarityWeight
+		local label = "winRewards.drop.rarityWeights." .. rarity
+		if entry.weight < 0 or entry.perRungGrowth < 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", label, "weight and perRungGrowth must not be negative")
+		end
+		totalWeight += entry.weight
+		if ((drop.duplicateCurrency :: any)[rarity] :: number) <= 0 then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"winRewards.drop.duplicateCurrency." .. rarity,
+				"must be positive - a duplicate cosmetic must still pay something"
+			)
+		end
+	end
+	if totalWeight <= 0 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"winRewards.drop.rarityWeights",
+			"at least one rarity needs a positive weight"
+		)
+	end
+	if drop.powerUpAmount < 1 or drop.powerUpAmount % 1 ~= 0 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"winRewards.drop.powerUpAmount",
+			"must be a whole number, at least 1"
+		)
 	end
 end
 

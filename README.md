@@ -274,11 +274,12 @@ Playtesting has driven the work since the tracker finished:
   `GameConfig.teleport.matchPlaceId` are both `0` until the Hub and
   Match places are published, so matchmaking runs in Studio only and
   teleporting is off.
-- **Win rewards.** Not built yet. A win records a package reference but
-  grants nothing, the daily/weekly board reward hook has no receiver,
-  and the finale shows stand-in glyphs. The design is settled in
-  design-decisions.md Q1's 2026-09-30 revision: currency plus a random
-  drop per win, time-limited pass tracks, and a 21-rung streak ladder.
+- **Win rewards.** Being built in steps, tracked in
+  `docs/rewards-roadmap.md`. The config and pure logic exist
+  (`RewardLogic`), but a win still grants nothing, the daily/weekly
+  board reward hook has no receiver, and the finale shows stand-in
+  glyphs. The design is settled in design-decisions.md Q1's 2026-09-30
+  revision and its applied cases.
 - **Economy numbers.** Every price and grant is still PLACEHOLDER. Those
   numbers decide whether Q8's "Robux buys time, never power" rule holds
   (`docs/store-receipts.md`).

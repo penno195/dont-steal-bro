@@ -96,6 +96,20 @@ Twenty Deep 20, Allegedly Legit 30. Unlocks stay append-only, so
 anything already unlocked is kept. NPC bots now skip the top 6 rungs
 (25 and up) rather than the top 3.
 
+*Applied (2026-10-02, user decision):* how a win's reward is worked out.
+- **The ladder replaces bountyTiers.** The five VU tiers are retired.
+  A win pays a base currency amount for its outcome tier (sole stealer
+  > lone sharer > all share > 0, the same ordering as before) times a
+  multiplier that grows with the winner's rung.
+- **The rung comes from the streak after this win**, so a first-ever
+  win pays at rung 1, next to the title it just unlocked.
+- **The drop pool** is every enabled power-up marked `freelyEarnable`,
+  plus enabled cosmetics that opt in with `winDrop = true`. Founder,
+  paid-only and limited cosmetics stay out unless a file opts them in.
+- **A cosmetic the player already owns** still counts as the drop, and
+  pays a fixed currency amount by rarity instead. The odds never shift
+  with what a player owns.
+
 ## 2. Round timer expires with <3 finished
 
 **Decision:** Rank finishers by task-completion percentage (tiebreak:

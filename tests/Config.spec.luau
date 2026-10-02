@@ -36,6 +36,21 @@ local function validGameConfig(): Validate.GameConfig
 			{ tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
 			{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
 		},
+		winRewards = {
+			currency = { soleStealer = 100, loneSharer = 50, allShare = 25, perRungBonus = 0.1 },
+			drop = {
+				baseChance = 0.1,
+				perRungChance = 0.02,
+				maxChance = 0.5,
+				rarityWeights = {
+					Common = { weight = 70, perRungGrowth = 0 },
+					Uncommon = { weight = 25, perRungGrowth = 0.05 },
+					Rare = { weight = 5, perRungGrowth = 0.2 },
+				},
+				powerUpAmount = 1,
+				duplicateCurrency = { Common = 50, Uncommon = 100, Rare = 250 },
+			},
+		},
 		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
 		powerUpUseRangeStuds = 24,
@@ -879,6 +894,52 @@ TestRunner.describe("Validate.checkGameConfig (bounty ordering)", function()
 		config.bountyTiers = { { tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 } }
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues):toBe(0)
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (win rewards)", function()
+	TestRunner.it("rejects each broken win-reward number", function()
+		local cases: { (any) -> () } = {
+			function(c)
+				c.winRewards.currency.loneSharer = c.winRewards.currency.soleStealer -- steal must beat share
+			end,
+			function(c)
+				c.winRewards.currency.allShare = 0
+			end,
+			function(c)
+				c.winRewards.currency.perRungBonus = -0.1
+			end,
+			function(c)
+				c.winRewards.drop.maxChance = 1.5
+			end,
+			function(c)
+				c.winRewards.drop.baseChance = 0.6 -- above maxChance
+			end,
+			function(c)
+				c.winRewards.drop.perRungChance = -0.01
+			end,
+			function(c)
+				c.winRewards.drop.rarityWeights.Rare.perRungGrowth = -1
+			end,
+			function(c)
+				c.winRewards.drop.rarityWeights.Common.weight = 0
+				c.winRewards.drop.rarityWeights.Uncommon.weight = 0
+				c.winRewards.drop.rarityWeights.Rare.weight = 0
+			end,
+			function(c)
+				c.winRewards.drop.duplicateCurrency.Rare = 0
+			end,
+			function(c)
+				c.winRewards.drop.powerUpAmount = 1.5
+			end,
+		}
+		for _, mutate in cases do
+			local issues = {}
+			local config = validGameConfig()
+			mutate(config)
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
 	end)
 end)
 
