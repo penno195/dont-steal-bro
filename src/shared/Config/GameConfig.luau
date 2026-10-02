@@ -320,7 +320,25 @@ local GameConfig: Validate.GameConfig = {
 		-- no reason to outlast it by more than the read takes. 1 hour is
 		-- generous against a refresh interval measured in minutes.
 		periodGraceSeconds = 3600,
-		rewardTopN = 10, -- PLACEHOLDER: no locked value in docs/ yet
+		-- What a finished period pays (design-decisions.md Q1, applied
+		-- 2026-10-02; rewards-roadmap.md step 4). Bands of places in
+		-- ascending maxRank: #1, #2-3, #4-10. The last band's maxRank is
+		-- how many places get paid. A band may also name a limited
+		-- cosmetic via `cosmeticId`; none do yet. The all-time board has
+		-- no entry on purpose: it never pays (user decision). Every
+		-- amount is PLACEHOLDER until playtest (roadmap step 7).
+		payouts = {
+			Daily = {
+				{ maxRank = 1, currency = 500 },
+				{ maxRank = 3, currency = 250 },
+				{ maxRank = 10, currency = 100 },
+			},
+			Weekly = {
+				{ maxRank = 1, currency = 2000 },
+				{ maxRank = 3, currency = 1000 },
+				{ maxRank = 10, currency = 400 },
+			},
+		},
 	},
 
 	-- P4-5: the store. Two of these are locked by a design decision and

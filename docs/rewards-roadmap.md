@@ -74,16 +74,25 @@ and ask the user (CLAUDE.md).
     still no amounts before lock-in.
   - Also cleared 2d leftovers: DecisionLogic's "no streak credit" copy,
     decision-studio.md and store-receipts.md.
+- [x] **4. Leaderboard payouts.**
+  - User decisions (design-decisions.md Q1 applied case): the top 10 are
+    paid in bands (#1, #2–3, #4–10). Daily pays 500/250/100 and weekly
+    pays 4x that. The all-time board never pays. A band can name a
+    limited cosmetic, but none does yet.
+  - `GameConfig.leaderboard.payouts` replaced `rewardTopN`. Validate
+    checks the bands and that any `cosmeticId` is a real cosmetic.
+  - `LeaderboardPayoutLogic.luau` is the pure part
+    (`tests/LeaderboardPayoutLogic.spec.luau`).
+  - `LeaderboardPayoutService` claims the reward hook. It queues each
+    payout on the winner's profile with `ProfileStore:MessageAsync`,
+    because winners are usually offline. DataService routes profile
+    messages by `type` (`routeProfileMessages` / `sendProfileMessage`),
+    and applies the grants and the processed mark in one step.
+  - Not verified in Studio yet: Rojo wasn't syncing into the open place.
+    There's no on-screen "you placed #N" notice yet either. The coins
+    just arrive and StoreState refreshes.
 
 ## Next
-
-- [ ] **4. Leaderboard payouts.**
-  - Give LeaderboardService's daily/weekly reward hook a receiver. It
-    has none today.
-  - Payouts are currency and/or limited cosmetics, and limited means
-    cosmetic only (Q8).
-  - **Ask the user** for the amounts, the placement cut-offs and the
-    limited items, and whether the all-time board pays at all.
 - [ ] **5. Pass reward tracks.**
   - Add a track config: the pass, a start and an end, and items
     unlocked at win counts. Only wins inside the window count.

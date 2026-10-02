@@ -760,8 +760,21 @@ export type LeaderboardConfig = {
 	-- P4-4: daily/weekly boards.
 	snapshotStoreName: string,
 	periodGraceSeconds: number,
-	rewardTopN: number,
+	-- Rewards-roadmap step 4: period kind -> bands of places.
+	-- Structurally LeaderboardPayoutLogic.PayoutTable.
+	payouts: { [string]: { LeaderboardPayoutBand } },
 }
+
+export type LeaderboardPayoutBand = {
+	maxRank: number,
+	currency: number,
+	cosmeticId: string?,
+}
+
+-- The period kinds LeaderboardService rolls over. The all-time board
+-- never pays (design-decisions.md Q1, applied 2026-10-02), so it is not
+-- a valid key.
+local PAYOUT_KINDS: { [string]: true } = { Daily = true, Weekly = true }
 
 -- ===== NPCBrainConfig: P3-6 ==============================================
 -- The utility AI's weights. A score is assembled as
@@ -1919,8 +1932,82 @@ local function checkLeaderboardConfig(leaderboard: LeaderboardConfig, issues: { 
 	if leaderboard.periodGraceSeconds <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.periodGraceSeconds", "must be positive")
 	end
-	if leaderboard.rewardTopN < 1 then
-		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.rewardTopN", "must be at least 1")
+	local payouts = leaderboard.payouts
+	if type(payouts) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.payouts", "must be a table of period kinds")
+	else
+		for kind, bands in payouts do
+			local path = "leaderboard.payouts." .. tostring(kind)
+			if not PAYOUT_KINDS[kind] then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					path,
+					"must be Daily or Weekly - the all-time board never pays (design-decisions.md Q1)"
+				)
+				continue
+			end
+			if type(bands) ~= "table" or #bands == 0 then
+				issue(issues, "GameConfig", "GameConfig.luau", path, "must list at least one band")
+				continue
+			end
+			local previousMax = 0
+			for i, band in bands do
+				local bandPath = string.format("%s[%d]", path, i)
+				local maxRank = band.maxRank
+				if type(maxRank) ~= "number" or maxRank ~= math.floor(maxRank) or maxRank <= previousMax then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath .. ".maxRank",
+						"must be a whole number above the previous band's maxRank"
+					)
+				elseif maxRank > leaderboard.topCount then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath .. ".maxRank",
+						string.format(
+							"must not exceed topCount (%d): only that many places are read",
+							leaderboard.topCount
+						)
+					)
+				else
+					previousMax = maxRank
+				end
+				local currency = band.currency
+				if type(currency) ~= "number" or currency < 0 or currency ~= math.floor(currency) then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath .. ".currency",
+						"must be a whole number, 0 or more"
+					)
+				end
+				if band.cosmeticId ~= nil and not isNonEmptyString(band.cosmeticId) then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath .. ".cosmeticId",
+						"must be a non-empty string"
+					)
+				end
+				if currency == 0 and band.cosmeticId == nil then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath,
+						"pays nothing - give it currency or a cosmeticId"
+					)
+				end
+			end
+		end
 	end
 
 	local budget = leaderboard.budget
@@ -2851,6 +2938,35 @@ function Validate.run(input: RegistryInput): { Issue }
 	checkDuplicateIds("PowerUp", input.powerUps :: any, issues)
 	checkDuplicateIds("Title", input.titles :: any, issues)
 	checkDuplicateIds("Cosmetic", (cosmetics or {}) :: any, issues)
+
+	-- A leaderboard band's limited item must be a real cosmetic. The
+	-- field can only hold a cosmetic id, which is what keeps leaderboard
+	-- prizes cosmetic only (Q8). Unchecked when no cosmetics registry is
+	-- passed at all, the same as a store product's Cosmetic grant.
+	local leaderboard = input.gameConfig.leaderboard
+	if cosmetics ~= nil and leaderboard ~= nil and type(leaderboard.payouts) == "table" then
+		local cosmeticIds: { [string]: true } = {}
+		for _, entry in cosmetics do
+			cosmeticIds[entry.def.id] = true
+		end
+		for kind, bands in leaderboard.payouts do
+			if type(bands) ~= "table" then
+				continue
+			end
+			for i, band in bands do
+				local cosmeticId = band.cosmeticId
+				if type(cosmeticId) == "string" and not cosmeticIds[cosmeticId] then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						string.format("leaderboard.payouts.%s[%d].cosmeticId", tostring(kind), i),
+						string.format("%q is not a cosmetic id", cosmeticId)
+					)
+				end
+			end
+		end
+	end
 
 	-- A training dummy can only throw something that lands on someone
 	-- else: an Aimed item, or an Area one dropped at its feet.

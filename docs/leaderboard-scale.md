@@ -238,7 +238,10 @@ snapshot write itself, not a separate lock:
 3. `UpdateAsync` returns what the transform returned. A server compares
    it against what it tried to write — if they match, it created the
    snapshot; if not, someone else did.
-4. **Only the creator fires the reward hook.**
+4. **Only the creator fires the reward hook.** LeaderboardPayoutService
+   receives it and queues each paid rank on the winner's profile with
+   `ProfileStore:MessageAsync` (two `UpdateAsync` calls on the player
+   store per payout, so at most 20 per daily or weekly rollover).
 
 There is no window, because the read and the write are one operation. A
 separate MemoryStore lock would also work, but it would be a second

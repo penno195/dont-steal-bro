@@ -51,6 +51,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local LeaderboardLogic = require(ServerScriptService.Server.LeaderboardLogic)
 local PeriodKeys = require(ServerScriptService.Server.PeriodKeys)
+local LeaderboardPayoutLogic = require(ServerScriptService.Server.LeaderboardPayoutLogic)
 
 local config = GameConfig.leaderboard
 
@@ -67,11 +68,11 @@ local pollThread: thread? = nil
 -- winners are still worth showing and still owe a reward.
 local snapshotStore: DataStore? = nil
 
--- P4-4's reward hook. A no-op until something claims it, because what a
--- period win is WORTH is a progression decision (design-decisions.md
--- Q1's still-unbuilt RewardTables), not a leaderboard one. Fired only
--- by the server that won the snapshot race, so exactly once per period
--- across the whole universe.
+-- P4-4's reward hook. LeaderboardPayoutService claims it at init
+-- (rewards-roadmap.md step 4); this logging default only runs if
+-- nothing has. What a placement is WORTH is an economy decision, so it
+-- lives there, not here. Fired only by the server that won the
+-- snapshot race, so exactly once per period across the whole universe.
 local periodRewardHandler: (kind: string, periodKey: string, rank: number, userId: number, streak: number) -> () = function(
 	kind: string,
 	periodKey: string,
@@ -534,23 +535,26 @@ local function processRollover(kind: string, finishedKey: string)
 		return
 	end
 
+	-- How many places this kind pays: the last payout band's maxRank, or
+	-- 0 for a kind with no bands.
+	local paidPlaces = LeaderboardPayoutLogic.paidPlaces(config.payouts[kind])
 	print(
 		string.format(
 			"LeaderboardService: froze %s %s with %d entries - awarding top %d",
 			kind,
 			finishedKey,
 			#payload.entries,
-			math.min(config.rewardTopN, #payload.entries)
+			math.min(paidPlaces, #payload.entries)
 		)
 	)
 
 	-- The reward hook. Injected rather than implemented here, because
-	-- what a period win is WORTH is a progression/economy decision
-	-- (design-decisions.md Q1's still-unbuilt RewardTables), not a
-	-- leaderboard one. Fired only by the snapshot's creator, so it is
-	-- fired exactly once across the whole universe.
+	-- what a placement is WORTH is an economy decision
+	-- (LeaderboardPayoutService), not a leaderboard one. Fired only by
+	-- the snapshot's creator, so it is fired exactly once across the
+	-- whole universe.
 	for rank, entry in payload.entries do
-		if rank > config.rewardTopN then
+		if rank > paidPlaces then
 			break
 		end
 		-- Message captured through the handler's upvalue rather than
@@ -808,9 +812,9 @@ local LeaderboardService: Loader.Service = {
 
 	-- ===== P4-4 =============================================
 
-	-- The seam a progression/economy system claims to decide what a
-	-- period win is worth. Replaces the logging default; called once
-	-- per rewarded rank, only on the server that won the snapshot race.
+	-- The seam LeaderboardPayoutService claims to pay a placement.
+	-- Replaces the logging default; called once per paid rank, only on
+	-- the server that won the snapshot race.
 	setPeriodRewardHandler = function(handler: (
 		kind: string,
 		periodKey: string,

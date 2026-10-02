@@ -126,7 +126,10 @@ local function validGameConfig(): Validate.GameConfig
 			budget = { perWindow = 60, windowSeconds = 60, softCeiling = 0.7 },
 			snapshotStoreName = "TestSnapshots",
 			periodGraceSeconds = 3600,
-			rewardTopN = 10,
+			payouts = {
+				Daily = { { maxRank = 1, currency = 500 }, { maxRank = 10, currency = 100 } },
+				Weekly = { { maxRank = 3, currency = 1000 } },
+			},
 		},
 		store = {
 			purchaseIdCacheSize = 100,
@@ -574,6 +577,63 @@ TestRunner.describe("Validate.checkTitle", function()
 		title.colorHex = "teal"
 		Validate.checkTitle("T.luau", title, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (leaderboard payouts, rewards step 4)", function()
+	local function issuesWith(payouts: any): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		config.leaderboard.payouts = payouts
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the fixture's bands", function()
+		TestRunner.expect(#issuesWith(validGameConfig().leaderboard.payouts)):toBe(0)
+	end)
+
+	TestRunner.it("refuses an all-time payout: that board never pays", function()
+		TestRunner.expect(#issuesWith({ AllTime = { { maxRank = 1, currency = 100 } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses bands out of order or past topCount", function()
+		local unordered = { Daily = { { maxRank = 3, currency = 100 }, { maxRank = 3, currency = 50 } } }
+		TestRunner.expect(#issuesWith(unordered) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 101, currency = 100 } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an empty kind, negative currency and a band that pays nothing", function()
+		TestRunner.expect(#issuesWith({ Daily = {} }) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 1, currency = -5 } } }) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 1, currency = 0 } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("accepts a cosmetic-only band", function()
+		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 1, currency = 0, cosmeticId = "x" } } })):toBe(0)
+	end)
+end)
+
+TestRunner.describe("Validate.run - leaderboard payout cosmetics (rewards step 4)", function()
+	local function runWithBandCosmetic(cosmeticId: string): { Validate.Issue }
+		local config = validGameConfig()
+		config.leaderboard.payouts = { Weekly = { { maxRank = 1, currency = 2000, cosmeticId = cosmeticId } } }
+		return Validate.run({
+			gameConfig = config,
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+			cosmetics = { { fileName = "Skin.luau", def = validCosmetic("skin-weekly", "Skin") } },
+		})
+	end
+
+	TestRunner.it("accepts a registered cosmetic", function()
+		TestRunner.expect(#runWithBandCosmetic("skin-weekly")):toBe(0)
+	end)
+
+	TestRunner.it("refuses an id no cosmetic has", function()
+		TestRunner.expect(#runWithBandCosmetic("blind") > 0):toBeTruthy()
 	end)
 end)
 

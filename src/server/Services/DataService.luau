@@ -62,6 +62,17 @@ local pendingRoundOutcomeResolvers: { [Player]: () -> () } = {}
 -- happens to push again.
 local loadedCallbacks: { (Player) -> () } = {}
 
+-- Rewards-roadmap step 4: routes a ProfileStore message to its handler.
+-- Declared here and defined in the "profile messages" section below,
+-- because loadProfile hooks it up but it needs writable().
+local handleProfileMessage: (player: Player, raw: any, processed: () -> ()) -> ()
+
+-- Messages whose type has no route yet. A profile can load before the
+-- routing service's init runs, and ProfileStore won't offer a message
+-- again until the next session, so they wait here and are replayed when
+-- the route is registered.
+local unroutedMessages: { { player: Player, raw: any, processed: () -> () } } = {}
+
 ProfileStoreLib.OnError:Connect(function(message: string, storeName: string, profileKey: string)
 	warn(string.format("DataService: ProfileStore error on %s/%s: %s", storeName, profileKey, message))
 end)
@@ -151,6 +162,14 @@ local function loadProfile(player: Player)
 	for _, callback in loadedCallbacks do
 		task.spawn(callback, player)
 	end
+
+	-- After profiles[player] is set, so a message's grants land through
+	-- the same writable() check every setter uses. ProfileStore replays
+	-- every unprocessed message to this, including ones sent while the
+	-- player was offline.
+	profile:MessageHandler(function(message: any, processed: () -> ())
+		handleProfileMessage(player, message, processed)
+	end)
 end
 
 -- Registers `callback` for every future load, and runs it now for any
@@ -173,6 +192,12 @@ local function releaseProfile(player: Player)
 	if ran then
 		profiles[player] = nil
 		pendingRoundOutcomeResolvers[player] = nil
+		-- Still unprocessed in the profile, so the next session gets it.
+		for i = #unroutedMessages, 1, -1 do
+			if unroutedMessages[i].player == player then
+				table.remove(unroutedMessages, i)
+			end
+		end
 	end
 end
 
@@ -435,6 +460,99 @@ local function claimReceiptAccess(claimantName: string): (player: Player) -> Rec
 	return receiptHandleFor
 end
 
+-- ===== profile messages (rewards-roadmap.md step 4) ======================
+--
+-- Some grants are owed to a player who may be offline: a leaderboard
+-- payout is decided when a period ends, on whichever server noticed.
+-- ProfileStore:MessageAsync is the package's own answer (its docs:
+-- "gifting paid items to in-game friends that may or may not be
+-- online"). The message waits in the profile until a session reads it.
+--
+-- A handler only RESOLVES a message to grants. This file applies them,
+-- through the same StoreLogic.applyGrants path as purchases and wins,
+-- and marks the message processed in the same synchronous step. Both
+-- the grants and the processed mark save with Profile.Data, so a crash
+-- can't pay a message twice or mark it read without paying it.
+
+export type ProfileMessageRoute = {
+	-- The grants a message pays, or nil to drop it as malformed.
+	resolve: (player: Player, raw: any) -> { StoreLogic.Grant }?,
+	-- Called after the grants are applied, with applyGrants' change
+	-- lines, for audit logging and pushing fresh state to the client.
+	applied: (player: Player, raw: any, changes: { string }) -> (),
+}
+
+local messageRoutes: { [string]: ProfileMessageRoute } = {}
+
+function handleProfileMessage(player: Player, raw: any, processed: () -> ())
+	local messageType = if type(raw) == "table" then raw.type else nil
+	local route = if type(messageType) == "string" then messageRoutes[messageType] else nil
+	if route == nil then
+		table.insert(unroutedMessages, { player = player, raw = raw, processed = processed })
+		return
+	end
+
+	local grants = route.resolve(player, raw)
+	if grants == nil then
+		warn(string.format("DataService: dropped a malformed %s message for %s", tostring(messageType), player.Name))
+		processed()
+		return
+	end
+
+	-- Read-only mode or a released profile: leave it unprocessed, so
+	-- ProfileStore offers it again next session rather than losing it.
+	local d = writable(player)
+	if d == nil then
+		return
+	end
+
+	local after, changes = StoreLogic.applyGrants({
+		currency = d.currency,
+		powerUpStock = d.powerUpStock,
+		ownedCosmetics = d.ownedCosmetics,
+		unlockedTitles = d.unlockedTitles,
+	}, grants)
+	d.currency = after.currency
+	d.powerUpStock = after.powerUpStock
+	d.ownedCosmetics = after.ownedCosmetics
+	d.unlockedTitles = after.unlockedTitles
+	processed()
+
+	task.spawn(route.applied, player, raw, changes)
+end
+
+-- One route per message type, claimed once, like the writers above.
+local function routeProfileMessages(messageType: string, route: ProfileMessageRoute)
+	assert(
+		messageRoutes[messageType] == nil,
+		string.format("DataService.routeProfileMessages: %q already has a route", messageType)
+	)
+	messageRoutes[messageType] = route
+
+	local waiting = unroutedMessages
+	unroutedMessages = {}
+	for _, entry in waiting do
+		if entry.player.Parent == Players and profiles[entry.player] ~= nil then
+			handleProfileMessage(entry.player, entry.raw, entry.processed)
+		end
+	end
+end
+
+-- Queues a message on a profile whether or not its player is online.
+-- Yields: ProfileStore retries with backoff until it lands, and gives up
+-- only when the server is shutting down. Sent even in read-only mode,
+-- because the message only waits; applying it is what writable() gates.
+local function sendProfileMessage(userId: number, message: { [string]: any }): boolean
+	local ok, sent = pcall(function()
+		return PlayerStore:MessageAsync(tostring(userId), message)
+	end)
+	if not ok then
+		warn(string.format("DataService: message to user %d errored - %s", userId, tostring(sent)))
+		return false
+	end
+	return sent == true
+end
+
 -- ===== store-owned profile fields (P4-5) =================================
 -- Ordinary typed accessors, same contract as every other one in this
 -- file: collections are copied out, never handed back by reference.
@@ -594,6 +712,10 @@ local DataService: Loader.Service = {
 	-- StoreService, because ProcessReceipt needs durability facts no
 	-- accessor can express.
 	claimReceiptAccess = claimReceiptAccess,
+
+	-- Rewards-roadmap step 4: grants owed to a player who may be offline.
+	routeProfileMessages = routeProfileMessages,
+	sendProfileMessage = sendProfileMessage,
 	getPowerUpStock = getPowerUpStock,
 	getLoadout = getLoadout,
 	setLoadoutAndStock = setLoadoutAndStock,
