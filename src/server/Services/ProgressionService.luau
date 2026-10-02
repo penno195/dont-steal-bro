@@ -481,6 +481,11 @@ local function sendRecaps()
 			bestStreakAfter = entry.after.bestStreak,
 			reward = rewardPayload(entry),
 		})
+		-- The win's coins, drop and season progress, now that Results is
+		-- on screen. Not from the write itself, for the reason RoundRecap
+		-- isn't: it would land before DecisionReveal.
+		local StoreService = Loader.get("StoreService") :: any
+		StoreService.pushState(player)
 	end
 end
 

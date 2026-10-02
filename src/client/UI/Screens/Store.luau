@@ -26,6 +26,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local StoreScreenLogic = require(script.Parent.Parent.StoreScreenLogic)
+local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
 local MenuShell = require(script.Parent.MenuShell)
@@ -57,11 +58,15 @@ export type Store = {
 	dismiss: () -> (),
 	-- Equip (or, with equip = false, take off) a cosmetic this player owns.
 	equip: (cosmeticId: string, equip: boolean) -> (),
+	-- The Season tab: the live season's track as rows, nil when none is
+	-- running, and a season id's pass key from config.
+	seasonView: () -> SeasonTrackLogic.View?,
+	passKeyOf: (seasonId: string) -> string?,
 	close: () -> (),
 }
 
 local CATEGORY_TAB: { [string]: { label: string, icon: string } } = {
-	Passes = { label = "Passes", icon = "star" },
+	Season = { label = "Season", icon = "star" },
 	Bundles = { label = "Bundles", icon = "gem" },
 	PowerUps = { label = "Power", icon = "bolt" },
 	Cosmetics = { label = "Style", icon = "flame" },
@@ -390,6 +395,163 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?): Instance
 	})
 end
 
+-- ===== the Season tab (rewards-roadmap.md step 5b) ==========================
+
+local ROW_H = 36
+local WINS_W = 64
+local STATUS_W = 56
+
+local ROW_STATUS: { [string]: { text: string, color: string } } = {
+	Claimed = { text = "✓ Got it", color = "success" },
+	Next = { text = "Next", color = "brand" },
+	Locked = { text = "Locked", color = "inkMuted" },
+}
+
+local function trackRow(row: () -> SeasonTrackLogic.Row, index: number): Instance
+	local status = derive(function()
+		return ROW_STATUS[row().status]
+	end)
+	return create("Frame")({
+		Name = "Row" .. index,
+		LayoutOrder = index,
+		Size = UDim2.new(1, 0, 0, ROW_H),
+		BackgroundColor3 = Theme.color.surface,
+		BackgroundTransparency = function()
+			return if row().status == "Next" then 0 else 1
+		end,
+		Base.corner(Theme.radius.sm),
+		Base.text("caption", {
+			Name = "Wins",
+			Position = UDim2.fromOffset(Theme.spacing.sm, 0),
+			Size = UDim2.new(0, WINS_W, 1, 0),
+			Text = function()
+				local w = row().wins
+				return if w == 0 then "Instant" else string.format("%d wins", w)
+			end,
+			TextColor3 = Theme.color.inkMuted,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+		Base.text("body", {
+			Name = "Item",
+			Position = UDim2.fromOffset(Theme.spacing.sm + WINS_W, 0),
+			Size = UDim2.new(1, -(2 * Theme.spacing.sm + WINS_W + STATUS_W), 1, 0),
+			Text = function()
+				return row().text
+			end,
+			TextColor3 = function()
+				return if row().status == "Locked" then Theme.color.inkMuted else Theme.color.ink
+			end,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+		-- Status is a word as well as a colour.
+		Base.text("caption", {
+			Name = "Status",
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -Theme.spacing.sm, 0, 0),
+			Size = UDim2.new(0, STATUS_W, 1, 0),
+			Text = function()
+				return status().text
+			end,
+			TextColor3 = function()
+				return Theme.color[status().color]
+			end,
+			TextXAlignment = Enum.TextXAlignment.Right,
+		}),
+	})
+end
+
+local function trackSection(trackView: () -> SeasonTrackLogic.TrackView, order: number): Instance
+	local rows = derive(function()
+		return trackView().rows
+	end)
+	return create("Frame")({
+		Name = "Track" .. order,
+		LayoutOrder = order,
+		Size = UDim2.fromOffset(MenuShell.INNER, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundTransparency = 1,
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Vertical,
+			Padding = UDim.new(0, Theme.spacing.xs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		Base.text("label", {
+			Name = "Title",
+			LayoutOrder = 0,
+			Size = UDim2.new(1, 0, 0, Theme.type.label.size + Theme.spacing.xs),
+			Text = function()
+				local t = trackView()
+				local nextText = if t.nextAt ~= nil and not t.locked
+					then string.format(" · next at %d", t.nextAt)
+					else ""
+				return string.format("%s · %d wins%s", t.title, t.wins, nextText)
+			end,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+		indexes(rows, trackRow) :: any,
+	})
+end
+
+local function seasonTrack(store: Store, height: () -> number): Instance
+	local hasSeason = derive(function()
+		return store.seasonView() ~= nil
+	end)
+	-- Only read while hasSeason is true (the switch below), so the cast
+	-- never hides a nil.
+	local view = function(): SeasonTrackLogic.View
+		return store.seasonView() :: SeasonTrackLogic.View
+	end
+
+	return create("Frame")({
+		Name = "Season",
+		Position = UDim2.fromOffset(0, TAB_H + Theme.spacing.sm),
+		Size = function()
+			return UDim2.fromOffset(MenuShell.INNER, height())
+		end,
+		BackgroundTransparency = 1,
+		switch(hasSeason)({
+			[true] = function()
+				return create("ScrollingFrame")({
+					Name = "Track",
+					Size = UDim2.fromScale(1, 1),
+					BackgroundTransparency = 1,
+					BorderSizePixel = 0,
+					ScrollBarThickness = 4,
+					ScrollingDirection = Enum.ScrollingDirection.Y,
+					AutomaticCanvasSize = Enum.AutomaticSize.Y,
+					CanvasSize = UDim2.new(),
+					create("UIListLayout")({
+						FillDirection = Enum.FillDirection.Vertical,
+						Padding = UDim.new(0, Theme.spacing.md),
+						SortOrder = Enum.SortOrder.LayoutOrder,
+					}),
+					Base.text("title", {
+						Name = "Name",
+						LayoutOrder = 0,
+						Size = UDim2.new(1, 0, 0, Theme.type.title.size + Theme.spacing.xs),
+						Text = function()
+							return string.format("%s · %s", view().name, view().timeLeft)
+						end,
+						TextTruncate = Enum.TextTruncate.AtEnd,
+						TextXAlignment = Enum.TextXAlignment.Left,
+					}),
+					trackSection(function()
+						return view().premium
+					end, 1),
+					trackSection(function()
+						return view().free
+					end, 2),
+				})
+			end,
+			[false] = function()
+				return MenuShell.message("No season running", "The next season's track shows up here.")
+			end,
+		}) :: any,
+	})
+end
+
 local function body(store: Store, height: () -> number): { Instance }
 	local tabIndex = source(1)
 	-- Cast: derive widens a string-literal union back to `string`.
@@ -397,7 +559,13 @@ local function body(store: Store, height: () -> number): { Instance }
 		return StoreScreenLogic.CATEGORIES[tabIndex()]
 	end) :: () -> StoreScreenLogic.Category
 	local itemsHere = derive(function()
-		return StoreScreenLogic.itemsIn(store.items, category())
+		local s = store.state()
+		local season = if s then s.season else nil
+		local livePassKey = if season then store.passKeyOf(season.id) else nil
+		return StoreScreenLogic.itemsIn(store.items, category(), livePassKey)
+	end)
+	local onSeason = derive(function()
+		return category() == "Season"
 	end)
 	local selectedKey = source(nil :: string?)
 	-- A tab switch selects that tab's first item, so the panel is never
@@ -470,7 +638,14 @@ local function body(store: Store, height: () -> number): { Instance }
 		switch(loaded)({
 			[true] = function()
 				return {
-					grid(),
+					-- The Season tab shows the track where the other tabs
+					-- show their grid; the pass sits in the panel below.
+					switch(onSeason)({
+						[true] = function()
+							return seasonTrack(store, gridHeight)
+						end,
+						[false] = grid,
+					}) :: any,
 					panel(store, selected),
 				} :: any
 			end,

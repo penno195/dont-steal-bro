@@ -115,11 +115,22 @@ and ask the user (CLAUDE.md).
   - Season 1 ships disabled, because its cosmetics have no assets. Not
     yet Studio-verified: to test, enable it with placeholder cosmetics
     enabled, or move its items to coins and power-ups.
+- [x] **5b. Track UI.**
+  - The store's Passes tab is now **Season**, the first tab. It shows the
+    live season's name and time left, then the premium and free tracks
+    as rows (wins needed, item, and Got it / Next / Locked). The pass
+    sits in the panel below. Only the live season's pass is offered.
+  - StoreState carries `season`: the live season's id, seconds left, and
+    this player's own counts. It's targeted, so Q7 holds. The client
+    reads track items from `Config/Seasons` by id
+    (`UI/SeasonTrackLogic.luau`, tested in `tests/MenuScreens.spec.luau`).
+  - ProgressionService re-pushes StoreState when Results opens, so a
+    win's coins and track progress show without a rejoin. It's never
+    sent before the reveal.
+  - Not yet seen in Studio. Season 1 is disabled, so the tab says "No
+    season running" until a season is enabled.
 
 ## Next
-- [ ] **5b. Track UI.** The store lists the season pass, but nothing
-  shows a track or a player's progress on it. StoreState needs the
-  player's own season progress (private, so Q7 holds).
 - [ ] **6. Store audit.**
   - Currency buys specific named items at fixed prices.
   - Check that nothing bought is random, for Robux or for currency.

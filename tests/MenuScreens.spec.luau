@@ -9,6 +9,7 @@ local Net = require("../src/shared/Net")
 local ProgressionLogic = require("../src/server/ProgressionLogic")
 local ResultsLogic = require("../src/client/UI/ResultsLogic")
 local SettingsLogic = require("../src/shared/SettingsLogic")
+local SeasonTrackLogic = require("../src/client/UI/SeasonTrackLogic")
 local StoreScreenLogic = require("../src/client/UI/StoreScreenLogic")
 local TestRunner = require("./TestRunner")
 
@@ -142,7 +143,7 @@ local bundle = item("bundle", "DeveloperProduct", {
 
 describe("StoreScreenLogic catalogue", function()
 	it("files items by what they grant", function()
-		expect(StoreScreenLogic.categoryOf(pass)):toBe("Passes")
+		expect(StoreScreenLogic.categoryOf(pass)):toBe("Season")
 		expect(StoreScreenLogic.categoryOf(coins)):toBe("Currency")
 		expect(StoreScreenLogic.categoryOf(bundle)):toBe("Bundles")
 	end)
@@ -442,5 +443,91 @@ describe("ResultsLogic.placementText", function()
 		expect(ResultsLogic.placementText(13, 20)):toBe("13th of 20")
 		expect(ResultsLogic.placementText(21, 30)):toBe("21st of 30")
 		expect(ResultsLogic.placementText(nil, 6)):toBe("Unplaced")
+	end)
+end)
+
+-- ===== the store's Season tab (rewards step 5b) =============================
+
+describe("StoreScreenLogic.itemsIn (Season tab)", function()
+	local s1 = item("s1-pass", "GamePass", {})
+	local s2 = item("s2-pass", "GamePass", {})
+
+	it("offers only the live season's pass", function()
+		local here = StoreScreenLogic.itemsIn({ s1, s2 }, "Season", "s2-pass")
+		expect(#here):toBe(1)
+		expect(here[1].key):toBe("s2-pass")
+	end)
+
+	it("offers no pass when no season is running", function()
+		expect(#StoreScreenLogic.itemsIn({ s1, s2 }, "Season", nil)):toBe(0)
+	end)
+end)
+
+describe("SeasonTrackLogic", function()
+	local def: SeasonTrackLogic.SeasonDef = {
+		id = "s1",
+		displayName = "Season 1",
+		passKey = "s1-pass",
+		free = {
+			{ wins = 3, grant = { kind = "Currency", amount = 100 } },
+			{ wins = 10, grant = { kind = "Currency", amount = 250 } },
+		},
+		premium = {
+			{ wins = 0, grant = { kind = "Cosmetic", cosmeticId = "trail" } },
+			{ wins = 5, grant = { kind = "Currency", amount = 250 } },
+		},
+	}
+	local function text(grant: SeasonTrackLogic.Grant): string
+		return if grant.kind == "Currency" then string.format("%d coins", grant.amount or 0) else grant.cosmeticId or ""
+	end
+	local function state(overrides: { [string]: any }): SeasonTrackLogic.SeasonState
+		local s: { [string]: any } = {
+			id = "s1",
+			secondsLeft = 10 * 86400,
+			passSeen = false,
+			freeWins = 4,
+			premiumWins = 0,
+			freePaid = 1,
+			premiumPaid = 0,
+		}
+		for k, v in overrides do
+			s[k] = v
+		end
+		return s :: any
+	end
+
+	it("marks claimed rows, then the next one, then locked", function()
+		local view = SeasonTrackLogic.view(def, state({}), text)
+		expect(view.free.rows[1].status):toBe("Claimed")
+		expect(view.free.rows[2].status):toBe("Next")
+		expect(view.free.nextAt):toBe(10)
+		expect(view.free.rows[1].text):toBe("100 coins")
+	end)
+
+	it("locks the whole premium track without the pass", function()
+		local view = SeasonTrackLogic.view(def, state({}), text)
+		expect(view.premium.locked):toBe(true)
+		expect(view.premium.rows[1].status):toBe("Locked")
+		expect(view.premium.title):toBe("Premium track · needs the pass")
+	end)
+
+	it("opens the premium track once the pass is seen", function()
+		local view = SeasonTrackLogic.view(def, state({ passSeen = true, premiumPaid = 1, premiumWins = 2 }), text)
+		expect(view.premium.locked):toBe(false)
+		expect(view.premium.rows[1].status):toBe("Claimed")
+		expect(view.premium.rows[2].status):toBe("Next")
+	end)
+
+	it("has no next item once a track is fully claimed", function()
+		local view = SeasonTrackLogic.view(def, state({ freeWins = 12, freePaid = 2 }), text)
+		expect(view.free.nextAt):toBe(nil)
+		expect(view.free.rows[2].status):toBe("Claimed")
+	end)
+
+	it("words the time left", function()
+		expect(SeasonTrackLogic.timeLeftText(10 * 86400)):toBe("10 days left")
+		expect(SeasonTrackLogic.timeLeftText(86400 + 5)):toBe("1 day left")
+		expect(SeasonTrackLogic.timeLeftText(5 * 3600)):toBe("5h left")
+		expect(SeasonTrackLogic.timeLeftText(120)):toBe("Ends soon")
 	end)
 end)

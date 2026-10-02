@@ -644,6 +644,15 @@ local function getCurrency(player: Player): number
 	return if d then d.currency else 0
 end
 
+-- One season's progress, or nil when the player hasn't been seen during it.
+-- A copy: callers display it, and only the progression writer and
+-- StoreService's pass sync write it.
+local function getSeasonProgress(player: Player, seasonId: string): ProfileLogic.SeasonProgress?
+	local d = data(player)
+	local progress = if d then d.seasonProgress[seasonId] else nil
+	return if progress then table.clone(progress) else nil
+end
+
 local function addCurrency(player: Player, amount: number)
 	local d = writable(player)
 	if d ~= nil then
@@ -749,6 +758,7 @@ local DataService: Loader.Service = {
 	getEquipped = getEquipped,
 	setEquippedCosmetic = setEquippedCosmetic,
 	getCurrency = getCurrency,
+	getSeasonProgress = getSeasonProgress,
 	addCurrency = addCurrency,
 	getStats = getStats,
 	recordRoundStat = recordRoundStat,

@@ -34,11 +34,13 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local StoreConfig = require(ReplicatedStorage.Shared.Config.Store)
+local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local BoardLogic = require(script.Parent.Parent.UI.BoardLogic)
 local C = require(script.Parent.Parent.UI.Components)
 local ResultsLogic = require(script.Parent.Parent.UI.ResultsLogic)
 local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
+local SeasonTrackLogic = require(script.Parent.Parent.UI.SeasonTrackLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local LeaderboardsScreen = require(script.Parent.Parent.UI.Screens.Leaderboards)
 local DropNames = require(script.Parent.Parent.UI.DropNames)
@@ -88,6 +90,11 @@ end
 local titleNames: { [string]: string } = {}
 for _, entry in Titles do
 	titleNames[entry.def.id] = entry.def.displayName
+end
+
+local seasonDefs: { [string]: SeasonTrackLogic.SeasonDef } = {}
+for _, entry in Seasons do
+	seasonDefs[entry.def.id] = entry.def :: any
 end
 
 local function rarityOf(grant: StoreScreenLogic.Grant): string?
@@ -199,6 +206,19 @@ local function open(menu: Menu)
 				end
 			end,
 			close = closeMenu,
+			seasonView = function(): SeasonTrackLogic.View?
+				local s = storeState()
+				local season = if s then s.season else nil
+				local def = if season then seasonDefs[season.id] else nil
+				if season == nil or def == nil then
+					return nil
+				end
+				return SeasonTrackLogic.view(def, season :: any, grantText :: any)
+			end,
+			passKeyOf = function(seasonId: string): string?
+				local def = seasonDefs[seasonId]
+				return if def then def.passKey else nil
+			end,
 		})
 	elseif menu == "Leaderboards" then
 		unmountMenu =

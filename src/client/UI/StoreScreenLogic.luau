@@ -44,13 +44,17 @@ export type StoreState = {
 	equipped: { [string]: string },
 	ownedPasses: { string },
 	loadoutSlots: number,
+	-- The live season and this player's progress on it, or nil when no
+	-- season is running. SeasonTrackLogic.SeasonState's shape; loose here
+	-- because this module has no requires.
+	season: { [string]: any }?,
 }
 
-export type Category = "Passes" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"
+export type Category = "Season" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"
 
--- Tab order, left to right. Passes first: a permanent purchase is the
--- one a player most wants to find, and the one least worth burying.
-StoreScreenLogic.CATEGORIES = table.freeze({ "Passes", "Bundles", "PowerUps", "Cosmetics", "Currency" } :: { Category })
+-- Tab order, left to right. Season first: the pass is the purchase a
+-- player most wants to find, and its track is where wins pay off.
+StoreScreenLogic.CATEGORIES = table.freeze({ "Season", "Bundles", "PowerUps", "Cosmetics", "Currency" } :: { Category })
 
 local KIND_CATEGORY: { [string]: Category } = {
 	PowerUpStock = "PowerUps",
@@ -62,10 +66,11 @@ local KIND_CATEGORY: { [string]: Category } = {
 -- Derived from what the item GRANTS rather than a new config field, so
 -- adding a product stays one file (Ground Rule 2) and a product can't be
 -- filed under a tab that disagrees with its contents. A game pass is
--- always Passes; anything granting two different kinds is a bundle.
+-- always Season (every pass is a season pass, rewards step 5); anything
+-- granting two different kinds is a bundle.
 function StoreScreenLogic.categoryOf(item: Item): Category
 	if item.kind == "GamePass" then
-		return "Passes"
+		return "Season"
 	end
 	local found: Category? = nil
 	for _, grant in item.grants do
@@ -188,10 +193,13 @@ end
 
 -- One tab's items, sorted by config sortOrder then key (so two items
 -- with the same order still land in a stable place across refreshes).
-function StoreScreenLogic.itemsIn(items: { Item }, category: Category): { Item }
+-- `livePassKey` is the running season's pass: the Season tab offers only
+-- that one, since an old season's pass would unlock nothing (and the
+-- server refuses to sell it). nil = no season running, nothing to offer.
+function StoreScreenLogic.itemsIn(items: { Item }, category: Category, livePassKey: string?): { Item }
 	local out = {}
 	for _, item in items do
-		if StoreScreenLogic.categoryOf(item) == category then
+		if StoreScreenLogic.categoryOf(item) == category and (category ~= "Season" or item.key == livePassKey) then
 			table.insert(out, item)
 		end
 	end

@@ -144,6 +144,40 @@ end
 
 -- ===== replication ========================================================
 
+-- The season running now, or nil. Seasons don't overlap (Validate), so
+-- there's at most one.
+local function liveSeason(nowUtc: number): SeasonLogic.Season?
+	for _, entry in Seasons do
+		local season = SeasonLogic.fromDef(entry.def :: any)
+		if season ~= nil and SeasonLogic.isLive(season, nowUtc) then
+			return season
+		end
+	end
+	return nil
+end
+
+-- The store's Season tab (rewards-roadmap.md step 5b): the live season
+-- and this player's own progress on it. The tab reads the track items
+-- from config by `id`. Time left is sent as a duration, so a client
+-- clock that's off doesn't move the end.
+local function seasonState(player: Player, DataService: any): { [string]: any }?
+	local nowUtc = os.time()
+	local season = liveSeason(nowUtc)
+	if season == nil then
+		return nil
+	end
+	local progress = DataService.getSeasonProgress(player, season.id)
+	return {
+		id = season.id,
+		secondsLeft = season.endsAt - nowUtc,
+		passSeen = progress ~= nil and progress.passSeenAt ~= nil,
+		freeWins = if progress then progress.freeWins else 0,
+		premiumWins = if progress then progress.premiumWins else 0,
+		freePaid = if progress then progress.freePaid else 0,
+		premiumPaid = if progress then progress.premiumPaid else 0,
+	}
+end
+
 -- A player's own store state, to that player only. Never
 -- fireAllClients: this is a private inventory (see Net.luau's own note
 -- on StoreState).
@@ -173,6 +207,7 @@ local function pushState(player: Player)
 		equipped = DataService.getEquipped(player),
 		ownedPasses = ownedPasses,
 		loadoutSlots = GameConfig.store.loadoutSlots,
+		season = seasonState(player, DataService),
 	})
 end
 
