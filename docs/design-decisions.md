@@ -87,6 +87,15 @@ drops should be rarer and worth more.
 
 All amounts and odds start as PLACEHOLDER, to be tuned in playtest.
 
+*Applied (2026-10-02, user decision):* the 21 rungs' names. Existing
+titles keep their ids and move to: Menace 16, Untouchable 35, Final
+Boss 40 (Glow), Actual Villain 45 (Pulse), Touch Grass 50 (Rainbow).
+New: Back To Back 2, Not A Fluke 4, Suspicious 6, Reported 7, Under
+Review 8, Main Character 9, Sweaty 12, Tryhard 14, Lobby Ender 18,
+Twenty Deep 20, Allegedly Legit 30. Unlocks stay append-only, so
+anything already unlocked is kept. NPC bots now skip the top 6 rungs
+(25 and up) rather than the top 3.
+
 ## 2. Round timer expires with <3 finished
 
 **Decision:** Rank finishers by task-completion percentage (tiebreak:

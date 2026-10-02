@@ -501,11 +501,12 @@ local GameConfig: Validate.GameConfig = {
 
 	-- P4-2's NPC title distribution. PLACEHOLDER, both: bots wear a
 	-- title so a filled lobby doesn't look obviously fake, drawn from
-	-- the lower rungs only. 3 top rungs excluded - a bot wearing the
+	-- the lower rungs only. The top 6 of the 21 rungs (25 and up) are
+	-- excluded, so a bot tops out at Twenty Deep - a bot wearing the
 	-- rarest title in the game is MORE obviously fake than a bot
 	-- wearing nothing.
 	npcTitleNoneChance = 0.35,
-	npcTitleTopRungsExcluded = 3,
+	npcTitleTopRungsExcluded = 6,
 
 	-- P4-7: analytics instrumentation. All PLACEHOLDER - no analytics
 	-- schema exists yet. The disabled flag is a hard kill switch for when

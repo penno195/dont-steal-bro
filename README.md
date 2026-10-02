@@ -99,8 +99,8 @@ is a loss too", so a 4th-place finisher kept their streak indefinitely;
 and threat-model.md §8's NPC-seat streak-credit threshold now actually
 gates a win.
 
-P4-2 added the title ladder — ten rungs from a first win ("Got One") to a
-streak nobody should have ("Touch Grass", 120), one config file each in
+P4-2 added the title ladder, since retuned to 21 rungs, from a first win ("Got One") to a
+streak nobody should have ("Touch Grass", 50), one config file each in
 `src/shared/Config/Titles/`. Permanence is structural rather than
 promised: unlocking is a function of `bestStreak` alone, `bestStreak` is
 never lowered, the stored list is append-only, and no module exposes a
