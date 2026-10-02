@@ -373,10 +373,13 @@ export type CosmeticDef = {
 -- `assetId = 0` means "not created on the Roblox side yet." That's a
 -- legal state for a DISABLED entry and an error for an enabled one -
 -- exactly the stance MapDef.enabled takes against ServerStorage.Maps.
-export type StoreProductKind = "GamePass" | "DeveloperProduct"
+-- CoinOffer (rewards step 6): bought with earned coins, not Robux. No
+-- Roblox asset (assetId and robuxPrice are 0), priced by `coinPrice`, and
+-- it may only grant power-up stock (user decision, 2026-10-02).
+export type StoreProductKind = "GamePass" | "DeveloperProduct" | "CoinOffer"
 export type StoreGrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title"
 
-local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct" }
+local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct", "CoinOffer" }
 local STORE_GRANT_KINDS: { StoreGrantKind } = { "Currency", "PowerUpStock", "Cosmetic", "Title" }
 
 -- A single thing a purchase hands over. One flat type with optional
@@ -400,6 +403,7 @@ export type StoreItemDef = {
 	displayName: string,
 	description: string,
 	robuxPrice: number, -- DISPLAY ONLY - see checkStoreItem for why a grant never reads this
+	coinPrice: number?, -- CoinOffer only: what it costs in coins, deducted server-side
 	sortOrder: number,
 	-- A DeveloperProduct grants at least one thing. A GamePass grants
 	-- nothing here: every pass is a season pass, and what it unlocks is
@@ -1486,7 +1490,9 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 			"assetId",
 			string.format("expected a non-negative integer, got %s", tostring(def.assetId))
 		)
-	elseif def.enabled and def.assetId == 0 then
+	elseif def.kind == "CoinOffer" and def.assetId ~= 0 then
+		issue(issues, "Store", fileName, "assetId", "a CoinOffer has no Roblox asset - set assetId = 0")
+	elseif def.enabled and def.assetId == 0 and def.kind ~= "CoinOffer" then
 		-- The MapDef.enabled stance, applied to monetisation: an entry
 		-- may be written and validated before its Roblox asset exists,
 		-- but it may not be SOLD before then. An enabled product with no
@@ -1509,6 +1515,18 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 			"robuxPrice",
 			string.format("expected a non-negative integer, got %s", tostring(def.robuxPrice))
 		)
+	end
+
+	if def.kind == "CoinOffer" then
+		local price = def.coinPrice
+		if type(price) ~= "number" or price <= 0 or price % 1 ~= 0 then
+			issue(issues, "Store", fileName, "coinPrice", "a CoinOffer needs a positive integer coinPrice")
+		end
+		if def.robuxPrice ~= 0 then
+			issue(issues, "Store", fileName, "robuxPrice", "a CoinOffer is bought with coins - set robuxPrice = 0")
+		end
+	elseif def.coinPrice ~= nil then
+		issue(issues, "Store", fileName, "coinPrice", "only a CoinOffer has a coinPrice")
 	end
 
 	if type(def.grants) ~= "table" then
@@ -1539,6 +1557,12 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 
 	for index, grant in def.grants do
 		local field = string.format("grants[%d]", index)
+
+		-- Coins buy power-up stock only (user decision, 2026-10-02): no
+		-- cosmetics, titles or currency, and never anything random.
+		if def.kind == "CoinOffer" and grant.kind ~= "PowerUpStock" then
+			issue(issues, "Store", fileName, field, "a CoinOffer may only grant PowerUpStock")
+		end
 
 		if not inSet(grant.kind, STORE_GRANT_KINDS) then
 			issue(

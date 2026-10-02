@@ -149,6 +149,20 @@ cosmetic opts in, or doesn't, in its own file.
   Missing a season means missing its items.
 - A pass is only sold while its season is running.
 
+*Applied (2026-10-02, user decision):* **what coins buy.**
+- **Power-up stock only**: one of each freely earnable power-up, at a
+  fixed coin price (PLACEHOLDER 150 each, about two to six wins). Not
+  cosmetics, so win drops stay the only way to get the drop cosmetics.
+  Track and leaderboard cosmetics stay exclusive anyway.
+- **Each offer is its own store file** (`CoinOffer`): a `coinPrice`, no
+  Roblox asset, and Validate refuses any grant but power-up stock.
+- This makes Q8 literal: the stock Robux sells can also be bought with
+  coins earned by playing.
+- Checked against Roblox's paid-random-items policy on 2026-10-02:
+  nothing sold is random, and win drops count as free gameplay rewards.
+  Selling a luck boost, a crate or a paid round entry would need odds
+  disclosure and a PolicyService gate. See store-receipts.md §6b.
+
 ## 2. Round timer expires with <3 finished
 
 **Decision:** Rank finishers by task-completion percentage (tiebreak:

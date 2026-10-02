@@ -2352,3 +2352,61 @@ TestRunner.describe("Validate.checkSeason and season cross-checks (rewards step 
 			:toBe(0)
 	end)
 end)
+
+-- ===== coin offers (rewards step 6) =========================================
+
+local function coinOffer(key: string): Validate.StoreItemDef
+	local def = validProduct(key)
+	def.kind = "CoinOffer"
+	def.assetId = 0
+	def.robuxPrice = 0
+	def.coinPrice = 150
+	def.grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 1 } }
+	return def
+end
+
+TestRunner.describe("Validate.checkStoreItem (CoinOffer, rewards step 6)", function()
+	TestRunner.it("accepts an enabled coin offer with no Roblox asset", function()
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = coinOffer("c") } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a coin offer without a sane coinPrice", function()
+		for _, price in { 0, -1, 2.5 } do
+			local def = coinOffer("c")
+			def.coinPrice = price
+			TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+		end
+		local def = coinOffer("c")
+		def.coinPrice = nil
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a coin offer with a Roblox id or price", function()
+		local withId = coinOffer("c")
+		withId.assetId = 99
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = withId } }) > 0):toBeTruthy()
+		local withRobux = coinOffer("c")
+		withRobux.robuxPrice = 49
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = withRobux } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a coin offer granting anything but power-up stock", function()
+		for _, grant in
+			{
+				{ kind = "Currency" :: any, amount = 100 },
+				{ kind = "Cosmetic" :: any, cosmeticId = "skin-founder" },
+				{ kind = "Title" :: any, titleId = "got-one" },
+			}
+		do
+			local def = coinOffer("c")
+			def.grants = { grant :: any }
+			TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+		end
+	end)
+
+	TestRunner.it("refuses a coinPrice on anything but a coin offer", function()
+		local def = validProduct("t")
+		def.coinPrice = 100
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+end)

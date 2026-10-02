@@ -653,6 +653,46 @@ local function liveSeasonForPass(key: string): SeasonLogic.Season?
 	return nil
 end
 
+-- ===== coin offers (rewards-roadmap.md step 6) ============================
+
+-- Coins buy a specific power-up at a fixed price (design-decisions.md Q1;
+-- coins buy power-up stock only, user decision 2026-10-02). Entirely
+-- server-side: the price comes from config by key, the balance from the
+-- profile, and the deduction and the grant land in one mutation
+-- (StoreLogic.buyWithCoins), saved straight away like a receipt.
+local function buyWithCoins(player: Player, def: StoreItemDef)
+	local getHandle = receiptHandleFor
+	local handle = if getHandle then getHandle(player) else nil
+	local data = if handle then handle.getData() else nil
+	if handle == nil or data == nil or not handle.isActive() then
+		sendPurchaseResult(player, def.key, "Unavailable", "Your data isn't loaded yet. Try again in a moment.")
+		return
+	end
+
+	local after, changes, reason = StoreLogic.buyWithCoins({
+		currency = data.currency,
+		powerUpStock = data.powerUpStock,
+		ownedCosmetics = data.ownedCosmetics,
+		unlockedTitles = data.unlockedTitles,
+	}, def.coinPrice or 0, def.grants :: any)
+	if after == nil then
+		local message = if reason == "not enough coins"
+			then "You don't have enough coins for that yet."
+			else "That item isn't available right now."
+		sendPurchaseResult(player, def.key, "NotEnoughCoins", message)
+		return
+	end
+
+	data.currency = after.currency
+	data.powerUpStock = after.powerUpStock
+	data.ownedCosmetics = after.ownedCosmetics
+	data.unlockedTitles = after.unlockedTitles
+	handle.save()
+	recordGrant(player, def, nil, changes)
+	sendPurchaseResult(player, def.key, "Granted", "")
+	pushState(player)
+end
+
 -- ===== the purchase prompt flow ===========================================
 
 local function handlePurchaseIntent(player: Player, key: string)
@@ -667,8 +707,8 @@ local function handlePurchaseIntent(player: Player, key: string)
 	-- design switch, `assetId > 0` is whether the thing exists on
 	-- Roblox at all. ConfigValidator refuses the combination
 	-- "enabled with no id" at boot, so reaching this branch means the
-	-- entry is deliberately off.
-	if not def.enabled or def.assetId <= 0 then
+	-- entry is deliberately off. A CoinOffer has no Roblox asset at all.
+	if not def.enabled or (def.assetId <= 0 and def.kind ~= "CoinOffer") then
 		sendPurchaseResult(player, key, "Unavailable", "That item is not available right now.")
 		return
 	end
@@ -676,6 +716,11 @@ local function handlePurchaseIntent(player: Player, key: string)
 	-- P8-5 kill switch: no new prompts while the store is off.
 	if not Loader.get("LiveConfig").flags().storeEnabled then
 		sendPurchaseResult(player, key, "Unavailable", "The store is closed right now. Try again later.")
+		return
+	end
+
+	if def.kind == "CoinOffer" then
+		buyWithCoins(player, def)
 		return
 	end
 

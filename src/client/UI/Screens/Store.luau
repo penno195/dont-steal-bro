@@ -78,6 +78,9 @@ local CATEGORY_TAB: { [string]: { label: string, icon: string } } = {
 local RARITY_COLOR: { [string]: string } = { Common = "inkMuted", Uncommon = "success", Rare = "brand" }
 
 local function priceText(item: StoreScreenLogic.Item): string
+	if item.kind == "CoinOffer" then
+		return string.format("%d coins", item.coinPrice or 0)
+	end
 	return string.format("R$ %d", item.robuxPrice)
 end
 
@@ -97,6 +100,8 @@ local function card(
 			return "✓ " .. s
 		elseif s == "Unavailable" then
 			return "Coming soon"
+		elseif s == "TooFewCoins" then
+			return "Need " .. priceText(item)
 		end
 		return priceText(item)
 	end)
@@ -188,6 +193,8 @@ local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?): Inst
 			return "Buy"
 		elseif s == "Unavailable" then
 			return "Coming soon"
+		elseif s == "TooFewCoins" then
+			return "Need " .. priceText(i)
 		elseif s == "Owned" or s == "Equipped" then
 			return "Owned"
 		elseif mine() and store.flow().phase == "Processing" then

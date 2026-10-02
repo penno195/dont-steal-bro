@@ -531,3 +531,38 @@ describe("SeasonTrackLogic", function()
 		expect(SeasonTrackLogic.timeLeftText(120)):toBe("Ends soon")
 	end)
 end)
+
+describe("StoreScreenLogic coin offers (rewards step 6)", function()
+	local offer: StoreScreenLogic.Item = {
+		key = "sprint-boost-coins",
+		kind = "CoinOffer",
+		enabled = true,
+		displayName = "Sprint Boost",
+		robuxPrice = 0,
+		coinPrice = 150,
+		sortOrder = 1,
+		grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 1 } },
+	}
+
+	it("is buyable only when the player has the coins", function()
+		expect(StoreScreenLogic.itemState(offer, state({ currency = 150 }))):toBe("Buyable")
+		expect(StoreScreenLogic.itemState(offer, state({ currency = 149 }))):toBe("TooFewCoins")
+	end)
+
+	it("files under the power-ups tab", function()
+		expect(StoreScreenLogic.categoryOf(offer)):toBe("PowerUps")
+	end)
+
+	it("goes straight to Succeeded on Granted, with no prompt", function()
+		local f = StoreScreenLogic.step(StoreScreenLogic.idle(), { type = "Tap", key = offer.key, state = state() }, 0)
+		f = StoreScreenLogic.step(f, { type = "Result", key = offer.key, status = "Granted", message = "" }, 0.2)
+		expect(f.phase):toBe("Succeeded")
+	end)
+
+	it("explains a refusal for too few coins", function()
+		local f = StoreScreenLogic.step(StoreScreenLogic.idle(), { type = "Tap", key = offer.key, state = state() }, 0)
+		f = StoreScreenLogic.step(f, { type = "Result", key = offer.key, status = "NotEnoughCoins", message = "" }, 0.2)
+		expect(f.phase):toBe("Failed")
+		expect(f.message):toBe("You don't have enough coins for that yet.")
+	end)
+end)

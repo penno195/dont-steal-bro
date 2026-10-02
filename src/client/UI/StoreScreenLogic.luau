@@ -27,10 +27,11 @@ export type Grant = {
 
 export type Item = {
 	key: string,
-	kind: string, -- "GamePass" | "DeveloperProduct"
+	kind: string, -- "GamePass" | "DeveloperProduct" | "CoinOffer"
 	enabled: boolean,
 	displayName: string,
 	robuxPrice: number,
+	coinPrice: number?, -- CoinOffer only
 	sortOrder: number,
 	grants: { Grant },
 }
@@ -113,6 +114,7 @@ export type ItemState =
 	| "Buyable"
 	| "Owned" -- a pass already owned: nothing to buy again
 	| "Equipped" -- owned, and something it grants is being worn
+	| "TooFewCoins" -- a coin offer the player can't afford yet
 
 local function cosmeticIds(item: Item): { string }
 	local out = {}
@@ -143,6 +145,9 @@ function StoreScreenLogic.itemState(item: Item, state: StoreState?): ItemState?
 	end
 	if not item.enabled then
 		return "Unavailable"
+	end
+	if item.kind == "CoinOffer" then
+		return if state.currency >= (item.coinPrice or 0) then "Buyable" else "TooFewCoins"
 	end
 	if item.kind ~= "GamePass" or table.find(state.ownedPasses, item.key) == nil then
 		return "Buyable"
@@ -264,6 +269,7 @@ local FALLBACK_MESSAGES: { [string]: string } = {
 	Unavailable = "That item isn't available right now.",
 	AlreadyOwned = "You already own this.",
 	PromptFailed = "Couldn't open the purchase window. Please try again.",
+	NotEnoughCoins = "You don't have enough coins for that yet.",
 }
 
 function StoreScreenLogic.idle(): Flow
@@ -311,6 +317,11 @@ function StoreScreenLogic.step(flow: Flow, event: FlowEvent, now: number): Flow
 	elseif e.type == "Result" then
 		if flow.phase ~= "Requesting" or e.key ~= flow.key then
 			return flow -- a late answer to something we've moved past
+		end
+		-- A coin offer is settled server-side in one step: no prompt, no
+		-- receipt to wait for.
+		if e.status == "Granted" then
+			return { phase = "Succeeded", key = flow.key, since = now, message = nil, baseline = nil }
 		end
 		if e.status == "Prompted" then
 			return { phase = "Prompted", key = flow.key, since = now, message = nil, baseline = flow.baseline }

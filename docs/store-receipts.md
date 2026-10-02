@@ -366,6 +366,58 @@ bucketed by whether the player has ever bought stock. If the two curves
 separate at the top end, this design crossed the line regardless of what
 the config validates.
 
+## 6b. Coin offers and the random-item audit (rewards step 6, 2026-10-02)
+
+**Coin offers.** Coins are spent on `CoinOffer` store entries: one file
+per offer in `Config/Store/`, with a fixed `coinPrice` and no Roblox
+asset. User decision: coins buy **power-up stock only**, one of each
+freely earnable power-up, PLACEHOLDER 150 coins each. Validate refuses a
+coin offer that grants anything else. `StoreService.buyWithCoins`
+deducts the price and applies the grant in one profile mutation
+(`StoreLogic.buyWithCoins`), then saves. No prompt and no receipt are
+involved, so the client's flow goes straight to Succeeded on `Granted`.
+
+**Nothing bought is random.** Every way to pay, and what it yields:
+
+| Paid with | What | Yields |
+|---|---|---|
+| Robux | Developer product | Its config `grants`, fixed |
+| Robux | Season pass | Nothing itself; fixed track items at fixed win counts |
+| Coins (buyable with Robux) | Coin offer | Its config `grants`, fixed |
+
+The only random prize is the win drop (`RewardLogic`, rolled by
+ProgressionService on a win). Entering a round costs nothing, and the
+drop odds depend on the streak alone. No grant kind can move a streak or
+an odd. `tests/StoreLogic.spec.luau` scans every purchase-path module
+and fails if one gains a random source or a call into RewardLogic.
+
+**Roblox policy, checked 2026-10-02.** The [paid random items
+guidelines](https://create.roblox.com/docs/production/monetization/paid-random-items)
+and the [26 May 2026 clarification](https://devforum.roblox.com/t/clarifying-requirements-for-paid-random-items/4654622):
+- A paid random item is a random outcome bought with Robux, or with
+  in-game currency bought with Robux. Our coins count as such a currency.
+- Random rewards earned through gameplay without payment, including
+  "random rewards from winning matches", are explicitly out of scope.
+  That covers win drops.
+- An item that boosts the odds of a random outcome (a "lucky potion")
+  is in scope, and its effect has to be shown numerically.
+- Restricted users (`PolicyService:GetPolicyInfoForPlayerAsync`'s
+  `ArePaidRandomItemsRestricted`, which also covers under-18s in Brazil
+  since 17 March 2026) can't be offered paid random items at all.
+
+So today we need no odds display and no PolicyService gate. Three
+things would change that, and each needs both before it ships:
+1. Anything sold for Robux or coins that yields a random outcome, such
+   as a crate or a re-roll.
+2. Anything sold that raises drop odds, such as a luck boost or a
+   streak shield that keeps the rung.
+3. Paying to enter a round, since its win drop would then be bought.
+
+Bought power-ups help win a race, which leads to drops only through
+play. We read that as gameplay, not an odds boost, because no item
+touches the roll. Re-check this if a power-up ever affects streaks or
+rewards directly.
+
 ## 7. Unverified platform assumptions
 
 Same stance as `leaderboard-scale.md` §6. Each of these is believed

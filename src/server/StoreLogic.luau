@@ -265,6 +265,38 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 	return updated, lines
 end
 
+-- ===== coin offers (rewards-roadmap.md step 6) ==============================
+
+-- Spends `price` coins on `grants`, or refuses. design-decisions.md Q1:
+-- currency buys specific named items at fixed prices, never anything
+-- random. The deduction and the grant come back as one new state, so the
+-- caller writes both in the same profile mutation or neither.
+--
+-- No PurchaseId is involved: nothing here is a Roblox transaction, and a
+-- replayed intent spends coins again, which is just a second purchase.
+-- The intent's rate limit and the coin balance bound that.
+function StoreLogic.buyWithCoins(
+	state: GrantState,
+	price: number,
+	grants: { Grant }
+): (GrantState?, { string }, string?)
+	if type(price) ~= "number" or price <= 0 or price % 1 ~= 0 then
+		return nil, {}, "bad price"
+	end
+	if state.currency < price then
+		return nil, {}, "not enough coins"
+	end
+	local paid: GrantState = {
+		currency = state.currency - price,
+		powerUpStock = state.powerUpStock,
+		ownedCosmetics = state.ownedCosmetics,
+		unlockedTitles = state.unlockedTitles,
+	}
+	local after, lines = StoreLogic.applyGrants(paid, grants)
+	table.insert(lines, 1, string.format("Currency -%d (coin price)", price))
+	return after, lines, nil
+end
+
 -- ===== the loadout ========================================================
 
 -- design-decisions.md Q8: "Loadouts are capped at 3 items regardless of

@@ -129,11 +129,22 @@ and ask the user (CLAUDE.md).
     sent before the reveal.
   - Not yet seen in Studio. Season 1 is disabled, so the tab says "No
     season running" until a season is enabled.
+- [x] **6. Store audit.**
+  - User decisions (design-decisions.md Q1 applied case, "what coins
+    buy"): coins buy power-up stock only, through `CoinOffer` store
+    entries, PLACEHOLDER 150 coins each.
+  - Ten `Config/Store/*Coins.luau` offers, one per freely earnable
+    power-up. `StoreLogic.buyWithCoins` deducts and grants in one
+    mutation, and `StoreService.buyWithCoins` saves it. The client shows
+    "150 coins", or "Need 150 coins" when short.
+  - The random-item audit is store-receipts.md §6b. Nothing bought is
+    random, and a spec scans the purchase-path modules for random
+    sources.
+  - Roblox's paid random items policy, checked 2026-10-02: win drops are
+    out of scope. Odds disclosure plus a PolicyService gate would be
+    needed for any crate, luck boost or paid round entry.
+  - Not yet Studio-verified.
 
 ## Next
-- [ ] **6. Store audit.**
-  - Currency buys specific named items at fixed prices.
-  - Check that nothing bought is random, for Robux or for currency.
-  - Verify Roblox's current random-item policy before launch.
 - [ ] **7. Tune in playtest.** Every amount and odd is PLACEHOLDER.
   Q8's "Robux buys time, never power" rests on these numbers.
