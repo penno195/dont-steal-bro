@@ -9,14 +9,14 @@
 -- NO AMOUNTS IN HERE (rewards-roadmap.md step 2c). Each winner carries
 -- the outcome tier they won at, never a number. What that tier pays is
 -- RewardLogic.currencyFor at the winner's own after-win rung, worked out
--- on the server by ProgressionService. Two reasons:
---   * The result is broadcast to the whole room in DecisionReveal. Any
---     amount scaled by a winner's streak would let anyone in the room
---     read that streak off the packet, which is design-decisions.md Q7
---     condition 1's leak. A tier is derivable from the choices anyway,
---     so it leaks nothing.
---   * One place decides what a win pays, instead of two that could
---     disagree.
+-- on the server by ProgressionService, so one place decides what a win
+-- pays instead of two that could disagree.
+--
+-- Showing a winner's amount in the reveal would be allowed: the result
+-- only exists once every choice is locked in, and design-decisions.md
+-- Q7's 2026-10-02 applied case lets levels show from then on. A future
+-- reveal that wants amounts should get them from RewardLogic rather than
+-- adding them back here.
 --
 -- FEWER THAN THREE FINALISTS: design-decisions.md Q3 guarantees the
 -- Decision Studio always resolves with exactly 3 (NPC backfill covers

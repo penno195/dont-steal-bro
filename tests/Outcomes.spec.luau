@@ -149,17 +149,3 @@ TestRunner.describe("Outcomes.resolve - invalid finalist counts fail loudly", fu
 		TestRunner.expect(ok):toBe(false)
 	end)
 end)
-
-TestRunner.describe("Outcomes.resolve - carries no amounts", function()
-	TestRunner.it("gives each winner a tier and nothing else, since the result is broadcast", function()
-		-- Q7: an amount scaled by a winner's streak would leak that
-		-- streak to the whole room through DecisionReveal.
-		local result = Outcomes.resolve({ finalist(1, "Steal"), finalist(2, "Share"), finalist(3, "Share") })
-		local fields = {}
-		for key in result.winners[1] :: any do
-			table.insert(fields, key)
-		end
-		table.sort(fields)
-		TestRunner.expect(table.concat(fields, ",")):toBe("outcomeTag,playerId")
-	end)
-end)

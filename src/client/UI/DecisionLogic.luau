@@ -11,9 +11,11 @@
 -- SECRECY: nothing here can hold another player's choice before the
 -- reveal, because the only function that ever produces one is
 -- parseReveal, and the only input to it is the DecisionReveal packet.
--- The packet carries no reward amounts at all: a winner's pay scales
--- with their streak, so it only reaches its owner, at Results, in
--- RoundRecap. See docs/decision-studio.md "Secrecy audit".
+-- The packet carries no reward amounts today; a player's own pay
+-- arrives at Results, in RoundRecap. Amounts and levels could ride the
+-- reveal (design-decisions.md Q7's 2026-10-02 applied case: they may
+-- show once every choice is locked in). See docs/decision-studio.md
+-- "Secrecy audit".
 
 local DecisionLogic = {}
 
@@ -173,9 +175,10 @@ DecisionLogic.QUICK_PHRASES = table.freeze({ "Share", "Steal", "Please", "Don't"
 -- PAYOFF TABLE -------------------------------------------------------
 
 -- What YOU get, given your choice and how many of the others steal.
--- payoff-table.md §1, read from one seat. Words, never numbers: what a
--- prize pays scales with the winner's streak, which the table must not
--- show (Q7), so it only names the tier.
+-- payoff-table.md §1, read from one seat. Words, never numbers: the
+-- table shows while choices are still open, and a prize's pay scales
+-- with the winner's streak, which must stay hidden until every choice
+-- is locked in (Q7), so it only names the tier.
 function DecisionLogic.prizeFor(mine: Choice, othersStealing: number, seats: number): Prize
 	if seats <= 1 then
 		return "Small" -- Outcomes.resolveOne: a solo finalist always gets the all-share package

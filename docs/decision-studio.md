@@ -132,9 +132,9 @@ off its movement input (`InputLock.holdMovement`, camera left free),
 stops the walk/run tracks and plays the rig's idle.
 
 **Payoff table.** Always visible until the outcome shows. Words only: BIG,
-MEDIUM, SMALL, ✕ NOTHING. Never coin amounts: those scale with each
-winner's streak, so showing them would tell the room who has the most
-to lose (Q7). It adapts
+MEDIUM, SMALL, ✕ NOTHING. Never coin amounts: the table shows while
+choices are open, and amounts scale with each winner's streak, so they
+would tell the room who has the most to lose (Q7). It adapts
 to the seat count (3, 2 or 1). `tests/DecisionLogic.spec.luau` checks it
 against `Outcomes.resolve` for every combination of choices at every seat
 count, so the table can't tell a player something the resolver won't do.
@@ -254,13 +254,13 @@ against a full memory dump of it:
   are built for every seat at mount, from the same two tokens, so their
   existence says nothing. The reveal is a visibility change, not an asset
   chosen early.
-- **Fixed in rewards step 2c: `bountyVU` in `DecisionReveal`.** The
-  packet used to broadcast each winner's VU, a function of their streak
-  tier, readable by a modified client. Outcomes now gives each winner
-  only an `outcomeTag`, which anyone can work out from the choices. The
-  coin amount, which scales with the winner's streak, reaches only its
-  owner, at Results, in `RoundRecap`. `parseReveal` still drops any
-  extra field on a winner.
+- **Closed: `bountyVU` in `DecisionReveal`.** The packet used to
+  broadcast each winner's VU, a function of their streak tier. Rewards
+  step 2c removed it: Outcomes now gives each winner only an
+  `outcomeTag`, and a player's coins reach them at Results in
+  `RoundRecap`. It was never a real leak, though. The reveal only
+  fires once every choice is locked in, and Q7's 2026-10-02 applied
+  case lets levels and amounts show from then on.
 - **Fixed in P6-6: `ProgressionStreakSkipped` fired before the reveal.**
   `ProgressionService.applyRoundResult` fires it during
   `computeOutcomeAndWriteProfiles`, which runs about 0.2 s before

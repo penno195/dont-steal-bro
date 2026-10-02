@@ -270,8 +270,9 @@ end
 local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 	local DataService = Loader.get("DataService") :: any
 
-	-- Choices only. No streak or amount goes in, because the result is
-	-- broadcast in DecisionReveal (Outcomes.luau's header, Q7).
+	-- Choices only: what a win pays is RewardLogic's (Outcomes.luau's
+	-- header). Every choice is locked by now, so from here on Q7's
+	-- 2026-10-02 applied case would allow showing levels.
 	local finalists: { Outcomes.FinalistInput } = {}
 	for _, id in qualifierIds do
 		table.insert(finalists, { playerId = id, choice = choices[id] })

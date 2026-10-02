@@ -344,6 +344,23 @@ unless `StreakTagLogic.isHub`, so a match server never sends
 `StreakTagState`. The number is always the real `currentStreak`; flair
 changes only its colour and backing texture.
 
+### Applied case: after every finalist has locked in (2026-10-02)
+
+Decided by the project owner: **a finalist's level (streak, rung, and
+anything scaled by them, such as a win's coin payout) may be revealed
+once all three finalists' choices are locked in.** Nothing shown after
+that point can change the outcome, so condition 1 has nothing left to
+protect in that round. Before lock-in, everything above still holds:
+the payoff table names prizes in words only, and titles and streaks stay
+hidden through the intro, Negotiate and Choose.
+- "Locked in" means every choice is final: all three finalists
+  submitted, or the Choose timer filled in the defaults (Q4). In code,
+  that is the moment DecisionService computes the outcome.
+- This permits, but doesn't require, showing amounts or levels in the
+  reveal (rewards-roadmap.md step 3 can use it). It widens the P4-2
+  titles case's "after the result is in" to this slightly earlier
+  moment, but doesn't change `TitleService` by itself.
+
 ## 8. Are starting power-ups sold for Robux?
 
 **Decision:** Power-ups may be purchased with Robux, provided **every**

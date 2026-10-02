@@ -70,8 +70,8 @@ describe("DecisionLogic.parseReveal", function()
 			choices = choices,
 			outcome = {
 				branch = "SoleSteal",
-				-- bountyVU is a stray amount from a pre-2c server, kept
-				-- here to prove parseReveal drops it.
+				-- bountyVU is a field from a pre-2c server, kept here to
+				-- prove parseReveal copies only what it knows.
 				winners = { { playerId = 1, outcomeTag = "SoleStealer", bountyVU = 20 } },
 				loserIds = { 2, -7 },
 			},
@@ -89,7 +89,7 @@ describe("DecisionLogic.parseReveal", function()
 		expect(r.loserIds[2]):toBe(-7)
 	end)
 
-	it("never keeps an amount on a winner, even if a server sends one (a streak tell)", function()
+	it("copies only winner ids, dropping any field it doesn't know", function()
 		local r = DecisionLogic.parseReveal(payload({ [1] = "Steal" })) :: any
 		for _, value in r do
 			if type(value) == "table" then

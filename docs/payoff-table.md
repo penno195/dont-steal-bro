@@ -15,9 +15,11 @@ the conversion is clean: **1 VU = 5 coins at rung 0**. Every number here is
 a PLACEHOLDER starting value, to be corrected by the telemetry in §4 (and
 rewards-roadmap.md step 7), not a final one.
 
-Players never see these numbers *during* the finale. The payoff table on
-screen names prizes in words (BIG / MEDIUM / SMALL), because an amount that
-scales with your streak would tell the room what your streak is (Q7).
+Players never see these numbers while choices are open. The payoff table
+on screen names prizes in words (BIG / MEDIUM / SMALL), because an amount
+that scales with your streak would tell the room what your streak is
+(Q7). Once all three choices are locked in, amounts and levels may show
+(Q7's 2026-10-02 applied case).
 
 ## 1. Setup
 

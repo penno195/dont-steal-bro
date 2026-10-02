@@ -38,11 +38,12 @@ and ask the user (CLAUDE.md).
     which added step 2d.
 - [x] **2c. Retire `bountyTiers`.**
   - Outcomes gives each winner an `outcomeTag` and no amount, rather
-    than switching the `*VU` numbers to currency as first planned. The
-    result is broadcast in `DecisionReveal`, and any amount scaled by a
-    winner's streak would leak it to the room (Q7). This also closed
-    decision-studio.md's open `bountyVU` audit item. Currency comes only
-    from `RewardLogic.currencyFor`, in ProgressionService.
+    than switching the `*VU` numbers to currency as first planned, so
+    currency comes only from `RewardLogic.currencyFor`, in
+    ProgressionService. (2c's commit also claimed an amount in
+    `DecisionReveal` would leak streaks. The user then ruled that levels
+    may show once all choices are locked in, so it wouldn't: Q7's
+    2026-10-02 applied case.)
   - `BountyTier`, `resolveBountyTier`, `bountyTiers`, their checks and
     specs are gone. LiveConfig allows `game.winRewards.**`.
   - payoff-table.md runs on coins (1 VU = 5 coins at rung 0, so
@@ -67,6 +68,10 @@ and ask the user (CLAUDE.md).
 - [ ] **3. Show win rewards.**
   - Results and the finale show the currency and the drop. This
     replaces `FinaleLoading`'s stand-in glyphs.
+  - The reveal may show everyone's amounts and levels, since it follows
+    lock-in (Q7's 2026-10-02 applied case). Before lock-in, prizes stay
+    words only. **Ask the user** whether the reveal should show other
+    finalists' payouts or just your own.
   - **Ask the user** which cosmetics set `winDrop = true`. None do yet,
     so today only power-ups can drop.
 - [ ] **4. Leaderboard payouts.**
