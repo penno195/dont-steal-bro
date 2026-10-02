@@ -27,37 +27,46 @@ export type Stats = {
 	losses: number,
 }
 
--- Per design-decisions.md Q1: bounty is a fixed, deterministic ITEM
--- PACKAGE looked up from (the winner's own streak tier, their outcome
--- tier) - never a raw currency amount. `streakTier`/`outcomeTag` are
--- exactly the two lookup keys that decision names; the actual item
--- grant is a RewardTables lookup this schema only references, not
--- resolves (RewardTables doesn't exist yet - a later task).
 export type OutcomeTag = "SoleStealer" | "LoneSharer" | "AllShare"
 
-export type PendingBounty = {
-	streakTier: number,
-	outcomeTag: OutcomeTag,
-	grantedAt: number, -- os.time() when computed; threat-model.md §13's idempotent-per-round grant audit trail
+-- What a player's most recent win paid (schema v4, rewards-roadmap.md
+-- step 2b). Replaces v1-v3's PendingBounty, which keyed into a reward
+-- table that was never built. design-decisions.md Q1's 2026-09-30
+-- revision pays every win at once, so nothing is left pending: this is
+-- the audit trail of a grant that already happened, written in the same
+-- mutation as the grants it describes (DataService's progression
+-- writer), so the two can't disagree.
+export type WinDropRecord = {
+	kind: "PowerUp" | "Cosmetic",
+	id: string,
+	rarity: "Common" | "Uncommon" | "Rare",
+	duplicate: boolean, -- an owned cosmetic, paid as currency instead
 }
 
--- The three fields a round result moves, as one value (P4-1). They are
+export type WinRewardRecord = {
+	roundId: string,
+	outcomeTag: OutcomeTag,
+	rung: number,
+	currency: number,
+	drop: WinDropRecord?,
+	grantedAt: number, -- os.time(); threat-model.md §13's per-round grant audit trail
+}
+
+-- The two fields a round result moves, as one value (P4-1). They are
 -- written together or not at all - see DataService's progression write
--- gate for why one atomic write beats three mutators. Structurally
+-- gate for why one atomic write beats separate mutators. Structurally
 -- identical to ProgressionLogic.StreakState, which is what that module
 -- computes and this one stores; neither requires the other.
 export type ProgressionState = {
 	currentStreak: number,
 	bestStreak: number,
-	pendingBounty: PendingBounty?,
 }
 
 export type ProfileData = {
 	schemaVersion: number,
 	currentStreak: number,
 	bestStreak: number, -- titles key off THIS, never currentStreak - gdd.md §3: "never revoked when a streak resets"
-	pendingBounty: PendingBounty?,
-	currency: number, -- the free-to-earn resource behind design-decisions.md Q8's "also earnable free" path - never bounty itself
+	currency: number, -- Q8's "also earnable free" resource, and what every win pays (Q1's 2026-09-30 revision)
 	ownedCosmetics: { string },
 	equipped: { [string]: string }, -- cosmetic slot -> item id
 	starterPowerUps: { string }, -- <= 3 items, design-decisions.md Q8's loadout cap
@@ -94,9 +103,13 @@ export type ProfileData = {
 	-- an older client can never reach the UI out of bounds. Empty means
 	-- "all defaults".
 	settings: { [string]: any },
+
+	-- ===== schema v4, rewards step 2b ===================================
+
+	lastWinReward: WinRewardRecord?, -- nil until a first win; a loss leaves it alone
 }
 
-local CURRENT_SCHEMA_VERSION = 3
+local CURRENT_SCHEMA_VERSION = 4
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -107,7 +120,6 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		schemaVersion = CURRENT_SCHEMA_VERSION,
 		currentStreak = 0,
 		bestStreak = 0,
-		pendingBounty = nil,
 		currency = 0,
 		ownedCosmetics = {},
 		equipped = {},
@@ -119,17 +131,18 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		equippedTitle = nil,
 		stats = defaultStats(),
 		lastSeen = 0,
+		lastWinReward = nil,
 	}
 end
 
 -- ===== Migration chain ===================================================
 -- Keyed by the version a profile is migrating FROM. Each step is a pure
 -- function from version n to n+1 that returns a FRESH table - "never
--- mutate a profile in place without bumping the version." Two steps
+-- mutate a profile in place without bumping the version." Four steps
 -- exist now: 0 -> 1 (schemaVersion didn't exist before P1-5), 1 -> 2
--- (P4-5's store fields) and 2 -> 3 (P6-6's settings). Adding a v4 means
--- writing migrations[3] and bumping CURRENT_SCHEMA_VERSION, and nothing
--- else - ProfileLogic.
+-- (P4-5's store fields), 2 -> 3 (P6-6's settings) and 3 -> 4 (rewards
+-- step 2b's lastWinReward). Adding a v5 means writing migrations[4] and
+-- bumping CURRENT_SCHEMA_VERSION, and nothing else - ProfileLogic.
 -- migrate below walks however many steps a stored profile actually
 -- needs, so a profile last saved under v0 arrives at v2 in one call.
 
@@ -150,7 +163,7 @@ migrations[0] = function(old: { [string]: any }): { [string]: any }
 		schemaVersion = 1,
 		currentStreak = (old.currentStreak :: number?) or 0,
 		bestStreak = (old.bestStreak :: number?) or 0,
-		pendingBounty = old.pendingBounty :: PendingBounty?,
+		pendingBounty = old.pendingBounty, -- v1's field; migrations[3] drops it
 		currency = (old.currency :: number?) or 0,
 		ownedCosmetics = (old.ownedCosmetics :: { string }?) or {},
 		equipped = (old.equipped :: { [string]: string }?) or {},
@@ -191,6 +204,18 @@ migrations[2] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 3
 	next.settings = (old.settings :: { [string]: any }?) or {}
+	return next
+end
+
+-- v3 -> v4 (rewards step 2b): `pendingBounty` gives way to
+-- `lastWinReward`. Nothing carries over. A PendingBounty was a key into
+-- a reward table that was never built, so no player was ever paid by
+-- one and there is no grant to reconstruct.
+migrations[3] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 4
+	next.pendingBounty = nil
+	next.lastWinReward = nil
 	return next
 end
 

@@ -275,8 +275,7 @@ local function body(store: Store, height: () -> number): { Instance }
 	end)
 	local reward = derive(function(): string
 		local recap = store.recap()
-		local bounty = recap and recap.bounty
-		return if bounty then string.format("Tier %d, carried into your next finale", bounty.streakTier) else ""
+		return ResultsLogic.rewardLine(if recap then recap.reward else nil)
 	end)
 
 	local cards = create("ScrollingFrame")({

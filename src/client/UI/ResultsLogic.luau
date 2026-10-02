@@ -6,13 +6,21 @@
 --
 -- Two sources, and they're trusted differently:
 --   * RoundRecap (server, targeted, on entering Results): reason,
---     streak before/after, bounty, streak credit. Authoritative.
+--     streak before/after, win reward, streak credit. Authoritative.
 --   * RaceTally (counted by the client from broadcasts it already got:
 --     TaskProgress, TaskQualificationResult, its own PowerUpUseResult).
 --     Display-only - a modified client lying to itself about how many
 --     power-ups it used changes nothing anywhere else.
 
 local ResultsLogic = {}
+
+-- The server's win reward (ProgressionService's RoundRecap), already
+-- granted by the time this arrives.
+export type RecapReward = {
+	currency: number,
+	rung: number,
+	drop: { kind: string, id: string, rarity: string, duplicate: boolean }?,
+}
 
 export type Recap = {
 	roundId: string,
@@ -21,7 +29,7 @@ export type Recap = {
 	streakAfter: number,
 	bestStreakBefore: number,
 	bestStreakAfter: number,
-	bounty: { streakTier: number, outcomeTag: string }?,
+	reward: RecapReward?, -- what this win paid; nil on a loss
 	streakCredited: boolean,
 	npcSeatCount: number,
 	npcSeatThreshold: number,
@@ -144,7 +152,7 @@ ResultsLogic.STREAK_PAUSE = 0.9
 -- The recap's beats in order, each with its start time from when the
 -- screen opens. The streak is always last - P6-6's one sequencing rule.
 -- Finale appears only for someone who reached the Studio, Rewards only
--- for someone who has a bounty to show, Streak only when there is a
+-- for a win that paid something, Streak only when there is a
 -- recap at all (a spectator has no streak change this round).
 --
 -- Reduced motion keeps the SAME order and timing. Reduced motion is
@@ -157,7 +165,7 @@ function ResultsLogic.beats(recap: Recap?): { Beat }
 		if ResultsLogic.finaleLine(recap.reason) ~= nil then
 			table.insert(ids, "Finale")
 		end
-		if recap.bounty ~= nil and ResultsLogic.isWin(recap.reason) then
+		if recap.reward ~= nil and ResultsLogic.isWin(recap.reason) then
 			table.insert(ids, "Rewards")
 		end
 		table.insert(ids, "Streak")
@@ -175,6 +183,23 @@ function ResultsLogic.beats(recap: Recap?): { Beat }
 		end
 	end
 	return out
+end
+
+-- The Rewards beat's text. Plain on purpose: rewards-roadmap.md step 3
+-- gives the drop its real name and art, and the finale its reveal.
+function ResultsLogic.rewardLine(reward: RecapReward?): string
+	if reward == nil then
+		return ""
+	end
+	local line = string.format("+%d coins", reward.currency)
+	local drop = reward.drop
+	if drop == nil then
+		return line
+	end
+	if drop.duplicate then
+		return string.format("%s, and a %s drop you already own (paid in coins)", line, drop.rarity)
+	end
+	return string.format("%s, and a %s drop: %s", line, drop.rarity, drop.id)
 end
 
 -- How many beats are showing at `elapsed` seconds in. `skipped` (a tap

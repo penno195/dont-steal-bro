@@ -808,8 +808,10 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
-	-- P6-6: what this round did to YOUR streak and bounty - the results
-	-- screen's data. Targeted at its owner (fireClient), never broadcast:
+	-- P6-6: what this round did to YOUR streak, and (rewards step 2b)
+	-- what your win paid - the results screen's data. A reward is
+	-- already granted when this fires, and this is the first the client
+	-- hears of it (Q7). Targeted at its owner (fireClient), never broadcast:
 	-- it carries streak numbers, design-decisions.md Q7 condition 1.
 	--
 	-- Fired on ENTERING Results, never from the progression write

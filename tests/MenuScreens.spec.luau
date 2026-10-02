@@ -343,7 +343,7 @@ local function recap(reason: string, before: number, after: number, overrides: {
 		streakAfter = after,
 		bestStreakBefore = before,
 		bestStreakAfter = math.max(before, after),
-		bounty = nil,
+		reward = nil,
 		streakCredited = true,
 		npcSeatCount = 0,
 		npcSeatThreshold = 3,
@@ -403,7 +403,7 @@ describe("ResultsLogic.beats", function()
 
 	it("always lands the streak last, with a longer pause before it", function()
 		local beats = ResultsLogic.beats(recap("StudioWinSoleStealer", 1, 2, {
-			bounty = { streakTier = 1, outcomeTag = "SoleStealer" },
+			reward = { currency = 110, rung = 1 },
 		}))
 		expect(ids(beats)):toBe("Placement,Tasks,PowerUps,Finale,Rewards,Streak")
 		local n = #beats
@@ -414,9 +414,24 @@ describe("ResultsLogic.beats", function()
 		expect(ids(ResultsLogic.beats(recap("FailedToQualify", 3, 0)))):toBe("Placement,Tasks,PowerUps,Streak")
 	end)
 
-	it("shows no rewards for a loss even if a bounty is present", function()
-		local r = recap("StudioLoss", 3, 0, { bounty = { streakTier = 1, outcomeTag = "AllShare" } })
+	it("shows no rewards for a loss even if a reward is present", function()
+		local r = recap("StudioLoss", 3, 0, { reward = { currency = 25, rung = 0 } })
 		expect(ids(ResultsLogic.beats(r))):toBe("Placement,Tasks,PowerUps,Finale,Streak")
+	end)
+
+	it("words the reward: coins alone, a new drop, and an owned one", function()
+		expect(ResultsLogic.rewardLine(nil)):toBe("")
+		expect(ResultsLogic.rewardLine({ currency = 110, rung = 1 })):toBe("+110 coins")
+		expect(ResultsLogic.rewardLine({
+			currency = 50,
+			rung = 0,
+			drop = { kind = "PowerUp", id = "SprintBoost", rarity = "Common", duplicate = false },
+		})):toBe("+50 coins, and a Common drop: SprintBoost")
+		expect(ResultsLogic.rewardLine({
+			currency = 50,
+			rung = 0,
+			drop = { kind = "Cosmetic", id = "GoldTrail", rarity = "Rare", duplicate = true },
+		})):toBe("+50 coins, and a Rare drop you already own (paid in coins)")
 	end)
 
 	it("has no streak beat for a spectator with no recap", function()

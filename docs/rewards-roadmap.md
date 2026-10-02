@@ -22,25 +22,23 @@ and ask the user (CLAUDE.md).
     drop pool and the roll, and returns StoreLogic-shaped grants.
     Specs: `tests/RewardLogic.spec.luau`, plus `Config.spec`'s win
     rewards block.
+- [x] **2b. Grant win rewards.**
+  - `ProgressionService.applyRoundResult` rolls the reward on a win
+    (streak after the win, every title's `minStreak`, a pool rebuilt per
+    roll from enabled power-ups and cosmetics), keeps it in the round
+    ledger so a retry returns it rather than re-rolling, and logs one
+    `Reward:` line per grant.
+  - DataService's progression writer applies the streak, the grants
+    (`StoreLogic.applyGrants`) and the record in one mutation.
+  - Profile schema v4: `pendingBounty` dropped, `lastWinReward` added.
+  - `RoundRecap.reward` carries it at Results; the results screen shows
+    a plain stand-in line until step 3.
+  - User decision while building it: a real player's win always counts
+    however many seats are bots (design-decisions.md Q5 applied case),
+    which added step 2d.
 
 ## Next
 
-- [ ] **2b. Grant win rewards.** Nothing calls RewardLogic yet.
-  - On a win, roll `RewardLogic.rollWinReward`. Use the streak after the
-    win, the title thresholds (every TitleDef's `minStreak`), and a pool
-    built from the PowerUps and Cosmetics registries. Server rng:
-    `Random.new()`.
-  - Apply the grants with `StoreLogic.applyGrants` through DataService,
-    once per round per player. ProgressionService's round ledger is the
-    idempotency key, so a retry can't pay twice. Log a single audit line
-    for each grant.
-  - Replace `PendingBounty` (streakTier + outcomeTag) with a record of
-    what was granted. This is a profile schema bump (v4 migration in
-    ProfileLogic).
-  - Send the reward in the `RoundRecap`, which only goes out at Results.
-    Q7: nothing about a reward may show during a live round.
-  - Rounds without streak credit (NPC seats over the threshold) still
-    pay rewards. That's the existing rule in ProgressionLogic.applyResult.
 - [ ] **2c. Retire `bountyTiers`.**
   - Outcomes and DecisionService currently carry `*VU` numbers from
     `bountyTiers`. Switch them to `RewardLogic.currencyFor` at the
@@ -51,6 +49,19 @@ and ask the user (CLAUDE.md).
   - Update the docs that describe VU tiers: `payoff-table.md`,
     `live-ops.md`, `launch-review.md` and `liveops-roadmap.md`. The
     payoff table's Steal/Share balance now runs on currency.
+- [ ] **2d. Retire the NPC-seat streak-credit threshold.** Per
+  design-decisions.md Q5's 2026-10-02 applied case, a real player's
+  result always counts. The threshold is set to 5 today so it never
+  fires.
+  - Remove `npcSeatStreakCreditThreshold` (GameConfig, Validate,
+    Config.spec), `NPCLogic.earnsStreakCredit`, NPCService's
+    `roundEarnsStreakCredit`, and ProgressionService's credit gate and
+    `roundEarnsStreakCredit` export.
+  - Drop `applyResult`'s `streakCredited` parameter and its specs.
+  - Drop `RoundRecap`'s `streakCredited`, `npcSeatCount` and
+    `npcSeatThreshold`, plus ResultsLogic's "Held" streak change.
+  - Update threat-model.md §8 (and its ranking table), npc-notes.md and
+    launch-review.md to say the mitigation was retired, and why.
 - [ ] **3. Show win rewards.**
   - Results and the finale show the currency and the drop. This
     replaces `FinaleLoading`'s stand-in glyphs.

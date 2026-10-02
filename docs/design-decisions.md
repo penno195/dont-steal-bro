@@ -223,6 +223,19 @@ steal and a Loyal one's leans share, with the noise a short record has.
 Bots also wear real avatars drawn from `npc.appearance`, not a
 placeholder rig.
 
+*Applied (2026-10-02, user decision):* **a real player's result always
+counts, however many seats are bots.** This reverses threat-model.md
+§8's NPC-seat streak-credit threshold. The user's reasoning: a player
+can't choose a bot-filled lobby (it only happens when nobody else is
+queueing), and bots are trained to vary their answers, so winning one
+is still luck rather than a farm. A win in such a round raises the
+streak and pays the full reward at the new rung, like any other.
+- Interim: `npcSeatStreakCreditThreshold = 5`, which never fires.
+  Removing the threshold and its "queue too thin" message is
+  rewards-roadmap.md step 2d.
+- **Planned:** separate practice and ranked modes. Practice pays no
+  rewards. Not built yet; ask before designing it.
+
 **Reversal cost:** Cheap — additive UI and a counter field; doesn't touch
 resolution logic.
 

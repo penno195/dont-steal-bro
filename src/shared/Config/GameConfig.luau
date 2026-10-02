@@ -17,7 +17,10 @@ local GameConfig: Validate.GameConfig = {
 	tasksPerPlayer = 6, -- PLACEHOLDER: no locked value in docs/ yet
 	qualificationFloorPercent = 0.5, -- design-decisions.md Q2
 	streakLossWeight = 2, -- payoff-table.md §3's c0; Closs(n) = 2n
-	npcSeatStreakCreditThreshold = 3, -- PLACEHOLDER: threat-model.md §8, playtest-tuned
+	-- 5 = never fires: a 6-seat round with one human has at most 5 bots.
+	-- A real player's win always counts (design-decisions.md Q5, applied
+	-- 2026-10-02); rewards-roadmap.md step 2d retires the machinery.
+	npcSeatStreakCreditThreshold = 5,
 	raceDurationSeconds = 300, -- PLACEHOLDER: no locked value in docs/ yet
 
 	-- architecture.md §6's network trace, verbatim.

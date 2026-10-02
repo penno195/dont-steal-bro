@@ -33,6 +33,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProfileStoreLib = require(ServerScriptService.ServerPackages.ProfileStore)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
+local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 
 local STORE_NAME = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData"
 
@@ -232,12 +233,6 @@ local function getBestStreak(player: Player): number
 	return if d then d.bestStreak else 0
 end
 
--- On a win. Bumps bestStreak too if this is a new peak - bestStreak is
-local function getPendingBounty(player: Player): ProfileLogic.PendingBounty?
-	local d = data(player)
-	return if d then d.pendingBounty else nil
-end
-
 -- ===== the progression write gate (P4-1) ==================================
 --
 -- P4-1 requires `ProgressionService.applyRoundResult` to be the ONLY
@@ -262,23 +257,56 @@ end
 -- ProgressionService declares DataService as a dependency, so it runs
 -- after DataService's own init and before anything that depends on IT.
 --
--- One function, not three, because the whole state moves together:
--- ProgressionLogic.applyResult computes currentStreak, bestStreak and
--- pendingBounty as a single before -> after transformation, and writing
--- them one at a time is what would let a yield land between "streak
--- reset" and "bounty cleared."
-export type ProgressionWriter = (player: Player, state: ProfileLogic.ProgressionState) -> ()
+-- One function, not three, because the whole result moves together: the
+-- streak ProgressionLogic.applyResult computed, and on a win the reward
+-- RewardLogic rolled (rewards-roadmap.md step 2b). Writing them one at a
+-- time is what would let a yield land between "streak raised" and "win
+-- paid". The grants go through StoreLogic.applyGrants, the same path a
+-- purchase takes, and the record lands in the same mutation, so the
+-- profile can't hold a reward record without its grants or the reverse.
+--
+-- Returns applyGrants' change lines for the audit log, or an empty list
+-- when nothing was paid (no reward, profile not loaded, read-only mode).
+export type WinRewardWrite = {
+	record: ProfileLogic.WinRewardRecord,
+	grants: { StoreLogic.Grant },
+}
+
+export type ProgressionWriter = (
+	player: Player,
+	state: ProfileLogic.ProgressionState,
+	reward: WinRewardWrite?
+) -> { string }
 
 local progressionWriterClaimedBy: string? = nil
 
-local function writeProgressionState(player: Player, state: ProfileLogic.ProgressionState)
+local function writeProgressionState(
+	player: Player,
+	state: ProfileLogic.ProgressionState,
+	reward: WinRewardWrite?
+): { string }
 	local d = writable(player)
 	if d == nil then
-		return
+		return {}
 	end
 	d.currentStreak = state.currentStreak
 	d.bestStreak = state.bestStreak
-	d.pendingBounty = state.pendingBounty
+	if reward == nil then
+		return {}
+	end
+
+	local after, changes = StoreLogic.applyGrants({
+		currency = d.currency,
+		powerUpStock = d.powerUpStock,
+		ownedCosmetics = d.ownedCosmetics,
+		unlockedTitles = d.unlockedTitles,
+	}, reward.grants)
+	d.currency = after.currency
+	d.powerUpStock = after.powerUpStock
+	d.ownedCosmetics = after.ownedCosmetics
+	d.unlockedTitles = after.unlockedTitles
+	d.lastWinReward = reward.record
+	return changes
 end
 
 local function claimProgressionWriter(claimantName: string): ProgressionWriter
@@ -558,7 +586,6 @@ local DataService: Loader.Service = {
 	setSettings = setSettings,
 	getStreak = getStreak,
 	getBestStreak = getBestStreak,
-	getPendingBounty = getPendingBounty,
 	-- P4-1: incrementStreak/resetStreak/setPendingBounty used to live
 	-- here. They are deliberately gone - see the write gate above.
 	claimProgressionWriter = claimProgressionWriter,

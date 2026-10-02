@@ -287,13 +287,11 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 	local DataService = Loader.get("DataService") :: any
 
 	local finalists: { Outcomes.FinalistInput } = {}
-	local tierNumberByPlayerId: { [number]: number } = {}
 
 	for _, id in qualifierIds do
 		local player = Players:GetPlayerByUserId(id)
 		local streak = if player ~= nil then DataService.getStreak(player) else 0
 		local tier = ProfileLogic.resolveBountyTier(GameConfig.bountyTiers, streak)
-		tierNumberByPlayerId[id] = tier.tier
 
 		table.insert(finalists, {
 			playerId = id,
@@ -319,10 +317,8 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			continue
 		end
 
-		-- Only `won` matters here, not the winner's own bountyVU number -
-		-- PendingBounty (ProfileLogic.luau) stores streakTier + an
-		-- OutcomeTag, not a raw VU figure; the VU-to-item lookup itself
-		-- is design-decisions.md Q1's still-unbuilt RewardTables module.
+		-- Only `won` matters here, not the winner's own bountyVU number;
+		-- what a win pays is RewardLogic's, via ProgressionService.
 		local won = false
 		for _, winner in outcome.winners do
 			if winner.playerId == finalist.playerId then
@@ -337,44 +333,16 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 		local ProgressionService = Loader.get("ProgressionService") :: any
 		local RoundService = Loader.get("RoundService") :: any
 
-		local bounty: ProfileLogic.PendingBounty? = nil
-		if won then
-			local outcomeTag = outcomeTagFor(outcome.branch)
-			if outcomeTag ~= nil then
-				-- Both the annotation and the cast are load-bearing, and
-				-- neither is obvious: confirmed locally that luau-lsp
-				-- widens a string-literal union back to plain `string`
-				-- inside a table constructor unless the table has an
-				-- expected type, and a `{ outcomeTag: string }` is not
-				-- assignable to PendingBounty because Luau table
-				-- properties are invariant. Annotating `granted` supplies
-				-- that expected type; the cast handles the `~= nil`
-				-- refinement widening `OutcomeTag?` to `string` rather
-				-- than to `OutcomeTag`. outcomeTagFor returns one of the
-				-- three literals or nil, and nil is already excluded
-				-- here, so the cast asserts what its signature promises.
-				local granted: ProfileLogic.PendingBounty = {
-					streakTier = tierNumberByPlayerId[finalist.playerId],
-					outcomeTag = outcomeTag :: ProfileLogic.OutcomeTag,
-					grantedAt = os.time(),
-				}
-				bounty = granted
-			else
-				warn(
-					string.format(
-						"DecisionService: %s won but branch %q has no OutcomeTag mapping - no bounty granted",
-						player.Name,
-						outcome.branch
-					)
-				)
-			end
-		end
+		-- A winner's outcome tier picks their currency base; the reward
+		-- itself is rolled and paid inside applyRoundResult (rewards
+		-- step 2b), which warns if a winner arrives without one.
+		local outcomeTag = if won then outcomeTagFor(outcome.branch) else nil
 
 		local streakBefore = DataService.getStreak(player)
 		local after = ProgressionService.applyRoundResult(player, {
 			roundId = RoundService.getRoundId(),
 			reason = ProgressionService.reasonForOutcome(outcome.branch, won),
-			bounty = bounty,
+			outcomeTag = outcomeTag,
 		})
 		personalResults[finalist.playerId] = {
 			streakBefore = streakBefore,
@@ -868,7 +836,7 @@ local function beginDecisionStudio()
 			ProgressionService.applyRoundResult(player, {
 				roundId = roundId,
 				reason = "ForfeitDisconnect",
-				bounty = nil,
+				outcomeTag = nil,
 			})
 		end)
 	end

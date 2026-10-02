@@ -3,8 +3,8 @@
 -- 2026-10-02 applied case, as arithmetic. Every win pays currency for
 -- its outcome tier, scaled by the winner's title-ladder rung, and rolls
 -- a chance at one random drop (a power-up or a cosmetic) whose odds
--- improve with that rung. The service that applies the result to a
--- profile is not built yet (docs/rewards-roadmap.md step 2b).
+-- improve with that rung. ProgressionService rolls it on a win and
+-- applies it through DataService's progression writer.
 --
 -- Self-contained on purpose - no requires of sibling files, no Roblox
 -- API calls - so it stays requirable under Lune for headless tests

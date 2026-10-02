@@ -13,7 +13,7 @@ local ProfileLogic = require("../src/server/ProfileLogic")
 TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 	TestRunner.it("fills every v1 field with defaults for a completely empty old profile", function()
 		local migrated = ProfileLogic.migrate({})
-		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(migrated.schemaVersion):toBe(4)
 		TestRunner.expect(migrated.currentStreak):toBe(0)
 		TestRunner.expect(migrated.bestStreak):toBe(0)
 		TestRunner.expect(migrated.currency):toBe(0)
@@ -27,7 +27,7 @@ TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 			bestStreak = 12,
 			currency = 250,
 		})
-		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(migrated.schemaVersion):toBe(4)
 		TestRunner.expect(migrated.currentStreak):toBe(7)
 		TestRunner.expect(migrated.bestStreak):toBe(12)
 		TestRunner.expect(migrated.currency):toBe(250)
@@ -38,7 +38,7 @@ TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 		template.currentStreak = 4
 		local migrated = ProfileLogic.migrate(template :: any)
 		TestRunner.expect(migrated.currentStreak):toBe(4)
-		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(migrated.schemaVersion):toBe(4)
 	end)
 
 	TestRunner.it("gives a v2 profile an empty settings table and keeps its store fields", function()
@@ -48,11 +48,27 @@ TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 			purchaseIdCache = { "a" },
 			powerUpStock = { SprintBoost = 2 },
 		})
-		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(migrated.schemaVersion):toBe(4)
 		TestRunner.expect(next(migrated.settings)):toBe(nil)
 		TestRunner.expect(migrated.currentStreak):toBe(5)
 		TestRunner.expect(migrated.purchaseIdCache[1]):toBe("a")
 		TestRunner.expect(migrated.powerUpStock.SprintBoost):toBe(2)
+	end)
+
+	TestRunner.it("drops a v3 profile's pendingBounty and starts it with no win reward", function()
+		-- A PendingBounty never paid anything (its reward table was never
+		-- built), so there is nothing to carry into lastWinReward.
+		local migrated: any = ProfileLogic.migrate({
+			schemaVersion = 3,
+			currentStreak = 2,
+			currency = 40,
+			pendingBounty = { streakTier = 1, outcomeTag = "AllShare", grantedAt = 1000 },
+		})
+		TestRunner.expect(migrated.schemaVersion):toBe(4)
+		TestRunner.expect(migrated.pendingBounty):toBe(nil)
+		TestRunner.expect(migrated.lastWinReward):toBe(nil)
+		TestRunner.expect(migrated.currentStreak):toBe(2)
+		TestRunner.expect(migrated.currency):toBe(40)
 	end)
 
 	TestRunner.it("never mutates the table passed in", function()
