@@ -17,7 +17,7 @@ them touches a remote.
 | Screen | Data | Freshness |
 |---|---|---|
 | Store | Catalogue, cosmetic/power-up/title registries | Static config |
-| | `StoreState` (currency, stock, owned, equipped, passes) | **Live**, targeted; pushed on profile load and after every change |
+| | `StoreState` (currency, stock, owned, equipped, passes, live season progress) | **Live**, targeted; pushed on profile load and after every change |
 | | `StorePurchaseResult` + `MarketplaceService.Prompt*PurchaseFinished` | Per request. They only move the spinner; ownership comes from `StoreState` alone |
 | Leaderboards | `LeaderboardState` (all-time), `PeriodBoardState` (daily/weekly) | **Cached** server-side, broadcast every 60–120 s, kept by MenuController for the session. There's no request remote. Staleness comes with the entries |
 | Results | `RoundRecap` (reason, streak before/after, win reward: coins and drop) | **Per round**, targeted, sent on entering Results |
