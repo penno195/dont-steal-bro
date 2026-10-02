@@ -297,18 +297,44 @@ export type WinRewardWrite = {
 	grants: { StoreLogic.Grant },
 }
 
+-- A win also counts toward the live season's tracks (rewards step 5).
+-- The writer hands the step the profile's current season progress and
+-- applies what it returns, in this same mutation: the progress entries
+-- it changed, and the track items that just came due. Running it inside
+-- the writer rather than reading progress beforehand means nothing can
+-- land between the read and the write.
+export type SeasonStep = (
+	progress: { [string]: ProfileLogic.SeasonProgress }
+) -> ({ [string]: ProfileLogic.SeasonProgress }, { StoreLogic.Grant })
+
 export type ProgressionWriter = (
 	player: Player,
 	state: ProfileLogic.ProgressionState,
-	reward: WinRewardWrite?
+	reward: WinRewardWrite?,
+	seasonStep: SeasonStep?
 ) -> { string }
 
 local progressionWriterClaimedBy: string? = nil
 
+local function applyGrantsTo(d: ProfileLogic.ProfileData, grants: { StoreLogic.Grant }): { string }
+	local after, changes = StoreLogic.applyGrants({
+		currency = d.currency,
+		powerUpStock = d.powerUpStock,
+		ownedCosmetics = d.ownedCosmetics,
+		unlockedTitles = d.unlockedTitles,
+	}, grants)
+	d.currency = after.currency
+	d.powerUpStock = after.powerUpStock
+	d.ownedCosmetics = after.ownedCosmetics
+	d.unlockedTitles = after.unlockedTitles
+	return changes
+end
+
 local function writeProgressionState(
 	player: Player,
 	state: ProfileLogic.ProgressionState,
-	reward: WinRewardWrite?
+	reward: WinRewardWrite?,
+	seasonStep: SeasonStep?
 ): { string }
 	local d = writable(player)
 	if d == nil then
@@ -316,21 +342,21 @@ local function writeProgressionState(
 	end
 	d.currentStreak = state.currentStreak
 	d.bestStreak = state.bestStreak
-	if reward == nil then
-		return {}
-	end
 
-	local after, changes = StoreLogic.applyGrants({
-		currency = d.currency,
-		powerUpStock = d.powerUpStock,
-		ownedCosmetics = d.ownedCosmetics,
-		unlockedTitles = d.unlockedTitles,
-	}, reward.grants)
-	d.currency = after.currency
-	d.powerUpStock = after.powerUpStock
-	d.ownedCosmetics = after.ownedCosmetics
-	d.unlockedTitles = after.unlockedTitles
-	d.lastWinReward = reward.record
+	local changes: { string } = {}
+	if reward ~= nil then
+		changes = applyGrantsTo(d, reward.grants)
+		d.lastWinReward = reward.record
+	end
+	if seasonStep ~= nil then
+		local updates, grants = seasonStep(table.clone(d.seasonProgress))
+		for seasonId, progress in updates do
+			d.seasonProgress[seasonId] = progress
+		end
+		-- Not merged into `changes`: those are the win reward's lines,
+		-- and the step logs its own track items (SeasonLogic.describePaid).
+		applyGrantsTo(d, grants)
+	end
 	return changes
 end
 

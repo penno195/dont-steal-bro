@@ -239,7 +239,8 @@ export type TitleDef = {
 -- WHY THERE IS NO `robuxPrice`/`currency` FIELD HERE, even though a
 -- cosmetic is a purchasable thing: P4-5 already owns pricing entirely -
 -- a cosmetic is sold by a StoreItemDef whose `grants` names this item's
--- `id` (see FounderPass.luau, VictoryEmotePass.luau). Duplicating a price
+-- `id`, or unlocked on a season track (see Seasons/Season1.luau).
+-- Duplicating a price
 -- here would be a second source of truth for the same number, and the
 -- two would eventually disagree. `rarity` stays here rather than on the
 -- store entry because it's a property of the ITEM regardless of which
@@ -400,7 +401,42 @@ export type StoreItemDef = {
 	description: string,
 	robuxPrice: number, -- DISPLAY ONLY - see checkStoreItem for why a grant never reads this
 	sortOrder: number,
+	-- A DeveloperProduct grants at least one thing. A GamePass grants
+	-- nothing here: every pass is a season pass, and what it unlocks is
+	-- that season's premium track (SeasonDef below).
 	grants: { StoreGrant },
+}
+
+-- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
+-- One file per season in src/shared/Config/Seasons/ (design-decisions.md
+-- Q1's 2026-09-30 revision, applied 2026-10-02). A season runs between
+-- two fixed UTC dates, and seasons replace each other, so no two windows
+-- may overlap. It has two tracks of items unlocked at win counts:
+--   * `free` counts every win in the window, for everyone (a retention
+--     tool, so it's the less generous of the two);
+--   * `premium` is unlocked by `passKey`, a Store GamePass, and counts
+--     only wins after the pass was first seen owned.
+-- Track items are track-only forever: a cosmetic on a track never drops,
+-- is never sold, and appears on no other track or leaderboard band.
+-- A power-up on a track must be freelyEarnable (Q8).
+export type SeasonGrantKind = "Currency" | "PowerUpStock" | "Cosmetic"
+
+local SEASON_GRANT_KINDS: { SeasonGrantKind } = { "Currency", "PowerUpStock", "Cosmetic" }
+
+export type SeasonTrackItem = {
+	wins: number, -- 0 = granted as soon as the track starts counting
+	grant: StoreGrant, -- Title isn't allowed here; see SEASON_GRANT_KINDS
+}
+
+export type SeasonDef = {
+	id: string,
+	enabled: boolean,
+	displayName: string,
+	startsOn: string, -- "YYYY-MM-DD", 00:00 UTC, inclusive
+	endsOn: string, -- "YYYY-MM-DD", 00:00 UTC, exclusive
+	passKey: string, -- the Store GamePass that unlocks `premium`
+	free: { SeasonTrackItem }, -- ascending `wins`
+	premium: { SeasonTrackItem }, -- ascending `wins`
 }
 
 -- ===== StoreConfig: P4-5 =================================================
@@ -1475,7 +1511,28 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		)
 	end
 
-	if type(def.grants) ~= "table" or #def.grants == 0 then
+	if type(def.grants) ~= "table" then
+		issue(issues, "Store", fileName, "grants", "grants must be a list")
+		return
+	end
+
+	-- Every pass is a season pass (rewards-roadmap.md step 5): it grants
+	-- nothing itself, and its season's premium track holds what it
+	-- unlocks. A grant here would be owned forever, outside any window.
+	if def.kind == "GamePass" then
+		if #def.grants > 0 then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"grants",
+				"a GamePass grants nothing itself - put its items on a season's premium track (Config/Seasons/)"
+			)
+		end
+		return
+	end
+
+	if #def.grants == 0 then
 		issue(issues, "Store", fileName, "grants", "a product must grant at least one thing")
 		return
 	end
@@ -1492,27 +1549,6 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 				string.format("expected one of %s, got %s", table.concat(STORE_GRANT_KINDS, "/"), tostring(grant.kind))
 			)
 			continue
-		end
-
-		-- P4-5 frames game passes as PERMANENT cosmetics and developer
-		-- products as consumables, and the split is enforced rather than
-		-- assumed. A pass that grants a consumable is one of two bugs
-		-- and there is no way to tell which from the config: either a
-		-- one-shot purchase the player can never repeat, or - if its
-		-- grants are re-applied on every join the way a pass's
-		-- permanent unlocks must be - an infinite free tap on currency
-		-- or power-up stock. Refusing the shape closes both.
-		if def.kind == "GamePass" and (grant.kind == "Currency" or grant.kind == "PowerUpStock") then
-			issue(
-				issues,
-				"Store",
-				fileName,
-				field,
-				string.format(
-					"a GamePass cannot grant %s - a pass is permanent and its grants re-apply on every join, so a consumable grant here is either a one-shot purchase or an infinite tap. Sell consumables as a DeveloperProduct.",
-					grant.kind
-				)
-			)
 		end
 
 		if grant.kind == "Currency" then
@@ -1536,6 +1572,106 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 			end
 		end
 	end
+end
+
+-- "YYYY-MM-DD" that names a real calendar date. Two valid dates compare
+-- correctly as strings, which is all the window checks below need;
+-- SeasonLogic.parseUtcDate turns them into os.time() at runtime.
+local function isCalendarDate(text: any): boolean
+	if type(text) ~= "string" then
+		return false
+	end
+	local ys, ms, ds = string.match(text, "^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+	if ys == nil then
+		return false
+	end
+	local y, m, d = tonumber(ys) :: number, tonumber(ms) :: number, tonumber(ds) :: number
+	if m < 1 or m > 12 or d < 1 then
+		return false
+	end
+	local leap = (y % 4 == 0 and y % 100 ~= 0) or y % 400 == 0
+	local maxDay = ({ 31, if leap then 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 })[m]
+	return d <= maxDay
+end
+
+local function checkSeasonTrack(fileName: string, trackName: string, track: any, issues: { Issue })
+	if type(track) ~= "table" then
+		issue(issues, "Season", fileName, trackName, "expected a list of track items")
+		return
+	end
+	local lastWins = -1
+	for index, item in track do
+		local field = string.format("%s[%d]", trackName, index)
+		if type(item) ~= "table" then
+			issue(issues, "Season", fileName, field, "expected a { wins, grant } table")
+			continue
+		end
+		if type(item.wins) ~= "number" or item.wins < 0 or item.wins % 1 ~= 0 then
+			issue(issues, "Season", fileName, field .. ".wins", "expected a non-negative integer")
+		elseif item.wins < lastWins then
+			-- SeasonLogic pays a track strictly in list order, so an
+			-- out-of-order item would wait behind a higher one.
+			issue(issues, "Season", fileName, field .. ".wins", "items must be listed in ascending `wins`")
+		else
+			lastWins = item.wins
+		end
+
+		local grant = item.grant
+		if type(grant) ~= "table" or not inSet(grant.kind, SEASON_GRANT_KINDS) then
+			issue(
+				issues,
+				"Season",
+				fileName,
+				field .. ".grant",
+				string.format("expected a grant of kind %s", table.concat(SEASON_GRANT_KINDS, "/"))
+			)
+			continue
+		end
+		local amountOk = type(grant.amount) == "number" and grant.amount > 0 and grant.amount % 1 == 0
+		if grant.kind == "Currency" and not amountOk then
+			issue(issues, "Season", fileName, field .. ".grant", "a Currency grant needs a positive integer `amount`")
+		elseif grant.kind == "PowerUpStock" and (not amountOk or not isNonEmptyString(grant.powerUpId)) then
+			issue(
+				issues,
+				"Season",
+				fileName,
+				field .. ".grant",
+				"a PowerUpStock grant needs a `powerUpId` and a positive integer `amount`"
+			)
+		elseif grant.kind == "Cosmetic" and not isNonEmptyString(grant.cosmeticId) then
+			issue(issues, "Season", fileName, field .. ".grant", "a Cosmetic grant needs a `cosmeticId`")
+		end
+	end
+end
+
+function Validate.checkSeason(fileName: string, def: SeasonDef, issues: { Issue })
+	if not isNonEmptyString(def.id) then
+		issue(issues, "Season", fileName, "id", "id must be a non-empty string")
+	end
+	if not isNonEmptyString(def.displayName) then
+		issue(issues, "Season", fileName, "displayName", "displayName must be a non-empty string")
+	end
+	if type(def.enabled) ~= "boolean" then
+		issue(issues, "Season", fileName, "enabled", "enabled must be a boolean")
+	end
+	if not isNonEmptyString(def.passKey) then
+		issue(issues, "Season", fileName, "passKey", "passKey must name a Store GamePass")
+	end
+
+	local startsOk = isCalendarDate(def.startsOn)
+	local endsOk = isCalendarDate(def.endsOn)
+	if not startsOk then
+		issue(issues, "Season", fileName, "startsOn", 'expected a real date as "YYYY-MM-DD" (UTC)')
+	end
+	if not endsOk then
+		issue(issues, "Season", fileName, "endsOn", 'expected a real date as "YYYY-MM-DD" (UTC)')
+	end
+	if startsOk and endsOk and def.endsOn <= def.startsOn then
+		issue(issues, "Season", fileName, "endsOn", "a season must end after it starts")
+	end
+
+	checkSeasonTrack(fileName, "free", def.free, issues)
+	checkSeasonTrack(fileName, "premium", def.premium, issues)
 end
 
 -- P3-5. Split out of checkGameConfig purely for length - it's called
@@ -2901,6 +3037,10 @@ export type RegistryInput = {
 	-- carry a placeholder name, because wave 2/3 maps are lit when they
 	-- are built.
 	lightingPresets: { { fileName: string, def: LightingPresetDef } }?,
+
+	-- Rewards step 5. Optional for the same reason - none passed is "no
+	-- seasons", and then every GamePass is left unchecked against them.
+	seasons: { { fileName: string, def: SeasonDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -3245,8 +3385,7 @@ function Validate.run(input: RegistryInput): { Issue }
 						elseif entry.def.enabled and not cosmetic.enabled then
 							-- Only checked when the PRODUCT itself is
 							-- enabled - a disabled product forward-
-							-- referencing a not-yet-built cosmetic
-							-- (FounderPass.luau, VictoryEmotePass.luau) is
+							-- referencing a not-yet-built cosmetic is
 							-- the same legitimate bootstrap state
 							-- checkStoreItem's own "enabled = true but
 							-- assetId is 0" check allows for a disabled
@@ -3272,6 +3411,216 @@ function Validate.run(input: RegistryInput): { Issue }
 							field,
 							string.format("references unregistered title id %q", tostring(grant.titleId))
 						)
+					end
+				end
+			end
+		end
+	end
+
+	-- ===== rewards step 5's season cross-checks =========================
+	local seasons = input.seasons
+	if seasons ~= nil then
+		for _, entry in seasons do
+			Validate.checkSeason(entry.fileName, entry.def, issues)
+		end
+		checkDuplicateIds("Season", seasons :: any, issues)
+
+		-- Seasons replace each other, so no two windows overlap. Valid
+		-- dates compare correctly as strings.
+		local ordered = table.clone(seasons)
+		table.sort(ordered, function(a, b)
+			return tostring(a.def.startsOn) < tostring(b.def.startsOn)
+		end)
+		for i = 2, #ordered do
+			local before, after = ordered[i - 1], ordered[i]
+			if
+				isCalendarDate(before.def.endsOn)
+				and isCalendarDate(after.def.startsOn)
+				and after.def.startsOn < before.def.endsOn
+			then
+				issue(
+					issues,
+					"Season",
+					after.fileName,
+					"startsOn",
+					string.format(
+						"overlaps %s, which ends %s - seasons run one at a time",
+						before.fileName,
+						before.def.endsOn
+					)
+				)
+			end
+		end
+
+		-- Each season's pass is a real GamePass, no two seasons share
+		-- one, and no GamePass is left without a season (it would sell
+		-- nothing, since a pass grants nothing itself).
+		if store ~= nil then
+			local passByKey: { [string]: StoreItemDef } = {}
+			for _, entry in store do
+				if entry.def.kind == "GamePass" then
+					passByKey[entry.def.key] = entry.def
+				end
+			end
+			local seasonForPass: { [string]: string } = {}
+			for _, entry in seasons do
+				local key = entry.def.passKey
+				if type(key) ~= "string" then
+					continue
+				end
+				if passByKey[key] == nil then
+					issue(
+						issues,
+						"Season",
+						entry.fileName,
+						"passKey",
+						string.format("%q is not a GamePass in Config/Store/", key)
+					)
+				elseif seasonForPass[key] ~= nil then
+					issue(
+						issues,
+						"Season",
+						entry.fileName,
+						"passKey",
+						string.format(
+							"%q already unlocks %s - a new season needs a new pass, because a pass is owned forever",
+							key,
+							seasonForPass[key]
+						)
+					)
+				else
+					seasonForPass[key] = entry.fileName
+				end
+			end
+			for _, entry in store do
+				if entry.def.kind == "GamePass" and seasonForPass[entry.def.key] == nil then
+					issue(
+						issues,
+						"Store",
+						entry.fileName,
+						"key",
+						"no season names this pass as its passKey, so it would unlock nothing"
+					)
+				end
+			end
+		end
+
+		local powerUpById: { [string]: PowerUpDef } = {}
+		for _, entry in input.powerUps do
+			powerUpById[entry.def.id] = entry.def
+		end
+		local cosmeticById: { [string]: CosmeticDef }? = nil
+		if cosmetics ~= nil then
+			local byId: { [string]: CosmeticDef } = {}
+			for _, entry in cosmetics do
+				byId[entry.def.id] = entry.def
+			end
+			cosmeticById = byId
+		end
+
+		-- Where else a cosmetic is handed out, for "track-only forever".
+		local elsewhere: { [string]: string } = {}
+		if store ~= nil then
+			for _, entry in store do
+				if type(entry.def.grants) == "table" then
+					for _, grant in entry.def.grants do
+						if grant.kind == "Cosmetic" and type(grant.cosmeticId) == "string" then
+							elsewhere[grant.cosmeticId] = "sold by " .. entry.fileName
+						end
+					end
+				end
+			end
+		end
+		if leaderboard ~= nil and type(leaderboard.payouts) == "table" then
+			for kind, bands in leaderboard.payouts do
+				if type(bands) == "table" then
+					for _, band in bands do
+						if type(band.cosmeticId) == "string" then
+							elsewhere[band.cosmeticId] = string.format("paid by the %s leaderboard", tostring(kind))
+						end
+					end
+				end
+			end
+		end
+
+		for _, entry in seasons do
+			for _, trackName in { "free", "premium" } do
+				local track = (entry.def :: any)[trackName]
+				if type(track) ~= "table" then
+					continue
+				end
+				for index, item in track do
+					local grant = if type(item) == "table" then item.grant else nil
+					if type(grant) ~= "table" then
+						continue
+					end
+					local field = string.format("%s[%d].grant", trackName, index)
+
+					if grant.kind == "PowerUpStock" then
+						local powerUp = powerUpById[grant.powerUpId or ""]
+						if powerUp == nil then
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format("references unregistered power-up id %q", tostring(grant.powerUpId))
+							)
+						elseif not (powerUp.acquisition.freelyEarnable and powerUp.acquisition.loadoutEligible) then
+							-- Q8: a power-up on a track (premium is paid
+							-- for) must also be earnable free, and stock
+							-- only means anything if it fits a loadout.
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format(
+									"power-up %q must be freelyEarnable and loadoutEligible to sit on a track (design-decisions.md Q8)",
+									powerUp.id
+								)
+							)
+						end
+					elseif grant.kind == "Cosmetic" and cosmeticById ~= nil and type(grant.cosmeticId) == "string" then
+						local id = grant.cosmeticId :: string
+						local cosmetic = cosmeticById[id]
+						if cosmetic == nil then
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format("references unregistered cosmetic id %q", id)
+							)
+							continue
+						end
+						-- Track-only forever (Q1, applied 2026-10-02).
+						local where = elsewhere[id]
+						if cosmetic.winDrop == true then
+							where = "a win drop (winDrop = true)"
+						end
+						if where ~= nil then
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format("cosmetic %q is also %s - a track item is track-only forever", id, where)
+							)
+						end
+						elsewhere[id] = string.format("on %s's %s track", entry.fileName, trackName)
+						if entry.def.enabled == true and not cosmetic.enabled then
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format(
+									"cosmetic %q is not enabled - it has no Roblox asset yet, so this ENABLED season would grant something invisible",
+									id
+								)
+							)
+						end
 					end
 				end
 			end

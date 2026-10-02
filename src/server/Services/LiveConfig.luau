@@ -57,6 +57,7 @@ local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local NPCPersonalities = require(ReplicatedStorage.Shared.Config.NPCPersonalities)
 local Store = require(ReplicatedStorage.Shared.Config.Store)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local LightingPresets = require(ReplicatedStorage.Shared.Config.LightingPresets)
 local StatusEffectDefs = require(ServerScriptService.Server.Services.StatusEffectDefs)
 local LiveConfigLogic = require(ServerScriptService.Server.LiveConfigLogic)
@@ -128,6 +129,7 @@ local function validateRoots(roots: LiveConfigLogic.Roots): { string }
 		store = Store :: any,
 		cosmetics = Cosmetics :: any,
 		lightingPresets = LightingPresets :: any,
+		seasons = Seasons :: any,
 	})
 	local issues = {}
 	for _, problem in found do

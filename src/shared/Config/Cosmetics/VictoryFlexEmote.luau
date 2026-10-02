@@ -1,5 +1,5 @@
 --!strict
--- The victory emote granted by VictoryEmotePass.luau. Played on the
+-- The victory emote on Season 1's premium track (Seasons/Season1.luau). Played on the
 -- results screen and the Decision Studio podium, never worn persistently
 -- - see CosmeticService's own note on why "Emote" has nothing to apply
 -- on spawn.

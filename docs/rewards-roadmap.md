@@ -95,17 +95,31 @@ and ask the user (CLAUDE.md).
   - There's no on-screen "you placed #N" notice yet. The coins just
     arrive and StoreState refreshes.
 
+- [x] **5. Pass reward tracks.**
+  - User decisions (design-decisions.md Q1 applied case, "seasons and
+    their tracks"): every pass is a season with fixed UTC dates. A
+    season has a free track and a premium track, and track items are
+    track-only forever. FounderPass and VictoryEmotePass are retired.
+    Their cosmetics are on Season 1's premium track.
+  - `Config/Seasons/` holds one file per season: the window, `passKey`,
+    `free` and `premium`. `Store/Season1Pass.luau` is its pass and
+    grants nothing itself. Validate checks dates, overlap, the pass
+    pairing, Q8 for power-ups, and track-only cosmetics.
+  - `SeasonLogic.luau` is the pure part (`tests/SeasonLogic.spec.luau`).
+    Schema v5 adds `seasonProgress`: `passSeenAt`, win counts and paid
+    counts per season.
+  - A win is counted inside the progression writer's mutation
+    (`DataService.SeasonStep`). On join and on a pass purchase,
+    `StoreService.syncPasses` records the pass sighting and pays any due
+    items. A pass can't be bought outside its season.
+  - Season 1 ships disabled, because its cosmetics have no assets. Not
+    yet Studio-verified: to test, enable it with placeholder cosmetics
+    enabled, or move its items to coins and power-ups.
+
 ## Next
-- [ ] **5. Pass reward tracks.**
-  - Add a track config: the pass, a start and an end, and items
-    unlocked at win counts. Only wins inside the window count.
-  - Store when ownership was first seen, plus each track's win count.
-    This needs a schema bump.
-  - Grant items as the counts are reached. A new track needs a new
-    pass, and Q8 still applies: a power-up on a track must also be free
-    to earn.
-  - **Ask the user** what happens to `FounderPass` and
-    `VictoryEmotePass`.
+- [ ] **5b. Track UI.** The store lists the season pass, but nothing
+  shows a track or a player's progress on it. StoreState needs the
+  player's own season progress (private, so Q7 holds).
 - [ ] **6. Store audit.**
   - Currency buys specific named items at fixed prices.
   - Check that nothing bought is random, for Robux or for currency.

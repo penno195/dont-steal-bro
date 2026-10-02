@@ -99,9 +99,29 @@ export type ProfileData = {
 	-- ===== schema v4, rewards step 2b ===================================
 
 	lastWinReward: WinRewardRecord?, -- nil until a first win; a loss leaves it alone
+
+	-- ===== schema v5, rewards step 5 ====================================
+
+	-- Season id -> this player's progress on that season's tracks. An
+	-- entry appears the first time the player is seen during the season,
+	-- and is kept after it ends (it's the record of what was paid).
+	seasonProgress: { [string]: SeasonProgress },
 }
 
-local CURRENT_SCHEMA_VERSION = 4
+-- Structurally SeasonLogic.Progress, which computes what this stores.
+-- `passSeenAt` is when the season's pass was first seen owned inside the
+-- window (os.time()); the premium track counts only wins after it. The
+-- `*Paid` fields count items paid from the front of each track, which is
+-- what stops a join or a retry paying an item twice.
+export type SeasonProgress = {
+	passSeenAt: number?,
+	freeWins: number,
+	premiumWins: number,
+	freePaid: number,
+	premiumPaid: number,
+}
+
+local CURRENT_SCHEMA_VERSION = 5
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -124,6 +144,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		stats = defaultStats(),
 		lastSeen = 0,
 		lastWinReward = nil,
+		seasonProgress = {},
 	}
 end
 
@@ -208,6 +229,15 @@ migrations[3] = function(old: { [string]: any }): { [string]: any }
 	next.schemaVersion = 4
 	next.pendingBounty = nil
 	next.lastWinReward = nil
+	return next
+end
+
+-- v4 -> v5 (rewards step 5): an empty seasonProgress. No season existed
+-- before this version, so there is no progress to reconstruct.
+migrations[4] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 5
+	next.seasonProgress = (old.seasonProgress :: { [string]: any }?) or {}
 	return next
 end
 

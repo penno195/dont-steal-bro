@@ -1304,13 +1304,14 @@ TestRunner.describe("Validate.checkStoreItem (P4-5)", function()
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 
-	TestRunner.it("refuses a game pass that grants currency or power-up stock", function()
-		-- A pass is permanent and its grants re-apply on every join, so a
-		-- consumable grant here is either a one-shot or an infinite tap.
+	TestRunner.it("refuses a game pass that grants anything itself", function()
+		-- Every pass is a season pass: its items live on the season's
+		-- premium track, where only wins inside the window count.
 		for _, grant in
 			{
 				{ kind = "Currency" :: any, amount = 100 },
 				{ kind = "PowerUpStock" :: any, powerUpId = "sprint-boost", amount = 5 },
+				{ kind = "Cosmetic" :: any, cosmeticId = "skin-founder" },
 			}
 		do
 			local def = validProduct("t")
@@ -1320,10 +1321,10 @@ TestRunner.describe("Validate.checkStoreItem (P4-5)", function()
 		end
 	end)
 
-	TestRunner.it("accepts a game pass that grants a cosmetic", function()
+	TestRunner.it("accepts a game pass that grants nothing", function()
 		local def = validProduct("t")
 		def.kind = "GamePass"
-		def.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		def.grants = {}
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(0)
 	end)
 
@@ -1532,9 +1533,8 @@ TestRunner.describe("Validate.checkCosmeticItem (P4-6)", function()
 end)
 
 TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", function()
-	TestRunner.it("accepts a game pass granting a registered, enabled cosmetic", function()
+	TestRunner.it("accepts a product granting a registered, enabled cosmetic", function()
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
 		local issues = Validate.run({
 			gameConfig = validGameConfig(),
@@ -1550,7 +1550,6 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 
 	TestRunner.it("refuses a grant of a cosmetic nobody registered, once a cosmetics registry is provided", function()
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.grants = { { kind = "Cosmetic", cosmeticId = "not-a-cosmetic" } }
 		local issues = Validate.run({
 			gameConfig = validGameConfig(),
@@ -1570,14 +1569,12 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 		-- "omitted store registry" test) - a caller/fixture that
 		-- predates P4-6 keeps working unchanged.
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.grants = { { kind = "Cosmetic", cosmeticId = "whatever" } }
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = product } })):toBe(0)
 	end)
 
 	TestRunner.it("refuses a grant of a cosmetic that exists but isn't enabled yet", function()
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
 		local cosmetic = validCosmetic("skin-founder", "Skin")
 		cosmetic.enabled = false
@@ -1596,11 +1593,9 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 	end)
 
 	TestRunner.it("allows a DISABLED product forward-referencing a not-yet-built cosmetic", function()
-		-- The real bootstrap state FounderPass.luau and
-		-- VictoryEmotePass.luau are in right now: neither the product nor
-		-- the cosmetic it names has a Roblox asset id yet.
+		-- The bootstrap state every store entry ships in: neither the
+		-- product nor the cosmetic it names has a Roblox asset id yet.
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.enabled = false
 		product.assetId = 0
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
@@ -2189,5 +2184,171 @@ TestRunner.describe("Validate.checkGameConfig (P8-5 liveOps)", function()
 		TestRunner.expect(#issuesWith(function(lo)
 			lo.tunablePaths = { "game..seconds" }
 		end)):toBe(1)
+	end)
+end)
+
+-- ===== seasons (rewards step 5) =============================================
+
+local function validSeason(id: string, startsOn: string, endsOn: string, passKey: string): Validate.SeasonDef
+	return {
+		id = id,
+		enabled = true,
+		displayName = "Test Season",
+		startsOn = startsOn,
+		endsOn = endsOn,
+		passKey = passKey,
+		free = {
+			{ wins = 3, grant = { kind = "Currency", amount = 100 } },
+			{ wins = 10, grant = { kind = "PowerUpStock", powerUpId = "earnable", amount = 1 } },
+		},
+		premium = {
+			{ wins = 0, grant = { kind = "Cosmetic", cosmeticId = "trail-s1" } },
+			{ wins = 5, grant = { kind = "Currency", amount = 250 } },
+		},
+	}
+end
+
+local function seasonPass(key: string): Validate.StoreItemDef
+	local def = validProduct(key)
+	def.kind = "GamePass"
+	def.assetId = 0
+	def.enabled = false
+	def.grants = {}
+	return def
+end
+
+type SeasonInput = {
+	seasons: { { fileName: string, def: Validate.SeasonDef } },
+	store: { { fileName: string, def: Validate.StoreItemDef } }?,
+	cosmetics: { { fileName: string, def: Validate.CosmeticDef } }?,
+}
+
+local function runSeasons(input: SeasonInput): { Validate.Issue }
+	local earnable = validPowerUp("earnable")
+	earnable.acquisition.freelyEarnable = true
+	return Validate.run({
+		gameConfig = validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = {
+			{ fileName = "Earnable.luau", def = earnable },
+			{ fileName = "PaidOnly.luau", def = validPowerUp("paid-only") },
+		},
+		titles = {},
+		seasons = input.seasons,
+		store = input.store or { { fileName = "S1Pass.luau", def = seasonPass("s1-pass") } },
+		cosmetics = input.cosmetics or { { fileName = "TrailS1.luau", def = validCosmetic("trail-s1", "Trail") } },
+	})
+end
+
+TestRunner.describe("Validate.checkSeason and season cross-checks (rewards step 5)", function()
+	TestRunner.it("accepts a well-formed season with its pass", function()
+		local issues = runSeasons({
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass") } },
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("refuses bad dates and a window that ends before it starts", function()
+		for _, dates in
+			{ { "2026-02-30", "2027-01-01" }, { "2026/10/01", "2027-01-01" }, { "2027-01-01", "2026-10-01" } }
+		do
+			local issues = runSeasons({
+				seasons = { { fileName = "S1.luau", def = validSeason("s1", dates[1], dates[2], "s1-pass") } },
+			})
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
+	end)
+
+	TestRunner.it("refuses a track listed out of win order", function()
+		local def = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		def.free = { def.free[2], def.free[1] }
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a Title on a track", function()
+		local def = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		table.insert(def.free, { wins = 20, grant = { kind = "Title", titleId = "got-one" } })
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a power-up on a track that isn't freely earnable (Q8)", function()
+		local def = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		def.premium[2] = { wins = 5, grant = { kind = "PowerUpStock", powerUpId = "paid-only", amount = 1 } }
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses overlapping seasons, and two seasons sharing one pass", function()
+		local store = {
+			{ fileName = "S1Pass.luau", def = seasonPass("s1-pass") },
+			{ fileName = "S2Pass.luau", def = seasonPass("s2-pass") },
+		}
+		local s1 = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		local overlapping = validSeason("s2", "2026-12-01", "2027-03-01", "s2-pass")
+		overlapping.premium = {}
+		TestRunner.expect(#runSeasons({
+			store = store,
+			seasons = { { fileName = "S1.luau", def = s1 }, { fileName = "S2.luau", def = overlapping } },
+		}) > 0):toBeTruthy()
+
+		local sharing = validSeason("s2", "2027-01-01", "2027-03-01", "s1-pass")
+		sharing.premium = {}
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = s1 }, { fileName = "S2.luau", def = sharing } },
+		}) > 0):toBeTruthy()
+
+		local next = validSeason("s2", "2027-01-01", "2027-03-01", "s2-pass")
+		next.premium = {}
+		TestRunner.expect(#runSeasons({
+			store = store,
+			seasons = { { fileName = "S1.luau", def = s1 }, { fileName = "S2.luau", def = next } },
+		})):toBe(0)
+	end)
+
+	TestRunner.it("refuses an unknown pass, and a pass no season names", function()
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2027-01-01", "nope") } },
+		}) > 0):toBeTruthy()
+		TestRunner.expect(#runSeasons({ seasons = {} }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("keeps a track cosmetic track-only: not a win drop, not sold, not on two tracks", function()
+		local season = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+
+		local dropping = validCosmetic("trail-s1", "Trail")
+		dropping.winDrop = true
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = season } },
+			cosmetics = { { fileName = "TrailS1.luau", def = dropping } },
+		}) > 0):toBeTruthy()
+
+		local seller = validProduct("trail-bundle")
+		seller.grants = { { kind = "Cosmetic", cosmeticId = "trail-s1" } }
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = season } },
+			store = {
+				{ fileName = "S1Pass.luau", def = seasonPass("s1-pass") },
+				{ fileName = "Bundle.luau", def = seller },
+			},
+		}) > 0):toBeTruthy()
+
+		local twice = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		table.insert(twice.free, { wins = 20, grant = { kind = "Cosmetic", cosmeticId = "trail-s1" } })
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = twice } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an enabled season granting a disabled cosmetic, but allows it while disabled", function()
+		local cosmetic = validCosmetic("trail-s1", "Trail")
+		cosmetic.enabled = false
+		cosmetic.trailTextureAssetId = 0
+		local cosmetics = { { fileName = "TrailS1.luau", def = cosmetic } }
+		local season = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		TestRunner.expect(
+			#runSeasons({ seasons = { { fileName = "S1.luau", def = season } }, cosmetics = cosmetics }) > 0
+		)
+			:toBeTruthy()
+		season.enabled = false
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = season } }, cosmetics = cosmetics }))
+			:toBe(0)
 	end)
 end)

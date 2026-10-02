@@ -3,13 +3,10 @@
 -- Decision Studio (design-decisions.md's podium circle) - see
 -- CosmeticService for why it only appears in that one round state.
 --
--- No Store product grants this yet - same "written before the product
--- exists" stance FounderPass.luau and VictoryEmotePass.luau took the
--- other way around (a store entry forward-referencing a cosmetic id).
--- Here it's a real, validated, disabled entry waiting on both a Roblox
--- asset id and a product to sell it. Nothing about that blocks P4-6:
--- Validate.checkStoreItem only requires a Cosmetic grant's id to exist
--- and be enabled when a product actually grants it.
+-- No Store product grants this - it is a win drop (winDrop = true).
+-- A disabled entry waiting on a Roblox asset id; nothing about that
+-- blocks P4-6, since Validate only requires a granted cosmetic to be
+-- enabled when the product or season granting it is.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)

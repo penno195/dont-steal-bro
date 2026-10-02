@@ -80,14 +80,22 @@ explicitly rather than pretending it isn't there.
 
 ## 3. What a game pass may grant, and why
 
-A pass is permanent, so its grants are re-applied on **every join**.
-That makes cosmetic and title grants safe — both are set insertions that
-do nothing the second time — and makes consumable grants a disaster:
-currency on a pass is an infinite tap.
+Nothing directly. Every pass is a **season pass** (design-decisions.md
+Q1, applied 2026-10-02; rewards-roadmap.md step 5), and
+`Validate.checkStoreItem` refuses a `GamePass` with any `grants`. What
+a pass unlocks is its season's premium track (`Config/Seasons/`): items
+at win counts, where only wins between the pass's first sighting and the
+season's end count. A Roblox pass is owned forever, so that window is
+ours to enforce, and a new season needs a new pass.
 
-`Validate.checkStoreItem` refuses a `GamePass` that grants `Currency` or
-`PowerUpStock` at boot, rather than leaving it to review. Consumables
-are sold as developer products, which come with receipts.
+Track items can be cosmetics, coins or power-up stock. They're paid
+once, not on every join: the profile's `seasonProgress` records how many
+items of each track were paid, in the same mutation as the grants
+(`SeasonLogic`). A power-up on a track must be `freelyEarnable` (Q8),
+and a track cosmetic is track-only forever: it never drops, is never
+sold, and is on no other track or leaderboard band. The store refuses
+to prompt for a pass outside its season. Consumables bought outright
+are still developer products, which come with receipts.
 
 No shipped product grants a `Title`. The grant kind exists and is
 validated, but the title ladder keys off `bestStreak` alone (P4-2), and
@@ -192,11 +200,13 @@ happen is a double grant, and the PurchaseId cache is what rules it out.
 
 ### Case 7 — game passes
 
-1. Enable a pass entry with a real `gamePassId` you own.
-2. Join. **Expect:** `syncPasses` grants its cosmetics once, with a
-   `Store: GRANT` line and no purchaseId.
-3. Rejoin. **Expect:** no second `Store: GRANT` line — the grants
-   re-apply and change nothing.
+1. Enable a season pass with a real `assetId` you own, and its season
+   with a window that includes today.
+2. Join. **Expect:** `syncPasses` records `passSeenAt` and pays the
+   premium track's 0-win item once, with a `Season ... Premium @0 wins`
+   line.
+3. Rejoin. **Expect:** no second line — the progress entry's
+   `premiumPaid` already covers it.
 4. `StoreService.ownsPass(player, id)` twice in a row: the second should
    not produce a second web call (watch the output; a failure warns).
 
@@ -274,7 +284,8 @@ correct rule, and this task made it structural rather than aspirational:
   price.
 - `Validate.checkStoreConfig` pins `loadoutSlots` to exactly 3, so the
   cap cannot be raised by editing a number.
-- A game pass cannot grant a consumable at all.
+- A game pass grants nothing itself, and a power-up on a season track
+  must be `freelyEarnable`.
 
 So the *mechanical* pay-to-win vector — buy power nobody can earn, or
 buy more of it than anyone can carry — is closed at boot, in four
@@ -339,9 +350,10 @@ Roughly in order of how much they cost:
    play, the rule holds. If it is 79 Robux or six hours, the rule is
    decorative.
 
-4. **Cosmetics-only, if any doubt remains.** Passes are already
-   cosmetic-only and structurally cannot be otherwise. Extending that to
-   the whole store costs real revenue and is the safe answer — Q8
+4. **Cosmetics-only, if any doubt remains.** Season tracks can pay
+   freely-earnable power-up stock (user decision, 2026-10-02); dropping
+   that, and extending cosmetics-only to the whole store, costs real
+   revenue and is the safe answer — Q8
    explicitly notes this direction is cheap to tighten and expensive to
    loosen later.
 

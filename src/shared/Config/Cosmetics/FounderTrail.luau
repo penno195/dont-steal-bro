@@ -1,5 +1,5 @@
 --!strict
--- A movement trail: the "Trail" half of FounderPass.luau's grant.
+-- A movement trail, on Season 1's premium track (Seasons/Season1.luau).
 -- Cosmetic only - purely visual, never touches movement stats.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")

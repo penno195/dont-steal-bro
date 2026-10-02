@@ -72,10 +72,12 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local StoreCatalogue = require(ReplicatedStorage.Shared.Config.Store)
+local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 local CosmeticLogic = require(ServerScriptService.Server.CosmeticLogic)
+local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 
 type StoreItemDef = Validate.StoreItemDef
 
@@ -531,13 +533,14 @@ local function ownsPass(player: Player, gamePassId: number): boolean
 	return owned == true
 end
 
--- A pass is permanent, so its grants are re-applied on every join and
--- on every purchase. That is safe by construction rather than by
--- bookkeeping: a pass may only grant Cosmetic or Title
--- (Validate.checkStoreItem refuses anything else), and both of those
--- are set-insertions that do nothing the second time
--- (StoreLogic.applyGrants). There is no receipt and no PurchaseId
--- involved, because there is nothing to consume.
+-- Every pass is a season pass (rewards-roadmap.md step 5) and grants
+-- nothing itself. On join and on a pass purchase, each season is synced
+-- (SeasonLogic.sync): a live season starts being tracked, its pass's
+-- first sighting is recorded (the premium track counts wins from then),
+-- and any track item now due is paid - a 0-win item, say. Paying is
+-- idempotent through the progress entry's `*Paid` counts, which are
+-- written in the same mutation as the grants. A win's own track items
+-- are paid by the progression writer instead (ProgressionService).
 local function syncPasses(player: Player)
 	local getHandle = receiptHandleFor
 	if getHandle == nil then
@@ -553,36 +556,66 @@ local function syncPasses(player: Player)
 	end
 
 	local anyChange = false
+	local nowUtc = os.time()
 
-	for _, entry in StoreCatalogue do
-		local def = entry.def :: StoreItemDef
-		if def.kind ~= "GamePass" or not def.enabled or def.assetId <= 0 then
+	for _, entry in Seasons do
+		local season = SeasonLogic.fromDef(entry.def :: any)
+		if season == nil then
 			continue
 		end
-		if not ownsPass(player, def.assetId) then
+		local pass = byKey[(entry.def :: any).passKey]
+		local owns = pass ~= nil and pass.enabled and ownsPass(player, pass.assetId)
+
+		local before = data.seasonProgress[season.id]
+		local after, paid = SeasonLogic.sync(before, season, nowUtc, owns)
+		if after == nil or after == before then
 			continue
 		end
-
-		local changes = applyProductTo(data, def, nil)
-		local realChange = false
-		for _, line in changes do
-			if
-				string.find(line, "already owned", 1, true) == nil
-				and string.find(line, "already unlocked", 1, true) == nil
-			then
-				realChange = true
-				break
-			end
+		local grants = {}
+		for _, item in paid do
+			table.insert(grants, item.grant)
+			print(
+				string.format(
+					"StoreService: %s (%d) %s",
+					player.Name,
+					player.UserId,
+					SeasonLogic.describePaid(season.id, item)
+				)
+			)
 		end
-		if realChange then
-			recordGrant(player, def, nil, changes)
-			anyChange = true
-		end
+		local granted = StoreLogic.applyGrants({
+			currency = data.currency,
+			powerUpStock = data.powerUpStock,
+			ownedCosmetics = data.ownedCosmetics,
+			unlockedTitles = data.unlockedTitles,
+		}, grants :: any)
+		data.currency = granted.currency
+		data.powerUpStock = granted.powerUpStock
+		data.ownedCosmetics = granted.ownedCosmetics
+		data.unlockedTitles = granted.unlockedTitles
+		data.seasonProgress[season.id] = after
+		anyChange = true
 	end
 
 	if anyChange then
 		handle.save()
 	end
+end
+
+-- The live season a pass unlocks, or nil. A pass is only sold during
+-- its season: bought after the end it would unlock nothing, and seasons
+-- replace each other, so there's no pre-sale either.
+local function liveSeasonForPass(key: string): SeasonLogic.Season?
+	for _, entry in Seasons do
+		if (entry.def :: any).passKey ~= key then
+			continue
+		end
+		local season = SeasonLogic.fromDef(entry.def :: any)
+		if season ~= nil and SeasonLogic.isLive(season, os.time()) then
+			return season
+		end
+	end
+	return nil
 end
 
 -- ===== the purchase prompt flow ===========================================
@@ -613,6 +646,11 @@ local function handlePurchaseIntent(player: Player, key: string)
 
 	if def.kind == "GamePass" and ownsPass(player, def.assetId) then
 		sendPurchaseResult(player, key, "AlreadyOwned", "You already own this.")
+		return
+	end
+
+	if def.kind == "GamePass" and liveSeasonForPass(def.key) == nil then
+		sendPurchaseResult(player, key, "Unavailable", "This season isn't running right now.")
 		return
 	end
 

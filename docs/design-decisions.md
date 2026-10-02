@@ -114,7 +114,8 @@ anything already unlocked is kept. NPC bots now skip the top 6 rungs
 Every cosmetic that no pass grants sets `winDrop = true`: Champion's
 Flare, Gilded Frame, Rubber Duck, Sorry Not Sorry, Vault Door and
 Wildfire. Founder's Kit and Founder's Trail (FounderPass) and Victory
-Flex (VictoryEmotePass) stay pass-only. All nine are disabled until
+Flex (VictoryEmotePass) stay pass-only (since moved to Season 1's
+premium track; see "seasons and their tracks"). All nine are disabled until
 they get assets, so until then only power-ups actually drop. A new
 cosmetic opts in, or doesn't, in its own file.
 
@@ -128,6 +129,25 @@ cosmetic opts in, or doesn't, in its own file.
   cosmetic id, so a leaderboard can't pay a power-up (Q8).
 - Winners are usually offline when a period ends, so a payout is queued
   on their profile and lands the next time they join.
+
+*Applied (2026-10-02, user decision):* **seasons and their tracks.**
+- **Every pass lasts a set period, then another replaces it.** These
+  are seasons. Each runs between fixed UTC dates, and no two overlap.
+  FounderPass and VictoryEmotePass are retired, and their three
+  cosmetics move to Season 1's premium track.
+- **Each season has two tracks.** The premium track comes with the
+  season's pass. The free track needs no pass and is less generous: it's
+  a retention tool. The free track counts every win in the window. The
+  premium track counts only wins after the pass was first seen owned.
+  This follows the revision's "between the purchase and the end".
+- **A track item can be a cosmetic, coins, or power-up stock**, and a
+  track's first item can sit at 0 wins (paid as soon as the track starts
+  counting). A power-up must be `freelyEarnable` (Q8). A pass grants
+  nothing itself.
+- **Track items are track-only forever.** A track cosmetic never drops,
+  is never sold, and is never on another track or leaderboard band.
+  Missing a season means missing its items.
+- A pass is only sold while its season is running.
 
 ## 2. Round timer expires with <3 finished
 

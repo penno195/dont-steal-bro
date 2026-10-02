@@ -1,5 +1,5 @@
 --!strict
--- A full outfit swap: the "Skin" half of FounderPass.luau's grant.
+-- A full outfit swap, on Season 1's premium track (Seasons/Season1.luau).
 -- Cosmetic only - CosmeticService applies it as a Shirt/Pants pair, which
 -- is the cheapest possible reskin (two Instances, no extra meshes) and
 -- fits the mobile instance-count budget trivially.

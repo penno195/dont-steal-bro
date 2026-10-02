@@ -49,7 +49,9 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
+local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local ProgressionLogic = require(ServerScriptService.Server.ProgressionLogic)
 local RewardLogic = require(ServerScriptService.Server.RewardLogic)
 local Participants = require(ServerScriptService.Server.Participants)
@@ -79,6 +81,45 @@ type LedgerEntry = {
 	-- a config LiveConfig can retune between roll and screen.
 	dropAmount: number?,
 }
+
+-- ===== season tracks (rewards-roadmap.md step 5) ===========================
+
+-- A win counts toward every live season's tracks. Seasons don't overlap
+-- (Validate), so in practice that's at most one. Returned as a step the
+-- progression writer runs inside its own mutation, so the count, the
+-- items it unlocks and the streak all land together.
+local function seasonStepFor(
+	player: Player,
+	roundId: string
+): (progress: { [string]: any }) -> ({ [string]: any }, { any })
+	return function(progress)
+		local now = os.time()
+		local updates: { [string]: any } = {}
+		local grants: { any } = {}
+		for _, entry in Seasons do
+			local season = SeasonLogic.fromDef(entry.def :: any)
+			if season == nil then
+				continue
+			end
+			local after, paid = SeasonLogic.recordWin(progress[season.id], season, now)
+			if after ~= nil and after ~= progress[season.id] then
+				updates[season.id] = after
+			end
+			for _, item in paid do
+				table.insert(grants, item.grant)
+				print(
+					string.format(
+						"Progression: %s round=%s %s",
+						player.Name,
+						roundId,
+						SeasonLogic.describePaid(season.id, item)
+					)
+				)
+			end
+		end
+		return updates, grants
+	end
+end
 
 -- ===== win rewards (rewards-roadmap.md step 2b) ============================
 
@@ -161,8 +202,10 @@ end
 -- double-reported by something on that same server.
 local ledger: { [string]: LedgerEntry } = {}
 
--- DataService.ProgressionWriter's shape; the reward is its WinRewardWrite.
-local writeProgressionState: ((player: Player, state: ProfileLogic.ProgressionState, reward: any) -> { string })? = nil
+-- DataService.ProgressionWriter's shape: the reward is its WinRewardWrite
+-- and the step its SeasonStep.
+local writeProgressionState: ((player: Player, state: ProfileLogic.ProgressionState, reward: any, seasonStep: any) -> { string })? =
+	nil
 
 local function ledgerKey(roundId: string, userId: number): string
 	return string.format("%s|%d", roundId, userId)
@@ -273,7 +316,8 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		return after
 	end
 	local rewardWrite = if rewardRecord ~= nil then { record = rewardRecord, grants = rewardGrants } else nil
-	local rewardChanges = write(player, after, rewardWrite)
+	local seasonStep = if ProgressionLogic.isWin(result.reason) then seasonStepFor(player, result.roundId) else nil
+	local rewardChanges = write(player, after, rewardWrite, seasonStep)
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
 
