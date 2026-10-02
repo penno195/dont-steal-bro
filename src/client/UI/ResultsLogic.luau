@@ -30,9 +30,6 @@ export type Recap = {
 	bestStreakBefore: number,
 	bestStreakAfter: number,
 	reward: RecapReward?, -- what this win paid; nil on a loss
-	streakCredited: boolean,
-	npcSeatCount: number,
-	npcSeatThreshold: number,
 }
 
 export type RaceTally = {
@@ -78,8 +75,7 @@ end
 -- ===== the streak change ===================================================
 
 export type StreakKind =
-	"Up" -- a credited win
-	| "Held" -- a win that earned no streak credit (NPC-heavy round)
+	"Up" -- a win: every win adds to the streak (design-decisions.md Q5)
 	| "Died" -- a loss that ended a streak worth naming
 	| "None" -- a loss from zero: nothing was lost
 
@@ -88,25 +84,12 @@ export type StreakChange = {
 	before: number,
 	after: number,
 	newBest: boolean,
-	-- "Held" only: the specific reason, per threat-model.md §8 - never a
-	-- vague "no change".
-	note: string?,
 }
 
 function ResultsLogic.streakChange(recap: Recap): StreakChange
 	local kind: StreakKind
-	local note: string? = nil
 	if recap.streakAfter > recap.streakBefore then
 		kind = "Up"
-	elseif ResultsLogic.isWin(recap.reason) then
-		kind = "Held"
-		if not recap.streakCredited then
-			note = string.format(
-				"%d of the seats this round were bots (the limit is %d), so the win doesn't add to your streak. Queue again for a fuller lobby.",
-				recap.npcSeatCount,
-				recap.npcSeatThreshold
-			)
-		end
 	elseif recap.streakBefore > 0 then
 		kind = "Died"
 	else
@@ -117,7 +100,6 @@ function ResultsLogic.streakChange(recap: Recap): StreakChange
 		before = recap.streakBefore,
 		after = recap.streakAfter,
 		newBest = recap.bestStreakAfter > recap.bestStreakBefore,
-		note = note,
 	}
 end
 
@@ -129,8 +111,6 @@ function ResultsLogic.streakHeadline(change: StreakChange): string
 		return if change.newBest
 			then string.format("Streak %d - a new best", change.after)
 			else string.format("Streak %d", change.after)
-	elseif change.kind == "Held" then
-		return string.format("Streak holds at %d", change.after)
 	elseif change.kind == "Died" then
 		return string.format("Your %d-win streak ends here", change.before)
 	end

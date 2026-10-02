@@ -19,10 +19,9 @@
 -- floors every sampled duration at the median human time for that task
 -- (this server, this round - see `humanDurationSamples` below), so a
 -- lucky roll on a strong profile still can't beat the median human.
--- threat-model.md §8 treats NPC-heavy lobbies as a streak-farming
--- vector; `earnsStreakCredit` below is the check P4-1's
--- ProgressionService gates on, and docs/npc-notes.md states exactly
--- where NPC presence can still distort the leaderboard.
+-- A real player's result counts however many seats are bots
+-- (design-decisions.md Q5's 2026-10-02 applied case); docs/npc-notes.md
+-- states where NPC presence can still distort the leaderboard.
 --
 -- WHERE THE MAP COMES FROM: the same injection-point pattern TaskService
 -- and PowerUpService already use (see either file's header) - no
@@ -1007,14 +1006,6 @@ local NPCService: Loader.Service = {
 
 	getNPCSeatCount = function(): number
 		return Participants.countNPCs()
-	end,
-
-	-- threat-model.md §8's required launch mitigation, as the one call
-	-- P4-1's ProgressionService makes before awarding streak. Kept here
-	-- rather than in ProgressionService so "how many seats were bots"
-	-- and "does that still count" can never drift apart.
-	roundEarnsStreakCredit = function(): boolean
-		return NPCLogic.earnsStreakCredit(Participants.countNPCs(), GameConfig.npcSeatStreakCreditThreshold)
 	end,
 
 	getNPCIds = function(): { number }

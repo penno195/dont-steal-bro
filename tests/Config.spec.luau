@@ -14,7 +14,6 @@ local function validGameConfig(): Validate.GameConfig
 		tasksPerPlayer = 6,
 		qualificationFloorPercent = 0.5,
 		streakLossWeight = 2,
-		npcSeatStreakCreditThreshold = 3,
 		raceDurationSeconds = 300,
 		studioTimers = {
 			introSeconds = 5,

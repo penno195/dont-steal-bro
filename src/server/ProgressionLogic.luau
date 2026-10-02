@@ -112,30 +112,12 @@ export type StreakState = {
 --
 -- Returns a NEW table; `before` is never mutated, so a caller can log
 -- both sides of the change without having to snapshot first.
--- `streakCredited = false` is threat-model.md §8's required launch
--- mitigation reaching this function: a round with more than
--- GameConfig.npcSeatStreakCreditThreshold bot seats moves nobody's
--- streak, in EITHER direction.
 --
--- Both directions matters and is a deliberate call. The threat model
--- only asks for "no streak credit above a defined NPC-seat threshold",
--- which on its own would mean wins stop counting while losses still
--- reset - so an honest player queueing at 4am could only ever go
--- backwards, and the mitigation aimed at farmers would land hardest on
--- exactly the players it isn't about. A round that doesn't count,
--- doesn't count.
---
--- 2026-10-02 (design-decisions.md Q5 applied case): the user ruled that
--- a real player's win always counts, NPC seats or not, so the threshold
--- is now set where it never fires. Retiring this parameter and the
--- machinery behind it is rewards-roadmap.md step 2d.
-function ProgressionLogic.applyResult(before: StreakState, reason: ReasonCode, streakCredited: boolean?): StreakState
-	local credited = streakCredited ~= false
-
-	if not credited then
-		return { currentStreak = before.currentStreak, bestStreak = before.bestStreak }
-	end
-
+-- There is no "round didn't count" case: a real player's result always
+-- counts, however many seats were bots (design-decisions.md Q5's
+-- 2026-10-02 applied case, which retired threat-model.md §8's NPC-seat
+-- threshold).
+function ProgressionLogic.applyResult(before: StreakState, reason: ReasonCode): StreakState
 	if not ProgressionLogic.isWin(reason) then
 		return { currentStreak = 0, bestStreak = before.bestStreak }
 	end

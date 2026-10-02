@@ -49,22 +49,18 @@ and ask the user (CLAUDE.md).
   - payoff-table.md runs on coins (1 VU = 5 coins at rung 0, so
     `streakLossWeight` became 10), with p* recomputed per streak.
     live-ops, launch-review, liveops-roadmap and decision-studio updated.
+- [x] **2d. Retire the NPC-seat streak-credit threshold.** Per Q5's
+  2026-10-02 applied case, a real player's result always counts.
+  - `npcSeatStreakCreditThreshold`, `NPCLogic.earnsStreakCredit`, both
+    `roundEarnsStreakCredit`s, `applyResult`'s `streakCredited`,
+    RoundRecap's credit fields and ResultsLogic's "Held" kind are gone,
+    with their specs.
+  - threat-model.md §8, npc-notes.md and launch-review.md record the
+    mitigation as retired. Bot-lobby farming is now watched by
+    telemetry only (`NPCService.getNPCSeatCount`).
 
 ## Next
 
-- [ ] **2d. Retire the NPC-seat streak-credit threshold.** Per
-  design-decisions.md Q5's 2026-10-02 applied case, a real player's
-  result always counts. The threshold is set to 5 today so it never
-  fires.
-  - Remove `npcSeatStreakCreditThreshold` (GameConfig, Validate,
-    Config.spec), `NPCLogic.earnsStreakCredit`, NPCService's
-    `roundEarnsStreakCredit`, and ProgressionService's credit gate and
-    `roundEarnsStreakCredit` export.
-  - Drop `applyResult`'s `streakCredited` parameter and its specs.
-  - Drop `RoundRecap`'s `streakCredited`, `npcSeatCount` and
-    `npcSeatThreshold`, plus ResultsLogic's "Held" streak change.
-  - Update threat-model.md §8 (and its ranking table), npc-notes.md and
-    launch-review.md to say the mitigation was retired, and why.
 - [ ] **3. Show win rewards.**
   - Results and the finale show the currency and the drop. This
     replaces `FinaleLoading`'s stand-in glyphs.

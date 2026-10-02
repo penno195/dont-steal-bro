@@ -70,7 +70,6 @@ type LedgerEntry = {
 	-- P6-6: kept for the RoundRecap sent on entering Results, which
 	-- can't be sent from the write itself (see sendRecaps).
 	before: ProgressionLogic.StreakState,
-	credited: boolean,
 	-- What this round paid. Rolled once and kept here, so a retry
 	-- returns the same reward rather than rolling a second one.
 	reward: ProfileLogic.WinRewardRecord?,
@@ -169,46 +168,6 @@ local function currentRoundId(): string
 	return RoundService.getRoundId() :: string
 end
 
--- ===== threat-model.md §8's required launch mitigation =====================
-
--- "No streak credit above a defined NPC-seat threshold. Exact N is a
--- playtest tuning call, but *some* threshold must ship day one" -
--- threat-model.md §8, which ranks farming NPC-filled lobbies as the 4th
--- most damaging attack on leaderboard credibility. This is the one
--- place that check happens, so a win can't reach a streak without
--- passing it.
---
--- The decision itself lives in NPCLogic.earnsStreakCredit and the count
--- in NPCService, deliberately: "how many seats were bots" and "does
--- that still count" must not drift apart, which they would the moment
--- two services each kept their own idea of the threshold.
---
--- Returns true when NPCService isn't loaded at all, which is the honest
--- default - a round with no NPC system running had no bot seats to
--- worry about.
-local function npcService(): any?
-	local ok, service = pcall(function()
-		return Loader.get("NPCService")
-	end)
-	return if ok then service else nil
-end
-
-local function shouldCreditStreak(): boolean
-	local service = npcService()
-	if service == nil then
-		return true
-	end
-	return service.roundEarnsStreakCredit() :: boolean
-end
-
-local function npcSeatCount(): number
-	local service = npcService()
-	if service == nil then
-		return 0
-	end
-	return service.getNPCSeatCount() :: number
-end
-
 -- ===== the one function ====================================================
 
 -- Applies a round's result to one player's progression, exactly once.
@@ -259,11 +218,11 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		bestStreak = DataService.getBestStreak(player),
 	}
 
-	local credited = shouldCreditStreak()
-	local after = ProgressionLogic.applyResult(before, result.reason, credited)
+	-- A real player's result always counts, however many seats were
+	-- bots (design-decisions.md Q5's 2026-10-02 applied case).
+	local after = ProgressionLogic.applyResult(before, result.reason)
 
-	-- Every win pays, credited or not (design-decisions.md Q1 revision).
-	-- Rolled before the ledger entry so the entry carries it.
+	-- Every win pays (design-decisions.md Q1 revision). Rolled before the ledger entry so the entry carries it.
 	local rewardRecord: ProfileLogic.WinRewardRecord? = nil
 	local rewardGrants: { RewardLogic.Grant } = {}
 	if ProgressionLogic.isWin(result.reason) then
@@ -295,7 +254,6 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		reason = result.reason,
 		after = after,
 		before = before,
-		credited = credited,
 		reward = rewardRecord,
 	}
 
@@ -324,11 +282,10 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		end
 	end
 
-	-- No client message here. threat-model.md §8's "explicit message,
-	-- not silent non-progression" for an uncredited round now travels in
-	-- the RoundRecap, sent on entering Results (sendRecaps below). It
-	-- used to be fired right here, which for a finalist is just BEFORE
-	-- DecisionReveal - and `reason` told them whether they'd won.
+	-- No client message here. The RoundRecap is sent on entering
+	-- Results (sendRecaps below). Fired from here it would land, for a
+	-- finalist, just BEFORE DecisionReveal - and `reason` would tell
+	-- them whether they'd won.
 
 	-- "One auditable function that logs the before state, the after
 	-- state, and the reason code" (P4-1's own requirement). Every
@@ -367,7 +324,7 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	-- the current period, so they are fed on EVERY win rather than only
 	-- on an all-time best - a player whose record is 40 but who has
 	-- reached 3 today belongs on today's board at 3.
-	if credited and after.currentStreak > before.currentStreak then
+	if after.currentStreak > before.currentStreak then
 		local periodOk, periodBoard = pcall(function()
 			return Loader.get("LeaderboardService")
 		end)
@@ -430,7 +387,6 @@ end
 -- treats that as "you were watching".
 local function sendRecaps()
 	local roundId = currentRoundId()
-	local seats = npcSeatCount()
 	for _, participant in Participants.humans() do
 		local player = participant.player
 		local entry = ledger[ledgerKey(roundId, participant.id)]
@@ -454,9 +410,6 @@ local function sendRecaps()
 					drop = entry.reward.drop,
 				}
 				else nil,
-			streakCredited = entry.credited,
-			npcSeatCount = seats,
-			npcSeatThreshold = GameConfig.npcSeatStreakCreditThreshold,
 		})
 	end
 end
@@ -474,10 +427,6 @@ local ProgressionService: Loader.Service = {
 	-- to a reason code through the same function the tests cover,
 	-- rather than keeping its own copy of the mapping.
 	reasonForOutcome = ProgressionLogic.reasonForOutcome,
-
-	-- threat-model.md §8, readable so a results screen can explain
-	-- itself without re-deriving the rule.
-	roundEarnsStreakCredit = shouldCreditStreak,
 }
 
 function ProgressionService:init()

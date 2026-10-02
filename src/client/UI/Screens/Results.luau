@@ -56,7 +56,6 @@ type CardStyle = { icon: string, color: string }
 
 local STREAK_STYLE: { [string]: CardStyle } = {
 	Up = { icon = "flame", color = "success" },
-	Held = { icon = "lock", color = "warning" },
 	Died = { icon = "down", color = "danger" },
 	None = { icon = "info", color = "inkMuted" },
 }
@@ -153,9 +152,6 @@ local function streakCard(store: Store, timedOut: () -> boolean, shown: () -> bo
 	local note = derive(function(): string
 		local c = change()
 		if c then
-			if c.note then
-				return c.note
-			end
 			return if c.newBest
 				then "Your best ever."
 				elseif c.kind == "Died" then "Back to zero. Next round starts a new one."

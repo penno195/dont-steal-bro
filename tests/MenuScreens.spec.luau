@@ -344,9 +344,6 @@ local function recap(reason: string, before: number, after: number, overrides: {
 		bestStreakBefore = before,
 		bestStreakAfter = math.max(before, after),
 		reward = nil,
-		streakCredited = true,
-		npcSeatCount = 0,
-		npcSeatThreshold = 3,
 	}
 	for k, v in overrides or {} do
 		r[k] = v
@@ -377,13 +374,6 @@ describe("ResultsLogic.streakChange", function()
 		expect(up.newBest):toBe(true)
 		expect(ResultsLogic.streakChange(recap("StudioLoss", 7, 0)).kind):toBe("Died")
 		expect(ResultsLogic.streakChange(recap("FailedToQualify", 0, 0)).kind):toBe("None")
-	end)
-
-	it("explains an uncredited win specifically, never as a silent no-change", function()
-		local held =
-			ResultsLogic.streakChange(recap("QualifiedWin", 2, 2, { streakCredited = false, npcSeatCount = 4 }))
-		expect(held.kind):toBe("Held")
-		expect((held.note :: string):find("4 of the seats") ~= nil):toBe(true)
 	end)
 
 	it("names the number of a streak that died", function()

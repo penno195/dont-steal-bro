@@ -74,7 +74,7 @@ delay. Don't trust a `pcall` that returned nothing.
 | Task abandoned | The brief asks for "too often abandoned". Completions alone can't show it. | `TaskAbandoned(taskId, secondsSpent)` when a player leaves a station with the task unfinished |
 | Power-up collected | "Never used" needs a denominator. Unused because nobody picks it up, or picked up and held? | `PowerUpCollected(powerUpId)` |
 | Round ended | Race length, finishers, backfilled seats, humans still present | `RoundEnded(mapId, raceSeconds, humanFinishers)` |
-| Streak credit | Whether `NPCService.roundEarnsStreakCredit()` refused credit (npc-notes.md §2) | a field on the win event |
+| NPC seats | How many seats were bots (`NPCService.getNPCSeatCount()`). Since the NPC-seat streak threshold was retired (threat-model.md §8, 2026-10-02), this telemetry is the only check on bot-lobby farming | a field on the win event |
 | Reward rung | The finale check (§3) is done per rung | a field on `StealShareChoice` |
 | Config version | Tells patched rounds apart from unpatched ones during a `rollout` | a field on `RoundStarted` |
 
@@ -310,7 +310,7 @@ probably matters more in week one than §3 does.
 | Bots' share of Studio seats in rounds with ≥ 3 humans | Low: bots are floored at median human speed | Bots routinely beat humans into the Studio | Same, or `map.<id>.npcDifficultyModifier` |
 | Bots' Studio steal rate | Matches the personality weights | It doesn't | A bug in NPCBrain, not balance |
 | Humans' realised payoff against bots vs against humans | Similar | Clearly higher against bots | npc-notes.md §2.2's open question. It needs a design decision (payoff-table), so ask |
-| Streak credit refused (`roundEarnsStreakCredit`) | Rare off-peak, near zero at peak | Common at peak hours | `npcSeatStreakCreditThreshold` needs a **deploy**. It isn't in `tunablePaths` |
+| Streak gain rate by bot-seat count | Flat, or rising gently with more bots | Climbs steeply in the 4-5 bot buckets, or clusters on a few accounts off-peak | Nothing tunable since the NPC-seat threshold was retired (threat-model.md §8). Raise it with the user (design-decisions.md Q5) |
 
 A qualification rate that is *distorted* by bots moves the streak
 leaderboard (threat-model.md §8, 4th most damaging attack). Check the

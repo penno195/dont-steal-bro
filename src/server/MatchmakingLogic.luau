@@ -543,8 +543,7 @@ end
 -- leftovers, and the rest of the seats are NPC slots. The cooldown is
 -- never relaxed to fill a group. A quiet server is exactly when
 -- colluding friends would be matched together, so the fallback is
--- bots, and NPC-heavy lobbies already earn reduced streak credit
--- (GameConfig.npcSeatStreakCreditThreshold).
+-- bots.
 function MatchmakingLogic.selectGroups(entries: { Entry }, now: number, config: Config): { FormedGroup }
 	local waiting = MatchmakingLogic.waitingInOrder(entries)
 	local taken: { [number]: boolean } = {}

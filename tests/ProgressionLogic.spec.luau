@@ -104,7 +104,7 @@ TestRunner.describe("ProgressionLogic.applyResult - a loss at each possible poin
 		-- The property P4-2's permanent titles depend on.
 		for _, reason in ALL_REASONS do
 			local state: ProgressionLogic.StreakState = { currentStreak = 4, bestStreak = 20 }
-			local after = ProgressionLogic.applyResult(state, reason, nil)
+			local after = ProgressionLogic.applyResult(state, reason)
 			assert(after.bestStreak >= 20, string.format("%s lowered bestStreak to %d", reason, after.bestStreak))
 		end
 	end)
@@ -114,32 +114,6 @@ TestRunner.describe("ProgressionLogic.applyResult - a loss at each possible poin
 		state = ProgressionLogic.applyResult(state, "StudioWinAllShare")
 		TestRunner.expect(state.currentStreak):toBe(1)
 		TestRunner.expect(state.bestStreak):toBe(8) -- not raised: 1 < 8
-	end)
-end)
-
-TestRunner.describe("ProgressionLogic.applyResult - NPC-heavy rounds earn no streak credit", function()
-	TestRunner.it("leaves a win's streak untouched", function()
-		-- threat-model.md §8's mitigation, switched off in config since
-		-- 2026-10-02 (rewards-roadmap.md step 2d retires it).
-		local state: ProgressionLogic.StreakState = { currentStreak = 3, bestStreak = 5 }
-		local after = ProgressionLogic.applyResult(state, "StudioWinAllShare", false)
-		TestRunner.expect(after.currentStreak):toBe(3)
-		TestRunner.expect(after.bestStreak):toBe(5)
-	end)
-
-	TestRunner.it("leaves a LOSS's streak untouched too", function()
-		-- Deliberate, and beyond what the threat model literally asks
-		-- for: crediting no wins while still applying losses would mean
-		-- an honest off-hours player can only ever go backwards.
-		local state: ProgressionLogic.StreakState = { currentStreak = 6, bestStreak = 9 }
-		local after = ProgressionLogic.applyResult(state, "StudioLoss", false)
-		TestRunner.expect(after.currentStreak):toBe(6)
-		TestRunner.expect(after.bestStreak):toBe(9)
-	end)
-
-	TestRunner.it("credits normally when the flag is omitted entirely", function()
-		local after = ProgressionLogic.applyResult(FRESH, "StudioWinAllShare")
-		TestRunner.expect(after.currentStreak):toBe(1)
 	end)
 end)
 
@@ -215,13 +189,11 @@ TestRunner.describe("ProgressionLogic.formatAudit", function()
 		assert(string.find(line, "streak 2->3", 1, true) ~= nil, "audit line is missing the streak change")
 		assert(string.find(line, "best 4->4", 1, true) ~= nil, "audit line is missing the bestStreak change")
 	end)
-
 end)
 
 TestRunner.describe("ProgressionLogic.formatRewardAudit", function()
 	TestRunner.it("names the player, round, outcome, rung and the grant", function()
-		local line =
-			ProgressionLogic.formatRewardAudit("Racer", "job:1", "SoleStealer", 4, "currency +140 (now 140)")
+		local line = ProgressionLogic.formatRewardAudit("Racer", "job:1", "SoleStealer", 4, "currency +140 (now 140)")
 		TestRunner.expect(line):toBe("Reward: Racer round=job:1 outcome=SoleStealer rung=4 -> currency +140 (now 140)")
 	end)
 end)

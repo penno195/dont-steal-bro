@@ -165,6 +165,15 @@ mitigation**: no streak credit above a defined NPC-seat threshold. Exact
 through no fault of their own. Needs an explicit "queue too thin for
 streak credit right now" message, not silent non-progression.
 
+**Retired (2026-10-02, user decision; design-decisions.md Q5 applied
+case):** a real player's result always counts, however many seats are
+bots. The threshold shipped, then was removed in rewards-roadmap.md
+step 2d. The reasoning: a player can't choose a bot-filled lobby (it
+only forms when nobody else is queueing), and bots vary their answers
+and are floored at the median human time, so winning one is still luck
+rather than a farm. The "queue too thin" message went with it. What's
+left of the threat is detection: the telemetry above still applies.
+
 ### 9. Alt accounts feeding wins
 
 **How it works:** one person controls multiple accounts, deliberately
@@ -304,7 +313,7 @@ Ranked by expected damage to the **leaderboard's** credibility specifically
 | 1 | Speed/teleport hacks (§3) | Directly fabricates race placement — the most visible, most "screenshot-and-mock" form of a broken leaderboard. |
 | 2 | Collusion/alt-farming family (§7, §9, §11) | Directly inflates the streak number with zero real skill — attacks the exact claim the leaderboard makes. Slower to surface than a speedhack, more corrosive once it does. |
 | 3 | Bounty/streak duplication via teleport timing (§6, §13, §14) | A raw economy dupe reads as "the whole leaderboard is fake," not just "one player cheated" — but fully preventable by construction if built correctly from day one. |
-| 4 | Farming NPC-filled lobbies (§8) | Inflates streak with reduced-but-real legitimacy; feels like exploiting a loophole rather than cheating, which makes it likely to spread by word of mouth before anyone flags it. |
+| 4 | Farming NPC-filled lobbies (§8) | Inflates streak with reduced-but-real legitimacy; feels like exploiting a loophole rather than cheating, which makes it likely to spread by word of mouth before anyone flags it. Mitigation retired 2026-10-02 by user decision (§8): accepted risk, watched by telemetry. |
 | 5 | Forged completion / power-up dupe / remote spam (§1, §2, §4) | Real damage to individual matches and trust, but each instance's blast radius is one round, not a straight line to the aggregate leaderboard. |
 | 6 | TeleportData tampering (§5) | Low residual risk if the architecture is followed — a "don't break the foundation" item more than an ongoing threat. |
 | 7 | Disconnect-to-dodge (§10) | Already fully closed by design; ranked lowest because there's essentially nothing left to exploit. |
@@ -315,7 +324,8 @@ Ranked by expected damage to the **leaderboard's** credibility specifically
 (§1); serialized power-up inventory mutations (§4); the
 `TeleportData`-never-authoritative rule plus `ProfileStore` session
 locking (§5, §6); no party queue, matchmaking-pool randomization against
-queue sniping, and *some* NPC-seat streak-credit threshold (§7, §8, §11);
+queue sniping (§7, §11; §8's NPC-seat threshold was retired by user
+decision on 2026-10-02);
 atomic, idempotent-per-round Studio outcome resolution (§6, §13, §14);
 idempotent receipt handling (§12); `Net.luau` as the sole remote-
 declaration surface (§14). None of these are safe to retrofit after a
@@ -324,8 +334,7 @@ live incident — they're all cheaper by construction than as a patch.
 **Can wait and iterate post-launch:** deep alt-account device/IP
 fingerprinting beyond basic correlation (§9) — start with logging and
 manual review, build sophisticated detection once real telemetry exists
-to tune against; the exact NPC-seat threshold number (§8) and the exact
-movement-tolerance band (§3) — ship conservative defaults and tune against
+to tune against; the exact movement-tolerance band (§3) — ship conservative defaults and tune against
 real player and network data, matching `perf-budget.md`'s own
 verify-empirically stance; account co-occurrence anomaly-detection
 statistics (§9, §11) — meaningless without a real population baseline to

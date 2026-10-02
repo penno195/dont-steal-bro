@@ -230,9 +230,9 @@ can't choose a bot-filled lobby (it only happens when nobody else is
 queueing), and bots are trained to vary their answers, so winning one
 is still luck rather than a farm. A win in such a round raises the
 streak and pays the full reward at the new rung, like any other.
-- Interim: `npcSeatStreakCreditThreshold = 5`, which never fires.
-  Removing the threshold and its "queue too thin" message is
-  rewards-roadmap.md step 2d.
+- Built (rewards-roadmap.md step 2d): the threshold, its check and its
+  "queue too thin" message are gone, and threat-model.md §8 records the
+  mitigation as retired.
 - **Planned:** separate practice and ranked modes. Practice pays no
   rewards. Not built yet; ask before designing it.
 

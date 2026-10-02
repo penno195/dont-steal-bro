@@ -628,7 +628,6 @@ export type GameConfig = {
 	tasksPerPlayer: number, -- cross-checked against every MapDef.taskStationCount
 	qualificationFloorPercent: number, -- design-decisions.md Q2: 0.5
 	streakLossWeight: number, -- payoff-table.md §3's c0; Closs(n) = streakLossWeight * n
-	npcSeatStreakCreditThreshold: number, -- PLACEHOLDER: threat-model.md §8, playtest-tuned
 	raceDurationSeconds: number, -- PLACEHOLDER: no locked value in docs/ yet
 	studioTimers: StudioTimers,
 	roundTimers: RoundTimers,

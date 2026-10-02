@@ -820,12 +820,6 @@ Net.Remotes = {
 	-- your own choice, gives away the others' early (the leak P6-5's
 	-- audit found in the old ProgressionStreakSkipped remote this one
 	-- replaces).
-	--
-	-- `streakCredited = false` is threat-model.md §8's required
-	-- explanation: an NPC-heavy round earns no streak credit and "needs
-	-- an explicit 'queue too thin for streak credit right now' message,
-	-- not silent non-progression." It carries the seat count and the
-	-- threshold so the screen can say something specific.
 	RoundRecap = {
 		name = "RoundRecap",
 		direction = "ServerBroadcast",
