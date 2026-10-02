@@ -29,8 +29,8 @@
 local TitleLogic = {}
 
 -- Structurally identical to Validate.TitleDef, duplicated rather than
--- required for the reason ProfileLogic's header gives about
--- Validate.BountyTier: a Roblox Instance-path require would make this
+-- required, the same as every pure module here: a Roblox
+-- Instance-path require would make this
 -- module unloadable under Lune, and Luau's structural typing means a
 -- real TitleDef satisfies this with no cast at the call site.
 export type TitleDef = {

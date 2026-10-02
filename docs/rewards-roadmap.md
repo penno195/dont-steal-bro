@@ -36,19 +36,21 @@ and ask the user (CLAUDE.md).
   - User decision while building it: a real player's win always counts
     however many seats are bots (design-decisions.md Q5 applied case),
     which added step 2d.
+- [x] **2c. Retire `bountyTiers`.**
+  - Outcomes gives each winner an `outcomeTag` and no amount, rather
+    than switching the `*VU` numbers to currency as first planned. The
+    result is broadcast in `DecisionReveal`, and any amount scaled by a
+    winner's streak would leak it to the room (Q7). This also closed
+    decision-studio.md's open `bountyVU` audit item. Currency comes only
+    from `RewardLogic.currencyFor`, in ProgressionService.
+  - `BountyTier`, `resolveBountyTier`, `bountyTiers`, their checks and
+    specs are gone. LiveConfig allows `game.winRewards.**`.
+  - payoff-table.md runs on coins (1 VU = 5 coins at rung 0, so
+    `streakLossWeight` became 10), with p* recomputed per streak.
+    live-ops, launch-review, liveops-roadmap and decision-studio updated.
 
 ## Next
 
-- [ ] **2c. Retire `bountyTiers`.**
-  - Outcomes and DecisionService currently carry `*VU` numbers from
-    `bountyTiers`. Switch them to `RewardLogic.currencyFor` at the
-    after-win rung, then delete `BountyTier`, `resolveBountyTier`,
-    their checks and their specs.
-  - Move LiveConfig's allowlisted paths from `game.bountyTiers.*` to
-    `game.winRewards.*`, and update its spec.
-  - Update the docs that describe VU tiers: `payoff-table.md`,
-    `live-ops.md`, `launch-review.md` and `liveops-roadmap.md`. The
-    payoff table's Steal/Share balance now runs on currency.
 - [ ] **2d. Retire the NPC-seat streak-credit threshold.** Per
   design-decisions.md Q5's 2026-10-02 applied case, a real player's
   result always counts. The threshold is set to 5 today so it never

@@ -6,19 +6,17 @@
 -- to stay requirable under Lune for headless tests, tests/Outcomes.
 -- spec.luau).
 --
--- Bounty numbers always come from the CALLER, never a literal in this
--- module ("bounty values come from the central config," the task's own
--- requirement, verbatim) - resolved from GameConfig.bountyTiers via
--- ProfileLogic.resolveBountyTier against each player's OWN streak.
--- design-decisions.md Q1 is explicit that this is per-player, not
--- per-Studio: "players at different streak tiers in the same Studio
--- each resolve their own package independently against their own tier
--- - there's no shared pot." `FinalistInput` below duplicates the three
--- VU fields it actually needs from Validate.luau's BountyTier rather
--- than requiring that module - the same duplication ProfileLogic.luau's
--- own BountyTier already establishes as this repo's precedent; a real
--- Validate.BountyTier value (or ProfileLogic.BountyTier) satisfies this
--- structurally, no cast needed at the call site.
+-- NO AMOUNTS IN HERE (rewards-roadmap.md step 2c). Each winner carries
+-- the outcome tier they won at, never a number. What that tier pays is
+-- RewardLogic.currencyFor at the winner's own after-win rung, worked out
+-- on the server by ProgressionService. Two reasons:
+--   * The result is broadcast to the whole room in DecisionReveal. Any
+--     amount scaled by a winner's streak would let anyone in the room
+--     read that streak off the packet, which is design-decisions.md Q7
+--     condition 1's leak. A tier is derivable from the choices anyway,
+--     so it leaks nothing.
+--   * One place decides what a win pays, instead of two that could
+--     disagree.
 --
 -- FEWER THAN THREE FINALISTS: design-decisions.md Q3 guarantees the
 -- Decision Studio always resolves with exactly 3 (NPC backfill covers
@@ -46,17 +44,18 @@ local Outcomes = {}
 
 export type Choice = "Steal" | "Share"
 
+-- The same three literals as RewardLogic.OutcomeTag and
+-- ProfileLogic.OutcomeTag, restated so this module stays require-free.
+export type OutcomeTag = "SoleStealer" | "LoneSharer" | "AllShare"
+
 export type FinalistInput = {
 	playerId: number,
 	choice: Choice,
-	soleStealerVU: number,
-	loneSharerVU: number,
-	allShareVU: number,
 }
 
 export type WinnerEntry = {
 	playerId: number,
-	bountyVU: number,
+	outcomeTag: OutcomeTag,
 }
 
 export type OutcomeResult = {
@@ -80,34 +79,34 @@ local function resolveThree(finalists: { FinalistInput }): OutcomeResult
 	local stealCount = countSteals(finalists)
 
 	if stealCount == 1 then
-		-- 1 Steal, 2 Share: the stealer wins the large bounty; the sharers lose.
+		-- 1 Steal, 2 Share: the stealer wins the large prize; the sharers lose.
 		local winners: { WinnerEntry } = {}
 		local losers: { number } = {}
 		for _, finalist in finalists do
 			if finalist.choice == "Steal" then
-				table.insert(winners, { playerId = finalist.playerId, bountyVU = finalist.soleStealerVU })
+				table.insert(winners, { playerId = finalist.playerId, outcomeTag = "SoleStealer" })
 			else
 				table.insert(losers, finalist.playerId)
 			end
 		end
 		return { branch = "SoleSteal", winners = winners, loserIds = losers }
 	elseif stealCount == 2 then
-		-- 2 Steal, 1 Share: the sharer wins the small bounty; the stealers lose.
+		-- 2 Steal, 1 Share: the sharer wins the medium prize; the stealers lose.
 		local winners: { WinnerEntry } = {}
 		local losers: { number } = {}
 		for _, finalist in finalists do
 			if finalist.choice == "Share" then
-				table.insert(winners, { playerId = finalist.playerId, bountyVU = finalist.loneSharerVU })
+				table.insert(winners, { playerId = finalist.playerId, outcomeTag = "LoneSharer" })
 			else
 				table.insert(losers, finalist.playerId)
 			end
 		end
 		return { branch = "LoneShare", winners = winners, loserIds = losers }
 	elseif stealCount == 0 then
-		-- 3 Share: all three win the smallest bounty.
+		-- 3 Share: all three win the smallest prize.
 		local winners: { WinnerEntry } = {}
 		for _, finalist in finalists do
-			table.insert(winners, { playerId = finalist.playerId, bountyVU = finalist.allShareVU })
+			table.insert(winners, { playerId = finalist.playerId, outcomeTag = "AllShare" })
 		end
 		return { branch = "AllShare", winners = winners, loserIds = {} }
 	else -- stealCount == 3
@@ -130,7 +129,7 @@ local function resolveTwo(finalists: { FinalistInput }): OutcomeResult
 	if stealCount == 0 then
 		local winners: { WinnerEntry } = {}
 		for _, finalist in finalists do
-			table.insert(winners, { playerId = finalist.playerId, bountyVU = finalist.allShareVU })
+			table.insert(winners, { playerId = finalist.playerId, outcomeTag = "AllShare" })
 		end
 		return { branch = "TwoShare", winners = winners, loserIds = {} }
 	elseif stealCount == 1 then
@@ -138,7 +137,7 @@ local function resolveTwo(finalists: { FinalistInput }): OutcomeResult
 		local losers: { number } = {}
 		for _, finalist in finalists do
 			if finalist.choice == "Steal" then
-				table.insert(winners, { playerId = finalist.playerId, bountyVU = finalist.soleStealerVU })
+				table.insert(winners, { playerId = finalist.playerId, outcomeTag = "SoleStealer" })
 			else
 				table.insert(losers, finalist.playerId)
 			end
@@ -159,7 +158,7 @@ local function resolveOne(finalists: { FinalistInput }): OutcomeResult
 	local only = finalists[1]
 	return {
 		branch = "SoloFinalist",
-		winners = { { playerId = only.playerId, bountyVU = only.allShareVU } },
+		winners = { { playerId = only.playerId, outcomeTag = "AllShare" } },
 		loserIds = {},
 	}
 end

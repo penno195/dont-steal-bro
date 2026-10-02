@@ -32,10 +32,6 @@ local function validGameConfig(): Validate.GameConfig
 			resultsSeconds = 8,
 			cleanupSeconds = 5,
 		},
-		bountyTiers = {
-			{ tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
-			{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
-		},
 		winRewards = {
 			currency = { soleStealer = 100, loneSharer = 50, allShare = 25, perRungBonus = 0.1 },
 			drop = {
@@ -854,46 +850,6 @@ TestRunner.describe("Validate.checkGameConfig (P3-5 npc block)", function()
 			Validate.checkGameConfig(config, issues)
 			TestRunner.expect(#issues > 0):toBeTruthy()
 		end
-	end)
-end)
-
-TestRunner.describe("Validate.checkGameConfig (bounty ordering)", function()
-	TestRunner.it("rejects a tier where soleStealer does not exceed loneSharer", function()
-		local issues = {}
-		local config = validGameConfig()
-		config.bountyTiers = { { tier = 1, minStreak = 1, soleStealerVU = 5, loneSharerVU = 10, allShareVU = 2 } }
-		Validate.checkGameConfig(config, issues)
-		TestRunner.expect(#issues > 0):toBeTruthy()
-	end)
-
-	TestRunner.it("rejects tiers not sorted by ascending minStreak", function()
-		local issues = {}
-		local config = validGameConfig()
-		config.bountyTiers = {
-			{ tier = 1, minStreak = 5, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
-			{ tier = 2, minStreak = 1, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
-		}
-		Validate.checkGameConfig(config, issues)
-		TestRunner.expect(#issues > 0):toBeTruthy()
-	end)
-
-	TestRunner.it(
-		"rejects a tier set where no tier covers streak 0 - a first-ever win would have no bounty tier",
-		function()
-			local issues = {}
-			local config = validGameConfig()
-			config.bountyTiers = { { tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 } }
-			Validate.checkGameConfig(config, issues)
-			TestRunner.expect(#issues > 0):toBeTruthy()
-		end
-	)
-
-	TestRunner.it("accepts a tier set whose lowest floor is exactly 0", function()
-		local issues = {}
-		local config = validGameConfig()
-		config.bountyTiers = { { tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 } }
-		Validate.checkGameConfig(config, issues)
-		TestRunner.expect(#issues):toBe(0)
 	end)
 end)
 

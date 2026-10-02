@@ -34,7 +34,7 @@ local StoreLogic = {}
 -- ===== types ==============================================================
 
 -- Structurally identical to Validate.StoreGrant, duplicated rather than
--- required for the same reason ProfileLogic duplicates BountyTier:
+-- required, the same as every pure module here:
 -- requiring Config/Validate means an Instance-path require this module
 -- can't resolve under Lune. Luau's structural typing means a real
 -- `Validate.StoreGrant` value satisfies these with no cast at the call

@@ -112,7 +112,6 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Outcomes = require(ReplicatedStorage.Shared.Config.Outcomes)
-local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local Participants = require(ServerScriptService.Server.Participants)
 local FinaleRoster = require(ServerScriptService.Server.FinaleRoster)
 local Signal = require(ReplicatedStorage.Packages.Signal)
@@ -254,21 +253,6 @@ local function isDebugAuthorized(_player: Player?): boolean
 	return RunService:IsStudio()
 end
 
--- Maps an Outcomes.luau branch name to ProfileLogic's OutcomeTag
--- (design-decisions.md Q1's "streak tier x outcome tier" reward lookup
--- key) - nil for a branch with no winners (AllSteal/TwoSteal), since
--- nothing ever looks up a tag for a loser.
-local function outcomeTagFor(branch: string): ProfileLogic.OutcomeTag?
-	if branch == "SoleSteal" or branch == "OneStealOneShare" then
-		return "SoleStealer"
-	elseif branch == "LoneShare" then
-		return "LoneSharer"
-	elseif branch == "AllShare" or branch == "TwoShare" or branch == "SoloFinalist" then
-		return "AllShare"
-	end
-	return nil
-end
-
 -- Step 3 + 4: resolves via the pure outcome module, then writes every
 -- STILL-CONNECTED qualifier's real result to their profile. A qualifier
 -- who's already disconnected by this point is silently skipped here -
@@ -286,20 +270,11 @@ end
 local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 	local DataService = Loader.get("DataService") :: any
 
+	-- Choices only. No streak or amount goes in, because the result is
+	-- broadcast in DecisionReveal (Outcomes.luau's header, Q7).
 	local finalists: { Outcomes.FinalistInput } = {}
-
 	for _, id in qualifierIds do
-		local player = Players:GetPlayerByUserId(id)
-		local streak = if player ~= nil then DataService.getStreak(player) else 0
-		local tier = ProfileLogic.resolveBountyTier(GameConfig.bountyTiers, streak)
-
-		table.insert(finalists, {
-			playerId = id,
-			choice = choices[id],
-			soleStealerVU = tier.soleStealerVU,
-			loneSharerVU = tier.loneSharerVU,
-			allShareVU = tier.allShareVU,
-		})
+		table.insert(finalists, { playerId = id, choice = choices[id] })
 	end
 
 	local outcome = Outcomes.resolve(finalists)
@@ -317,14 +292,16 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			continue
 		end
 
-		-- Only `won` matters here, not the winner's own bountyVU number;
-		-- what a win pays is RewardLogic's, via ProgressionService.
-		local won = false
+		-- A winner's outcome tier picks their currency base. The reward
+		-- itself is rolled and paid inside applyRoundResult (rewards
+		-- step 2b), at the winner's own after-win rung.
+		local outcomeTag: Outcomes.OutcomeTag? = nil
 		for _, winner in outcome.winners do
 			if winner.playerId == finalist.playerId then
-				won = true
+				outcomeTag = winner.outcomeTag
 			end
 		end
+		local won = outcomeTag ~= nil
 
 		-- P4-1: the streak change goes through ProgressionService and
 		-- nowhere else - reason code, round id, idempotency and the
@@ -332,11 +309,6 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 		-- move a streak, and DataService no longer publishes a way.
 		local ProgressionService = Loader.get("ProgressionService") :: any
 		local RoundService = Loader.get("RoundService") :: any
-
-		-- A winner's outcome tier picks their currency base; the reward
-		-- itself is rolled and paid inside applyRoundResult (rewards
-		-- step 2b), which warns if a winner arrives without one.
-		local outcomeTag = if won then outcomeTagFor(outcome.branch) else nil
 
 		local streakBefore = DataService.getStreak(player)
 		local after = ProgressionService.applyRoundResult(player, {

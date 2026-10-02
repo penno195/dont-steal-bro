@@ -19,7 +19,7 @@ local function defaults(): Roots
 			raceDurationSeconds = 300,
 			label = "shipped",
 			roundTimers = { resultsSeconds = 8, loadingSeconds = 5 },
-			bountyTiers = { { soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 } },
+			winRewards = { currency = { soleStealer = 100, loneSharer = 50, allShare = 25 } },
 			npc = { tickHz = 8, skillProfiles = { { weight = 0.5 } } },
 			playerCount = 6,
 		},
@@ -27,15 +27,15 @@ local function defaults(): Roots
 	}
 end
 
--- Stands in for Validate: a race must be positive, bounty ordering holds.
+-- Stands in for Validate: a race must be positive, win currency ordering holds.
 local function fakeValidate(roots: Roots): { string }
 	local issues = {}
 	if roots.game.raceDurationSeconds <= 0 then
 		table.insert(issues, "raceDurationSeconds must be positive")
 	end
-	local tier = roots.game.bountyTiers[1]
-	if not (tier.soleStealerVU > tier.loneSharerVU) then
-		table.insert(issues, "bounty ordering broken")
+	local currency = roots.game.winRewards.currency
+	if not (currency.soleStealer > currency.loneSharer) then
+		table.insert(issues, "win currency ordering broken")
 	end
 	return issues
 end
@@ -47,7 +47,7 @@ local function context(overrides: { [string]: any }?): Context
 			"game.raceDurationSeconds",
 			"game.label",
 			"game.roundTimers.*",
-			"game.bountyTiers.*.soleStealerVU",
+			"game.winRewards.**",
 			"game.npc.**",
 			"powerUp.*.durationSeconds",
 		},
@@ -124,7 +124,7 @@ TestRunner.describe("LiveConfigLogic paths", function()
 	TestRunner.it("accepts a same-typed leaf on an allowed path, array indices included", function()
 		local ctx = context()
 		TestRunner.expect(LiveConfigLogic.checkOverride("game.roundTimers.resultsSeconds", 12, ctx)):toBe(nil)
-		TestRunner.expect(LiveConfigLogic.checkOverride("game.bountyTiers.1.soleStealerVU", 22, ctx)):toBe(nil)
+		TestRunner.expect(LiveConfigLogic.checkOverride("game.winRewards.currency.soleStealer", 120, ctx)):toBe(nil)
 		TestRunner.expect(LiveConfigLogic.checkOverride("game.npc.skillProfiles.1.weight", 0.4, ctx)):toBe(nil)
 		TestRunner.expect(LiveConfigLogic.checkOverride("game.label", "live", ctx)):toBe(nil)
 	end)
@@ -134,7 +134,8 @@ TestRunner.describe("LiveConfigLogic paths", function()
 		local check = LiveConfigLogic.checkOverride
 		TestRunner.expect(check("game.playerCount", 8, ctx) ~= nil):toBeTruthy() -- not tunable
 		TestRunner.expect(check("game.roundTimers.newTimer", 3, ctx) ~= nil):toBeTruthy() -- doesn't exist
-		TestRunner.expect(check("game.bountyTiers.2.soleStealerVU", 3, ctx) ~= nil):toBeTruthy() -- no tier 2
+		TestRunner.expect(check("game.npc.skillProfiles.2.weight", 0.3, ctx) ~= nil):toBeTruthy() -- no profile 2
+		TestRunner.expect(check("game.winRewards.currency", 1, ctx) ~= nil):toBeTruthy() -- a table
 		TestRunner.expect(check("game.npc.skillProfiles", 1, ctx) ~= nil):toBeTruthy() -- a table
 		TestRunner.expect(check("game.raceDurationSeconds", "300", ctx) ~= nil):toBeTruthy()
 		TestRunner.expect(check("game.raceDurationSeconds", 0 / 0, ctx) ~= nil):toBeTruthy()
@@ -173,7 +174,7 @@ TestRunner.describe("LiveConfigLogic.resolve", function()
 	end)
 
 	TestRunner.it("rejects a layer the real validator refuses, or that makes it throw", function()
-		local raw = envelope(layer(3, { overrides = { ["game.bountyTiers.1.soleStealerVU"] = 1 } }))
+		local raw = envelope(layer(3, { overrides = { ["game.winRewards.currency.soleStealer"] = 1 } }))
 		TestRunner.expect(LiveConfigLogic.resolve(raw, 50, context()).source):toBe("Defaults")
 		local throwing = context({
 			validate = function(_roots: Roots): { string }

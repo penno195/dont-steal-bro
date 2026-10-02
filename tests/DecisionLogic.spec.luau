@@ -16,7 +16,8 @@ describe("DecisionLogic.prizeFor agrees with Outcomes.resolve", function()
 	-- disagreed with the real resolver, a player would lose on a table
 	-- that lied to them - so every combination, for every seat count,
 	-- is checked against the resolver itself.
-	local PRIZE_BY_VU: { [number]: DecisionLogic.Prize } = { [3] = "Big", [2] = "Medium", [1] = "Small" }
+	local PRIZE_BY_TAG: { [string]: DecisionLogic.Prize } =
+		{ SoleStealer = "Big", LoneSharer = "Medium", AllShare = "Small" }
 
 	for seats = 1, 3 do
 		it(string.format("matches every combination with %d seat(s)", seats), function()
@@ -24,13 +25,7 @@ describe("DecisionLogic.prizeFor agrees with Outcomes.resolve", function()
 				local finalists: { Outcomes.FinalistInput } = {}
 				for i = 1, seats do
 					local steals = math.floor(mask / 2 ^ (i - 1)) % 2 == 1
-					table.insert(finalists, {
-						playerId = i,
-						choice = if steals then "Steal" else "Share",
-						soleStealerVU = 3,
-						loneSharerVU = 2,
-						allShareVU = 1,
-					})
+					table.insert(finalists, { playerId = i, choice = if steals then "Steal" else "Share" })
 				end
 				local result = Outcomes.resolve(finalists)
 				for _, me in finalists do
@@ -43,7 +38,7 @@ describe("DecisionLogic.prizeFor agrees with Outcomes.resolve", function()
 					local expected: DecisionLogic.Prize = "Nothing"
 					for _, winner in result.winners do
 						if winner.playerId == me.playerId then
-							expected = PRIZE_BY_VU[winner.bountyVU]
+							expected = PRIZE_BY_TAG[winner.outcomeTag]
 						end
 					end
 					expect(DecisionLogic.prizeFor(me.choice, othersStealing, seats)):toBe(expected)
@@ -75,7 +70,9 @@ describe("DecisionLogic.parseReveal", function()
 			choices = choices,
 			outcome = {
 				branch = "SoleSteal",
-				winners = { { playerId = 1, bountyVU = 20 } },
+				-- bountyVU is a stray amount from a pre-2c server, kept
+				-- here to prove parseReveal drops it.
+				winners = { { playerId = 1, outcomeTag = "SoleStealer", bountyVU = 20 } },
 				loserIds = { 2, -7 },
 			},
 			revealAt = 100,
@@ -92,7 +89,7 @@ describe("DecisionLogic.parseReveal", function()
 		expect(r.loserIds[2]):toBe(-7)
 	end)
 
-	it("never keeps a winner's bountyVU (a streak-tier tell)", function()
+	it("never keeps an amount on a winner, even if a server sends one (a streak tell)", function()
 		local r = DecisionLogic.parseReveal(payload({ [1] = "Steal" })) :: any
 		for _, value in r do
 			if type(value) == "table" then

@@ -75,7 +75,7 @@ delay. Don't trust a `pcall` that returned nothing.
 | Power-up collected | "Never used" needs a denominator. Unused because nobody picks it up, or picked up and held? | `PowerUpCollected(powerUpId)` |
 | Round ended | Race length, finishers, backfilled seats, humans still present | `RoundEnded(mapId, raceSeconds, humanFinishers)` |
 | Streak credit | Whether `NPCService.roundEarnsStreakCredit()` refused credit (npc-notes.md §2) | a field on the win event |
-| Bounty tier | The finale check (§3) is done per tier | a field on `StealShareChoice` |
+| Reward rung | The finale check (§3) is done per rung | a field on `StealShareChoice` |
 | Config version | Tells patched rounds apart from unpatched ones during a `rollout` | a field on `RoundStarted` |
 
 The last row pays for itself. `/liveops rollout 10` gives a treatment
@@ -162,8 +162,9 @@ is the failure mode that design-decisions.md Q7 accepted, so measure it.
 
 ## 3. Finale health: tension, or a dominant strategy?
 
-The model is in `payoff-table.md`. With `L`/`M`/`S` = sole-stealer,
-lone-sharer and all-share VU, and `Closs` = the value of the streak you
+The model is in `payoff-table.md`. With `L`/`M`/`S` = the sole-stealer,
+lone-sharer and all-share coin payouts at the winner's rung
+(`RewardLogic.currencyFor`), and `Closs` = the value of the streak you
 lose:
 
 ```
@@ -172,7 +173,8 @@ p* = 1 / (1 + √((M + Closs) / (L − S)))
 
 `p*` is the steal rate at which neither choice is better. The design
 bet is that the population steal rate hovers near `p*` and falls as
-streak tier rises (0.53 at tier 1 → 0.41 at tier 5).
+streak rises (0.55 at a first-ever finale → 0.38 at streak 49, on the
+PLACEHOLDER `winRewards`).
 
 **Only count Studios with three human finalists.** A bot's choice is a
 fixed personality probability (Greedy 0.7 / Loyal 0.2 / Chaotic 0.5).
@@ -181,8 +183,8 @@ Report them separately (§5).
 
 ### 3.1 The three checks
 
-**A. Steal rate by tier compared with `p*`.** From `StealShareChoice`,
-steal rate by bounty tier, with a 95% interval
+**A. Steal rate by rung compared with `p*`.** From `StealShareChoice`,
+steal rate by rung (bucketed if a rung is too thin), with a 95% interval
 (`±1.96·√(p(1−p)/n)`). A finding needs the **whole interval** to sit
 outside `p* ± 0.05`.
 
@@ -204,38 +206,41 @@ repeat-pair check tells them apart. Absolute alarm levels are in
 payoff-table.md §4: **AllShare > 50–60%** means the finale is a
 formality, and **AllSteal > 15–20%** means trust has collapsed.
 
-**C. Steal-rate slope across tiers.** It should fall. If it's flat or
+**C. Steal-rate slope across rungs.** It should fall. If it's flat or
 rising, high-streak players aren't protecting what they have, and the
 loss-aversion effect isn't landing.
 
-**The dominance test itself:** for each tier, compute the *realised*
-average payoff of Steal and of Share. A win pays its VU, and a loss
-costs `2 × streak` (payoff-table.md's `c₀ = 2`). If one choice pays
-more in every tier for two windows in a row, it's dominant in practice,
-whatever the model says.
+**The dominance test itself:** for each rung bucket, compute the
+*realised* average payoff of Steal and of Share. A win pays its coins
+(the drop is left out: it's the same for both choices), and a loss
+costs `10 × streak` (payoff-table.md's `c₀ = 10` coins). If one choice
+pays more in every bucket for two windows in a row, it's dominant in
+practice, whatever the model says.
 
 ### 3.2 Which lever moves what
 
-`Closs` is the streak itself and can't be tuned. `c₀` is a modelling
-constant, not a config value. The live levers are only
-`game.bountyTiers.<n>.soleStealerVU | loneSharerVU | allShareVU`, and
-Validate keeps Steal above Share.
+`Closs` is the streak itself and can't be tuned. `c₀`
+(`GameConfig.streakLossWeight`) is a modelling constant that nothing
+reads at runtime. The live levers are only
+`game.winRewards.currency.soleStealer | loneSharer | allShare |
+perRungBonus`, and Validate keeps Steal above Share.
 
 | Observed | Change | Predicted effect on `p*` |
 |---|---|---|
-| Steal rate above `p*` (too greedy) | Lower `L` for that tier | Tier 1, L 20→16: p* 0.53→0.49 |
-| Steal rate below `p*`, AllShare too high | Raise `L` or lower `S` | Tier 1, S 5→3: p* 0.53→0.54 |
-| AllSteal too high | Raise `M` (reward the holdout) | Tier 1, M 10→14: p* 0.53→0.49 |
-| Slope flat or reversed | Flatten the upper tiers' `L` (tiers 4–5 only) | Lowers `p*` at the top only |
+| Steal rate above `p*` (too greedy) | Lower `soleStealer` | 100→80: p* at streak 1 0.53→0.49, at streak 18 0.44→0.40 |
+| Steal rate below `p*`, AllShare too high | Raise `soleStealer` or lower `allShare` | `allShare` 25→15: streak 1 0.53→0.55 |
+| AllSteal too high | Raise `loneSharer` (reward the holdout) | 50→70: streak 1 0.53→0.49 |
+| Slope flat or reversed | Lower `perRungBonus` (reward climbs slower than risk) | 0.1→0.05: streak 1 unchanged, streak 18 0.44→0.41, streak 49 0.38→0.34 |
 
 The `p*` shift is the model's prediction. The effect on the *observed*
 rate is smaller and slower, because players react to their beliefs
-about each other, and those update over many Studios. **Change one tier
-at a time**, starting with tier 1, which has by far the most data.
+about each other, and those update over many Studios. A base moves
+every rung at once, so **change one number at a time**, and judge it
+first on the low rungs, which have by far the most data.
 
-**Confirming metric:** that tier's steal rate over the next window,
+**Confirming metric:** the low rungs' steal rate over the next window,
 compared with the control servers during `rollout`. **Wait:** until the
-changed tier has had its §7 minimum number of choices again. Never less
+low rungs have had their §7 minimum number of choices again. Never less
 than 7 days.
 
 ---
@@ -352,10 +357,11 @@ difference this review acts on.
 | Integrity pair analysis | Never from counts alone. Investigate individual cases |
 | Retention (D1/D7) | Whatever Creator Hub shows with its own confidence display. Don't compare days one at a time |
 
-**Expect tier 4–5 finale data to be noise in week one.** Reaching
+**Expect finale data above rung 10 to be noise in week one.** Reaching
 streak 10 takes 10 wins in a row, and few players will have done it.
-Don't tune tiers 4–5 until they pass their floor, even if the numbers
-look alarming. Tier 1 carries the finale review until then.
+Don't tune `perRungBonus` on the high rungs' numbers until they pass
+their floor, even if they look alarming. Rungs 1–3 carry the finale
+review until then.
 
 Name noise findings in the log anyway, as *"noise at n = …, re-check
 next window"*, so a number that turns out to be real later has a

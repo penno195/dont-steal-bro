@@ -1,18 +1,10 @@
 --!strict
 -- Pure logic behind DataService.luau (P1-5): the schema type, the
--- versioned migration chain, the mid-round-leave ordering rule, and the
--- bounty-tier lookup. Self-contained on purpose - no requires of sibling
--- files, no Roblox API calls anywhere - so it stays requirable under
--- Lune for headless tests (tests/ProfileLogic.spec.luau), the same shape
--- as Net.luau (P1-3) and Validate.luau (P1-4) and for the same reason.
---
--- `BountyTier` below duplicates five fields from Validate.luau's own
--- BountyTier rather than requiring that module - Luau's structural
--- typing means a real `Validate.BountyTier` value (e.g. from
--- GameConfig.bountyTiers) still satisfies this type with no cast needed,
--- so the duplication costs nothing at call sites and keeps this file
--- from needing a Roblox Instance-path require it can't resolve under
--- Lune.
+-- versioned migration chain, and the mid-round-leave ordering rule.
+-- Self-contained on purpose - no requires of sibling files, no Roblox
+-- API calls anywhere - so it stays requirable under Lune for headless
+-- tests (tests/ProfileLogic.spec.luau), the same shape as Net.luau
+-- (P1-3) and Validate.luau (P1-4) and for the same reason.
 
 local ProfileLogic = {}
 
@@ -293,35 +285,6 @@ function ProfileLogic.classifyLoadOutcome(profileIsNil: boolean, cancelled: bool
 		return "CancelledByLeave"
 	end
 	return "LikelyLockedOrOutage"
-end
-
--- ===== Bounty tier lookup ================================================
-
-export type BountyTier = {
-	tier: number,
-	minStreak: number,
-	soleStealerVU: number,
-	loneSharerVU: number,
-	allShareVU: number,
-}
-
--- Pure: which bounty tier a streak falls into, per payoff-table.md §3's
--- ascending minStreak brackets - the highest tier whose floor the streak
--- has reached. Errors rather than guessing if `bountyTiers` doesn't
--- cover streak 0 at all; that's a GameConfig authoring bug Validate.
--- checkGameConfig (P1-4) should have already caught at boot.
-function ProfileLogic.resolveBountyTier(bountyTiers: { BountyTier }, streak: number): BountyTier
-	local best: BountyTier? = nil
-	for _, tier in bountyTiers do
-		if streak >= tier.minStreak and (best == nil or tier.minStreak > (best :: BountyTier).minStreak) then
-			best = tier
-		end
-	end
-	assert(
-		best ~= nil,
-		"ProfileLogic.resolveBountyTier: no bounty tier covers this streak - check GameConfig.bountyTiers"
-	)
-	return best :: BountyTier
 end
 
 return ProfileLogic

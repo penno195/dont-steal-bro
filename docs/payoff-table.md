@@ -1,14 +1,23 @@
 # Don't Steal Bro! — Steal/Share Payoff Table (P0-4)
 
 Tunes the Decision Studio's payoff numbers and shows the game-theory behind
-them. Per `design-decisions.md` Q1, "bounty" is a fixed item package, not a
-currency shown to the player — the **value units (VU)** below are an
-internal design currency for balancing, not something a player ever sees.
-They exist to (a) decide which item-tier bracket a `RewardTables` lookup
-should assign per (streak tier, outcome tier), and (b) drive the pure,
-`--!strict`-testable EV maths this document is built on, per Ground Rule 4.
-Treat every number here as a starting value for `Outcomes.luau`'s config,
-to be corrected by the telemetry in the closing section — not as final.
+them. Since `design-decisions.md` Q1's 2026-09-30 revision, a win pays
+**currency (coins)**: `RewardLogic.currencyFor` gives the outcome tier's
+base (`GameConfig.winRewards.currency`) times `1 + perRungBonus × rung`,
+where the rung is how many title-ladder rungs the winner's streak reaches
+*after* this win. A win also rolls a chance at a drop, which this EV model
+leaves out (it's the same for Steal and Share, so it can't tip the choice).
+
+Until 2026-10-02 (rewards-roadmap.md step 2c) this doc priced payoffs in
+abstract **value units (VU)** over five `bountyTiers`. The current coin
+bases (100 / 50 / 25) are exactly 5× the old tier-1 VU (20 / 10 / 5), so
+the conversion is clean: **1 VU = 5 coins at rung 0**. Every number here is
+a PLACEHOLDER starting value, to be corrected by the telemetry in §4 (and
+rewards-roadmap.md step 7), not a final one.
+
+Players never see these numbers *during* the finale. The payoff table on
+screen names prizes in words (BIG / MEDIUM / SMALL), because an amount that
+scales with your streak would tell the room what your streak is (Q7).
 
 ## 1. Setup
 
@@ -58,21 +67,21 @@ oscillate around `p*`, not collapse to 0 or 1 — that's the "tension, not a
 dominant strategy" the brief asks for, and it falls out of the numbers
 rather than needing to be forced in separately.
 
-## 2. Baseline numbers (streak tier 1, e.g. streak 1–2)
+## 2. Baseline numbers (streak 1 going in, so a win reaches rung 2)
 
 | L (sole steal) | M (lone share vs. 2 stealers) | S (3-share) | Closs (streak 1) |
 |---|---|---|---|
-| 20 VU | 10 VU | 5 VU | 2 VU |
+| 120 coins | 60 coins | 30 coins | 10 coins |
 
-Plugging in: `p* = 1 / (1 + √((10+2)/(20−5))) = 1 / (1 + √0.8) ≈ 0.53`.
+Plugging in: `p* = 1 / (1 + √((60+10)/(120−30))) = 1 / (1 + √0.78) ≈ 0.53`.
 
-### Three population assumptions, at this tier
+### Three population assumptions, at this streak
 
 | Assumption | p | EV(Steal) | EV(Share) | Favored |
 |---|---|---|---|---|
-| Mostly cooperative | 0.2 | **12.1** | 3.0 | Steal, strongly |
-| Mixed (≈ equilibrium) | 0.53 | 2.7 | 2.7 | Indifferent |
-| Mostly greedy | 0.8 | −1.1 | **6.0** | Share, strongly |
+| Mostly cooperative | 0.2 | **73.2** | 18.4 | Steal, strongly |
+| Mixed (≈ equilibrium) | 0.53 | 18.5 | 18.5 | Indifferent |
+| Mostly greedy | 0.8 | −4.8 | **36.4** | Share, strongly |
 
 Reading this: if you believe the table is mostly going to Share, betraying
 them is the single most profitable move in the game — that's the
@@ -97,50 +106,50 @@ resets the streak, so the cost of losing *is* the streak itself. A
 minimum) with zero extra design work — `Closs(n) = n · c₀` for some small
 constant `c₀`.
 
-Reward, per Q1, is bucketed into coarse **streak tiers**, not continuous —
-which means it naturally grows *slower* than the streak itself the higher
-you climb. That gap is the actual lever, and it should be kept, not closed:
-letting reward scale as slowly as risk grows is what makes a big streak
-feel increasingly precious to protect rather than just proportionally more
-lucrative to gamble.
+Reward grows with the **rung**, not the streak: one rung per win to 10,
+then every 2 wins to 20, then every 5 to 50 (21 rungs). Each rung adds a
+flat `perRungBonus` (10%) of the base, so reward grows linearly in rungs
+and *slower* than the streak itself past 10. That gap is the actual lever,
+and it should be kept, not closed: letting reward scale more slowly than
+risk is what makes a big streak feel increasingly precious to protect
+rather than just proportionally more lucrative to gamble.
 
-Using `c₀ = 2` and a 5-tier reward bracket that grows modestly per tier:
+Using `c₀ = 10` coins (`GameConfig.streakLossWeight`; 2 VU before the
+conversion) and the current PLACEHOLDER `winRewards`:
 
-| Tier | Streak range | L / M / S (VU) | Representative streak (n) | Closs = 2n | p* |
-|---|---|---|---|---|---|
-| 1 | 0–2 | 20 / 10 / 5 | 1 | 2 | 0.53 |
-| 2 | 3–5 | 24 / 12 / 6 | 4 | 8 | 0.49 |
-| 3 | 6–9 | 28 / 14 / 7 | 8 | 16 | 0.46 |
-| 4 | 10–14 | 32 / 16 / 8 | 12 | 24 | 0.44 |
-| 5 | 15+ | 36 / 18 / 9 | 18 | 36 | 0.41 |
+| Streak going in (n) | Rung after a win | L / M / S (coins) | Closs = 10n | p* |
+|---|---|---|---|---|
+| 0 (first-ever finale) | 1 | 110 / 55 / 27 | 0 | 0.55 |
+| 1 | 2 | 120 / 60 / 30 | 10 | 0.53 |
+| 4 | 5 | 150 / 75 / 37 | 40 | 0.50 |
+| 8 | 9 | 190 / 95 / 47 | 80 | 0.47 |
+| 12 | 11 | 210 / 105 / 52 | 120 | 0.46 |
+| 18 | 14 | 240 / 120 / 60 | 180 | 0.44 |
+| 30 | 17 | 270 / 135 / 67 | 300 | 0.41 |
+| 49 | 21 (top) | 310 / 155 / 77 | 490 | 0.38 |
 
-**Correction, found integrating P3-2 (Decision Studio):** Tier 1's floor
-is streak 0, not 1. The original "1–2" range left a brand-new player's
-very first-ever qualification (streak 0, before any win has incremented
-it) with no covering tier at all — `ProfileLogic.resolveBountyTier`
-errors loudly rather than guessing when that happens, by design, which
-made this a hard crash the first time a real code path could actually
-reach it rather than a theoretical gap. `GameConfig.bountyTiers` and
-`Validate.checkGameConfig`'s own boot-time check (a tier's `minStreak`
-must reach down to 0) both reflect this now.
+(Amounts are floored, as `currencyFor` does.) Streak 0 is a real case,
+not an edge: a first-ever finalist has nothing to lose, so their p* is the
+table's highest. The old VU table needed a fix for it, because its lowest
+tier started at streak 1; the rung formula covers streak 0 by construction.
 
-`p*` falls monotonically from 0.53 to 0.41 as streak climbs — exactly the
+`p*` falls monotonically from 0.55 to 0.38 as streak climbs — exactly the
 "more to lose, more cautious" effect the brief asks for, derived rather
-than hand-set. It doesn't hit 0: even at tier 5, Steal remains the better
-response whenever a player believes fewer than ~41% of the table will
-steal, so a high-streak lobby is never a foregone conclusion.
+than hand-set. It doesn't hit 0: even at streak 49, Steal remains the
+better response whenever a player believes fewer than ~38% of the table
+will steal, so a high-streak lobby is never a foregone conclusion.
 
-### The same three scenarios, at tier 5 (streak 18)
+### The same three scenarios, at streak 18 (rung 14)
 
 | Assumption | p | EV(Steal) | EV(Share) | Favored |
 |---|---|---|---|---|
-| Mostly cooperative | 0.2 | **10.1** | −5.0 | Steal, very strongly |
-| Mixed (≈ equilibrium) | 0.41 | ≈0 | ≈0 | Indifferent |
-| Mostly greedy | 0.8 | **−33.1** | 0.4 | Share, decisively |
+| Mostly cooperative | 0.2 | **88.8** | −14.4 | Steal, very strongly |
+| Mixed (≈ equilibrium) | 0.44 | −46.6 | −46.6 | Indifferent |
+| Mostly greedy | 0.8 | −163.2 | **21.6** | Share, decisively |
 
-Notice the swings are far more violent than tier 1's (−33.1 vs. −1.1 at the
-greedy extreme; a *negative* Share EV at the cooperative extreme, which
-tier 1 never sees). This is the intended effect of §3's asymmetric scaling:
+Notice the swings are far more violent than at streak 1 (−163.2 vs. −4.8
+at the greedy extreme; a *negative* Share EV at the cooperative extreme,
+which streak 1 never sees). This is the intended effect of §3's asymmetric scaling:
 a high-streak player isn't just risking a bigger number, they're playing a
 version of the same game with dramatically higher variance at both ends,
 which is what should make the Decision Studio feel like the climax the
@@ -148,10 +157,9 @@ GDD frames it as once someone's sitting on a real streak.
 
 ## 4. Telemetry: three metrics to watch, and which way to move the numbers
 
-**1. Observed steal-rate vs. the modeled `p*`, segmented by streak tier.**
-Log every Studio decision with the deciding player's streak tier and
-choice. If the empirical steal-rate is persistently *above* the tier's
-`p*`, players are stealing more than the maths says is rational — either
+**1. Observed steal-rate vs. the modeled `p*`, segmented by rung.**
+Log every Studio decision with the deciding player's rung and choice. If
+the empirical steal-rate is persistently *above* that rung's `p*`, players are stealing more than the maths says is rational — either
 they undervalue the loss emotionally, or `L` is priced too temptingly
 relative to `Closs`. **Direction:** lower `L` or raise `c₀`. If it's
 persistently *below* `p*`, Share is over-rewarded relative to the
@@ -168,8 +176,8 @@ than tension — **raise `Closs`'s weight relative to `L`**, or check
 whether the Q5 reputation display is actually visible/legible enough for
 players to use it to build trust over repeat sessions.
 
-**3. Steal-rate slope across streak tiers.** This is the direct test of
-§3's central claim — steal-rate should *decrease* as streak tier
+**3. Steal-rate slope across rungs.** This is the direct test of
+§3's central claim — steal-rate should *decrease* as the rung
 increases. If the observed slope is flat or, worse, reversed (high-streak
 players stealing as much or more than low-streak ones, e.g. because a big
 streak makes them feel invincible rather than cautious), the loss-aversion
@@ -178,7 +186,7 @@ often, steepen `Closs(n)` (raise `c₀`, or make it convex above a
 threshold) or slow down streak-rebuild pacing so a reset is felt more;
 if high-streak players *never* steal (predictable, boring finales at the
 top of the leaderboard), flatten `Closs(n)` slightly or add a small `L`
-premium at the top tier to keep some temptation alive even at the summit.
+premium at the top rungs to keep some temptation alive even at the summit.
 
 ## 5. What this doesn't cover
 

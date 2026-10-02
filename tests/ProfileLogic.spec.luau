@@ -143,27 +143,3 @@ TestRunner.describe("ProfileLogic.release (double-release)", function()
 		TestRunner.expect(order[2]):toBe("end")
 	end)
 end)
-
-TestRunner.describe("ProfileLogic.resolveBountyTier", function()
-	local tiers: { ProfileLogic.BountyTier } = {
-		{ tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
-		{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
-		{ tier = 5, minStreak = 15, soleStealerVU = 36, loneSharerVU = 18, allShareVU = 9 },
-	}
-
-	TestRunner.it("picks the lowest tier at its exact floor", function()
-		TestRunner.expect(ProfileLogic.resolveBountyTier(tiers, 1).tier):toBe(1)
-	end)
-
-	TestRunner.it("picks the highest tier whose floor has been reached", function()
-		TestRunner.expect(ProfileLogic.resolveBountyTier(tiers, 4).tier):toBe(2)
-		TestRunner.expect(ProfileLogic.resolveBountyTier(tiers, 20).tier):toBe(5)
-	end)
-
-	TestRunner.it("errors when no tier covers the streak", function()
-		local ok = pcall(function()
-			ProfileLogic.resolveBountyTier(tiers, 0)
-		end)
-		TestRunner.expect(ok):toBe(false)
-	end)
-end)

@@ -1,6 +1,6 @@
 --!strict
 -- The root config: round/player counts, Decision Studio timers, and
--- bounty tiers. See Validate.luau for field provenance - most of these
+-- win rewards. See Validate.luau for field provenance - most of these
 -- numbers are locked design decisions, not guesses; the ones that aren't
 -- are marked PLACEHOLDER, the same stance perf-budget.md and threat-
 -- model.md take on their own unverified figures. ConfigValidator
@@ -16,7 +16,7 @@ local GameConfig: Validate.GameConfig = {
 	qualifierCount = 3, -- gdd.md
 	tasksPerPlayer = 6, -- PLACEHOLDER: no locked value in docs/ yet
 	qualificationFloorPercent = 0.5, -- design-decisions.md Q2
-	streakLossWeight = 2, -- payoff-table.md §3's c0; Closs(n) = 2n
+	streakLossWeight = 10, -- payoff-table.md §3's c0 in coins (was 2 VU; 1 VU = 5 coins); Closs(n) = 10n
 	-- 5 = never fires: a 6-seat round with one human has at most 5 bots.
 	-- A real player's win always counts (design-decisions.md Q5, applied
 	-- 2026-10-02); rewards-roadmap.md step 2d retires the machinery.
@@ -46,28 +46,11 @@ local GameConfig: Validate.GameConfig = {
 		cleanupSeconds = 5,
 	},
 
-	-- payoff-table.md §3's table, with one fix found integrating P3-2:
-	-- the doc's own "Tier 1: streak range 1-2" leaves streak 0 - a
-	-- player's very first-ever qualification, before they've won
-	-- anything - uncovered by every tier. ProfileLogic.resolveBountyTier
-	-- (P1-5) errors loudly on an uncovered streak by design, which is
-	-- correct behavior for a genuinely misconfigured table, but streak 0
-	-- reaching the Decision Studio is not a misconfiguration - it's the
-	-- ordinary first-time-winner case. Tier 1's floor is lowered to 0
-	-- here (payoff-table.md itself should be updated to "0-2" to match).
-	bountyTiers = {
-		{ tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
-		{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
-		{ tier = 3, minStreak = 6, soleStealerVU = 28, loneSharerVU = 14, allShareVU = 7 },
-		{ tier = 4, minStreak = 10, soleStealerVU = 32, loneSharerVU = 16, allShareVU = 8 },
-		{ tier = 5, minStreak = 15, soleStealerVU = 36, loneSharerVU = 18, allShareVU = 9 },
-	},
-
 	-- What a win pays (design-decisions.md Q1, revised 2026-09-30 and
 	-- applied 2026-10-02): currency for the outcome tier, scaled by the
 	-- winner's title-ladder rung after this win, plus a chance at a random
-	-- drop. Replaces bountyTiers above once the services use it. Every
-	-- number is PLACEHOLDER until playtest.
+	-- drop. Replaced the five VU bountyTiers (rewards-roadmap.md 2c).
+	-- Every number is PLACEHOLDER until playtest.
 	winRewards = {
 		-- Rung 0 pays the base; rung 21 (streak 50) pays 3.1x.
 		currency = { soleStealer = 100, loneSharer = 50, allShare = 25, perRungBonus = 0.1 },
@@ -637,9 +620,7 @@ local GameConfig: Validate.GameConfig = {
 			"game.qualificationFloorPercent",
 			"game.roundTimers.*",
 			"game.studioTimers.*",
-			"game.bountyTiers.*.soleStealerVU",
-			"game.bountyTiers.*.loneSharerVU",
-			"game.bountyTiers.*.allShareVU",
+			"game.winRewards.**",
 			"game.powerUpRotationTimers.*",
 			"game.powerUpUseRangeStuds",
 			"game.npc.**",

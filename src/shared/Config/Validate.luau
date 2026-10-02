@@ -554,29 +554,19 @@ export type StudioTestConfig = {
 	startDelaySeconds: number,
 }
 
--- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
+-- ===== GameConfig: round/player counts, Studio timers, win rewards =====
 -- Studio phase timers are locked exactly by architecture.md §6's network
 -- trace (Intro +5s, Negotiate +20s - 45s until 2026-09-25 - Choose
--- +15s, Reveal +1s). Bounty
--- tiers are payoff-table.md §3's table verbatim (VU = the internal
--- balancing currency that doc explains is never shown to a player - see
--- its §1 for why L > M > S > 0 must hold at every tier). Fields with no
--- locked value anywhere in docs/ yet are marked PLACEHOLDER, the same
--- stance perf-budget.md and threat-model.md take on their own
--- unverified figures - not a guess presented as fact.
-export type BountyTier = {
-	tier: number, -- 1-5, ascending
-	minStreak: number, -- payoff-table.md §3's streak-range floor for this tier
-	soleStealerVU: number, -- L
-	loneSharerVU: number, -- M
-	allShareVU: number, -- S
-}
+-- +15s, Reveal +1s). Fields with no locked value anywhere in docs/ yet
+-- are marked PLACEHOLDER, the same stance perf-budget.md and
+-- threat-model.md take on their own unverified figures - not a guess
+-- presented as fact.
 
 -- What a win pays: design-decisions.md Q1's 2026-09-30 revision and its
 -- 2026-10-02 applied case. A "rung" is how many title-ladder rungs the
 -- winner's streak reaches AFTER this win (0-21; RewardLogic.rungFor).
--- Every number is PLACEHOLDER until playtest. Replaces bountyTiers once
--- the services are wired to it.
+-- Every number is PLACEHOLDER until playtest. Replaced the VU
+-- bountyTiers (rewards-roadmap.md step 2c).
 export type WinCurrencyConfig = {
 	-- The base for each outcome tier. Validate keeps soleStealer >
 	-- loneSharer > allShare > 0, the ordering bountyTiers had, so Steal
@@ -642,7 +632,6 @@ export type GameConfig = {
 	raceDurationSeconds: number, -- PLACEHOLDER: no locked value in docs/ yet
 	studioTimers: StudioTimers,
 	roundTimers: RoundTimers,
-	bountyTiers: { BountyTier },
 	winRewards: WinRewardsConfig,
 
 	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
@@ -2689,71 +2678,12 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		issue(issues, "GameConfig", "GameConfig.luau", "studioTimers.newPlayerFinales", "must not be negative")
 	end
 
-	if #config.bountyTiers == 0 then
-		issue(issues, "GameConfig", "GameConfig.luau", "bountyTiers", "must declare at least one tier")
-	end
-
-	-- P3-2 found this the hard way: ProfileLogic.resolveBountyTier errors
-	-- loudly when no tier covers a given streak, and a brand-new
-	-- qualifier's streak really can be 0 (their first-ever win, before
-	-- currentStreak has incremented at all) - so the lowest tier's own
-	-- floor must reach down to 0, not just "the lowest streak anyone
-	-- expects to see."
-	local coversZero = false
-	for _, tier in config.bountyTiers do
-		if tier.minStreak <= 0 then
-			coversZero = true
-		end
-	end
-	if #config.bountyTiers > 0 and not coversZero then
-		issue(
-			issues,
-			"GameConfig",
-			"GameConfig.luau",
-			"bountyTiers",
-			"no tier's minStreak is <= 0 - a streak-0 qualifier (a first-ever win) would have no covering tier"
-		)
-	end
-
-	local previousMinStreak: number? = nil
-	for _, tier in config.bountyTiers do
-		local label = string.format("bountyTiers[tier=%s]", tostring(tier.tier))
-
-		-- The central invariant the P1-4 task asks for by name: sole-
-		-- stealer bounty > lone-sharer bounty > all-share bounty > 0,
-		-- checked at every tier (payoff-table.md §1's asymmetric payoff
-		-- shape is what keeps Steal and Share both live options).
-		if
-			not (tier.soleStealerVU > tier.loneSharerVU and tier.loneSharerVU > tier.allShareVU and tier.allShareVU > 0)
-		then
-			issue(
-				issues,
-				"GameConfig",
-				"GameConfig.luau",
-				label,
-				string.format(
-					"bounty ordering broken: expected soleStealer (%s) > loneSharer (%s) > allShare (%s) > 0",
-					tostring(tier.soleStealerVU),
-					tostring(tier.loneSharerVU),
-					tostring(tier.allShareVU)
-				)
-			)
-		end
-
-		if previousMinStreak ~= nil and tier.minStreak <= previousMinStreak then
-			issue(
-				issues,
-				"GameConfig",
-				"GameConfig.luau",
-				label,
-				"bountyTiers must be sorted by strictly ascending minStreak"
-			)
-		end
-		previousMinStreak = tier.minStreak
-	end
-
-	-- design-decisions.md Q1, applied 2026-10-02: the same steal-beats-
-	-- share ordering bountyTiers enforced, now on the currency bases.
+	-- The central invariant the P1-4 task asked for by name, carried over
+	-- from the retired bountyTiers (design-decisions.md Q1, applied
+	-- 2026-10-02): sole stealer > lone sharer > all share > 0.
+	-- payoff-table.md §1's asymmetric payoff shape is what keeps Steal
+	-- and Share both live options. All three bases share one per-rung
+	-- multiplier, so the ordering carries up the ladder.
 	local winCurrency = config.winRewards.currency
 	if
 		not (

@@ -11,10 +11,9 @@
 -- SECRECY: nothing here can hold another player's choice before the
 -- reveal, because the only function that ever produces one is
 -- parseReveal, and the only input to it is the DecisionReveal packet.
--- parseReveal also drops `bountyVU`: a winner's VU figure is a function
--- of their streak tier (design-decisions.md Q1), so a client that never
--- keeps it can never display it. See docs/decision-studio.md "Secrecy
--- audit".
+-- The packet carries no reward amounts at all: a winner's pay scales
+-- with their streak, so it only reaches its owner, at Results, in
+-- RoundRecap. See docs/decision-studio.md "Secrecy audit".
 
 local DecisionLogic = {}
 
@@ -94,7 +93,7 @@ function DecisionLogic.parseReveal(payload: any): Reveal?
 	for _, entry in (payload.outcome.winners or {}) :: { any } do
 		local id = if type(entry) == "table" then toId(entry.playerId) else nil
 		if id ~= nil then
-			table.insert(winnerIds, id) -- bountyVU deliberately not copied
+			table.insert(winnerIds, id)
 		end
 	end
 	local loserIds: { number } = {}
@@ -174,8 +173,9 @@ DecisionLogic.QUICK_PHRASES = table.freeze({ "Share", "Steal", "Please", "Don't"
 -- PAYOFF TABLE -------------------------------------------------------
 
 -- What YOU get, given your choice and how many of the others steal.
--- payoff-table.md §1, read from one seat. Words, never VU: VU is an
--- internal balancing unit a player never sees (payoff-table.md intro).
+-- payoff-table.md §1, read from one seat. Words, never numbers: what a
+-- prize pays scales with the winner's streak, which the table must not
+-- show (Q7), so it only names the tier.
 function DecisionLogic.prizeFor(mine: Choice, othersStealing: number, seats: number): Prize
 	if seats <= 1 then
 		return "Small" -- Outcomes.resolveOne: a solo finalist always gets the all-share package

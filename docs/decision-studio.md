@@ -132,8 +132,9 @@ off its movement input (`InputLock.holdMovement`, camera left free),
 stops the walk/run tracks and plays the rig's idle.
 
 **Payoff table.** Always visible until the outcome shows. Words only: BIG,
-MEDIUM, SMALL, ✕ NOTHING. Never the VU numbers, which are an internal
-balancing unit that payoff-table.md says a player never sees. It adapts
+MEDIUM, SMALL, ✕ NOTHING. Never coin amounts: those scale with each
+winner's streak, so showing them would tell the room who has the most
+to lose (Q7). It adapts
 to the seat count (3, 2 or 1). `tests/DecisionLogic.spec.luau` checks it
 against `Outcomes.resolve` for every combination of choices at every seat
 count, so the table can't tell a player something the resolver won't do.
@@ -253,12 +254,13 @@ against a full memory dump of it:
   are built for every seat at mount, from the same two tokens, so their
   existence says nothing. The reveal is a visibility change, not an asset
   chosen early.
-- **`bountyVU`:** `DecisionReveal` does broadcast each winner's VU, and a
-  VU is a function of streak tier. `parseReveal` drops it, so this client
-  never keeps or shows it. It arrives *after* the result is in, which
-  Q7's applied case permits for titles, but a modified client can still
-  read it. Consider trimming it from the payload server-side (a one-line
-  change, and nothing on the client needs it).
+- **Fixed in rewards step 2c: `bountyVU` in `DecisionReveal`.** The
+  packet used to broadcast each winner's VU, a function of their streak
+  tier, readable by a modified client. Outcomes now gives each winner
+  only an `outcomeTag`, which anyone can work out from the choices. The
+  coin amount, which scales with the winner's streak, reaches only its
+  owner, at Results, in `RoundRecap`. `parseReveal` still drops any
+  extra field on a winner.
 - **Fixed in P6-6: `ProgressionStreakSkipped` fired before the reveal.**
   `ProgressionService.applyRoundResult` fires it during
   `computeOutcomeAndWriteProfiles`, which runs about 0.2 s before
@@ -386,5 +388,5 @@ in `StudioStageLogic` and are unit-tested.
 - ~~**P6-6:** gate the results screen on `DecisionStudioController.isActive()`.~~
   Done: `MenuController` waits on it before opening Results.
 - **Server:** ~~defer `ProgressionStreakSkipped` until after the reveal~~ (done in P6-6, as `RoundRecap`), and
-  consider dropping `bountyVU` from `DecisionReveal` (see the secrecy audit).
+  ~~consider dropping `bountyVU` from `DecisionReveal`~~ (done in rewards step 2c).
 - **Q1 `RewardTables`:** the per-player item reveal belongs in the result panel.

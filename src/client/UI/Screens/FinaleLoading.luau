@@ -9,7 +9,7 @@
 -- table (one tile each, from DecisionLogic.rewardTiles, so it can't
 -- disagree with the resolver), the one-line lesson, and a spinner that
 -- becomes a "Got it" button once the Intro starts (2026-09-28).
--- Words only for the prizes, never VU (payoff-table.md).
+-- Words only for the prizes, never amounts (DecisionLogic.prizeFor).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 

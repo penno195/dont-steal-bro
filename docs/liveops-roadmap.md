@@ -69,9 +69,9 @@ before W1. Every "confirming metric" below needs it.
      review gets a day to land first, and it's never a Friday.
    - **Fri 18:00 UTC → Mon 00:00 UTC:** the weekend event, which ends
      when the weekly board ends.
-6. **Events never touch the payoff table.** `bountyTiers.*` belongs to
-   P9-2's finale-health loop (`launch-review.md` §3). A "double bounty
-   weekend" would wreck the one measurement the game can least afford to
+6. **Events never touch the payoff table.** `winRewards.currency.*`
+   belongs to P9-2's finale-health loop (`launch-review.md` §3). A
+   "double coins weekend" would wreck the one measurement the game can least afford to
    lose.
 7. **Store rotations are cosmetic only.** A limited-time power-up offer
    turns the asymmetry `store-receipts.md` warns about ("a player can pay,
