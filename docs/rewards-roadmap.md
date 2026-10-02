@@ -136,7 +136,7 @@ and ask the user (CLAUDE.md).
   - Ten `Config/Store/*Coins.luau` offers, one per freely earnable
     power-up. `StoreLogic.buyWithCoins` deducts and grants in one
     mutation, and `StoreService.buyWithCoins` saves it. The client shows
-    "150 coins", or "Need 150 coins" when short.
+    "25 coins", or "Need 25 coins" when short (150 until step 7a).
   - The random-item audit is store-receipts.md §6b. Nothing bought is
     random, and a spec scans the purchase-path modules for random
     sources.
@@ -144,7 +144,16 @@ and ask the user (CLAUDE.md).
     out of scope. Odds disclosure plus a PolicyService gate would be
     needed for any crate, luck boost or paid round entry.
   - Not yet Studio-verified.
+- [x] **7a. Paper pricing pass.** User targets (design-decisions.md Q1,
+  "pricing"): one power-up for every rung-0 win, whatever the outcome,
+  and about 29 Robux per power-up.
+  - Win payouts are unchanged, because payoff-table.md's streak-loss
+    cost uses the same coins. Everything else is priced in power-ups,
+    at 25 coins each.
+  - Also fixed: the starter bundle is now the best Robux rate, and the
+    free track (about 15 power-ups) is worth more than weekly #1 (10).
 
 ## Next
-- [ ] **7. Tune in playtest.** Every amount and odd is PLACEHOLDER.
-  Q8's "Robux buys time, never power" rests on these numbers.
+- [ ] **7b. Tune in playtest.** The 7a amounts need a real playtest,
+  and drop odds and rung scaling haven't been touched yet. Q8's
+  "Robux buys time, never power" depends on these numbers.

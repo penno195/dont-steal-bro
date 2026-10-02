@@ -342,9 +342,10 @@ Roughly in order of how much they cost:
 
 3. **Make the free path fast enough to be real.** Q8's rule is only true
    if "also earnable" means earnable on a comparable timescale. There
-   are no economy numbers in `docs/` yet — `CurrencySmall`'s 500 coins
-   and `SprintBoostStock`'s ten items are marked PLACEHOLDER precisely
-   because nothing anchors them. **Whoever sets those numbers is the
+   are targets now (design-decisions.md Q1, "pricing", 2026-10-02): one
+   power-up is one rung-0 win, or about 23-29 Robux, so ten Sprint
+   Boosts are ten wins or 249 Robux. Playtest still has to confirm how
+   long a win takes. **Whoever sets those numbers is the
    person who decides whether this design is pay-to-win, not whoever
    wrote Q8.** If ten Sprint Boosts cost 79 Robux or forty minutes of
    play, the rule holds. If it is 79 Robux or six hours, the rule is
@@ -371,7 +372,7 @@ the config validates.
 **Coin offers.** Coins are spent on `CoinOffer` store entries: one file
 per offer in `Config/Store/`, with a fixed `coinPrice` and no Roblox
 asset. User decision: coins buy **power-up stock only**, one of each
-freely earnable power-up, PLACEHOLDER 150 coins each. Validate refuses a
+freely earnable power-up, 25 coins each (one rung-0 win). Validate refuses a
 coin offer that grants anything else. `StoreService.buyWithCoins`
 deducts the price and applies the grant in one profile mutation
 (`StoreLogic.buyWithCoins`), then saves. No prompt and no receipt are

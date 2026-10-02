@@ -20,13 +20,13 @@ local Season1: Validate.SeasonDef = {
 	endsOn = "2027-01-01",
 	passKey = "season-1-pass",
 	free = {
-		{ wins = 3, grant = { kind = "Currency", amount = 100 } },
-		{ wins = 10, grant = { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 1 } },
+		{ wins = 3, grant = { kind = "Currency", amount = 50 } },
+		{ wins = 10, grant = { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 3 } },
 		{ wins = 25, grant = { kind = "Currency", amount = 250 } },
 	},
 	premium = {
 		{ wins = 0, grant = { kind = "Cosmetic", cosmeticId = "trail-founder" } },
-		{ wins = 5, grant = { kind = "Currency", amount = 250 } },
+		{ wins = 5, grant = { kind = "Currency", amount = 75 } },
 		{ wins = 10, grant = { kind = "Cosmetic", cosmeticId = "emote-victory-flex" } },
 		{ wins = 20, grant = { kind = "PowerUpStock", powerUpId = "second-wind", amount = 2 } },
 		{ wins = 30, grant = { kind = "Cosmetic", cosmeticId = "skin-founder" } },

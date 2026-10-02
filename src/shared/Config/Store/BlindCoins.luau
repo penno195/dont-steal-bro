@@ -15,7 +15,7 @@ local BlindCoins: Validate.StoreItemDef = {
 	displayName = "Blind",
 	description = "One Blind for your loadout, bought with coins you've earned.",
 	robuxPrice = 0,
-	coinPrice = 150, -- PLACEHOLDER: about two to six wins (rewards-roadmap.md step 7)
+	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 101,
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "blind", amount = 1 },

@@ -18,7 +18,7 @@ local StarterLoadoutBundle: Validate.StoreItemDef = {
 	enabled = false,
 	displayName = "Starter Loadout Bundle",
 	description = "Five each of Sprint Boost, Slow Field and Push-Trip. Every one of them is also earned free by playing.",
-	robuxPrice = 149, -- PLACEHOLDER: display only
+	robuxPrice = 349, -- about 23 R$ each: the bundle is the best Robux rate; display only
 	sortOrder = 41,
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 5 },

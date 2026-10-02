@@ -151,7 +151,7 @@ cosmetic opts in, or doesn't, in its own file.
 
 *Applied (2026-10-02, user decision):* **what coins buy.**
 - **Power-up stock only**: one of each freely earnable power-up, at a
-  fixed coin price (PLACEHOLDER 150 each, about two to six wins). Not
+  fixed coin price (25 each, see "pricing" below). Not
   cosmetics, so win drops stay the only way to get the drop cosmetics.
   Track and leaderboard cosmetics stay exclusive anyway.
 - **Each offer is its own store file** (`CoinOffer`): a `coinPrice`, no
@@ -162,6 +162,24 @@ cosmetic opts in, or doesn't, in its own file.
   nothing sold is random, and win drops count as free gameplay rewards.
   Selling a luck boost, a crate or a paid round entry would need odds
   disclosure and a PolicyService gate. See store-receipts.md §6b.
+
+*Applied (2026-10-02, user decision):* **pricing** (rewards-roadmap.md
+step 7a). Every amount is still unconfirmed until a playtest.
+- **Targets:** a casual (rung-0) player affords one power-up for every
+  win, whatever the outcome, and a power-up costs about 29 Robux.
+- **Win payouts unchanged** (100 / 50 / 25). payoff-table.md's streak-loss
+  cost is in the same coins, so rescaling them would shift the
+  Steal/Share balance. Instead a power-up costs 25 coins, the all-share
+  payout. A rung-0 sole stealer therefore earns four.
+- **Robux, best rate in the bundle:** 75 coins for 79 R$ (~26 each),
+  250 coins for 249 R$ (~25), Sprint Boost x10 for 249 R$ (~25), and the
+  15-item starter bundle for 349 R$ (~23).
+- **Free track over the weekly board:** the Season 1 free track is worth
+  about 15 power-ups (50 coins, 3 Sprint Boosts, 250 coins). Weekly #1
+  pays 250 coins (10) and daily #1 pays 75 (3). Duplicate-drop coins and
+  the premium track's coin step are scaled the same way.
+- Not addressed: high-rung snowball (a rung-21 stealer earns 12
+  power-ups a win). Left for playtest.
 
 ## 2. Round timer expires with <3 finished
 

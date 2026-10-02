@@ -62,7 +62,7 @@ local GameConfig: Validate.GameConfig = {
 				Rare = { weight = 5, perRungGrowth = 0.2 },
 			},
 			powerUpAmount = 1,
-			duplicateCurrency = { Common = 50, Uncommon = 100, Rare = 250 },
+			duplicateCurrency = { Common = 10, Uncommon = 20, Rare = 50 }, -- 0.4, 0.8 and 2 power-ups
 		},
 	},
 
@@ -329,14 +329,14 @@ local GameConfig: Validate.GameConfig = {
 		-- amount is PLACEHOLDER until playtest (roadmap step 7).
 		payouts = {
 			Daily = {
-				{ maxRank = 1, currency = 500 },
-				{ maxRank = 3, currency = 250 },
-				{ maxRank = 10, currency = 100 },
+				{ maxRank = 1, currency = 75 }, -- 3 power-ups
+				{ maxRank = 3, currency = 50 },
+				{ maxRank = 10, currency = 25 },
 			},
 			Weekly = {
-				{ maxRank = 1, currency = 2000 },
-				{ maxRank = 3, currency = 1000 },
-				{ maxRank = 10, currency = 400 },
+				{ maxRank = 1, currency = 250 }, -- 10 power-ups, under the free track
+				{ maxRank = 3, currency = 125 },
+				{ maxRank = 10, currency = 50 },
 			},
 		},
 	},

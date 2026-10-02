@@ -21,11 +21,11 @@ local CurrencySmall: Validate.StoreItemDef = {
 	assetId = 0,
 	enabled = false,
 	displayName = "Small Coin Pouch",
-	description = "500 coins. The same coins you earn from playing - these just arrive sooner.",
-	robuxPrice = 49, -- PLACEHOLDER: display only
+	description = "75 coins. The same coins you earn from playing - these just arrive sooner.",
+	robuxPrice = 79, -- three power-ups at about 26 R$ each; display only
 	sortOrder = 30,
 	grants = {
-		{ kind = "Currency", amount = 500 }, -- PLACEHOLDER: no locked economy numbers in docs/ yet
+		{ kind = "Currency", amount = 75 }, -- three power-ups (Q1 pricing, 2026-10-02)
 	},
 }
 

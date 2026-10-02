@@ -23,7 +23,7 @@ local SprintBoostStock: Validate.StoreItemDef = {
 	enabled = false,
 	displayName = "Sprint Boost x10",
 	description = "Ten Sprint Boosts for your loadout. Also earned free from Studio wins and found on every map.",
-	robuxPrice = 79, -- PLACEHOLDER: display only
+	robuxPrice = 249, -- 24.9 R$ each, matching the Large Coin Chest; display only
 	sortOrder = 40,
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 10 },
