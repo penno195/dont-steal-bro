@@ -14,7 +14,9 @@
 --      weights and lighting preset apply too - enabled or not, so an
 --      unreleased map can be tested in Studio.
 --   3. On Loading, moves humans to spawn points 1..n; NPCService seats
---      bots from n+1 up, so the two never share a pad.
+--      bots from n+1 up, so the two never share a pad. Humans stay
+--      anchored there until Race, and anyone who respawns before the
+--      Decision Studio goes back to their own pad.
 --
 -- The caller requests Loading itself, after load returns true. One map
 -- per server: RoundService's Cleanup is terminal and the match server
@@ -86,6 +88,45 @@ local function applyMapDef(mapId: string)
 	end
 end
 
+-- Each human's pad, from Loading on. A respawn goes back to it rather
+-- than to the place's own SpawnLocation (the Match place's ArrivalPad,
+-- thousands of studs from the map).
+local seats: { [Player]: BasePart } = {}
+-- Root parts held still until Race. The client owns its character's
+-- physics, so a character moved onto a map its client hasn't streamed
+-- yet falls through the floor; on a live server RequestStreamAroundAsync
+-- can time out before a dense map arrives, and the fall respawned
+-- players on the ArrivalPad.
+local held: { BasePart } = {}
+local raceStarted = false
+
+-- States in which a respawn belongs on the race map. From DecisionStudio
+-- on, StudioStageService decides where people stand.
+local ON_MAP: { [string]: boolean } = {
+	Loading = true,
+	Intro = true,
+	Race = true,
+	Qualified = true,
+}
+
+-- Yields on the stream, so callers run it in its own thread.
+local function putOnSeat(player: Player, point: BasePart)
+	MapStreaming.streamAround(player, point.Position)
+	local character = player.Character
+	local root = if character ~= nil then character:FindFirstChild("HumanoidRootPart") :: BasePart? else nil
+	if character == nil or root == nil then
+		return
+	end
+	if not raceStarted then
+		root.Anchored = true
+		table.insert(held, root)
+	end
+	-- A mid-Race respawn is a server teleport MovementWatch would
+	-- otherwise read as speed.
+	(Loader.get("MovementWatch") :: any).suppressNextSample(player)
+	character:PivotTo(point.CFrame + SPAWN_HEIGHT)
+end
+
 local function placeHumans()
 	if #spawnPoints == 0 then
 		return
@@ -96,16 +137,38 @@ local function placeHumans()
 	end)
 	for index, player in humans do
 		local point = spawnPoints[((index - 1) % #spawnPoints) + 1]
+		seats[player] = point
 		-- One thread per player, because streamAround yields and no player
 		-- should wait on another's stream.
-		task.spawn(function()
-			MapStreaming.streamAround(player, point.Position)
-			local character = player.Character
-			if character ~= nil then
-				character:PivotTo(point.CFrame + SPAWN_HEIGHT)
-			end
-		end)
+		task.spawn(putOnSeat, player, point)
 	end
+end
+
+local function releaseHumans()
+	raceStarted = true
+	for _, root in held do
+		if root.Parent ~= nil then
+			root.Anchored = false
+		end
+	end
+	table.clear(held)
+end
+
+local function onCharacterAdded(player: Player, character: Model)
+	local point: BasePart? = seats[player]
+	local RoundService = Loader.get("RoundService") :: any
+	if point == nil or not ON_MAP[RoundService.getState()] then
+		return
+	end
+	-- Let the default spawn finish building the character first.
+	character:WaitForChild("HumanoidRootPart", 5)
+	putOnSeat(player, point)
+end
+
+local function watchPlayer(player: Player)
+	player.CharacterAdded:Connect(function(character: Model)
+		onCharacterAdded(player, character)
+	end)
 end
 
 -- False when ServerStorage.Maps has no such model; the caller decides
@@ -134,6 +197,7 @@ local MapLoaderService: Loader.Service = {
 	name = "MapLoaderService",
 	dependencies = {
 		"RoundService",
+		"MovementWatch",
 		"TaskService",
 		"NPCService",
 		"PowerUpService",
@@ -145,6 +209,17 @@ local MapLoaderService: Loader.Service = {
 function MapLoaderService:init()
 	local RoundService = Loader.get("RoundService") :: any
 	RoundService.onEnter("Loading", placeHumans)
+	RoundService.onEnter("Race", releaseHumans)
+end
+
+function MapLoaderService:start()
+	for _, player in Players:GetPlayers() do
+		watchPlayer(player)
+	end
+	Players.PlayerAdded:Connect(watchPlayer)
+	Players.PlayerRemoving:Connect(function(player: Player)
+		seats[player] = nil
+	end)
 end
 
 return MapLoaderService
