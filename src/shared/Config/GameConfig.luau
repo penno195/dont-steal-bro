@@ -391,7 +391,7 @@ local GameConfig: Validate.GameConfig = {
 	-- Validate.checkMatchmakingConfig enforces the orderings between
 	-- them, which are what keep the queue moving.
 	matchmaking = {
-		hubPlaceId = 0, -- PLACEHOLDER: set once the Hub place is published; 0 runs matchmaking in Studio only
+		hubPlaceId = 96878739507497, -- the published Hub (start) place; 0 would run matchmaking in Studio only
 		-- Versioned like the leaderboard stores: a schema change means
 		-- new names, never an in-place migration of live queue state.
 		queueMapName = "MatchQueue_v1",
@@ -428,7 +428,7 @@ local GameConfig: Validate.GameConfig = {
 	-- The arrival grace window is npc.fillGraceSeconds (architecture.md
 	-- §4's ~10s), not a second knob here: it's the same window.
 	teleport = {
-		matchPlaceId = 0, -- PLACEHOLDER: set once the Match place is published; 0 disables teleporting
+		matchPlaceId = 126392243548802, -- the published Match place; 0 would disable teleporting
 		maxAttempts = 4, -- PLACEHOLDER: per player, including the first
 		retryBaseSeconds = 1, -- PLACEHOLDER
 		retryCapSeconds = 8, -- PLACEHOLDER

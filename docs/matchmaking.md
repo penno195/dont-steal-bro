@@ -183,8 +183,10 @@ first levers are:
 
 ## Studio verification
 
-The service runs in Studio when `hubPlaceId = 0`. MemoryStore needs
-the place published, with Studio API access enabled.
+The service runs on the Hub place (`hubPlaceId`, Studio included: a
+Studio playtest of the published Hub file has its place id), or in any
+Studio place while `hubPlaceId = 0`. MemoryStore needs the place
+published, with Studio API access enabled.
 
 1. Run "Clients and Servers" with 6 players and have all of them press
    Join. One group forms within about one tick. The warning log shows
