@@ -147,3 +147,25 @@ TestRunner.describe("TaskAssignment.assign - task variety", function()
 		end
 	end)
 end)
+
+TestRunner.describe("TaskAssignment.assign - rare tasks", function()
+	TestRunner.it("deals a task offered on one shared station before that station is used up", function()
+		-- "rare" lives only on the station that also offers "common". Dealing
+		-- "common" there first strands "rare" and forces a repeat.
+		local stations: { TaskAssignment.StationInfo } = {
+			{ stationId = "shared", acceptedTaskIds = { "common", "rare" } },
+			{ stationId = "common-1", acceptedTaskIds = { "common" } },
+			{ stationId = "common-2", acceptedTaskIds = { "common" } },
+			{ stationId = "other", acceptedTaskIds = { "other" } },
+		}
+		for seed = 1, 100 do
+			local route = TaskAssignment.assign(seed, stations, { 1 }, 3, 1)[1]
+			local seen: { [string]: boolean } = {}
+			for _, assignment in route do
+				TestRunner.expect(seen[assignment.taskId] == nil):toBe(true)
+				seen[assignment.taskId] = true
+			end
+			TestRunner.expect(seen.rare):toBe(true)
+		end
+	end)
+end)

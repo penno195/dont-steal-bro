@@ -110,34 +110,67 @@ function TaskAssignment.assign(
 	for _ = 1, tasksPerPlayer do
 		for _, playerId in orderedPlayerIds do
 			local counts = taskCounts[playerId]
-			local pool = shuffledCopy(stations, nextRandom)
 
-			local fewest = math.huge
-			for _, station in pool do
+			-- The stations still open to this player, in a fresh random
+			-- order, and how many of them offer each task.
+			local open: { StationInfo } = {}
+			local options: { [string]: number } = {}
+			for _, station in shuffledCopy(stations, nextRandom) do
 				if remainingCapacity[station.stationId] > 0 and not alreadyAssigned[playerId][station.stationId] then
+					table.insert(open, station)
 					for _, taskId in station.acceptedTaskIds do
-						fewest = math.min(fewest, counts[taskId] or 0)
+						options[taskId] = (options[taskId] or 0) + 1
 					end
 				end
 			end
 
-			for _, station in pool do
-				if remainingCapacity[station.stationId] > 0 and not alreadyAssigned[playerId][station.stationId] then
-					local candidates: { string } = {}
-					for _, taskId in station.acceptedTaskIds do
-						if (counts[taskId] or 0) == fewest then
-							table.insert(candidates, taskId)
-						end
-					end
-					if #candidates > 0 then
-						local taskId = candidates[math.floor(nextRandom() * #candidates) + 1]
-						table.insert(result[playerId], { stationId = station.stationId, taskId = taskId })
-						alreadyAssigned[playerId][station.stationId] = true
-						remainingCapacity[station.stationId] -= 1
-						counts[taskId] = (counts[taskId] or 0) + 1
-						break
+			local fewest = math.huge
+			for taskId in options do
+				fewest = math.min(fewest, counts[taskId] or 0)
+			end
+
+			-- Most constrained first: of the least-dealt tasks, the one
+			-- the fewest open stations offer. Dealing a common task first
+			-- can burn the only station a rare one lives on (a rare task
+			-- usually shares its station with common ones), and the player
+			-- is then forced to repeat. Ties go to the random station order.
+			local taskId: string? = nil
+			for _, station in open do
+				for _, candidate in station.acceptedTaskIds do
+					if
+						(counts[candidate] or 0) == fewest
+						and (taskId == nil or options[candidate] < options[taskId :: string])
+					then
+						taskId = candidate
 					end
 				end
+			end
+
+			-- Then the station for it that offers the fewest OTHER tasks this
+			-- player still needs, keeping those stations free for them.
+			local best: StationInfo? = nil
+			local bestCost = math.huge
+			if taskId ~= nil then
+				for _, station in open do
+					if table.find(station.acceptedTaskIds, taskId) then
+						local cost = 0
+						for _, other in station.acceptedTaskIds do
+							if other ~= taskId and (counts[other] or 0) == fewest then
+								cost += 1
+							end
+						end
+						if cost < bestCost then
+							best, bestCost = station, cost
+						end
+					end
+				end
+			end
+
+			if taskId ~= nil and best ~= nil then
+				table.insert(result[playerId], { stationId = best.stationId, taskId = taskId })
+				alreadyAssigned[playerId][best.stationId] = true
+				remainingCapacity[best.stationId] -= 1
+				counts[taskId] = (counts[taskId] or 0) + 1
 			end
 		end
 	end
