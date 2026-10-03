@@ -1031,6 +1031,84 @@ the only Studio that looks back onto its own map's hero landmark.
   in the density placeholder (1.10 item 5) before the art pass relies on
   them.
 
+### As built (2026-10-03, Match.rbxl)
+
+Where the build departs from the brief above, the build wins:
+
+- **Layout.** The footprint is x, z −110..110 (220 × 220). The shaft is
+  a **square** 72 across (|x|, |z| ≤ 36), not 60: the spiral, the core
+  collar and a coolant moat would not fit around a 6-radius core inside
+  60. Each level's ring walkway is the 14-wide band from 36 to 50. Floors
+  are at **y 0 (reactor), 16 (main) and 36 (upper)**, under a roof at 50,
+  so the ceiling heights are 15, 19 and 14. The reactor gallery is
+  enclosed at ±76; under the main floor outside that box is empty.
+- **Shaft.** The containment core is a 6-radius Neon cylinder from the
+  coolant pit to the roof. At reactor level it stands on a 27-radius
+  platform inside a coolant moat (the shaft's `KillZone`, `CoolantPool`).
+  Two catwalks, W and S, cross the moat to the reactor ring. The main
+  bridge (N–S) and the upper bridge (E–W) are 10 wide. Each passes the
+  core on a collar: 16 radius on main, 14 on upper.
+- **Spiral ramp.** 16 plates at radius 16..26 descend clockwise from the
+  main bridge's N arm, via E, to the platform beside the S catwalk:
+  152°, 16 studs down, about 16° of slope. The entrance (choke 2) is a
+  10-stud gap in the bridge's east rail. **The lowest seven plates sit
+  on solid plinths.** Without them, the crawlspace under the spiral's
+  foot (under 5 studs high) made the pathfinder snap a spiral node down
+  onto the platform. Rule for every map: **fill under any walkway that
+  passes less than ~6 studs above another floor.**
+- **Stairs** are 12-wide solid wedges, so nothing can walk under them.
+  NW and SE each switch back: reactor → main (32 long), then main →
+  upper (40 long) beside it. NE is main → upper only, and SW is
+  main → reactor only, along the south band. Holes are railed on three
+  sides; the exit edge stays open. Slopes are 26–27°.
+- **Rails** are 4.5-tall glass with a metal cap. They line every shaft
+  edge, bridge, collar, catwalk, the platform rim, both spiral edges and
+  every stair hole, so the shaft never has a solid parapet.
+- **Rooms.** The upper floor is offices behind solid walls: entry/spawn
+  hall NW, comms NE (radio mast through the roof), security W,
+  director E, server hall S (16 rack rows). Spawn and comms are not
+  connected directly. The main level is open labs behind **glass** ring
+  walls: a glass clean-room box W, a specimen bay NE/E with seven cryo
+  tanks and the hoist gantry, optics N, sorter S. Doors in the ring
+  walls are 16 wide (two per side, one each on the upper W and E).
+- **Level identity.** Each level has its own floor (blue fabric on upper,
+  white on main, diamond plate on reactor) and its own strip-light and
+  shaft-lip colour (blue, white, orange). A "LEVEL n" sign on the N and
+  S walls of each level is readable across the shaft.
+- **Spawn** is 6 pads in an arc at z ≈ −96 in the entry hall, facing
+  south. There are two exits: the ring door (with a yellow decon frame)
+  and the NW stair top. The nearest station (`lab-01`) is 49 studs away.
+- **Power-ups** follow the brief, with one change. The SW stair landing
+  pad has **no `AllowedPowerUpIds`**. `slow-field` is a Common now, so
+  an Uncommon pad restricted to it never spawns anything
+  (`PowerUpService: no eligible power-up defs`). School's slow-field
+  gate was dropped the same way.
+- **Stand-in stations** carry their Target list in `TargetTaskIds`, as on
+  Factory and Museum. The "— note" stations are tagged lab-05
+  `fuse-rewire`, lab-09 `pressure-valve,fuse-rewire`, lab-10
+  `code-playback,fuse-rewire`, lab-13 `code-playback,pressure-valve` and
+  lab-15 `code-playback,vent-purge`.
+- **Proofs so far.** The graph has 83 NavNodes and 105 edges, and every
+  edge pathfinds (AgentRadius 2). Spawn reaches all 16 stations and
+  12 pads. The average station-pair path is 169 studs (10.6 s) and the
+  longest is 313 (19.6 s, lab-02 ↔ lab-14, upper to reactor), inside the
+  25 s vertical budget. Blocking each choke strands nothing. The worst
+  extra detours are +5.4 s (upper bridge), +4.7 s (spiral entrance)
+  and +4.7 s (SE reactor landing). That is over the brief's +3 s and
+  +2 s, so watch it in playtest. One 6-racer round (1 human, 5 NPCs)
+  qualified with no `gave up pathing` and no MovementWatch violations.
+  The P7-1 validator is clean: 0 errors and 0 warnings, with 984 parts
+  and 0 textures.
+- **The coolant is a solid floor 1 stud below the walkways**, not a
+  9-deep pit. In the first playtest a racer fell into the moat and
+  couldn't get out, because no service handled `KillZone` yet
+  (design-decisions.md §9). The `CoolantPool` kill volume stays underneath
+  it. Until the KillZone service exists, falling into the shaft is a free
+  drop to the reactor level.
+- **Still to do:** a phone test of level readability, the emissive
+  cost measurement (core and strips), 4 more NPC rounds, and an art pass
+  with real asset packs.
+
 ---
 
 ## 6. Follow-ups this document creates

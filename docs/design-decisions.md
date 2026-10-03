@@ -18,6 +18,7 @@ delivering something specific, says so explicitly.
 | 6 | "Progress to next round" | Normal requeue — no priority ticket. |
 | 7 | Streak reset scope | Everyone but the winner(s) resets, including failing to qualify — made safe by streak-hiding in-round, random matchmaking, and mandatory counter-play for every attack. |
 | 8 | Robux power-ups | Allowed only for items that are also freely earnable — Robux buys time, never exclusive power. 3-item loadout cap regardless of spend. |
+| 9 | Where does a KillZone put a fallen racer? *(added 2026-10-03, not from GDD §7)* | Back to their last safe (grounded) spot on the map, after a short respawn delay as the penalty. |
 
 ---
 
@@ -460,3 +461,33 @@ attacks it already covers).
 **Reversal cost:** Cheap to tighten (remove the Robux purchase option),
 expensive to loosen further — introducing an exclusive paid power-up later
 reopens the exact threat-model question this decision just closed.
+
+---
+
+## 9. Where does a KillZone put a fallen racer?
+
+*Added 2026-10-03 (user decision). Not one of GDD §7's questions; it came
+up in the Laboratory playtest.*
+
+**Context:** `map-kit-spec.md` defines `KillZone` as a volume that
+"returns a fallen player to safety", and the P7-1 validator requires one
+under every gap. But no service ever read the tag, so on every map a
+kill zone did nothing. In the Laboratory playtest a racer fell into the
+coolant moat around the reactor platform and couldn't get out.
+
+**Decision:** When a racer touches a `KillZone`, the server returns them to
+their **last safe spot**: the last position where the server saw them
+standing on map geometry. A short respawn delay is the penalty. They
+keep their task progress and items.
+
+**Reasoning:** Their progress survives, so a fall costs seconds, not the
+round. The delay still makes deliberately diving off geometry a bad trade.
+Sending them back to their spawn pad was rejected: near the end of a
+race, that would cost the whole walk back. The nearest NavNode was also
+rejected, because on a vertical map it can be on a different level from
+the one they fell off.
+
+**Downstream:** a new server service. It tracks each racer's last grounded
+position and handles `KillZone` touches for humans and NPCs, then
+returns the racer with `PivotTo`. MovementWatch must treat that move as a
+server-authorised teleport, not a speed violation.

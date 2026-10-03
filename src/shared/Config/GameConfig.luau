@@ -505,7 +505,7 @@ local GameConfig: Validate.GameConfig = {
 	-- enabled = false to test the hub/queue in Studio instead.
 	studioTest = {
 		enabled = true,
-		mapId = "Museum", -- any model name in ServerStorage.Maps, enabled or not
+		mapId = "Laboratory", -- any model name in ServerStorage.Maps, enabled or not
 		minHumans = 1,
 		startDelaySeconds = 3, -- after minHumans is reached, so a second test client can join
 	},

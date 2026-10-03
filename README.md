@@ -265,9 +265,11 @@ Playtesting has driven the work since the tracker finished:
 
 ### What's left
 
-- **Maps.** All 11 map definitions exist, but every one is still
-  `enabled = false` until its geometry is built in `ServerStorage.Maps`.
-  The SpaceStation is the map in active playtesting.
+- **Maps.** All 11 map definitions exist. The four wave-1 maps (School,
+  Factory, Museum, Laboratory) are built in the Match place's
+  `ServerStorage.Maps` and enabled, with primitive-part dressing that
+  still needs a real-asset art pass. The other seven stay
+  `enabled = false` until their geometry is built.
 - **Assets and store products.** All placeholder cosmetics and store
   items are disabled until they have real Roblox asset ids and products
   in the Creator Dashboard. `GameConfig.matchmaking.hubPlaceId` and
