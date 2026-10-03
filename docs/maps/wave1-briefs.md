@@ -77,10 +77,12 @@ wants.
   will cost them time.
 - **Nothing within 24 studs of spawn.** Otherwise the first leg is free
   for whoever spawns nearest.
-- **Tagging while the task pool is incomplete.** Only 5 task ids are
+- **Tagging while the task pool is incomplete.** 8 task ids are
   registered today: `pressure-valve`, `vent-purge`, `fuse-rewire`,
-  `code-playback` and `alarm-killswitch` (added to its Target stations
-  2026-10-03; the "Tag today" columns below predate it). An `AcceptedTaskIds` entry that isn't registered
+  `code-playback`, `alarm-killswitch`, `breaker-sequence`,
+  `reactor-sync` and `airlock-cycle` (the last four added to their
+  Target stations 2026-10-03; the "Tag today" columns below predate
+  them). An `AcceptedTaskIds` entry that isn't registered
   fails the boot-time assertion (map-kit-spec §1), so every station
   table below has two columns:
   - **Target**: the full thematic list, for when those tasks exist.

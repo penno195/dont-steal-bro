@@ -581,6 +581,23 @@ Net.Remotes = {
 		practice = true,
 	} :: RemoteDef,
 
+	-- The Timing verb's submission remote (ReactorSync, AirlockCycle): one
+	-- stop tap, carrying WHEN on the attempt's clock the player tapped.
+	-- The server clamps that claim to the last half second and runs the
+	-- sweep itself (src/shared/TimingLogic.luau covers why a time, and
+	-- what the clamp does and doesn't allow).
+	TimingSubmit = {
+		name = "TimingSubmit",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			stationId = Net.string({ maxLength = 64 }),
+			at = Net.number({ min = 0, max = 3600 }),
+		}),
+		rateLimit = { capacity = 6, refillPerSecond = 3 },
+		states = { "Race" },
+		practice = true,
+	} :: RemoteDef,
+
 	-- P2-7's power-up remotes. Note what's deliberately NOT in
 	-- PowerUpUseIntent's payload: no powerUpId (the server already knows
 	-- what's in the player's own inventory slot) and no effect of any

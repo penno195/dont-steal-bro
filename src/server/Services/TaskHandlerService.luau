@@ -428,6 +428,12 @@ function TaskHandlerService:init()
 		handleSubmission(player, payload.stationId, { pressed = payload.pressed })
 	end)
 
+	-- The Timing verb's own submission remote (ReactorSync, AirlockCycle):
+	-- one stop tap and the attempt-clock time it claims.
+	NetGuard.on("TimingSubmit", function(player: Player, payload: any)
+		handleSubmission(player, payload.stationId, { at = payload.at })
+	end)
+
 	-- The task view's close/abort path (P6-4). Only ends the attempt the
 	-- client is looking at: an abort for an older one is stale and dropped.
 	NetGuard.on("TaskAbort", function(player: Player, payload: any)

@@ -39,14 +39,23 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   2026-10-03: built the same way, primitive-part dressing, enabled;
   as-built notes in wave1-briefs.md §5. All four still want a real-asset
   art pass.*
-- [ ] **5. Build the four remaining launch tasks**, one per session:
+- [x] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
   view, per `how-to-add-a-task.md`.
   *alarm-killswitch done 2026-10-03: the Hold style, with a new
   `HoldSubmit` remote (press/release edges, timed on the server).
   Enabled on all four launch maps; added to stations sch-01, fac-08,
-  fac-16, mus-06, mus-09 and lab-15 in Match.rbxl.*
+  fac-16, mus-06, mus-09 and lab-15 in Match.rbxl.
+  breaker-sequence done 2026-10-03: reuses `KeypadDigitSubmit` (switch
+  number as the digit), so no new remote. Enabled on all four launch
+  maps; added to its 14 Target stations in Match.rbxl.
+  reactor-sync and airlock-cycle done 2026-10-03: the Timing style, a
+  new `TimingSubmit` remote (the stop's attempt-clock time, clamped by
+  the server) and shared sweep maths in `src/shared/TimingLogic.luau`.
+  Enabled on all four launch maps; added to their 15 Target station
+  slots in Match.rbxl. TaskAssignment now deals the most constrained
+  task first, so with eight tasks a racer almost never repeats one.*
 
 ## Stage 3: Analytics (blocks launch)
 

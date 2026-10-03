@@ -58,5 +58,6 @@ require("./FeelLogic.spec")
 require("./TaskHandlerTypes.spec")
 require("./DoorLogic.spec")
 require("./QueueLogic.spec")
+require("./TimingLogic.spec")
 
 TestRunner.run()
