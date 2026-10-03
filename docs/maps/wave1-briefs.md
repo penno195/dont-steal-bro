@@ -611,6 +611,18 @@ Where the build departs from the brief above, the build wins:
   north–south crossings split span 5, tunnel 7, east 15 (37%), west 13.
   Two 6-racer rounds qualified at 165 s and 148 s with no `gave up
   pathing` and no MovementWatch violations.
+- **The line animates, client-side only.** `Belt` is tagged
+  `ConveyorBelt` (Speed 6), the cartons `ConveyorItem` and the rams
+  `ConveyorPress`. `ConveyorController` scrolls slats and cartons, stops
+  the belt whenever a carton reaches a press, and the ram stamps it with a
+  flash. The server never moves anything, so it stays a non-carrying
+  static conveyor. Any map can reuse the three tags.
+- **The line can't be reached.** Jump height is ~6.4, so the 9-tall guards
+  hold from the floor, but the 3.5 railings on the bridges, span and ring
+  could be hopped onto the line, and so could the west press head from the
+  ring. `Geometry.LineScreens` adds see-through screens 6 above every bridge
+  railing, and above the span and ring railings for |z| ≤ 14. The screens
+  are CanQuery off so cameras and throws ignore them.
 - **Studio gotcha:** after a bulk rebuild, the navmesh can stay stale in
   patches (whole columns report NoPath). Any later edit regenerates it,
   so re-test before believing a NoPath.
