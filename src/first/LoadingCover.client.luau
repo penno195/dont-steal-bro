@@ -9,8 +9,10 @@
 -- None of that should be seen. The cover stays up until the round
 -- reaches Intro, by which point everyone is standing on the map.
 --
--- In the Hub there is no round, so it is just a loading screen: it
--- lifts once the game has loaded.
+-- In the Hub there is no round, so it is just a "Loading lobby" screen:
+-- it lifts once the game has loaded and the character exists. The Hub
+-- is recognised before game.Loaded (GameConfig replicates ahead of the
+-- Workspace), so a Hub player never sees the match's round texts.
 --
 -- It never traps anyone. If the round hasn't reached Intro within
 -- FALLBACK_SECONDS of the game loading (studioTest disabled, a stalled
@@ -131,19 +133,29 @@ local function lift(placed: boolean)
 	gui:Destroy()
 end
 
-if not game:IsLoaded() then
-	game.Loaded:Wait()
-end
-
--- Same test as QueueController/RaceHUDController's isHubServer.
+-- Same test as QueueController/RaceHUDController's isHubServer. With the
+-- id set it is just the place id, so it is known before the game has
+-- loaded; the Studio-only fallback needs Workspace.Hub, so it waits.
 local GameConfig =
 	require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("GameConfig")) :: any
 local hubPlaceId = GameConfig.matchmaking.hubPlaceId
+if hubPlaceId ~= 0 and game.PlaceId == hubPlaceId then
+	baseText = "Loading lobby"
+end
+
+if not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+task.delay(FALLBACK_SECONDS, lift, false)
+
 local isHub = if hubPlaceId == 0
 	then RunService:IsStudio() and Workspace:FindFirstChild("Hub") ~= nil
 	else game.PlaceId == hubPlaceId
 if isHub then
-	lift(false)
+	if player.Character == nil then
+		player.CharacterAdded:Wait()
+	end
+	lift(true)
 	return
 end
 
@@ -164,4 +176,3 @@ end
 
 Workspace:GetAttributeChangedSignal("RoundState"):Connect(check)
 check()
-task.delay(FALLBACK_SECONDS, lift, false)
