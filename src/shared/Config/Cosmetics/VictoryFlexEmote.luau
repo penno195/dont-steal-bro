@@ -14,7 +14,7 @@ local VictoryFlexEmote: Validate.CosmeticDef = {
 	description = "Celebrate your wins with an emote on the results screen and the Studio podium.",
 	rarity = "Uncommon",
 	sortOrder = 20,
-	enabled = false, -- PLACEHOLDER: no Roblox asset id yet, see below
+	enabled = false, -- PLACEHOLDER: needs animationAssetId (assets/cosmetics/README.md)
 	animationAssetId = 0,
 }
 

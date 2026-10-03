@@ -92,8 +92,9 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   enable them. Season 1 needs its premium-track items first.
   *Art made 2026-10-03: all nine items' images, the duck mesh
   (`assets/cosmetics/`, from `scripts/make-cosmetic-art.ps1`) and the
-  Victory Flex animation (a temporary rig in Match.rbxl). Waiting on the
-  owner to upload them; then wire the ids in and enable each item, per
+  Victory Flex animation (a temporary rig in Match.rbxl). Images uploaded
+  and wired the same day; seven items are enabled. Still open: the duck
+  mesh and the emote need the owner's Studio upload, per
   `assets/cosmetics/README.md`. Season 1 stays disabled until step 11
   gives it its pass.*
 - [ ] **11. Store products.** Create passes/products in the Creator

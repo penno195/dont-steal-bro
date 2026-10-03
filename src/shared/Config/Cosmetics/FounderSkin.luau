@@ -14,9 +14,9 @@ local FounderSkin: Validate.CosmeticDef = {
 	description = "The outfit worn by the founders. Cosmetic only.",
 	rarity = "Rare",
 	sortOrder = 10,
-	enabled = false, -- PLACEHOLDER: no Roblox asset id yet, see below
-	shirtAssetId = 0,
-	pantsAssetId = 0,
+	enabled = true,
+	shirtAssetId = 99470555666548,
+	pantsAssetId = 129608190082628,
 }
 
 return FounderSkin
