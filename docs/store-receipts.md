@@ -15,9 +15,9 @@ starting-power-up design crosses the pay-to-win line.
 | `src/server/Services/DataService.luau` | The receipt write gate — the one narrow handle that exposes durability facts. |
 | `tests/StoreLogic.spec.luau` | 53 cases over the pure half. |
 
-Everything in `Config/Store/` currently ships `enabled = false` and
-`assetId = 0`. Nothing is for sale until somebody creates the pass or
-developer product in the Creator Dashboard and pastes its id in — and
+A Robux product is for sale only once its pass or developer product
+exists in the Creator Dashboard and its id is pasted in (the four
+developer products went live 2026-10-03; see `store-products.md`) — and
 `ConfigValidator` refuses to boot a server with an enabled entry that
 still has no id, so a half-finished product cannot reach a player.
 

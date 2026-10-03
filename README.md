@@ -270,12 +270,12 @@ Playtesting has driven the work since the tracker finished:
   `ServerStorage.Maps` and enabled, with primitive-part dressing that
   still needs a real-asset art pass. The other seven stay
   `enabled = false` until their geometry is built.
-- **Assets and store products.** All placeholder cosmetics and store
-  items are disabled until they have real Roblox asset ids and products
-  in the Creator Dashboard. `GameConfig.matchmaking.hubPlaceId` and
-  `GameConfig.teleport.matchPlaceId` are both `0` until the Hub and
-  Match places are published, so matchmaking runs in Studio only and
-  teleporting is off.
+- **Store products and places.** The four Robux developer products are
+  live; the Season 1 Pass exists on Roblox but stays disabled with its
+  season (`docs/store-products.md`). The Hub and Match places are
+  published, but `GameConfig.matchmaking.hubPlaceId` and
+  `GameConfig.teleport.matchPlaceId` stay `0` until step 12 tests
+  teleporting, so matchmaking runs in Studio only for now.
 - **Win rewards: price tuning only.** Q1's 2026-09-30 revision is built
   (`docs/rewards-roadmap.md` steps 1–7a): a win pays coins plus a chance
   at a drop, shown in the Decision Studio and Results; daily and weekly

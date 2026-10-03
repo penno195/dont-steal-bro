@@ -95,8 +95,12 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   emote from `scripts/make-victory-flex.luau`. How each was uploaded is
   in `assets/cosmetics/README.md`. Season 1 stays disabled until step 11
   gives it its pass. The win-drop items are now in the drop pool.*
-- [ ] **11. Store products.** Create passes/products in the Creator
+- [x] **11. Store products.** Create passes/products in the Creator
   Dashboard and put their ids in the store configs.
+  *Done 2026-10-03. Experience published under the user account; the four
+  developer products are enabled, the Season 1 Pass is created but stays
+  disabled with its season. Ids, icons and descriptions are in
+  `store-products.md`; icons come from `scripts/make-store-icons.ps1`.*
 - [ ] **12. Publish the Hub and Match places.** Set `hubPlaceId` and
   `matchPlaceId`; test teleport and the matchmaking queue for real
   (MemoryStore is off in Studio).
