@@ -15,13 +15,17 @@ local Laboratory: Validate.LightingPresetDef = {
 	lightingStyle = "Realistic",
 	prioritizeLightingQuality = false,
 	globalShadows = false,
-	ambient = "#50607A",
-	outdoorAmbient = "#46556E",
-	brightness = 1,
+	-- Brightened 2026-10-03 after a playtest called it "very dark": the
+	-- primitive-part build has no light fittings yet (0 Lights in the
+	-- map), so ambient alone has to carry readability. Still cool and
+	-- blue; revisit (darker again) once the art pass adds real fittings.
+	ambient = "#8A9AB4",
+	outdoorAmbient = "#7686A2",
+	brightness = 1.5,
 	clockTime = 0,
-	environmentDiffuseScale = 0.3,
+	environmentDiffuseScale = 0.5,
 	environmentSpecularScale = 0.6,
-	exposureCompensation = 0.2,
+	exposureCompensation = 0.4,
 	-- Gives depth when looking down the shaft. It starts past the longest
 	-- sightline, which here is the 60-stud shaft plus a ring walkway.
 	fogColor = "#1A2A33",
