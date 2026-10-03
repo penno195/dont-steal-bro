@@ -64,6 +64,13 @@ end
 -- tick advances it to the next one. Distinct from the arrival radius at
 -- a station (config): this is a pathing detail, not a gameplay knob.
 local WAYPOINT_REACHED_STUDS = 4
+-- Measured flat, with the height checked separately: waypoints sit on
+-- the navmesh, ~3 studs below the root, and on a steep ramp the navmesh
+-- itself can sit another 1-2 studs under the surface. A 3D check then
+-- never fires while the Humanoid, which judges MoveTo flat, has already
+-- stopped on the waypoint - the bot stands still until the stuck timer
+-- gives up (Factory's bridge ramps, 2026-10-03).
+local WAYPOINT_REACHED_HEIGHT_STUDS = 6
 -- A rig that has moved less than this since the last tick is making no
 -- progress, for the stuck timer's purposes. Small enough that a bot
 -- shuffling on the spot against a wall still counts as stuck.
@@ -852,7 +859,11 @@ local function tickWalking(record: NPCRecord, nowValue: number)
 		record.jumpWaypoints[record.waypointIndex] = nil
 	end
 
-	if ((waypoint :: Vector3) - position).Magnitude <= WAYPOINT_REACHED_STUDS then
+	local offset = (waypoint :: Vector3) - position
+	if
+		Vector3.new(offset.X, 0, offset.Z).Magnitude <= WAYPOINT_REACHED_STUDS
+		and math.abs(offset.Y) <= WAYPOINT_REACHED_HEIGHT_STUDS
+	then
 		record.waypointIndex += 1
 		local nextWaypoint: Vector3? = record.waypoints[record.waypointIndex]
 		if nextWaypoint ~= nil then

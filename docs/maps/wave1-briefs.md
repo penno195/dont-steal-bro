@@ -571,6 +571,40 @@ behind the safety line painted around the boundary.
   pack shipped with a script or with velocity set
   (`scripts/sanitise-pack.luau` catches the scripts).
 
+### As built (2026-10-03, Match.rbxl)
+
+Where the build departs from the brief above, the build wins:
+
+- **Layout.** The floor is x −140..60 and z −70..70, with the line along
+  z = 0. The yard is x 62..140 and z −110..110, sitting 4 studs lower.
+  Crossings: west bridge x −110..−98 (12 wide), tunnel x −40..−30, east
+  bridge x 6..16 (10 wide), catwalk span x −66..−54. Bridge decks are at
+  13 and the catwalk ring at 18.
+- **Tunnel floor at −12, not −10.** Under a 1-stud cover, 9 studs of
+  headroom got no navmesh, because the engine voxelises at 4 studs.
+  Raising it to 11 fixed that. The control room's roof went from 7 to
+  10 studs of headroom for the same reason. **Rule for every map: covered
+  walkways need ≥ 10 studs of headroom.**
+- **Four stair links, not three.** NW, NE and SE stairs, plus a staff
+  stair in the spawn room up to the SW catwalk corner. That stair is the
+  spawn's second exit. The ladder-styled NE stair runs along the north
+  wall.
+- **Control room in the NE** (x 24..48, z −50..−34, floor 10), with steps
+  from the west and its door at the NW corner.
+- **No `push-trip` restriction on the dock pad.** `push-trip` is Common in
+  config, so an Uncommon pad restricted to it could never roll
+  (`PowerUpService` skips it). The pad stays Uncommon and unrestricted.
+- **Stand-in stations** (see note) carry their Target list in a
+  `TargetTaskIds` attribute on the anchor.
+- **Proofs so far:** validator clean (0/0, 780 instances, 0 textures).
+  Spawn reaches all 16 stations and 12 pads. The average station-pair
+  path is 163 studs (10.2 s) and the longest is 331 (20.7 s). On
+  shortest paths, the north–south crossings split span 9, tunnel 7,
+  east 16 (40%), west 8. Two 6-racer rounds qualified at 148 s and 151 s
+  with no `gave up pathing`.
+- **Still to do:** phone readability test, an art pass with real asset
+  packs (the current dressing is primitive parts), and 3 more NPC rounds.
+
 ---
 
 ## 4. Museum
