@@ -503,6 +503,11 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 
 	recordGrant(player, product, purchaseKey, changes)
 	pushState(player)
+	-- What Roblox actually charged, from the receipt, not the config's
+	-- display price.
+	local spent = receiptInfo.CurrencySpent
+	local robux = if type(spent) == "number" then spent else nil
+	Loader.get("Telemetry").purchaseCompleted(player, product.key, product.kind, robux)
 	return granted
 end
 
@@ -691,6 +696,7 @@ local function buyWithCoins(player: Player, def: StoreItemDef)
 	recordGrant(player, def, nil, changes)
 	sendPurchaseResult(player, def.key, "Granted", "")
 	pushState(player)
+	Loader.get("Telemetry").purchaseCompleted(player, def.key, def.kind, nil)
 end
 
 -- ===== the purchase prompt flow ===========================================
@@ -931,7 +937,7 @@ end
 
 local StoreService: Loader.Service = {
 	name = "StoreService",
-	dependencies = { "NetGuard", "ConfigValidator", "DataService", "CosmeticService", "LiveConfig" },
+	dependencies = { "NetGuard", "ConfigValidator", "DataService", "CosmeticService", "LiveConfig", "Telemetry" },
 
 	ownsPass = ownsPass,
 	consumeLoadoutFor = consumeLoadoutFor,
@@ -1007,13 +1013,27 @@ function StoreService:init()
 				end
 				lastPassSyncAt[player] = now()
 				local perPlayer = ownership[player]
+				-- The signal is spoofable, so a purchase is only logged
+				-- for a pass this server had seen unowned and Roblox now
+				-- says is owned.
+				local knownUnowned: { [number]: boolean } = {}
 				if perPlayer ~= nil then
 					for passId in pending :: { [number]: boolean } do
+						local cached = perPlayer[passId]
+						knownUnowned[passId] = cached ~= nil and not cached.owned
 						perPlayer[passId] = nil
 					end
 				end
 				syncPasses(player)
 				pushState(player)
+				for passId in knownUnowned do
+					local def = byAssetId[passId]
+					if knownUnowned[passId] and def ~= nil and ownsPass(player, passId) then
+						-- A pass has no receipt, so its value is the
+						-- configured price.
+						Loader.get("Telemetry").purchaseCompleted(player, def.key, def.kind, def.robuxPrice)
+					end
+				end
 			end)
 		end
 	)

@@ -320,6 +320,9 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	local rewardChanges = write(player, after, rewardWrite, seasonStep)
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
+	if not ProgressionLogic.isWin(result.reason) then
+		Loader.get("Telemetry").streakLoss(player, before.currentStreak, result.reason)
+	end
 
 	-- One audit line per grant, beside the Progression: line below.
 	if rewardRecord ~= nil then
@@ -493,7 +496,7 @@ end
 
 local ProgressionService: Loader.Service = {
 	name = "ProgressionService",
-	dependencies = { "DataService", "RoundService", "ParticipantService" },
+	dependencies = { "DataService", "RoundService", "ParticipantService", "Telemetry" },
 
 	applyRoundResult = applyRoundResult,
 	hasResultFor = hasResultFor,

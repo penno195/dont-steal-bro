@@ -70,8 +70,11 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   are custom events with the round's map from cached context. Telemetry
   functions now take a Player or user id; step 7 calls them with the
   new signatures.*
-- [ ] **7. Hook up the 15 defined-but-unsent events** from the service
+- [x] **7. Hook up the 15 defined-but-unsent events** from the service
   that already knows each fact.
+  *Done 2026-10-03. Every Telemetry function is now called; the
+  call-site table is in `telemetry-schema.md`. Not yet seen in Studio's
+  `studioEcho` output.*
 - [ ] **8. Add the missing events**: task abandoned, power-up collected,
   round ended, bot seat count, reward rung, config version.
 - [ ] **9. Check on a published place** that events reach Creator Hub

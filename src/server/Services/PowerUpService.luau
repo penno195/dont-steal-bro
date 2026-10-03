@@ -1101,9 +1101,13 @@ local function useFor(
 		-- A throw lands a moment after it was committed: the target may
 		-- have left, or (in practice) walked out of the area, mid-flight.
 		-- The item is already spent, same as any other miss.
+		-- Logged per use that spent the item; a use refused before that
+		-- (cooldown, no target) never reached anyone.
+		local Telemetry = Loader.get("Telemetry") :: any
 		if thrownAt ~= nil and (Participants.get(thrownAt.id) == nil or not EffectContext.mayAct(thrownAt.id)) then
 			audit(racer, def.id, resolvedTargetId, "Rejected", "target gone before impact")
 			sendResult(racer, false, def.id, resolvedTargetId, "target gone before impact")
+			Telemetry.powerUpUsed(racer.id, def.id, false)
 			return
 		end
 
@@ -1118,6 +1122,7 @@ local function useFor(
 		if not applied then
 			audit(racer, def.id, resolvedTargetId, "Rejected", description)
 			sendResult(racer, false, def.id, resolvedTargetId, description)
+			Telemetry.powerUpUsed(racer.id, def.id, false)
 			if victim ~= nil then
 				StatusEffects.notifyUsedOn(victim, racer, def.id, false)
 			end
@@ -1126,6 +1131,7 @@ local function useFor(
 
 		audit(racer, def.id, resolvedTargetId, "Applied", description)
 		sendResult(racer, true, def.id, resolvedTargetId, description)
+		Telemetry.powerUpUsed(racer.id, def.id, true)
 
 		-- Only a hit that landed shoves: a Shield or an immunity window
 		-- blocks the push along with the effect.
@@ -1302,6 +1308,7 @@ local PowerUpService: Loader.Service = {
 		"LiveConfig",
 		"StoreService",
 		"CosmeticService",
+		"Telemetry",
 	},
 
 	setSpawnPoints = setSpawnPoints,

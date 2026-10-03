@@ -18,10 +18,33 @@ with that file.
   flushed when a player leaves, while they can still be logged against.
 - **Kill switch:** `GameConfig.telemetry.enabled`.
 
-> **Wiring status (step 6):** the sink and mapping are done. Only
-> `userMatched`, `roundStarted` and `mapPlayed` are called anywhere;
-> step 7 wires the rest, step 8 adds the missing events
+> **Wiring status (step 7):** every function below is called from the
+> service that knows the fact. Step 8 adds the missing events
 > (`launch-review.md` §0.3).
+
+## Where each call is made
+
+| Call | Service | When |
+|---|---|---|
+| `userQueued` | MatchmakingService | a fresh queue ticket reaches Waiting (not a requeue after a failed teleport) |
+| `userMatched` | MatchTeleportService | each player sent to a match |
+| `mapVoted` | VoteService | a vote is written to the group record |
+| `returnedToHub` | MatchTeleportService | a player joins the hub from the match place |
+| `purchaseCompleted` | StoreService | developer product: receipt granted and saved (value = `CurrencySpent`); coin offer: granted (no value); game pass: a pass seen unowned is now owned (value = configured price) |
+| `roundStarted`, `mapPlayed` | MatchTeleportService | the arrival gate closes |
+| `npcCountInRound` | NPCService | after the seat fill (deferred, so the round context is set) |
+| `taskCompleted` | TaskService | each accepted completion; seconds since the racer's last task or the race start |
+| `finished` | TaskService | a racer completes their last task |
+| `qualified` | TaskService | qualification is decided, per qualifier |
+| `finaleEntered` | DecisionService | the Studio's roster is set |
+| `choiceLocked` | DecisionService | a finalist locks in (a timer default isn't a step) |
+| `stealShareChoice` | DecisionService | outcome resolved, per human finalist, with their pre-Studio streak (defaults included) |
+| `finaleOutcome` | DecisionService | outcome resolved |
+| `resultReceived` | DecisionService | the personal result is sent at Reveal |
+| `streakLoss` | ProgressionService | every non-win result, including forfeits and failing to qualify |
+| `powerUpUsed` | PowerUpService | an item was spent: `Landed` if applied, `Refused` if blocked or the target was gone on impact. Cooldown / no-target refusals spend nothing and aren't logged |
+
+NPC ids are dropped by the sink, so callers pass racer ids freely.
 
 ## Platform limits that shaped the mapping
 

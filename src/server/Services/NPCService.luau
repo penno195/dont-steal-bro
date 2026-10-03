@@ -990,6 +990,10 @@ local function fillSeats()
 	end
 
 	broadcastRoster()
+	-- Deferred: with the grace already served and no seats to fill, this
+	-- runs inside Loading's onEnter, before MatchTeleportService has
+	-- called Telemetry.roundStarted, and the event would carry no map.
+	task.defer(Loader.get("Telemetry").npcCountInRound, Participants.countNPCs(), humansPresent)
 	print(
 		string.format(
 			"NPCService: %d human(s) after a %.0fs grace window - spawned %d NPC(s)",
@@ -1004,7 +1008,15 @@ end
 
 local NPCService: Loader.Service = {
 	name = "NPCService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "TaskService", "LiveConfig" },
+	dependencies = {
+		"NetGuard",
+		"ConfigValidator",
+		"RoundService",
+		"ParticipantService",
+		"TaskService",
+		"LiveConfig",
+		"Telemetry",
+	},
 
 	setNavNodes = setNavNodes,
 	setSpawnPoints = setSpawnPoints,

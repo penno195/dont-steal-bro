@@ -326,6 +326,9 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			won = won,
 			reward = ProgressionService.rewardFor(roundId, player.UserId),
 		}
+		-- Defaulted choices included: the streak they were risking is
+		-- the one they brought into the Studio.
+		Loader.get("Telemetry").stealShareChoice(player, finalist.choice, streakBefore)
 
 		DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
 		DataService.recordRoundStat(player, "qualifications")
@@ -334,6 +337,14 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 		-- must never fire for someone who made it through normally.
 		DataService.setPendingRoundOutcomeResolver(player, nil)
 	end
+
+	local bots = 0
+	for _, id in qualifierIds do
+		if Participants.isNPCId(id) then
+			bots += 1
+		end
+	end
+	Loader.get("Telemetry").finaleOutcome(outcome.branch, #outcome.winners, bots)
 
 	print(
 		string.format(
@@ -404,6 +415,7 @@ enterReveal = function(outcome: Outcomes.OutcomeResult)
 		local player = Players:GetPlayerByUserId(id)
 		if player ~= nil then
 			Net.fireClient("DecisionPersonalResult", player, result)
+			Loader.get("Telemetry").resultReceived(player)
 		end
 	end
 
@@ -550,6 +562,9 @@ local function lockIn(racerId: number, choice: any, who: string): boolean
 
 	choices[racerId] = choice :: Outcomes.Choice
 	locked[racerId] = true
+	-- Only a real lock-in is a funnel step; a choice defaulted by the
+	-- Choose timer isn't.
+	Loader.get("Telemetry").choiceLocked(racerId)
 
 	-- Still only {playerId} - the secrecy audit at the top of this file
 	-- holds identically for a bot's lock-in. A client learning WHICH of
@@ -773,6 +788,11 @@ local function beginDecisionStudio()
 		return
 	end
 
+	local Telemetry = Loader.get("Telemetry") :: any
+	for _, id in qualifierIds do
+		Telemetry.finaleEntered(id)
+	end
+
 	local DataService = Loader.get("DataService") :: any
 	local RoundService = Loader.get("RoundService") :: any
 	for _, id in qualifierIds do
@@ -871,7 +891,15 @@ end
 
 local DecisionService: Loader.Service = {
 	name = "DecisionService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "TaskService", "DataService", "ProgressionService" },
+	dependencies = {
+		"NetGuard",
+		"ConfigValidator",
+		"RoundService",
+		"TaskService",
+		"DataService",
+		"ProgressionService",
+		"Telemetry",
+	},
 
 	debugForceOutcome = debugForceOutcome,
 

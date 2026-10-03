@@ -280,6 +280,9 @@ local function startHub()
 		if message ~= nil then
 			matchmaking().notify(player, "Idle", message)
 		end
+		local data = joinData.TeleportData
+		local Telemetry = Loader.get("Telemetry") :: any
+		Telemetry.returnedToHub(player, if type(data) == "table" then (data :: any).returnReason else nil)
 	end)
 end
 

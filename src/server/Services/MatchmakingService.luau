@@ -548,6 +548,11 @@ local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: 
 	end
 	ticket.status = "Waiting"
 	sendState(player, { status = "Waiting", message = message })
+	-- A requeue after a failed teleport carries its old enqueuedAt and is
+	-- the same attempt, not a new Matchmaking funnel session.
+	if preservedEnqueuedAt == nil then
+		Loader.get("Telemetry").userQueued(player)
+	end
 end
 
 local function leaveQueue(player: Player, fromIntent: boolean)
@@ -622,7 +627,7 @@ end
 
 local MatchmakingService: Loader.Service = {
 	name = "MatchmakingService",
-	dependencies = { "NetGuard", "ConfigValidator", "DataService", "LiveConfig" },
+	dependencies = { "NetGuard", "ConfigValidator", "DataService", "LiveConfig", "Telemetry" },
 
 	setDepartureHandler = setDepartureHandler,
 	setDestinationProvider = setDestinationProvider,
