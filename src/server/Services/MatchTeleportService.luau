@@ -430,6 +430,12 @@ local function startRound(present: number)
 		)
 	)
 
+	-- A missing model is a build mistake ConfigValidator already reports
+	-- at startup; the round still runs rather than stranding everyone.
+	if chosenMapId ~= nil then
+		(Loader.get("MapLoaderService") :: any).load(chosenMapId)
+	end
+
 	local NPCService = Loader.get("NPCService") :: any
 	NPCService.markArrivalGraceServed()
 	local RoundService = Loader.get("RoundService") :: any
@@ -535,10 +541,10 @@ local MatchTeleportService: Loader.Service = {
 		"RoundService",
 		"NPCService",
 		"Telemetry",
+		"MapLoaderService",
 	},
 
 	-- The map this match is playing, once the arrival gate has closed.
-	-- Whatever loads maps reads it here (no map loader exists yet).
 	getMapId = function(): string?
 		return chosenMapId
 	end,

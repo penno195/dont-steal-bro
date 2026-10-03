@@ -27,6 +27,7 @@ local Players = game:GetService("Players")
 local ReplicatedFirst = game:GetService("ReplicatedFirst")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
@@ -75,6 +76,7 @@ title.TextScaled = true
 title.Parent = backdrop
 
 local status = Instance.new("TextLabel")
+status.Name = "TeleportStatus"
 status.AnchorPoint = Vector2.new(0.5, 0)
 status.Position = UDim2.fromScale(0.5, 0.53)
 status.Size = UDim2.fromScale(0.7, 0.05)
@@ -141,6 +143,21 @@ local GameConfig =
 local hubPlaceId = GameConfig.matchmaking.hubPlaceId
 if hubPlaceId ~= 0 and game.PlaceId == hubPlaceId then
 	baseText = "Loading lobby"
+end
+
+-- A still copy of this cover replaces Roblox's own teleport screen for
+-- the next hop (Hub -> Match, or Match -> Hub), and the next place's
+-- cover is identical, so the trip reads as one screen. Studio can't
+-- teleport, and the call is harmless to lose, hence the pcall.
+if hubPlaceId ~= 0 then
+	local teleportGui = gui:Clone()
+	local teleportStatus = teleportGui:FindFirstChild("TeleportStatus", true) :: TextLabel?
+	if teleportStatus ~= nil then
+		teleportStatus.Text = if game.PlaceId == hubPlaceId then "Joining the match" else "Back to the lobby"
+	end
+	pcall(function()
+		TeleportService:SetTeleportGui(teleportGui :: any)
+	end)
 end
 
 if not game:IsLoaded() then

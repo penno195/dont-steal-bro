@@ -136,13 +136,11 @@ bucket is `Render`.
 
 ## 5. Follow-ups
 
-- **The real map loader** (it doesn't exist yet; `StudioTestService` is
-  the stand-in) must:
-  - call `MapStreaming.prepare(clone)` before parenting the map;
-  - call `LightingService.apply(def.lightingPreset)`;
-  - call `streamAround` before the Decision Studio teleport.
-
-  `LightingService` restores the lighting on Cleanup by itself.
+- **The map loader** is `MapLoaderService`; live match servers and
+  Studio test mode both use it. It calls `MapStreaming.prepare(clone)`
+  before parenting the map and `LightingService.apply(def.lightingPreset)`;
+  `StudioStageService` calls `streamAround` before the Decision Studio
+  teleport. `LightingService` restores the lighting on Cleanup by itself.
 - **Wave 2/3 maps** keep placeholder preset names. They get a preset
   file when they're built; the validator only requires one once
   `enabled = true`.
