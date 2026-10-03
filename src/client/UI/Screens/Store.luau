@@ -41,7 +41,6 @@ local values = vide.values
 local switch = vide.switch
 
 local TAB_H = 48
-local CARD_W = (MenuShell.INNER - Theme.spacing.sm) / 2
 local CARD_H = 92
 local PANEL_H = 212
 local PREVIEW = 72
@@ -88,7 +87,8 @@ local function card(
 	store: Store,
 	item: StoreScreenLogic.Item,
 	selected: () -> string?,
-	choose: (string) -> ()
+	choose: (string) -> (),
+	cardW: number
 ): Instance
 	local rarity = StoreScreenLogic.rarityOf(item, store.rarityOf)
 	local itemState = derive(function()
@@ -111,7 +111,7 @@ local function card(
 
 	return Base.interactive({
 		name = item.key,
-		size = Vector2.new(CARD_W, CARD_H),
+		size = Vector2.new(cardW, CARD_H),
 		onActivate = function()
 			choose(item.key)
 		end,
@@ -172,7 +172,7 @@ end
 
 -- The buy button's label and state for the selected item, from its
 -- ItemState and the purchase flow.
-local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?): Instance
+local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?, pane: number): Instance
 	local itemState = derive(function()
 		local i = item()
 		return if i then StoreScreenLogic.itemState(i, store.state()) else nil
@@ -206,7 +206,7 @@ local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?): Inst
 		label = label,
 		variant = "primary",
 		icon = "shop",
-		width = MenuShell.INNER - 2 * Theme.spacing.md,
+		width = pane - 2 * Theme.spacing.md,
 		-- Any purchase in flight disables every Buy: one prompt at a time.
 		disabled = derive(function()
 			return itemState() ~= "Buyable" or (busy() and not mine())
@@ -228,7 +228,7 @@ end
 
 -- One line under the item for a finished or stuck purchase, with a way
 -- to clear it. Failed and Delayed show the flow's own message verbatim.
-local function flowBanner(store: Store): Instance
+local function flowBanner(store: Store, pane: number): Instance
 	local text = derive(function(): string?
 		local f = store.flow()
 		if f.phase == "Failed" or f.phase == "Delayed" then
@@ -273,7 +273,7 @@ local function flowBanner(store: Store): Instance
 		C.Button({
 			label = "OK",
 			variant = "secondary",
-			width = MenuShell.INNER - 2 * Theme.spacing.md - 2 * Theme.spacing.md,
+			width = pane - 2 * Theme.spacing.md - 2 * Theme.spacing.md,
 			onActivate = store.dismiss,
 			order = 101,
 			anchorPoint = Vector2.new(0.5, 1),
@@ -282,7 +282,8 @@ local function flowBanner(store: Store): Instance
 	})
 end
 
-local function panel(store: Store, item: () -> StoreScreenLogic.Item?): Instance
+local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: MenuShell.BodyLayout): Instance
+	local pane = layout.pane
 	local rarity = derive(function(): string?
 		local i = item()
 		return if i then StoreScreenLogic.rarityOf(i, store.rarityOf) else nil
@@ -317,9 +318,10 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?): Instance
 		name = "Selected",
 		elevation = 3,
 		padding = Theme.spacing.md,
-		size = UDim2.fromOffset(MenuShell.INNER, PANEL_H),
-		anchorPoint = Vector2.new(0, 1),
-		position = UDim2.fromScale(0, 1),
+		size = UDim2.fromOffset(pane, PANEL_H),
+		-- Under the grid, or beside it when split (MenuShell).
+		anchorPoint = if layout.split then Vector2.zero else Vector2.new(0, 1),
+		position = if layout.split then UDim2.fromOffset(pane + MenuShell.GUTTER, 0) else UDim2.fromScale(0, 1),
 		children = {
 			-- Preview. Every sellable item is still a placeholder with no
 			-- asset id (enabled = false in config), so there is no model to
@@ -385,8 +387,7 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?): Instance
 							return (if v.equipped then "Take off " else "Wear ") .. store.cosmeticName(v.cosmeticId)
 						end),
 						variant = "secondary",
-						width = (MenuShell.INNER - 2 * Theme.spacing.md - (count - 1) * Theme.spacing.sm)
-							/ math.max(count, 1),
+						width = (pane - 2 * Theme.spacing.md - (count - 1) * Theme.spacing.sm) / math.max(count, 1),
 						onActivate = function()
 							local v = t()
 							store.equip(v.cosmeticId, not v.equipped)
@@ -396,8 +397,8 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?): Instance
 					})
 				end) :: any,
 			}),
-			buyButton(store, item),
-			flowBanner(store),
+			buyButton(store, item, pane),
+			flowBanner(store, pane),
 		},
 	})
 end
@@ -468,14 +469,14 @@ local function trackRow(row: () -> SeasonTrackLogic.Row, index: number): Instanc
 	})
 end
 
-local function trackSection(trackView: () -> SeasonTrackLogic.TrackView, order: number): Instance
+local function trackSection(trackView: () -> SeasonTrackLogic.TrackView, order: number, pane: number): Instance
 	local rows = derive(function()
 		return trackView().rows
 	end)
 	return create("Frame")({
 		Name = "Track" .. order,
 		LayoutOrder = order,
-		Size = UDim2.fromOffset(MenuShell.INNER, 0),
+		Size = UDim2.fromOffset(pane, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundTransparency = 1,
 		create("UIListLayout")({
@@ -501,7 +502,7 @@ local function trackSection(trackView: () -> SeasonTrackLogic.TrackView, order: 
 	})
 end
 
-local function seasonTrack(store: Store, height: () -> number): Instance
+local function seasonTrack(store: Store, height: () -> number, pane: number): Instance
 	local hasSeason = derive(function()
 		return store.seasonView() ~= nil
 	end)
@@ -515,7 +516,7 @@ local function seasonTrack(store: Store, height: () -> number): Instance
 		Name = "Season",
 		Position = UDim2.fromOffset(0, TAB_H + Theme.spacing.sm),
 		Size = function()
-			return UDim2.fromOffset(MenuShell.INNER, height())
+			return UDim2.fromOffset(pane, height())
 		end,
 		BackgroundTransparency = 1,
 		switch(hasSeason)({
@@ -546,10 +547,10 @@ local function seasonTrack(store: Store, height: () -> number): Instance
 					}),
 					trackSection(function()
 						return view().premium
-					end, 1),
+					end, 1, pane),
 					trackSection(function()
 						return view().free
-					end, 2),
+					end, 2, pane),
 				})
 			end,
 			[false] = function()
@@ -559,7 +560,9 @@ local function seasonTrack(store: Store, height: () -> number): Instance
 	})
 end
 
-local function body(store: Store, height: () -> number): { Instance }
+local function body(store: Store, height: () -> number, layout: MenuShell.BodyLayout): { Instance }
+	local pane = layout.pane
+	local cardW = (pane - Theme.spacing.sm) / 2
 	local tabIndex = source(1)
 	-- Cast: derive widens a string-literal union back to `string`.
 	local category = derive(function(): StoreScreenLogic.Category
@@ -600,7 +603,9 @@ local function body(store: Store, height: () -> number): { Instance }
 	end
 
 	local gridHeight = derive(function()
-		return math.max(0, height() - TAB_H - PANEL_H - 2 * Theme.spacing.sm)
+		-- Split puts the panel beside the grid, so the grid gets the height.
+		local panelH = if layout.split then 0 else PANEL_H + Theme.spacing.sm
+		return math.max(0, height() - TAB_H - Theme.spacing.sm - panelH)
 	end)
 
 	local function grid(): Instance
@@ -608,7 +613,7 @@ local function body(store: Store, height: () -> number): { Instance }
 			Name = "Grid",
 			Position = UDim2.fromOffset(0, TAB_H + Theme.spacing.sm),
 			Size = function()
-				return UDim2.fromOffset(MenuShell.INNER, gridHeight())
+				return UDim2.fromOffset(pane, gridHeight())
 			end,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
@@ -617,7 +622,7 @@ local function body(store: Store, height: () -> number): { Instance }
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			CanvasSize = UDim2.new(),
 			create("UIGridLayout")({
-				CellSize = UDim2.fromOffset(CARD_W, CARD_H),
+				CellSize = UDim2.fromOffset(cardW, CARD_H),
 				CellPadding = UDim2.fromOffset(Theme.spacing.sm, Theme.spacing.sm),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
@@ -625,7 +630,7 @@ local function body(store: Store, height: () -> number): { Instance }
 			-- shown, and a tab switch swaps whole cards rather than
 			-- rewriting one card into another.
 			values(itemsHere, function(item: StoreScreenLogic.Item, index: () -> number)
-				local c = card(store, item, selectedKey, selectedKey) :: GuiObject
+				local c = card(store, item, selectedKey, selectedKey, cardW) :: GuiObject
 				effect(function()
 					c.LayoutOrder = index()
 				end)
@@ -639,7 +644,7 @@ local function body(store: Store, height: () -> number): { Instance }
 			tabs = tabs,
 			selected = tabIndex,
 			onSelect = tabIndex,
-			width = MenuShell.INNER,
+			width = pane,
 			order = 1,
 		}),
 		switch(loaded)({
@@ -649,11 +654,11 @@ local function body(store: Store, height: () -> number): { Instance }
 					-- show their grid; the pass sits in the panel below.
 					switch(onSeason)({
 						[true] = function()
-							return seasonTrack(store, gridHeight)
+							return seasonTrack(store, gridHeight, pane)
 						end,
 						[false] = grid,
 					}) :: any,
-					panel(store, selected),
+					panel(store, selected, layout),
 				} :: any
 			end,
 			[false] = function()
@@ -679,8 +684,9 @@ function Store.mount(controller: any, store: Store): () -> ()
 			})
 		end,
 		onClose = store.close,
-		body = function(height)
-			return body(store, height)
+		split = true,
+		body = function(height, layout)
+			return body(store, height, layout)
 		end,
 	})
 end

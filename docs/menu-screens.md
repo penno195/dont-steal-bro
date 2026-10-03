@@ -30,6 +30,13 @@ them touches a remote.
   as the usable rect, centred over an opaque backdrop. The primary action
   sits at the bottom, where the thumb already is: Close/Continue, and on the
   store the Buy button.
+- **Landscape split (store).** The scale follows the short axis, so a
+  landscape screen is always about 360 tall, too short for the store's
+  tabs + grid + 212 px item panel in one column (the panel used to cover
+  the tabs). A screen can opt into `MenuShell` `split`: in landscape the
+  column widens to two panes, each up to 312 wide, with the grid or
+  season track on the left and the item panel on the right. Portrait
+  is unchanged. Found in the 2026-10-03 Studio pass.
 - **Store.** Tapping a card only selects it. Only the panel's Buy button
   buys, so a tap while scrolling can never open a prompt. Rarity shows as a
   coloured edge *and* the word. While any purchase is in flight, every Buy

@@ -10,7 +10,8 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
 - [ ] **1. Rewards step 7b: tune prices in playtest.** Check the 7a
   prices, drop odds and per-rung scaling in real rounds. Last open step
   in `rewards-roadmap.md`; Q8's "Robux buys time, never power" depends
-  on these numbers.
+  on these numbers. *Deferred by the owner (2026-10-03): do it just
+  before publishing, not now.*
 - [ ] **2. Studio pass on features never checked in Studio.** Season tab
   (enable a season with placeholder items), buying with coins, Slow
   Field zone, discard bin, left-click aim, and a two-player test of the
