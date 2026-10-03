@@ -340,6 +340,27 @@ local ZONE_EXIT_LINGER = 0.3
 local ZONE_COLOR = Color3.fromRGB(235, 70, 70)
 local ZONE_THICKNESS = 0.3
 
+-- Tells `victim` a rival's item was used on them (the HUD's "X used Y on
+-- you" toast). `landed` false means it reached them but did nothing (a
+-- ward, immunity, no task to scramble): they still hear who tried. Also
+-- PowerUpService's path for targeted items. `shunt` rides along only on
+-- a landed throw.
+local function notifyUsedOn(
+	victim: Player,
+	caster: Participants.Participant,
+	powerUpId: string,
+	landed: boolean,
+	shunt: any?
+)
+	Net.fireClient("PowerUpHitYou", victim, {
+		powerUpId = powerUpId,
+		casterName = caster.displayName,
+		landed = landed,
+		shunt = if landed then shunt else nil,
+		callingCardId = (Loader.get("CosmeticService") :: any).equippedIdFor(caster.player, "CallingCard"),
+	})
+end
+
 type Zone = {
 	casterId: number,
 	def: StatusEffectResolver.EffectDef,
@@ -349,6 +370,9 @@ type Zone = {
 	part: BasePart,
 	-- racer id -> the effect instance this zone placed on them.
 	placed: { [number]: string },
+	powerUpId: string,
+	-- Humans already told "X used Slow Field on you", once per zone.
+	notified: { [number]: boolean },
 }
 
 local zones: { Zone } = {}
@@ -409,6 +433,16 @@ local function tickZone(zone: Zone, t: number)
 				local applied, _, placedId = applyEffect(racer.id, timed, zone.casterId, false)
 				if applied and placedId ~= nil then
 					zone.placed[racer.id] = placedId
+				end
+				-- Every item used on a player names its caster, a zone
+				-- included, even when a ward stopped it (powerups.md, user
+				-- decision 2026-10-03). Once per zone, not per retry tick.
+				if racer.player ~= nil and not zone.notified[racer.id] then
+					zone.notified[racer.id] = true
+					local caster = Participants.get(zone.casterId)
+					if caster ~= nil then
+						notifyUsedOn(racer.player, caster, zone.powerUpId, applied)
+					end
 				end
 			end
 		elseif effect ~= nil and effect.expiresAt > t + ZONE_EXIT_LINGER then
@@ -495,6 +529,8 @@ local function dropZone(caster: Participants.Participant, powerUpDef: Validate.P
 		endsAt = now() + EffectContext.effectDuration(powerUpDef.durationSeconds),
 		part = zonePart(floor, radius),
 		placed = {},
+		powerUpId = powerUpDef.id,
+		notified = {},
 	})
 	runZones()
 	return true, "zone dropped"
@@ -604,6 +640,7 @@ local StatusEffects: Loader.Service = {
 	baseJumpPower = BASE_JUMP_POWER,
 
 	applyEffectFor = applyEffectFor,
+	notifyUsedOn = notifyUsedOn,
 
 	-- P3-5: NPCService calls this when a bot's rig is despawned or
 	-- replaced, the same way a human's respawn clears theirs below.

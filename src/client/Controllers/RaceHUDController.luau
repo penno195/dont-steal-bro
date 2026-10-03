@@ -33,6 +33,7 @@ local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local ParticipantIds = require(ReplicatedStorage.Shared.ParticipantIds)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
@@ -160,7 +161,7 @@ local function practiceDummies(): { [number]: Model }
 end
 
 local function characterFor(racerId: number): Model?
-	if racerId < 0 then
+	if ParticipantIds.isNPC(racerId) then
 		local dummy: Model? = practiceDummies()[racerId]
 		if dummy ~= nil then
 			return dummy
@@ -719,16 +720,23 @@ local function onUseResult(payload: any)
 	end
 end
 
--- A rival's power-up landed on you. Named, so a sudden freeze reads as
--- a play someone made rather than lag. The caster's CallingCard, if
--- they wear one, rides along on the same toast.
+-- A rival used a power-up on you. Named, so a sudden freeze reads as
+-- a play someone made rather than lag. Every item says so, even one a
+-- ward or a missing task stopped (`landed` false), so the victim always
+-- knows who tried. The caster's CallingCard, if they wear one, rides
+-- along on the same toast.
 local function onHitYou(payload: any)
 	local def = powerUpDefs[payload.powerUpId]
 	if def == nil or type(payload.casterName) ~= "string" then
 		return
 	end
 	local card = if type(payload.callingCardId) == "string" then callingCardImage[payload.callingCardId] else nil
-	Toast.show(string.format("%s used %s on you", payload.casterName, def.displayName), "danger", card)
+	local text = string.format("%s used %s on you", payload.casterName, def.displayName)
+	if payload.landed == false then
+		Toast.show(text .. " - no effect", "warning", card)
+	else
+		Toast.show(text, "danger", card)
+	end
 end
 
 -- The objective arrow, while mounted. Returns the stop function.

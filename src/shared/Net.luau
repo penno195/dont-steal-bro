@@ -635,17 +635,19 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
-	-- Server -> client (targeted at the VICTIM only): a rival's aimed or
-	-- nearest-target power-up just landed on you. `{ powerUpId,
-	-- casterName, shunt?, callingCardId? }`, so the HUD can say "Freeze
+	-- Server -> client (targeted at the VICTIM only): a rival's power-up
+	-- was just used on you. `{ powerUpId, casterName, landed, shunt?,
+	-- callingCardId? }`, so the HUD can say "Freeze
 	-- from Alex" plus the item's one-line description - playtests showed a
 	-- hit with no explanation reads as lag. `callingCardId` is the caster's
 	-- equipped CallingCard cosmetic, read server-side from their profile
 	-- (nil for NPCs, dummies and anyone without one); the toast shows its
 	-- image. `shunt` ({ x, y, z } studs/s) is the shove
 	-- a thrown item gives; the victim's client applies it because it owns
-	-- its character's physics. Only fired when the effect actually applied; a zone
-	-- (Slow Field) is visible on the ground and doesn't fire it.
+	-- its character's physics, so it's only sent on a landed hit. Fired for
+	-- every item used on a player (powerups.md, user decision 2026-10-03):
+	-- `landed` false when it reached them but did nothing (a ward, no task
+	-- to scramble), and a Slow Field fires it once per zone per player.
 	PowerUpHitYou = {
 		name = "PowerUpHitYou",
 		direction = "ServerBroadcast",

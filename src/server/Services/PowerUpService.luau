@@ -1109,9 +1109,18 @@ local function useFor(
 
 		local applied, description = effectApplier(racer, resolvedTarget, def)
 
+		-- The victim hears about every item that reached them, landed or
+		-- not (powerups.md, user decision 2026-10-03): a Task Scramble on
+		-- someone away from a task used to be spent in silence.
+		local victim = if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then resolvedTarget.player else nil
+		local StatusEffects = Loader.get("StatusEffects") :: any
+
 		if not applied then
 			audit(racer, def.id, resolvedTargetId, "Rejected", description)
 			sendResult(racer, false, def.id, resolvedTargetId, description)
+			if victim ~= nil then
+				StatusEffects.notifyUsedOn(victim, racer, def.id, false)
+			end
 			return
 		end
 
@@ -1121,14 +1130,8 @@ local function useFor(
 		-- Only a hit that landed shoves: a Shield or an immunity window
 		-- blocks the push along with the effect.
 		local shunt = if thrownAt ~= nil then shuntFor(racer, thrownAt, def) else nil
-		local victim = if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then resolvedTarget.player else nil
 		if victim ~= nil then
-			Net.fireClient("PowerUpHitYou", victim, {
-				powerUpId = def.id,
-				casterName = racer.displayName,
-				shunt = shunt,
-				callingCardId = (Loader.get("CosmeticService") :: any).equippedIdFor(racer.player, "CallingCard"),
-			})
+			StatusEffects.notifyUsedOn(victim, racer, def.id, true, shunt)
 		end
 	end
 

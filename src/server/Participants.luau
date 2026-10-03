@@ -54,7 +54,10 @@ local byId: { [number]: Participant } = {}
 -- than following Luau's hash order - a rank/target scan that reorders
 -- itself between calls is miserable to debug.
 local order: { number } = {}
-local nextNPCId = -1
+
+-- Mirrors ParticipantIds.FIRST_NPC_ID (src/shared); a spec checks they match.
+Participants.FIRST_NPC_ID = -1000
+local nextNPCId = Participants.FIRST_NPC_ID
 
 local function indexOf(id: number): number?
 	for index, existing in order do
@@ -65,17 +68,20 @@ local function indexOf(id: number): number?
 	return nil
 end
 
--- Hands out the next never-yet-used negative id. Monotonic for the life
--- of the server (never reused even after unregister) so a stale id held
--- by an in-flight callback can never be mistaken for a live NPC.
+-- Hands out the next never-yet-used NPC id, counting down from
+-- FIRST_NPC_ID. Monotonic for the life of the server (never reused even
+-- after unregister) so a stale id held by an in-flight callback can never
+-- be mistaken for a live NPC.
 function Participants.allocateNPCId(): number
 	local id = nextNPCId
 	nextNPCId -= 1
 	return id
 end
 
+-- Not just "negative": Studio's local test players have UserIds -1, -2,
+-- ... (see src/shared/ParticipantIds.luau, which the client uses).
 function Participants.isNPCId(id: number): boolean
-	return id < 0
+	return id <= Participants.FIRST_NPC_ID
 end
 
 function Participants.register(participant: Participant): Participant
@@ -191,7 +197,7 @@ end
 function Participants.resetForTesting()
 	byId = {}
 	order = {}
-	nextNPCId = -1
+	nextNPCId = Participants.FIRST_NPC_ID
 end
 
 return Participants

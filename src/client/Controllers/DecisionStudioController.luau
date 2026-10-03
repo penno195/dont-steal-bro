@@ -36,6 +36,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local ParticipantIds = require(ReplicatedStorage.Shared.ParticipantIds)
 local DecisionLogic = require(script.Parent.Parent.UI.DecisionLogic)
 local DecisionStudio = require(script.Parent.Parent.UI.Screens.DecisionStudio)
 local DropNames = require(script.Parent.Parent.UI.DropNames)
@@ -83,7 +84,7 @@ local ids: { number } = {}
 local leftIds: { [number]: boolean } = {}
 
 local function nameOf(id: number): string
-	if id < 0 then
+	if ParticipantIds.isNPC(id) then
 		return NPCBubbleController.getNPCName(id) or "Finalist"
 	end
 	local player = Players:GetPlayerByUserId(id)
@@ -107,7 +108,7 @@ local function rebuildSeats()
 				id = id,
 				name = nameOf(id),
 				isSelf = id == selfId,
-				isNPC = id < 0,
+				isNPC = ParticipantIds.isNPC(id),
 				left = leftIds[id] == true,
 			})
 		)

@@ -126,11 +126,18 @@ did, whether they were using one or being hit by one. So:
 - **First pickup:** the first time a player holds each type in a
   session, a toast shows `displayName: description`. After that there's
   only the slot icon, so it never nags.
-- **Being hit:** when an aimed or nearest-target item lands, the server
-  sends the victim alone `PowerUpHitYou` `{ powerUpId, casterName }`, and
-  a red toast reads "Alex used Freeze on you". A blocked hit sends
-  nothing. Slow Field is a zone rather than a hit on one player, so it
-  doesn't send this; its ground visual has to explain it instead.
+- **Being hit:** the victim is told about **every** item used on them
+  (user decision, 2026-10-03, after a two-player test where Task Scramble
+  on someone away from a task was spent in silence). The server sends the
+  victim alone `PowerUpHitYou` `{ powerUpId, casterName, landed }`:
+  - Landed: a red toast reads "Alex used Freeze on you".
+  - Reached them but did nothing (a ward, an immunity window, no task to
+    scramble, the scramble cap): an amber "Alex used Task Scramble on
+    you - no effect".
+  - Slow Field: once per zone per player, the first time it catches
+    them (landed or warded).
+  An item that never reached them (out of range, target gone before a
+  throw lands) sends nothing.
 
 ### 1. Sprint Boost (Buff, Self)
 

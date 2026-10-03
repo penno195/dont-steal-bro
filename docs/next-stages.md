@@ -12,10 +12,13 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   in `rewards-roadmap.md`; Q8's "Robux buys time, never power" depends
   on these numbers. *Deferred by the owner (2026-10-03): do it just
   before publishing, not now.*
-- [ ] **2. Studio pass on features never checked in Studio.** Season tab
+- [x] **2. Studio pass on features never checked in Studio.** Season tab
   (enable a season with placeholder items), buying with coins, Slow
   Field zone, discard bin, left-click aim, and a two-player test of the
-  "X used Y on you" message.
+  "X used Y on you" message. *Done 2026-10-03; all pass. Fixed on the
+  way: the store in landscape, NPC ids colliding with Studio test
+  players, silent Task Scramble/Slow Field, and the hub's practice rug
+  (Lobby.rbxl) hiding the Slow Field zone.*
 - [ ] **3. Fix the README.** Its "Win rewards" bullet under What's left
   says a win grants nothing, but steps 2–7a are built.
 
