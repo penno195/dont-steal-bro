@@ -791,6 +791,75 @@ lighting, and the spectators stand at the velvet rope. It fits the
 - **Nobody gets lost in the corner rooms.** They look alike, so each one
   needs a distinct prop silhouette before the art pass, not during it.
 
+### As built (2026-10-03, Match.rbxl)
+
+Where the build departs from the brief above, the build wins:
+
+- **Layout.** The square is x, z −130..130; the lobby adds z 130..166
+  (x −70..70), so the footprint is 260 × 296. The rotunda is an
+  **octagon**, 88 across (inner faces at 44), not a circle: the balcony,
+  walls and ramps are straight parts. Galleries are the four edge
+  bands, 100 × 80, with 32-high ceilings; the corner rooms are 80 × 80
+  with the upper floor at 18. The ground-floor doors are 14 wide, the
+  rotunda N/S doors 12 and E/W 14, and the SW room → Natural History door
+  10 (choke 3).
+- **Upper floor.** The balcony is a 12-wide octagonal band at 18 (r 32..44)
+  with a 3.5 balustrade. Four **diagonal corridors** run from the
+  balcony's diagonal sides to the inner corner of each upper corner room.
+  Each corridor's walls also chamfer the inner corners of the two
+  galleries beside it (12.7-stud chamfers), and an end wall seals the
+  void under the corridor at ground level.
+- **Corridors are 16 wide, not 12.** With 12-wide diagonal corridors,
+  local paths worked but every long path into the upper NW and SE rooms
+  came back NoPath. The pathfinder's long-range graph lost the thin
+  diagonal link. **Rule for every map: diagonal walkways need ≥ 16
+  studs clear.**
+- **Grand staircases are NW and SE, not N and S.** Each is a 34-long
+  ramp in the rotunda's diagonal, rising to a landing on the N (or S)
+  balcony side, so choke 2 is still "the N staircase's top landing". The
+  ramps sit flush against the balcony edge and have a rail on the
+  inner side only. An outer rail whose top end poked 2 studs onto the
+  balcony split the balcony ring in two for long paths. **Rule: no
+  rail or stub may end on a walkway.**
+- **Back stairs** are 12-wide ramps against the north wall (NE room,
+  rising east) and the west wall (SW room, rising south). The stairwell
+  holes are railed on the upper floor.
+- **Archways are 30 tall.** The four rotunda arches (gallery wall,
+  passage and octagon wall) open from 0 to 30, with a glass rail where
+  the balcony crosses each arch. At 17 tall they showed the dinosaur's
+  body but cut off its neck. Raycasts now see most of the neck and the
+  skull from the far wall of each gallery within about ±15 studs of its
+  axis. The far corners see only the body or nothing.
+- **Spawn** is the lobby: 6 pads in a shallow arc at z ≈ 157, a north
+  exit into Natural History (the hub axis) and a NW exit into the SW
+  room (the ring). The vault keypad station (`mus-16`) sits beside a
+  round vault door on the lobby's east wall.
+- **Dressing is primitive parts.** The dinosaur is a long-necked
+  skeleton, ~34 tall, with collidable legs; the rare pad sits between its
+  feet. The zones get the pyramid and obelisks (Egypt), the hanging
+  rocket, planets and a starfield ceiling (Space), the whale skeleton
+  (Natural History) and the stacked angular sculpture (Modern Art). The
+  corner rooms each get one distinct silhouette: a giant clock (NW), a
+  telegraph mast (NE), a totem pole (SE) and archive stacks (SW). Signs
+  name each gallery on the balcony fascia, and each corner room above
+  its doors.
+- **Stand-in stations** carry their Target list in `TargetTaskIds` on the
+  anchor, as on Factory. Every station whose Tag differs from its Target
+  has one.
+- **Proofs so far:** every one of the 75 nav edges pathfinds, and spawn
+  reaches all 16 stations and 12 pads. The average station-pair path is
+  203 studs (12.7 s) and the longest 338 (21.1 s). On shortest paths,
+  57% of gallery-to-gallery legs go through the corner rooms (≥ 30%
+  wanted). Blocking each choke strands nothing. The worst extra detours
+  are +4.6 s (N door), +10.2 s (S door) and +5.4 s (SW door), all on legs
+  into the rotunda's one station (`mus-10`); the N landing costs +0.8 s.
+  The S-door figure is over the brief's ~4 s, so watch it in playtest.
+  One 6-racer round (1 human, 5 NPCs) qualified with no
+  `gave up pathing` and no MovementWatch violations.
+- **Still to do:** the map validator (needs Match.rbxl saved), a phone
+  readability test, 4 more NPC rounds, and an art pass with real
+  asset packs.
+
 ---
 
 ## 5. Laboratory

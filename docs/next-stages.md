@@ -33,7 +33,9 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   (`Desktop\Match.rbxl`), built by `scripts/assemble-match-place.luau`;
   add each new map with it. Factory done 2026-10-03: built straight
   into Match.rbxl, primitive-part dressing, enabled; as-built notes in
-  wave1-briefs.md §3. Its art pass with real packs is still open.*
+  wave1-briefs.md §3. Its art pass with real packs is still open.
+  Museum done 2026-10-03: built the same way, primitive-part dressing,
+  enabled; as-built notes in wave1-briefs.md §4. Laboratory next.*
 - [ ] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
