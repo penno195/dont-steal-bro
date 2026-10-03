@@ -6,17 +6,22 @@ on a white background. That is intended.
 
 ## Status
 
-All the images were uploaded on 2026-10-03 to the owner's account
-through Studio MCP's `upload_image`. Their ids are in the configs, and
-every item they cover is enabled. Two things are still open; each needs
-a Studio step only the owner can do (see below):
+Done 2026-10-03: every asset is uploaded to the owner's account and
+all nine items are enabled.
 
-- `rubber-duck.obj` → `RubberDuckProjectile.projectileMeshAssetId`. In
-  Studio, `AssetService:CreateAssetAsync` returns "not available yet",
-  so the mesh can't be uploaded from a script.
-- the Victory Flex animation → `VictoryFlexEmote.animationAssetId`.
+- Images: Studio MCP's `upload_image`, with the PNGs served from
+  localhost.
+- Duck mesh: the owner used Import 3D. That makes a **Model**
+  (77444634807769). The config needs the **Mesh** inside it
+  (129661865353465), which is the MeshPart's `MeshId`.
+  `AssetService:CreateAssetAsync` returns "not available yet" in Studio,
+  so a script can't upload meshes.
+- Animation (86732319077255): a throwaway local plugin selected the
+  KeyframeSequence and called `plugin:SaveSelectedToRoblox()`, which
+  opens the Save to Roblox dialog without the Animation Editor. Scripts
+  run through Studio MCP have no `plugin` object, so a plugin is needed.
 
-Paste each id in, then set that item's `enabled = true`.
+The steps below are for redoing or replacing an asset.
 
 ## Upload, then paste the ids back
 
