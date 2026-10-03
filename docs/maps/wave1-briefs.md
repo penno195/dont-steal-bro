@@ -575,33 +575,45 @@ behind the safety line painted around the boundary.
 
 Where the build departs from the brief above, the build wins:
 
-- **Layout.** The floor is x −140..60 and z −70..70, with the line along
-  z = 0. The yard is x 62..140 and z −110..110, sitting 4 studs lower.
-  Crossings: west bridge x −110..−98 (12 wide), tunnel x −40..−30, east
-  bridge x 6..16 (10 wide), catwalk span x −66..−54. Bridge decks are at
-  13 and the catwalk ring at 18.
+- **Layout (v2, rebuilt roomier after playtest feedback that it felt
+  cramped).** The floor is 220 × 160: x −150..70, z −80..80, with the
+  line along z = 0. The yard is x 72..150 and z −120..120, sitting 4
+  studs lower. Crossings, all 12 wide and spread along the line: west
+  bridge x −102..−90, catwalk span x −66..−54, tunnel x −26..−14, east
+  bridge x 4..16. The line guard is 9 tall, the bridge decks are at 10.5
+  and the catwalk ring at 18. The ring is 12 wide and the stairs are 10
+  wide. Every station and prop sits against a wall or has ≥ 7 studs of
+  clearance (a raycast width scan finds no corridor under 7 apart from
+  sealed or decorative pockets). An east bridge at x 0 took 60% of
+  crossings; at x 10, with the tunnel moved east, it's 37%.
+- **Spawn is a staff room** (x −146..−62, z 82..114). It has lockers,
+  benches, vending machines, a CLOCK IN board, two 12–14 wide doors onto
+  the floor, and the staff stair up to the south catwalk.
 - **Tunnel floor at −12, not −10.** Under a 1-stud cover, 9 studs of
   headroom got no navmesh, because the engine voxelises at 4 studs.
   Raising it to 11 fixed that. The control room's roof went from 7 to
   10 studs of headroom for the same reason. **Rule for every map: covered
   walkways need ≥ 10 studs of headroom.**
-- **Four stair links, not three.** NW, NE and SE stairs, plus a staff
-  stair in the spawn room up to the SW catwalk corner. That stair is the
-  spawn's second exit. The ladder-styled NE stair runs along the north
-  wall.
-- **Control room in the NE** (x 24..48, z −50..−34, floor 10), with steps
-  from the west and its door at the NW corner.
+- **Four stair links, not three.** NW, NE and SE stairs, plus the staff
+  stair in the spawn room, which is the spawn's second exit. The
+  ladder-styled NE stair runs along the north wall.
+- **Control room in the NE** (x 34..58, z −46..−30, floor 10), with steps
+  from the west and its door at the NW corner. The furnace sits against
+  the west wall, under the ring.
 - **No `push-trip` restriction on the dock pad.** `push-trip` is Common in
   config, so an Uncommon pad restricted to it could never roll
   (`PowerUpService` skips it). The pad stays Uncommon and unrestricted.
 - **Stand-in stations** (see note) carry their Target list in a
   `TargetTaskIds` attribute on the anchor.
-- **Proofs so far:** validator clean (0/0, 780 instances, 0 textures).
-  Spawn reaches all 16 stations and 12 pads. The average station-pair
-  path is 163 studs (10.2 s) and the longest is 331 (20.7 s). On
-  shortest paths, the north–south crossings split span 9, tunnel 7,
-  east 16 (40%), west 8. Two 6-racer rounds qualified at 148 s and 151 s
-  with no `gave up pathing`.
+- **Proofs so far (v2):** spawn reaches all 16 stations and 12 pads, and
+  every nav edge pathfinds. The average station-pair path is 172 studs
+  (10.7 s) and the longest is 346 (21.6 s). On shortest paths, the
+  north–south crossings split span 5, tunnel 7, east 15 (37%), west 13.
+  Two 6-racer rounds qualified at 165 s and 148 s with no `gave up
+  pathing` and no MovementWatch violations.
+- **Studio gotcha:** after a bulk rebuild, the navmesh can stay stale in
+  patches (whole columns report NoPath). Any later edit regenerates it,
+  so re-test before believing a NoPath.
 - **Still to do:** phone readability test, an art pass with real asset
   packs (the current dressing is primitive parts), and 3 more NPC rounds.
 
