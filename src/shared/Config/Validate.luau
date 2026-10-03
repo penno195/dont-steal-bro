@@ -484,6 +484,7 @@ export type TelemetryConfig = {
 	batchSize: number,
 	flushIntervalSeconds: number,
 	perMinuteLimit: number, -- 0 = no limit
+	studioEcho: boolean, -- Studio only: print each event, since Studio can't send them
 }
 
 -- ===== LiveOpsConfig: P8-5 ===============================================
@@ -2805,6 +2806,9 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	else
 		if type(telemetry.enabled) ~= "boolean" then
 			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.enabled", "must be a boolean")
+		end
+		if type(telemetry.studioEcho) ~= "boolean" then
+			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.studioEcho", "must be a boolean")
 		end
 		if telemetry.batchSize < 1 then
 			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.batchSize", "must be at least 1")

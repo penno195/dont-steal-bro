@@ -42,6 +42,12 @@ server already knows the fact:
 
 ### 0.2 The sink API
 
+> **Done (next-stages step 6, 2026-10-03).** The sink now uses
+> `LogFunnelStepEvent` / `LogCustomEvent`, and the per-event field mapping
+> is decided in `telemetry-schema.md`. Some event names changed: the
+> funnel events are now steps of the `Matchmaking` and `Round` funnels.
+> The text below is the original finding.
+
 `flush()` calls `AnalyticsService:FireEvent`, which the pinned
 `globalTypes.d.luau` marks `@deprecated`, inside a `pcall` that hides
 any failure. The current methods are the `Log*` family:
@@ -63,8 +69,9 @@ pinned types:
   into the three slots. The mapping per event has to be decided when the
   events are wired, and it controls which breakdowns this review can do.
 
-**Verify in Studio before launch:** fire each event from a test place
-and confirm it appears in Creator Hub analytics. Expect some ingestion
+**Verify on a published place before launch** (Studio can't send
+analytics at all): fire each event and confirm it appears in Creator
+Hub analytics. Expect some ingestion
 delay. Don't trust a `pcall` that returned nothing.
 
 ### 0.3 Events this review needs that the schema doesn't have

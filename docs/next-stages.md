@@ -62,13 +62,22 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
 `launch-review.md` §0. Only MatchTeleportService and PracticeService
 call Telemetry, and it still uses the deprecated `FireEvent`.
 
-- [ ] **6. Switch to `LogFunnelStepEvent` / `LogCustomEvent`** and decide
+- [x] **6. Switch to `LogFunnelStepEvent` / `LogCustomEvent`** and decide
   each event's three custom fields.
+  *Done 2026-10-03. Mapping lives in `src/server/TelemetryLogic.luau`
+  (pure, tested); `telemetry-schema.md` is the table. Two funnels
+  (`Matchmaking` in the hub, `Round` keyed on roundId); the other events
+  are custom events with the round's map from cached context. Telemetry
+  functions now take a Player or user id; step 7 calls them with the
+  new signatures.*
 - [ ] **7. Hook up the 15 defined-but-unsent events** from the service
   that already knows each fact.
 - [ ] **8. Add the missing events**: task abandoned, power-up collected,
   round ended, bot seat count, reward rung, config version.
-- [ ] **9. Check in Studio** that events reach Creator Hub analytics.
+- [ ] **9. Check on a published place** that events reach Creator Hub
+  analytics (allow up to 24 hours). Studio can't send analytics at all;
+  there, set `telemetry.studioEcho = true` to see what would be sent.
+  Needs step 12's published places.
 
 ## Stage 4: Assets, products, publishing
 

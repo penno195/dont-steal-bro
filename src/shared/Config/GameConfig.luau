@@ -548,6 +548,10 @@ local GameConfig: Validate.GameConfig = {
 		-- Per-event-name rate limit. 0 = no limit, >0 = max events per
 		-- minute. Applied per player. PLACEHOLDER.
 		perMinuteLimit = 0,
+		-- Roblox only accepts analytics from a published game's server,
+		-- so in Studio every event is dropped. true prints each one to
+		-- Output instead, to check what would have been sent.
+		studioEcho = false,
 	},
 
 	-- P3-6: "every probability and timing exposed for tuning without

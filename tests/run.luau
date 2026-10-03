@@ -59,5 +59,6 @@ require("./TaskHandlerTypes.spec")
 require("./DoorLogic.spec")
 require("./QueueLogic.spec")
 require("./TimingLogic.spec")
+require("./TelemetryLogic.spec")
 
 TestRunner.run()

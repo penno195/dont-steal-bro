@@ -1,32 +1,46 @@
 --!strict
--- Analytics instrumentation (P4-7). One thin wrapper around AnalyticsService,
--- never called directly anywhere else. All events pass through here, so a
--- missing instrumentation point shows up as a missing call rather than as
--- an empty cell in the analytics dashboard.
+-- Analytics instrumentation (P4-7, reworked in next-stages step 6). One
+-- thin wrapper around AnalyticsService, never called directly anywhere
+-- else. All events pass through here, so a missing instrumentation point
+-- shows up as a missing call rather than as an empty cell in the
+-- analytics dashboard.
 --
--- Event naming convention: PascalCase, organized hierarchically by verb +
--- noun (UserQueued, UserMatched, RoundStarted, TaskCompleted, etc). All
--- events carry the user's id (inherent to AnalyticsService) and a clientId
--- (if on the client) or serverId (if on the server), never player names
--- or other PII.
+-- What each event is called and which fields it carries is decided in
+-- src/server/TelemetryLogic.luau (pure, tested); docs/telemetry-schema.md
+-- is the table. This file only finds the Player, rate-limits, queues and
+-- makes the call: LogFunnelStepEvent for the two funnels, LogCustomEvent
+-- for everything else. (The old AnalyticsService:FireEvent is deprecated.)
+--
+-- Callers pass a Player or a user id. A user id with no Player in this
+-- server (an NPC's negative id, or someone who already left) is dropped:
+-- every analytics call needs a Player. Round-level events are logged
+-- against one human in the server, the "anchor".
+--
+-- No PII: AnalyticsService attaches the user itself; nothing here logs
+-- names, display names, chat or another player's id.
 --
 -- Rate limiting is per-player per-event per-minute. A player mashing a
 -- button 100 times per second still only logs 60 events at the limit,
--- not 6000. The limit is set in config, and 0 = no limit. Off by default
--- for now (PLACEHOLDER in GameConfig) because there's no telemetry yet to
--- say what is sane, but it's there to add without touching code.
+-- not 6000. The limit is set in config, and 0 = no limit.
 
+local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Analytics = game:GetService("AnalyticsService")
 
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
+local TelemetryLogic = require(ServerScriptService.Server.TelemetryLogic)
 
-export type Event = {
-	name: string,
-	parameters: { [string]: any },
+type Record = TelemetryLogic.Record
+type Who = Player | number
+
+type Queued = {
+	player: Player,
+	record: Record,
 }
 
 type RateLimitEntry = {
@@ -34,368 +48,285 @@ type RateLimitEntry = {
 	resetAt: number,
 }
 
-local Telemetry = {
-	-- Per-player rate limit tracking. Format: "eventName|userId" -> count + resetAt.
-	rateLimits = {} :: { [string]: RateLimitEntry },
-	-- Queued events waiting for flush. Max 50 (configurable) or flushIntervalSeconds
-	-- (configurable), whichever comes first.
-	queue = {} :: { Event },
-	-- Last flush time, so we can enforce flushIntervalSeconds.
-	lastFlushAt = 0,
-	-- Monotonic counter for event ordering.
-	eventSequence = 0,
+local FIELD_KEYS = {
+	Enum.AnalyticsCustomFieldKeys.CustomField01.Name,
+	Enum.AnalyticsCustomFieldKeys.CustomField02.Name,
+	Enum.AnalyticsCustomFieldKeys.CustomField03.Name,
 }
+
+-- Studio can't send events (the platform only accepts a published
+-- game's server), so there the call is replaced by a print when
+-- telemetry.studioEcho is on.
+local IS_STUDIO = RunService:IsStudio()
+
+local state = {
+	-- "eventName|userId" -> count + resetAt.
+	rateLimits = {} :: { [string]: RateLimitEntry },
+	-- Waiting for flush: batchSize events or flushIntervalSeconds,
+	-- whichever comes first, and always before a player leaves.
+	queue = {} :: { Queued },
+	lastFlushAt = 0,
+	-- Match server only: set by roundStarted, read by every Round step.
+	round = nil :: TelemetryLogic.RoundContext?,
+	-- Hub only: the Matchmaking funnel session per queue attempt.
+	queueSessions = {} :: { [Player]: string },
+	-- Event names whose call has already failed once, so a broken sink
+	-- warns once per name instead of every event.
+	warned = {} :: { [string]: true },
+}
+
+-- ===== players =============================================================
+
+local function resolve(who: Who): Player?
+	if typeof(who) == "Instance" then
+		return if who.Parent == Players then who else nil
+	end
+	return Players:GetPlayerByUserId(who)
+end
+
+-- Round-level facts are logged once, against the first human here.
+local function anchor(): Player?
+	return Players:GetPlayers()[1]
+end
 
 -- ===== rate limiting =========================================================
 
-local function rateLimitKey(eventName: string, userId: number): string
-	return string.format("%s|%d", eventName, userId)
-end
-
-local function checkRateLimit(eventName: string, userId: number): boolean
-	local config = GameConfig.telemetry
-	if config.perMinuteLimit <= 0 then
-		return true -- no limit
-	end
-
-	local key = rateLimitKey(eventName, userId)
-	local now = os.time()
-	local entry = Telemetry.rateLimits[key]
-
-	if entry == nil or now >= entry.resetAt then
-		-- New window: reset counter
-		Telemetry.rateLimits[key] = { count = 1, resetAt = now + 60 }
+local function allowed(eventName: string, userId: number): boolean
+	local limit = GameConfig.telemetry.perMinuteLimit
+	if limit <= 0 then
 		return true
 	end
 
-	-- Existing window
-	if entry.count < config.perMinuteLimit then
+	local key = string.format("%s|%d", eventName, userId)
+	local now = os.time()
+	local entry = state.rateLimits[key]
+	if entry == nil or now >= entry.resetAt then
+		state.rateLimits[key] = { count = 1, resetAt = now + 60 }
+		return true
+	end
+	if entry.count < limit then
 		entry.count += 1
 		return true
 	end
-
-	-- Rate limited
 	return false
 end
 
--- ===== queueing and flushing ================================================
+-- ===== sending ===============================================================
 
--- Declared ahead of enqueue, which calls it. `Telemetry` above is the
--- module's private state table, not the service - it has no `flush`.
-local flush: () -> ()
+local function customFields(record: Record): { [string]: string }?
+	local fields: { [string]: string } = {}
+	local any = false
+	for slot = 1, #FIELD_KEYS do
+		local value = record.fields[slot]
+		if value ~= nil then
+			fields[FIELD_KEYS[slot]] = value
+			any = true
+		end
+	end
+	return if any then fields else nil
+end
 
-local function enqueue(event: Event)
-	if not GameConfig.telemetry.enabled then
+local function send(item: Queued)
+	local record = item.record
+	local fields = customFields(record)
+
+	if IS_STUDIO then
+		if GameConfig.telemetry.studioEcho then
+			local shown: { string } = {}
+			for slot = 1, #FIELD_KEYS do
+				table.insert(shown, record.fields[slot] or "-")
+			end
+			print(
+				string.format(
+					"Telemetry [%s] %s%s value=%s session=%s player=%d %s",
+					record.kind,
+					record.name,
+					if record.stepName then "/" .. record.stepName else "",
+					tostring(record.value),
+					tostring(record.sessionId),
+					item.player.UserId,
+					table.concat(shown, " | ")
+				)
+			)
+		end
 		return
 	end
 
-	table.insert(Telemetry.queue, event)
+	local ok, err = pcall(function()
+		if record.kind == "Funnel" then
+			Analytics:LogFunnelStepEvent(
+				item.player,
+				record.name,
+				record.sessionId,
+				record.step,
+				record.stepName,
+				fields
+			)
+		else
+			Analytics:LogCustomEvent(item.player, record.name, record.value, fields)
+		end
+	end)
+	if not ok and not state.warned[record.name] then
+		state.warned[record.name] = true
+		warn(string.format("Telemetry: %s failed and will not warn again: %s", record.name, tostring(err)))
+	end
+end
 
-	if
-		#Telemetry.queue >= GameConfig.telemetry.batchSize
-		or os.time() - Telemetry.lastFlushAt >= GameConfig.telemetry.flushIntervalSeconds
-	then
+local function flush()
+	if #state.queue == 0 then
+		return
+	end
+	local items = state.queue
+	state.queue = {}
+	state.lastFlushAt = os.time()
+	for _, item in items do
+		-- A player who left before the flush can't be logged against.
+		-- PlayerRemoving flushes first, so this is only a backstop.
+		if item.player.Parent == Players then
+			send(item)
+		end
+	end
+end
+
+-- The rate-limit key: the event name, or funnel/step for a funnel step.
+local function limitName(record: Record): string
+	return if record.stepName then record.name .. "/" .. record.stepName else record.name
+end
+
+local function log(player: Player?, record: Record)
+	if player == nil or not GameConfig.telemetry.enabled then
+		return
+	end
+	if not allowed(limitName(record), player.UserId) then
+		return
+	end
+	table.insert(state.queue, { player = player, record = record })
+	local config = GameConfig.telemetry
+	if #state.queue >= config.batchSize or os.time() - state.lastFlushAt >= config.flushIntervalSeconds then
 		flush()
 	end
 end
 
-function flush()
-	if #Telemetry.queue == 0 then
+local function roundMapId(): string
+	local round = state.round
+	return if round ~= nil then round.mapId else "none"
+end
+
+local function roundStep(who: Who, step: number)
+	local round = state.round
+	if round == nil then
+		return -- not in a round (hub, or before Loading)
+	end
+	log(resolve(who), TelemetryLogic.roundStep(round, step))
+end
+
+-- ===== Matchmaking funnel (hub) =============================================
+
+local function userQueued(who: Who)
+	local player = resolve(who)
+	if player == nil then
 		return
 	end
-
-	local events = Telemetry.queue
-	Telemetry.queue = {}
-	Telemetry.lastFlushAt = os.time()
-
-	-- Fire all at once. AnalyticsService batches internally; we're just
-	-- breaking up the work into sensible chunks to keep frames smooth.
-	for _, event in events do
-		pcall(function()
-			Analytics:FireEvent(event.name, event.parameters)
-		end)
-	end
+	local sessionId = HttpService:GenerateGUID(false)
+	state.queueSessions[player] = sessionId
+	log(player, TelemetryLogic.matchmakingStep(sessionId, TelemetryLogic.MatchmakingStep.Queued))
 end
 
--- ===== core funnel ===========================================================
-
--- Core funnel: the critical path from queue to match to hub, and back.
--- These are the dashboard's headline metrics: how many users do we lose
--- at each step?
-
-local function userQueued(userId: number)
-	if not checkRateLimit("UserQueued", userId) then
+local function userMatched(who: Who)
+	local player = resolve(who)
+	if player == nil then
 		return
 	end
-	enqueue({
-		name = "UserQueued",
-		parameters = { userId = userId, timestamp = os.time() },
-	})
+	-- Matched without a Queued (a session that predates the server, say)
+	-- still gets a session: the funnel back-fills skipped steps.
+	local sessionId = state.queueSessions[player] or HttpService:GenerateGUID(false)
+	state.queueSessions[player] = nil
+	log(player, TelemetryLogic.matchmakingStep(sessionId, TelemetryLogic.MatchmakingStep.Matched))
 end
 
-local function userMatched(userId: number, groupSize: number, npcCount: number)
-	if not checkRateLimit("UserMatched", userId) then
-		return
+-- ===== Round funnel (match) ==================================================
+
+-- Starts the round's funnel session and logs step 1 for every human here.
+local function roundStarted(roundId: string, mapId: string, humans: { Player }, configVersion: string?)
+	local round: TelemetryLogic.RoundContext = {
+		roundId = roundId,
+		mapId = mapId,
+		humans = #humans,
+		configVersion = configVersion,
+	}
+	state.round = round
+	for _, player in humans do
+		log(resolve(player), TelemetryLogic.roundStep(round, TelemetryLogic.RoundStep.Started))
 	end
-	enqueue({
-		name = "UserMatched",
-		parameters = {
-			userId = userId,
-			groupSize = groupSize,
-			npcCount = npcCount,
-			timestamp = os.time(),
-		},
-	})
 end
 
-local function roundStarted(roundId: string, mapId: string, playerCount: number)
-	enqueue({
-		name = "RoundStarted",
-		parameters = {
-			roundId = roundId,
-			mapId = mapId,
-			playerCount = playerCount,
-			timestamp = os.time(),
-		},
-	})
+local function finished(who: Who)
+	roundStep(who, TelemetryLogic.RoundStep.Finished)
 end
 
-local function taskCompleted(roundId: string, userId: number, taskId: string, durationSeconds: number)
-	if not checkRateLimit("TaskCompleted", userId) then
-		return
-	end
-	enqueue({
-		name = "TaskCompleted",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			taskId = taskId,
-			durationSeconds = math.floor(durationSeconds),
-			timestamp = os.time(),
-		},
-	})
+local function qualified(who: Who)
+	roundStep(who, TelemetryLogic.RoundStep.Qualified)
 end
 
-local function allTasksCompleted(roundId: string, userId: number, placementIndex: number)
-	if not checkRateLimit("AllTasksCompleted", userId) then
-		return
-	end
-	enqueue({
-		name = "AllTasksCompleted",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			placementIndex = placementIndex,
-			timestamp = os.time(),
-		},
-	})
+local function finaleEntered(who: Who)
+	roundStep(who, TelemetryLogic.RoundStep.FinaleEntered)
 end
 
-local function qualified(roundId: string, userId: number, placementIndex: number)
-	if not checkRateLimit("Qualified", userId) then
-		return
-	end
-	enqueue({
-		name = "Qualified",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			placementIndex = placementIndex,
-			timestamp = os.time(),
-		},
-	})
+local function choiceLocked(who: Who)
+	roundStep(who, TelemetryLogic.RoundStep.ChoiceLocked)
 end
 
-local function finaleEntered(roundId: string, userId: number, placementIndex: number)
-	if not checkRateLimit("FinaleEntered", userId) then
-		return
-	end
-	enqueue({
-		name = "FinaleEntered",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			placementIndex = placementIndex,
-			timestamp = os.time(),
-		},
-	})
+local function resultReceived(who: Who)
+	roundStep(who, TelemetryLogic.RoundStep.ResultReceived)
 end
 
-local function choiceLocked(roundId: string, userId: number, choice: string)
-	if not checkRateLimit("ChoiceLocked", userId) then
-		return
-	end
-	enqueue({
-		name = "ChoiceLocked",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			choice = choice,
-			timestamp = os.time(),
-		},
-	})
+-- ===== custom events =========================================================
+
+local function taskCompleted(who: Who, taskId: string, seconds: number, taskNumber: number)
+	log(resolve(who), TelemetryLogic.taskCompleted(taskId, seconds, taskNumber, roundMapId()))
 end
 
-local function resultReceived(roundId: string, userId: number, resultBranch: string)
-	if not checkRateLimit("ResultReceived", userId) then
-		return
-	end
-	enqueue({
-		name = "ResultReceived",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			resultBranch = resultBranch,
-			timestamp = os.time(),
-		},
-	})
+local function mapVoted(who: Who, mapId: string)
+	log(resolve(who), TelemetryLogic.mapVoted(mapId))
 end
 
-local function returnedToHub(userId: number)
-	if not checkRateLimit("ReturnedToHub", userId) then
-		return
-	end
-	enqueue({
-		name = "ReturnedToHub",
-		parameters = { userId = userId, timestamp = os.time() },
-	})
+local function mapPlayed(mapId: string, humans: number)
+	log(anchor(), TelemetryLogic.mapPlayed(mapId, humans))
 end
 
--- ===== custom events ========================================================
-
--- Map voting and play.
-local function mapVoted(roundId: string, userId: number, mapId: string)
-	if not checkRateLimit("MapVoted", userId) then
-		return
-	end
-	enqueue({
-		name = "MapVoted",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			mapId = mapId,
-			timestamp = os.time(),
-		},
-	})
-end
-
-local function mapPlayed(roundId: string, mapId: string, playerCount: number)
-	enqueue({
-		name = "MapPlayed",
-		parameters = {
-			roundId = roundId,
-			mapId = mapId,
-			playerCount = playerCount,
-			timestamp = os.time(),
-		},
-	})
-end
-
--- Power-up use and outcome. Never from hub practice (P5-5): a practice
--- scuffle would skew real power-up balance data.
-local function powerUpUsed(roundId: string, userId: number, powerUpId: string, targetId: number?, succeeded: boolean)
+-- Never from hub practice (P5-5): a practice scuffle would skew real
+-- power-up balance data.
+local function powerUpUsed(who: Who, powerUpId: string, succeeded: boolean)
 	if not EffectContext.recordsStats() then
 		return
 	end
-	if not checkRateLimit("PowerUpUsed", userId) then
-		return
-	end
-	enqueue({
-		name = "PowerUpUsed",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			powerUpId = powerUpId,
-			targetUserId = targetId,
-			succeeded = succeeded,
-			timestamp = os.time(),
-		},
-	})
+	log(resolve(who), TelemetryLogic.powerUpUsed(powerUpId, succeeded, roundMapId()))
 end
 
--- Steal vs Share breakdown by streak at decision time.
-local function stealShareChoice(roundId: string, userId: number, choice: string, currentStreak: number)
-	if not checkRateLimit("StealShareChoice", userId) then
-		return
-	end
-	enqueue({
-		name = "StealShareChoice",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			choice = choice,
-			currentStreak = currentStreak,
-			timestamp = os.time(),
-		},
-	})
+local function stealShareChoice(who: Who, choice: string, streak: number, rung: number?)
+	log(resolve(who), TelemetryLogic.stealShareChoice(choice, streak, rung))
 end
 
--- Outcome branch tag for post-hoc analysis. Comes from Outcomes.luau.
-local function finaleOutcome(
-	roundId: string,
-	resultBranch: string,
-	winners: { number },
-	losers: { number },
-	npcCount: number
-)
-	enqueue({
-		name = "FinaleOutcome",
-		parameters = {
-			roundId = roundId,
-			resultBranch = resultBranch,
-			winnerCount = #winners,
-			loserCount = #losers,
-			npcCount = npcCount,
-			timestamp = os.time(),
-		},
-	})
+local function finaleOutcome(branch: string, winners: number, bots: number)
+	log(anchor(), TelemetryLogic.finaleOutcome(branch, winners, bots))
 end
 
--- Streak length and reason at a loss. Separate from the outcome so you can
--- run "what distribution of streaks end at each loss type".
-local function streakLoss(userId: number, roundId: string, streakLength: number, lossReason: string)
-	if not checkRateLimit("StreakLoss", userId) then
-		return
-	end
-	enqueue({
-		name = "StreakLoss",
-		parameters = {
-			userId = userId,
-			roundId = roundId,
-			streakLength = streakLength,
-			lossReason = lossReason,
-			timestamp = os.time(),
-		},
-	})
+local function streakLoss(who: Who, streak: number, reason: string)
+	log(resolve(who), TelemetryLogic.streakLoss(streak, reason, roundMapId()))
 end
 
--- NPC count per round for understanding bot fill impact.
-local function npcCountInRound(roundId: string, npcCount: number, humanCount: number)
-	enqueue({
-		name = "NPCCountInRound",
-		parameters = {
-			roundId = roundId,
-			npcCount = npcCount,
-			humanCount = humanCount,
-			timestamp = os.time(),
-		},
-	})
+local function npcCountInRound(bots: number, humans: number)
+	log(anchor(), TelemetryLogic.npcCountInRound(bots, humans, roundMapId()))
 end
 
--- Purchase completed. Logged when StoreService grants a receipt.
-local function purchaseCompleted(userId: number, productId: string, productType: string)
-	if not checkRateLimit("PurchaseCompleted", userId) then
-		return
-	end
-	enqueue({
-		name = "PurchaseCompleted",
-		parameters = {
-			userId = userId,
-			productId = productId,
-			productType = productType,
-			timestamp = os.time(),
-		},
-	})
+local function purchaseCompleted(who: Who, productId: string, productType: string, robux: number?)
+	log(resolve(who), TelemetryLogic.purchaseCompleted(productId, productType, robux))
+end
+
+-- `rawReason` is TeleportData's returnReason, unchecked; the logic layer
+-- keeps only the reasons the match server sends.
+local function returnedToHub(who: Who, rawReason: any)
+	log(resolve(who), TelemetryLogic.returnedToHub(rawReason))
 end
 
 -- ===== service ===============================================================
@@ -404,19 +335,20 @@ local TelemetryService: Loader.Service = {
 	name = "Telemetry",
 	dependencies = {},
 
-	-- Core funnel
+	-- Matchmaking funnel (hub)
 	userQueued = userQueued,
 	userMatched = userMatched,
+
+	-- Round funnel (match)
 	roundStarted = roundStarted,
-	taskCompleted = taskCompleted,
-	allTasksCompleted = allTasksCompleted,
+	finished = finished,
 	qualified = qualified,
 	finaleEntered = finaleEntered,
 	choiceLocked = choiceLocked,
 	resultReceived = resultReceived,
-	returnedToHub = returnedToHub,
 
 	-- Custom events
+	taskCompleted = taskCompleted,
 	mapVoted = mapVoted,
 	mapPlayed = mapPlayed,
 	powerUpUsed = powerUpUsed,
@@ -425,13 +357,19 @@ local TelemetryService: Loader.Service = {
 	streakLoss = streakLoss,
 	npcCountInRound = npcCountInRound,
 	purchaseCompleted = purchaseCompleted,
+	returnedToHub = returnedToHub,
 
 	-- Explicit flush for tests and edge cases (BindToClose, etc)
 	flush = flush,
 }
 
 function TelemetryService:init()
-	-- Flush on close to ensure the last events make it out.
+	-- A leaving player's queued events go out while they're still a
+	-- Player; after this they can't be logged against.
+	Players.PlayerRemoving:Connect(function(player)
+		flush()
+		state.queueSessions[player] = nil
+	end)
 	game:BindToClose(function()
 		flush()
 	end)

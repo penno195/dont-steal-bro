@@ -240,7 +240,7 @@ local function onGroupDeparted(players: { Player }, group: GroupRecord)
 		end
 		travelling[player] = { group = group, options = options, attempt = 0, token = 0 }
 		matchmaking().notify(player, "Travelling", "Heading to your match...")
-		Telemetry.userMatched(player.UserId, #group.members, group.npcSlots)
+		Telemetry.userMatched(player)
 		table.insert(going, player)
 	end
 	if #going > 0 then
@@ -433,8 +433,14 @@ local function startRound(present: number)
 
 	local Telemetry = Loader.get("Telemetry") :: any
 	local mapLabel = chosenMapId or "none"
-	Telemetry.roundStarted(RoundService.getRoundId(), mapLabel, present)
-	Telemetry.mapPlayed(RoundService.getRoundId(), mapLabel, present)
+	local humans: { Player } = {}
+	for player in admitted do
+		if player.Parent == Players then
+			table.insert(humans, player)
+		end
+	end
+	Telemetry.roundStarted(RoundService.getRoundId(), mapLabel, humans)
+	Telemetry.mapPlayed(mapLabel, present)
 end
 
 local function runArrivalGate()

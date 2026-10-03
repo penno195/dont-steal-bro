@@ -200,7 +200,7 @@ local function validGameConfig(): Validate.GameConfig
 		},
 		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
-		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0 },
+		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0, studioEcho = false },
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
 		npcTitleTopRungsExcluded = 3,
