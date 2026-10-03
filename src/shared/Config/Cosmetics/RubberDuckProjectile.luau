@@ -3,7 +3,7 @@
 -- tinted by the power-up's role and still the usual size, so a victim
 -- reads it exactly as they would the default orb.
 --
--- Drawn by ThrowController. Disabled until it has its mesh asset id.
+-- Drawn by ThrowController.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
@@ -15,9 +15,9 @@ local RubberDuckProjectile: Validate.CosmeticDef = {
 	description = "Your throws fly as a rubber duck. Same colour, same size, same effect - cosmetic only.",
 	rarity = "Uncommon",
 	sortOrder = 50,
-	enabled = false, -- PLACEHOLDER: needs projectileMeshAssetId (assets/cosmetics/README.md)
+	enabled = true,
 	winDrop = true, -- design-decisions.md Q1 applied case (2026-10-02): no pass grants it, so wins can drop it
-	projectileMeshAssetId = 0,
+	projectileMeshAssetId = 129661865353465, -- the Mesh inside model 77444634807769
 	explosionTextureAssetId = 114742972878274,
 }
 
