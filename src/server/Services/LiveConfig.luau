@@ -332,6 +332,12 @@ function LiveConfig.flags(): LiveConfigLogic.Effective
 	return current.flags
 end
 
+-- Which resolution this server is running and its version: analytics
+-- tags each round with it, so a rollout's two groups can be told apart.
+function LiveConfig.resolution(): (LiveConfigLogic.Source, number)
+	return current.source, current.version
+end
+
 function LiveConfig.isMapEnabled(mapId: string): boolean
 	return not current.flags.disabledMaps[mapId]
 end

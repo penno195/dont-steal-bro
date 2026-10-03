@@ -149,6 +149,17 @@ local function endSession(player: Player, notify: boolean?)
 	StationOccupancy.leave(player.UserId)
 end
 
+-- Logs a race attempt the player gave up on. A solve waiting out its
+-- floor, a practice attempt, a re-roll at the same station and the
+-- round ending aren't abandonment, so their paths never call this.
+local function logAbandoned(player: Player, exit: string)
+	local session = activeSessions[player]
+	if session == nil or session.completing or practiceFor(session.ctx.stationId) ~= nil then
+		return
+	end
+	Loader.get("Telemetry").taskAbandoned(player, session.taskId, session.ctx.elapsedSeconds(), exit)
+end
+
 -- `forceEasy` is set by a power-up restarting the current attempt;
 -- a player's own interaction leaves it nil and takes any Insight window.
 local function beginInteraction(player: Player, stationId: string, forceEasy: boolean?)
@@ -160,6 +171,10 @@ local function beginInteraction(player: Player, stationId: string, forceEasy: bo
 	-- matters if walking away and starting something else also cleans up
 	-- correctly, which this covers the same way. Notified: if this new
 	-- request fails the checks below, no challenge replaces the old view.
+	local previous = activeSessions[player]
+	if previous ~= nil and previous.ctx.stationId ~= stationId then
+		logAbandoned(player, "Switched")
+	end
 	endSession(player, true)
 
 	if not mayWork(player, stationId) then
@@ -384,7 +399,7 @@ end
 
 local TaskHandlerService: Loader.Service = {
 	name = "TaskHandlerService",
-	dependencies = { "NetGuard", "ConfigValidator", "TaskService", "RoundService" },
+	dependencies = { "NetGuard", "ConfigValidator", "TaskService", "RoundService", "Telemetry" },
 
 	grantInsight = grantInsight,
 	scramble = scramble,
@@ -439,6 +454,7 @@ function TaskHandlerService:init()
 	NetGuard.on("TaskAbort", function(player: Player, payload: any)
 		local session = activeSessions[player]
 		if session ~= nil and session.attempt == payload.attempt then
+			logAbandoned(player, "Closed")
 			endSession(player)
 		end
 	end)

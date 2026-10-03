@@ -315,7 +315,12 @@ local function streakLoss(who: Who, streak: number, reason: string)
 	log(resolve(who), TelemetryLogic.streakLoss(streak, reason, roundMapId()))
 end
 
+-- Also remembers the seat count for StreakWin.
 local function npcCountInRound(bots: number, humans: number)
+	local round = state.round
+	if round ~= nil then
+		round.bots = bots
+	end
 	log(anchor(), TelemetryLogic.npcCountInRound(bots, humans, roundMapId()))
 end
 
@@ -327,6 +332,27 @@ end
 -- keeps only the reasons the match server sends.
 local function returnedToHub(who: Who, rawReason: any)
 	log(resolve(who), TelemetryLogic.returnedToHub(rawReason))
+end
+
+local function taskAbandoned(who: Who, taskId: string, seconds: number, exit: string)
+	log(resolve(who), TelemetryLogic.taskAbandoned(taskId, seconds, exit, roundMapId()))
+end
+
+-- Never from hub practice, like powerUpUsed: the two are read together.
+local function powerUpCollected(who: Who, powerUpId: string, source: string)
+	if not EffectContext.recordsStats() then
+		return
+	end
+	log(resolve(who), TelemetryLogic.powerUpCollected(powerUpId, source, roundMapId()))
+end
+
+local function roundEnded(raceSeconds: number, humanFinishers: number, humans: number)
+	log(anchor(), TelemetryLogic.roundEnded(roundMapId(), raceSeconds, humanFinishers, humans))
+end
+
+local function streakWin(who: Who, streak: number)
+	local round = state.round
+	log(resolve(who), TelemetryLogic.streakWin(streak, if round ~= nil then round.bots else nil, roundMapId()))
 end
 
 -- ===== service ===============================================================
@@ -358,6 +384,10 @@ local TelemetryService: Loader.Service = {
 	npcCountInRound = npcCountInRound,
 	purchaseCompleted = purchaseCompleted,
 	returnedToHub = returnedToHub,
+	taskAbandoned = taskAbandoned,
+	powerUpCollected = powerUpCollected,
+	roundEnded = roundEnded,
+	streakWin = streakWin,
 
 	-- Explicit flush for tests and edge cases (BindToClose, etc)
 	flush = flush,

@@ -84,6 +84,7 @@ local qualificationEmitted = false
 -- When this race's tasks were dealt: a racer's first task is timed from
 -- here, so for analytics it includes the walk from spawn.
 local raceStartedAt = 0
+local raceSeconds = 0 -- set when Race ends, for RoundEnded
 local nextSeedOverride: number? = nil
 local lastQualificationResult: Qualification.QualificationResult? = nil
 
@@ -617,6 +618,22 @@ function TaskService:init()
 
 	RoundService.onEnter("Qualified", function()
 		emitQualification()
+	end)
+
+	RoundService.onExit("Race", function()
+		raceSeconds = now() - raceStartedAt
+	end)
+
+	-- Logged at Results, not Race's end, so Humans counts who stayed
+	-- through the finale too.
+	RoundService.onEnter("Results", function()
+		local humanFinishers = 0
+		for _, racerId in finishOrder do
+			if not Participants.isNPCId(racerId) then
+				humanFinishers += 1
+			end
+		end
+		Loader.get("Telemetry").roundEnded(raceSeconds, humanFinishers, Participants.countHumans())
 	end)
 
 	RoundService.onPlayerLeaving(function(player: Player, state: string)

@@ -55,6 +55,7 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Maps = require(ReplicatedStorage.Shared.Config.Maps)
 local MatchmakingLogic = require(ServerScriptService.Server.MatchmakingLogic)
+local TelemetryLogic = require(ServerScriptService.Server.TelemetryLogic)
 local TeleportLogic = require(ServerScriptService.Server.TeleportLogic)
 
 type GroupRecord = MatchmakingLogic.GroupRecord
@@ -442,7 +443,13 @@ local function startRound(present: number)
 			table.insert(humans, player)
 		end
 	end
-	Telemetry.roundStarted(RoundService.getRoundId(), mapLabel, humans)
+	local configSource, configVersion = (Loader.get("LiveConfig") :: any).resolution()
+	Telemetry.roundStarted(
+		RoundService.getRoundId(),
+		mapLabel,
+		humans,
+		TelemetryLogic.configLabel(configSource, configVersion)
+	)
 	Telemetry.mapPlayed(mapLabel, present)
 end
 

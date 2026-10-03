@@ -75,8 +75,12 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   *Done 2026-10-03. Every Telemetry function is now called; the
   call-site table is in `telemetry-schema.md`. Not yet seen in Studio's
   `studioEcho` output.*
-- [ ] **8. Add the missing events**: task abandoned, power-up collected,
+- [x] **8. Add the missing events**: task abandoned, power-up collected,
   round ended, bot seat count, reward rung, config version.
+  *Done 2026-10-03. New events `TaskAbandoned`, `PowerUpCollected`,
+  `RoundEnded` and `StreakWin` (bot seats ride on it as `Bots`);
+  `StealShareChoice` gets `Rung`, the Round funnel gets `Config`. See
+  `telemetry-schema.md`.*
 - [ ] **9. Check on a published place** that events reach Creator Hub
   analytics (allow up to 24 hours). Studio can't send analytics at all;
   there, set `telemetry.studioEcho = true` to see what would be sent.

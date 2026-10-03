@@ -112,8 +112,37 @@ TestRunner.describe("TelemetryLogic custom events", function()
 		TestRunner.expect(loss.fields[2]):toBe("Streak: 10-19")
 	end)
 
-	TestRunner.it("leaves the rung slot out until step 8 supplies it", function()
+	TestRunner.it("leaves the rung slot out when the caller has none", function()
 		TestRunner.expect(TelemetryLogic.stealShareChoice("Share", 0, nil).fields[3]):toBe(nil)
+	end)
+
+	TestRunner.it("labels the config resolution so a rollout splits", function()
+		TestRunner.expect(TelemetryLogic.configLabel("Staged", 7)):toBe("Staged v7")
+		local staged = table.clone(round)
+		staged.configVersion = TelemetryLogic.configLabel("Staged", 7)
+		TestRunner.expect(TelemetryLogic.roundStep(staged, 1).fields[3]):toBe("Config: Staged v7")
+	end)
+
+	TestRunner.it("times an abandoned task and says how they left", function()
+		local record = TelemetryLogic.taskAbandoned("fuse-rewire", 9.9, "Switched", "Factory")
+		TestRunner.expect(record.name):toBe("TaskAbandoned")
+		TestRunner.expect(record.value):toBe(9)
+		TestRunner.expect(record.fields[3]):toBe("Exit: Switched")
+	end)
+
+	TestRunner.it("ends a round with race length in value", function()
+		local record = TelemetryLogic.roundEnded("School", 181.6, 2, 4)
+		TestRunner.expect(record.value):toBe(181)
+		TestRunner.expect(record.fields[2]):toBe("Finishers: 2")
+		TestRunner.expect(record.fields[3]):toBe("Humans: 4")
+	end)
+
+	TestRunner.it("puts bot seats on a win, and says when they're unknown", function()
+		local win = TelemetryLogic.streakWin(6, 3, "Museum")
+		TestRunner.expect(win.value):toBe(6)
+		TestRunner.expect(win.fields[1]):toBe("Streak: 5-9")
+		TestRunner.expect(win.fields[2]):toBe("Bots: 3")
+		TestRunner.expect(TelemetryLogic.streakWin(1, nil, "m").fields[2]):toBe("Bots: unknown")
 	end)
 
 	TestRunner.it("floors task seconds and splits by task, map and order", function()
@@ -143,6 +172,10 @@ TestRunner.describe("TelemetryLogic custom events", function()
 			TelemetryLogic.npcCountInRound(2, 4, "m"),
 			TelemetryLogic.purchaseCompleted("p", "GamePass", 99),
 			TelemetryLogic.returnedToHub("RoundOver"),
+			TelemetryLogic.taskAbandoned("t", 1, "Closed", "m"),
+			TelemetryLogic.powerUpCollected("p", "Pickup", "m"),
+			TelemetryLogic.roundEnded("m", 1, 0, 1),
+			TelemetryLogic.streakWin(1, 0, "m"),
 		}
 		for _, record in records do
 			for key in record.fields do

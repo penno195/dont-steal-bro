@@ -320,7 +320,9 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	local rewardChanges = write(player, after, rewardWrite, seasonStep)
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
-	if not ProgressionLogic.isWin(result.reason) then
+	if ProgressionLogic.isWin(result.reason) then
+		Loader.get("Telemetry").streakWin(player, after.currentStreak)
+	else
 		Loader.get("Telemetry").streakLoss(player, before.currentStreak, result.reason)
 	end
 
@@ -501,6 +503,12 @@ local ProgressionService: Loader.Service = {
 	applyRoundResult = applyRoundResult,
 	hasResultFor = hasResultFor,
 	rewardFor = rewardFor,
+
+	-- The rung a win from `streak` would pay at (the after-win rung, as
+	-- rollReward uses). Analytics splits the finale by it.
+	rungAtStake = function(streak: number): number
+		return RewardLogic.rungFor(rungThresholds, streak + 1)
+	end,
 
 	-- Re-exported so a caller (DecisionService) maps an outcome branch
 	-- to a reason code through the same function the tests cover,

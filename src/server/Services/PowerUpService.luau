@@ -724,6 +724,7 @@ tryClaimPickup = function(point: SpawnPointRecord, live: LivePickup, hitPart: Ba
 	-- Under Swap this overwrites (evicts) the oldest held item.
 	state.inventory[slotIndex] = { powerUpId = live.def.id, acquiredAt = now() }
 	broadcastInventory(racer)
+	Loader.get("Telemetry").powerUpCollected(racer.id, live.def.id, "Pickup")
 
 	hideLivePickup(point)
 	scheduleRespawn(point)
@@ -1269,10 +1270,12 @@ local function grantLoadouts()
 		end
 		local state = stateFor(racer.id)
 		local at = now()
+		local Telemetry = Loader.get("Telemetry") :: any
 		for slotIndex, powerUpId in granted do
 			-- Validate pins powerUpInventorySlots >= store.loadoutSlots, so
 			-- this never drops an item whose stock was just spent.
 			state.inventory[slotIndex] = { powerUpId = powerUpId, acquiredAt = at }
+			Telemetry.powerUpCollected(player, powerUpId, "Loadout")
 		end
 		broadcastInventory(racer)
 	end

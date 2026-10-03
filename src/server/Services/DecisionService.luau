@@ -328,7 +328,8 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 		}
 		-- Defaulted choices included: the streak they were risking is
 		-- the one they brought into the Studio.
-		Loader.get("Telemetry").stealShareChoice(player, finalist.choice, streakBefore)
+		Loader.get("Telemetry")
+			.stealShareChoice(player, finalist.choice, streakBefore, ProgressionService.rungAtStake(streakBefore))
 
 		DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
 		DataService.recordRoundStat(player, "qualifications")

@@ -148,8 +148,16 @@ export type RoundContext = {
 	roundId: string,
 	mapId: string,
 	humans: number,
-	configVersion: string?, -- next-stages step 8; nil until then
+	configVersion: string?, -- configLabel below; nil only if nothing supplied one
+	bots: number?, -- set once the NPC fill is done; StreakWin's Bots field
 }
+
+-- The Config field: which live-config resolution this server ran. During
+-- a `/liveops rollout` the treatment servers run "Staged" and the
+-- control servers "Active", so the field splits the two groups.
+function TelemetryLogic.configLabel(source: string, version: number): string
+	return string.format("%s v%d", source, version)
+end
 
 local function roundFields(context: RoundContext): { string? }
 	return {
@@ -222,8 +230,8 @@ function TelemetryLogic.powerUpUsed(powerUpId: string, succeeded: boolean, mapId
 end
 
 -- Value: the exact streak, so averages work; the band is for splitting.
--- The reward rung is next-stages step 8's addition (launch-review.md §3
--- checks the finale per rung).
+-- The rung is the one a win would pay at (launch-review.md §3 checks the
+-- finale per rung).
 function TelemetryLogic.stealShareChoice(choice: string, streak: number, rung: number?): Record
 	return custom("StealShareChoice", streak, {
 		TelemetryLogic.field("Choice", choice),
@@ -272,6 +280,47 @@ end
 function TelemetryLogic.returnedToHub(rawReason: any): Record
 	return custom("ReturnedToHub", nil, {
 		TelemetryLogic.field("Reason", TelemetryLogic.returnReason(rawReason)),
+	})
+end
+
+-- Value: seconds spent before giving up. `exit` is how they left:
+-- "Closed" (shut the task view) or "Switched" (started another station).
+function TelemetryLogic.taskAbandoned(taskId: string, seconds: number, exit: string, mapId: string): Record
+	return custom("TaskAbandoned", math.floor(seconds), {
+		TelemetryLogic.field("Task", taskId),
+		TelemetryLogic.field("Map", mapId),
+		TelemetryLogic.field("Exit", exit),
+	})
+end
+
+-- The denominator for "never used": `source` is "Pickup" (from the
+-- field) or "Loadout" (pre-game stock).
+function TelemetryLogic.powerUpCollected(powerUpId: string, source: string, mapId: string): Record
+	return custom("PowerUpCollected", nil, {
+		TelemetryLogic.field("PowerUp", powerUpId),
+		TelemetryLogic.field("Source", source),
+		TelemetryLogic.field("Map", mapId),
+	})
+end
+
+-- Round-level: logged once, against the anchor, on entering Results.
+-- Value: how long the race ran. Humans: still in the server by then.
+function TelemetryLogic.roundEnded(mapId: string, raceSeconds: number, humanFinishers: number, humans: number): Record
+	return custom("RoundEnded", math.floor(raceSeconds), {
+		TelemetryLogic.field("Map", mapId),
+		TelemetryLogic.field("Finishers", humanFinishers),
+		TelemetryLogic.field("Humans", humans),
+	})
+end
+
+-- Value: the streak the win took them to. Bots: how many of the round's
+-- seats were NPCs, the only check on bot-lobby farming since the
+-- NPC-seat streak threshold was retired (threat-model.md §8).
+function TelemetryLogic.streakWin(streak: number, bots: number?, mapId: string): Record
+	return custom("StreakWin", streak, {
+		TelemetryLogic.field("Streak", TelemetryLogic.streakBand(streak)),
+		TelemetryLogic.field("Bots", if bots ~= nil then bots else "unknown"),
+		TelemetryLogic.field("Map", mapId),
 	})
 end
 
