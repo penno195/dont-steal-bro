@@ -19,8 +19,9 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   way: the store in landscape, NPC ids colliding with Studio test
   players, silent Task Scramble/Slow Field, and the hub's practice rug
   (Lobby.rbxl) hiding the Slow Field zone.*
-- [ ] **3. Fix the README.** Its "Win rewards" bullet under What's left
-  says a win grants nothing, but steps 2–7a are built.
+- [x] **3. Fix the README.** Its "Win rewards" bullet under What's left
+  says a win grants nothing, but steps 2–7a are built. *Done
+  2026-10-03; the "Economy numbers" bullet now points at 7b too.*
 
 ## Stage 2: Launch content
 

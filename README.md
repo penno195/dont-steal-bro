@@ -274,15 +274,19 @@ Playtesting has driven the work since the tracker finished:
   `GameConfig.teleport.matchPlaceId` are both `0` until the Hub and
   Match places are published, so matchmaking runs in Studio only and
   teleporting is off.
-- **Win rewards.** Being built in steps, tracked in
-  `docs/rewards-roadmap.md`. The config and pure logic exist
-  (`RewardLogic`), but a win still grants nothing, the daily/weekly
-  board reward hook has no receiver, and the finale shows stand-in
-  glyphs. The design is settled in design-decisions.md Q1's 2026-09-30
-  revision and its applied cases.
-- **Economy numbers.** Every price and grant is still PLACEHOLDER. Those
-  numbers decide whether Q8's "Robux buys time, never power" rule holds
-  (`docs/store-receipts.md`).
+- **Win rewards: price tuning only.** Q1's 2026-09-30 revision is built
+  (`docs/rewards-roadmap.md` steps 1–7a): a win pays coins plus a chance
+  at a drop, shown in the Decision Studio and Results; daily and weekly
+  board winners are paid through ProfileStore messages; seasons have
+  free and premium tracks on the store's Season tab; and coins buy
+  power-ups. Season 1 and the drop cosmetics stay disabled until their
+  assets exist. Offline delivery of board payouts needs a published
+  place to test.
+- **Economy numbers.** Step 7a priced everything on paper (25 coins = 1
+  power-up, about 29 Robux), but the amounts, drop odds and per-rung
+  scaling still need a real playtest (step 7b, deferred until just
+  before publishing). Those numbers decide whether Q8's "Robux buys
+  time, never power" rule holds (`docs/store-receipts.md`).
 - **Platform assumptions.** The leaderboard and receipt docs flag
   assumptions that must be checked against current Roblox documentation
   before launch.
