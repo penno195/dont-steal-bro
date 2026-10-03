@@ -51,7 +51,12 @@ The first three are Season 1's premium track.
   `Workspace.VictoryFlexRig`. Its 2.2 s KeyframeSequence is saved in
   `ServerStorage.RBX_ANIMSAVES.VictoryFlexRig`. Open the Animation Editor,
   select the rig, load **VictoryFlex**, then **Publish to Roblox**. Then
-  delete the rig and that `RBX_ANIMSAVES` entry. The animation must be
+  delete the rig and that `RBX_ANIMSAVES` entry. The same animation is
+  also a local file, `VictoryFlex.rbxm` (from
+  `lune run scripts/make-victory-flex`; git-ignored like every .rbxm).
+  Insert it into a rig's `AnimSaves` (or
+  `ServerStorage.RBX_ANIMSAVES.<rig>`), then load and publish it the
+  same way. The animation must be
   owned by the same user or group as the experience, or it won't play.
 
 Upload everything under the account or group that will own the
