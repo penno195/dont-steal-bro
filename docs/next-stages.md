@@ -85,6 +85,12 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   analytics (allow up to 24 hours). Studio can't send analytics at all;
   there, set `telemetry.studioEcho = true` to see what would be sent.
   Needs step 12's published places.
+  *2026-10-04: studioEcho pass on a solo Match round. Round-level
+  events print with the right fields (`Map` is `none` only in Studio,
+  where the arrival gate never calls `roundStarted`). Found and fixed:
+  nothing flushed the queue on a timer, so `RoundEnded`/`StreakLoss`
+  waited for a player to leave. Still to do: the Creator Hub check on
+  the published places.*
 
 ## Stage 4: Assets, products, publishing
 

@@ -403,6 +403,17 @@ function TelemetryService:init()
 	game:BindToClose(function()
 		flush()
 	end)
+	-- log() only flushes when a new event arrives, so the last events
+	-- of a burst (RoundEnded, StreakLoss at Results) would otherwise
+	-- wait for the next event or a player leaving.
+	task.spawn(function()
+		while true do
+			task.wait(GameConfig.telemetry.flushIntervalSeconds)
+			if os.time() - state.lastFlushAt >= GameConfig.telemetry.flushIntervalSeconds then
+				flush()
+			end
+		end
+	end)
 end
 
 return TelemetryService
