@@ -855,10 +855,10 @@ Where the build departs from the brief above, the build wins:
   into the rotunda's one station (`mus-10`); the N landing costs +0.8 s.
   The S-door figure is over the brief's ~4 s, so watch it in playtest.
   One 6-racer round (1 human, 5 NPCs) qualified with no
-  `gave up pathing` and no MovementWatch violations.
-- **Still to do:** the map validator (needs Match.rbxl saved), a phone
-  readability test, 4 more NPC rounds, and an art pass with real
-  asset packs.
+  `gave up pathing` and no MovementWatch violations. The P7-1 validator
+  is clean: 0 errors and 0 warnings, with 807 parts and 0 textures.
+- **Still to do:** a phone readability test, 4 more NPC rounds, and an
+  art pass with real asset packs.
 
 ---
 
