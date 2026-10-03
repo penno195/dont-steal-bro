@@ -35,6 +35,7 @@ status and what's left: `README.md`.
 src/shared/     -> ReplicatedStorage.Shared                  (Config/, Net.luau, Loader.luau)
 src/server/     -> ServerScriptService.Server                (Services/, TaskHandlers/, *Logic.luau)
 src/client/     -> StarterPlayer.StarterPlayerScripts.Client (Controllers/, UI/, TaskViews/)
+src/first/      -> ReplicatedFirst.First                     (LoadingCover: the loading screen)
 docs/           design and architecture
 tests/          pure-logic specs, run headlessly via Lune
 ```

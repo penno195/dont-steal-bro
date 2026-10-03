@@ -1,8 +1,7 @@
 --!strict
 -- map-kit-spec.md §2. `id` must equal the built model's Name in
 -- ServerStorage.Maps - ConfigValidator and the P7-1 validator both match
--- on it. Asset ids and station count are PLACEHOLDERS
--- until the map is built (P7-4).
+-- on it. Asset ids are still PLACEHOLDERS (P7-4).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
@@ -23,8 +22,8 @@ local School: Validate.MapDef = {
 	},
 	npcDifficultyModifier = 1.0,
 	waveNumber = 1,
-	enabled = false, -- wave 1: set true once built in ServerStorage.Maps
-	taskStationCount = 12, -- PLACEHOLDER: spec floor; update to the real built count
+	enabled = true, -- wave 1; built in the Match place's ServerStorage.Maps
+	taskStationCount = 16, -- built count (School-Studio.rbxl, validated 2026-10-03)
 }
 
 return School

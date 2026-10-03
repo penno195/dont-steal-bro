@@ -42,6 +42,13 @@ end
 
 local function checkBuiltMaps(maps: { Registry_Entry }, issues: { Validate.Issue })
 	local mapsFolder = ServerStorage:FindFirstChild("Maps")
+	-- Both places run this one codebase, but only the Match place carries
+	-- maps. The Hub has no Maps folder at all; the Match place always has
+	-- one, if only for the shared DecisionStudio set. So a missing folder
+	-- means "this is the Hub", not "every map is unbuilt".
+	if mapsFolder == nil then
+		return
+	end
 
 	for _, entry in maps do
 		local def = entry.def :: Validate.MapDef
@@ -49,8 +56,7 @@ local function checkBuiltMaps(maps: { Registry_Entry }, issues: { Validate.Issue
 			continue
 		end
 
-		local built = mapsFolder ~= nil and mapsFolder:FindFirstChild(def.id) ~= nil
-		if not built then
+		if mapsFolder:FindFirstChild(def.id) == nil then
 			table.insert(issues, {
 				category = "Map",
 				fileName = entry.fileName,

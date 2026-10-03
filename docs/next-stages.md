@@ -28,6 +28,10 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
 - [ ] **4. Build the four launch maps in Studio**: School, Factory,
   Museum, Laboratory, one per session. Check each against
   `map-kit-spec.md` and the map validator, then enable its config.
+  *School done 2026-10-03: dressed, roofed, stations and pickups
+  re-placed, enabled. Maps now ship in one Match place
+  (`Desktop\Match.rbxl`), built by `scripts/assemble-match-place.luau`;
+  add each new map with it.*
 - [ ] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
