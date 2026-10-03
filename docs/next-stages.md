@@ -119,6 +119,12 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   set it back to 60 before launch.*
 - [ ] **13. Test on the published place**: leaderboard payouts to an
   offline player, receipt redelivery.
+  *In progress 2026-10-04. Code review before testing found that a
+  period nobody was online for at midnight UTC paid no one. Fixed: a
+  booting server now catches up the previous period
+  (`leaderboard-scale.md` §8). The test steps are in
+  `live-test-plan.md`. Needs Owner's id in `liveOps.adminUserIds`, an
+  alt account, and both places republished.*
 - [ ] **14. Check platform assumptions** flagged in the leaderboard and
   receipt docs against current Roblox documentation.
 

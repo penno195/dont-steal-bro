@@ -131,6 +131,11 @@ cosmetic opts in, or doesn't, in its own file.
   cosmetic id, so a leaderboard can't pay a power-up (Q8).
 - Winners are usually offline when a period ends, so a payout is queued
   on their profile and lands the next time they join.
+- *(2026-10-04, user decision)* **A period pays even if no server was
+  running when it ended.** The first server to boot in the next period
+  catches it up, guarded by the same snapshot as the normal rollover, so
+  it still pays only once. This only reaches one period back
+  (`leaderboard-scale.md` §8).
 
 *Applied (2026-10-02, user decision):* **seasons and their tracks.**
 - **Every pass lasts a set period, then another replaces it.** These

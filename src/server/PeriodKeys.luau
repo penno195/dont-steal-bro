@@ -120,6 +120,14 @@ function PeriodKeys.keyFor(kind: string, timestamp: number): string
 	return if kind == "Daily" then PeriodKeys.dayKey(timestamp) else PeriodKeys.isoWeekKey(timestamp)
 end
 
+-- The key of the period just before the one `timestamp` is in. Used by
+-- a server that boots into a new period: if no server was running at
+-- the boundary, nobody snapshotted or paid the period that ended, and
+-- this is the period it has to catch up on.
+function PeriodKeys.previousKeyFor(kind: string, timestamp: number): string
+	return PeriodKeys.keyFor(kind, PeriodKeys.boundsFor(kind, timestamp).startsAt - 1)
+end
+
 -- The MemoryStore SortedMap holding one period's live standings. The
 -- period key is IN the map name, which is what makes rollover free:
 -- at midnight every server simply starts addressing a different map,
@@ -172,16 +180,19 @@ end
 -- for both would keep the late one alive almost a full day into the
 -- next period.
 --
--- The grace margin is what lets the finished board still be readable
--- while the rollover snapshot is being taken and displayed. It is
--- deliberately small: the snapshot is the durable copy, so the live map
--- has no reason to linger beyond it.
+-- After the rest of the period, an entry lives one FULL extra period
+-- plus the grace margin. The extra period is for the catch-up: if no
+-- server was running at the boundary, the first server to boot at any
+-- point in the next period must still be able to read the finished
+-- standings to snapshot and pay them. The grace margin covers a boot
+-- right at the end of that next period.
 function PeriodKeys.liveExpirySeconds(kind: string, now: number, graceSeconds: number): number
 	local bounds = PeriodKeys.boundsFor(kind, now)
 	local remaining = bounds.endsAt - now
-	-- At least the grace period even for a write landing exactly on the
-	-- boundary, so an entry is never written with a zero or negative TTL.
-	return math.max(remaining, 0) + graceSeconds
+	local periodLength = bounds.endsAt - bounds.startsAt
+	-- max(): a write landing exactly on the boundary still gets a
+	-- positive TTL.
+	return math.max(remaining, 0) + periodLength + graceSeconds
 end
 
 -- ===== rollover ========================================================
@@ -194,8 +205,9 @@ end
 --
 -- `previousKey` is nil on a server's first ever check, which is
 -- deliberately NOT a rollover: a server booting at 3am has not just
--- witnessed midnight, and treating it as though it had would have every
--- new server trying to re-process a period that ended hours ago.
+-- witnessed midnight. A period that no server witnessed ending is
+-- caught up separately (previousKeyFor), once per boot, and only if
+-- that period has no snapshot yet.
 function PeriodKeys.hasRolledOver(previousKey: string?, currentKey: string): boolean
 	if previousKey == nil then
 		return false

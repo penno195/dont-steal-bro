@@ -212,10 +212,14 @@ a different map). Measuring from now means every entry in a period
 expires at roughly the same wall-clock moment regardless of when it was
 written.
 
-The grace margin (1h) exists so the rollover can still read the finished
-period's final standings. It is deliberately small: the **snapshot** is
-the durable copy, so the live map has no reason to outlive it by more
-than one read.
+After the period ends, an entry lives **one full extra period** plus a
+1h grace margin. Until 2026-10-04 it was the 1h margin alone, which was
+only enough for a server that was running at the boundary to read the
+finished standings. The extra period is what the boot-time catch-up
+(§8) reads: a server that boots any time in the next period can still
+snapshot and pay the one before. The cost is that MemoryStore holds up
+to two periods of entries at once (one entry per player who scored),
+which is small next to the quota.
 
 ## 8. Rollover, and the double-award guard
 
@@ -228,6 +232,19 @@ A server's **first** check is deliberately *not* a rollover. A server
 booting at 3am hasn't witnessed midnight, and treating `nil` as a
 rollover would have every new server re-processing a period that ended
 hours ago.
+
+**The catch-up (added 2026-10-04, next-stages step 13).** The rollover
+only fires on a server that was running at the boundary. At low player
+counts there may be none, and then nobody paid the period, silently. So
+once per boot, after its first random delay, each server looks at the
+period **before** the one it booted into. It `GetAsync`s that period's
+snapshot. If there is none, it runs the ordinary rollover for that
+period. If the read fails, it skips and leaves it to the next boot. Two
+servers booting together both see "no snapshot". The guard below then
+picks one of them, as at midnight. This costs one snapshot read per kind
+per server boot, plus one rollover per period that nobody witnessed.
+Only one period back is covered. With no server at all for a whole
+period, the older standings have expired and are not paid.
 
 **The guard against two servers awarding the same period** is the
 snapshot write itself, not a separate lock:

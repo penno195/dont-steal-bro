@@ -314,11 +314,12 @@ local GameConfig: Validate.GameConfig = {
 		-- outlive every MemoryStore TTL - yesterday's winners are still
 		-- worth showing and still owe a reward.
 		snapshotStoreName = "PeriodSnapshots_v1",
-		-- How long a finished period's live entries linger past its end,
-		-- so the rollover can still read the final standings. Small on
-		-- purpose: the snapshot is the durable copy, so the live map has
-		-- no reason to outlast it by more than the read takes. 1 hour is
-		-- generous against a refresh interval measured in minutes.
+		-- Extra time a finished period's live entries last, on top of one
+		-- full extra period (PeriodKeys.liveExpirySeconds). The extra
+		-- period lets a server booting any time in the next period catch
+		-- up a rollover no server saw; this margin covers a boot at the
+		-- very end of it. 1 hour is generous against a refresh interval
+		-- measured in minutes.
 		periodGraceSeconds = 3600,
 		-- What a finished period pays (design-decisions.md Q1, applied
 		-- 2026-10-02; rewards-roadmap.md step 4). Bands of places in

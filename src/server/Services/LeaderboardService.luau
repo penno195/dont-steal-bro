@@ -616,6 +616,57 @@ local function checkRollovers()
 	end
 end
 
+-- The rollover above only fires on a server that was running at the
+-- boundary. At low player counts there may be none, and then nobody
+-- snapshots or pays the finished period. So every server, once at boot,
+-- looks at the period before the one it booted into: no snapshot means
+-- nobody processed it, and this server does. The live entries last one
+-- extra period (PeriodKeys.liveExpirySeconds) so they are still there
+-- to read.
+--
+-- The cheap GetAsync check keeps every boot from spending an
+-- UpdateAsync. Two servers booting together both pass it, and then the
+-- snapshot write's own guard picks one of them, as at midnight.
+local function catchUpMissedRollovers(bootTime: number)
+	local snapshots = snapshotStore
+	if snapshots == nil then
+		return
+	end
+
+	for _, rawKind in PERIOD_KINDS do
+		local kind = rawKind
+		local previousKey = PeriodKeys.previousKeyFor(kind, bootTime)
+		local readOk, existing = pcall(function()
+			return snapshots:GetAsync(PeriodKeys.snapshotKey(kind, previousKey))
+		end)
+		-- A failed read is not "no snapshot": skip, and leave the period
+		-- to the next server that boots.
+		if readOk and existing == nil then
+			print(string.format("LeaderboardService: %s %s was never snapshotted - catching up", kind, previousKey))
+			local rolloverError: string? = nil
+			local ok = xpcall(processRollover, function(err)
+				rolloverError = tostring(err)
+			end, kind, previousKey)
+			if not ok then
+				warn(
+					string.format(
+						"LeaderboardService: catch-up for %s %s failed - %s",
+						kind,
+						previousKey,
+						tostring(rolloverError)
+					)
+				)
+			end
+
+			-- processRollover read the OLD period into this kind's board;
+			-- the poll loop refills it with the current one.
+			local state = periodState[kind]
+			state.entries = {}
+			state.lastRefreshAt = nil
+		end
+	end
+end
+
 local function broadcastPeriodBoards()
 	for _, rawKind in PERIOD_KINDS do
 		local kind = rawKind
@@ -736,7 +787,7 @@ end
 
 -- ===== poll loop ===========================================================
 
-local function startPolling()
+local function startPolling(bootTime: number)
 	if pollThread ~= nil then
 		return
 	end
@@ -746,6 +797,10 @@ local function startPolling()
 		-- servers started by the same deploy would otherwise take their
 		-- first read at the same instant.
 		task.wait(LeaderboardLogic.nextRefreshDelay(0, config.refreshMaxSeconds, rng()))
+
+		-- By boot time, not now: if the delay above crossed a boundary,
+		-- checkRollovers handles that one as an ordinary rollover.
+		catchUpMissedRollovers(bootTime)
 
 		local consecutiveFailures = 0
 		while true do
@@ -899,7 +954,7 @@ function LeaderboardService:init()
 		broadcastPeriodBoards()
 	end)
 
-	startPolling()
+	startPolling(bootTime)
 end
 
 return LeaderboardService
