@@ -195,6 +195,7 @@ TestRunner.describe("Net.isStateAllowed", function()
 			KeypadDigitSubmit = true,
 			TapSubmit = true,
 			FuseDropSubmit = true,
+			HoldSubmit = true,
 		}
 		for name, def in Net.Remotes :: { [string]: any } do
 			TestRunner.expect(def.practice == true):toBe(optedIn[name] == true)

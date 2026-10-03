@@ -19,6 +19,7 @@ delivering something specific, says so explicitly.
 | 7 | Streak reset scope | Everyone but the winner(s) resets, including failing to qualify — made safe by streak-hiding in-round, random matchmaking, and mandatory counter-play for every attack. |
 | 8 | Robux power-ups | Allowed only for items that are also freely earnable — Robux buys time, never exclusive power. 3-item loadout cap regardless of spend. |
 | 9 | Where does a KillZone put a fallen racer? *(added 2026-10-03, not from GDD §7)* | Back to their last safe (grounded) spot on the map, after a short respawn delay as the penalty. |
+| 10 | Which tasks ship at launch? *(added 2026-10-03, not from GDD §7)* | All eight: the four built plus `alarm-killswitch`, `breaker-sequence`, `reactor-sync` and `airlock-cycle`. |
 
 ---
 
@@ -491,3 +492,18 @@ the one they fell off.
 position and handles `KillZone` touches for humans and NPCs, then
 returns the racer with `PivotTo`. MovementWatch must treat that move as a
 server-authorised teleport, not a speed violation.
+
+## 10. Which tasks ship at launch?
+
+*Added 2026-10-03 (user decision). One of the owner questions in
+`next-stages.md`, not one of GDD §7's.*
+
+**Decision:** All eight. The four already built (`code-playback`,
+`fuse-rewire`, `pressure-valve`, `vent-purge`) plus the four in
+next-stages step 5: `alarm-killswitch`, `breaker-sequence`,
+`reactor-sync` and `airlock-cycle`.
+
+**Downstream:** step 5 builds the four, one per session. As each lands,
+add its id to the four launch maps' `enabledTaskIds`, and add it to the
+`AcceptedTaskIds` of every station whose Target list in
+`maps/wave1-briefs.md` names it (a Match.rbxl edit).

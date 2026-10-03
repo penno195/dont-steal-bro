@@ -422,6 +422,12 @@ function TaskHandlerService:init()
 		handleSubmission(player, payload.stationId, { fuseId = payload.fuseId, slotId = payload.slotId })
 	end)
 
+	-- The Hold verb's own submission remote (AlarmKillswitch): press and
+	-- release edges only.
+	NetGuard.on("HoldSubmit", function(player: Player, payload: any)
+		handleSubmission(player, payload.stationId, { pressed = payload.pressed })
+	end)
+
 	-- The task view's close/abort path (P6-4). Only ends the attempt the
 	-- client is looking at: an abort for an older one is stale and dropped.
 	NetGuard.on("TaskAbort", function(player: Player, payload: any)

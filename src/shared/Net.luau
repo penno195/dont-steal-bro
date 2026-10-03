@@ -564,6 +564,23 @@ Net.Remotes = {
 		practice = true,
 	} :: RemoteDef,
 
+	-- The Hold verb's submission remote (AlarmKillswitch, later Crate
+	-- Winch): `pressed` true when the thumb goes down, false when it
+	-- lifts. Only the edges travel - the server times the interval on
+	-- its own clock (src/server/TaskHandlers/AlarmKillswitch.luau), so
+	-- no client-reported duration exists to forge.
+	HoldSubmit = {
+		name = "HoldSubmit",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			stationId = Net.string({ maxLength = 64 }),
+			pressed = Net.boolean(),
+		}),
+		rateLimit = { capacity = 10, refillPerSecond = 4 },
+		states = { "Race" },
+		practice = true,
+	} :: RemoteDef,
+
 	-- P2-7's power-up remotes. Note what's deliberately NOT in
 	-- PowerUpUseIntent's payload: no powerUpId (the server already knows
 	-- what's in the player's own inventory slot) and no effect of any

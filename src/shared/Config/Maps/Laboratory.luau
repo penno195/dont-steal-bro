@@ -19,6 +19,7 @@ local Laboratory: Validate.MapDef = {
 		"fuse-rewire",
 		"pressure-valve",
 		"vent-purge",
+		"alarm-killswitch",
 	},
 	npcDifficultyModifier = 1.0,
 	waveNumber = 1,

@@ -43,6 +43,10 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
   view, per `how-to-add-a-task.md`.
+  *alarm-killswitch done 2026-10-03: the Hold style, with a new
+  `HoldSubmit` remote (press/release edges, timed on the server).
+  Enabled on all four launch maps; added to stations sch-01, fac-08,
+  fac-16, mus-06, mus-09 and lab-15 in Match.rbxl.*
 
 ## Stage 3: Analytics (blocks launch)
 
@@ -96,7 +100,8 @@ Ask before the steps that depend on them; record answers in
 - **Season mismatch.** Live-ops plans 6-week seasons ranked by a season
   score; rewards step 5 built fixed-date pass seasons. Same thing, or two?
 - **Season score.** Peak live streak (recommended) or a season-only counter?
-- **Launch tasks.** The four built plus the four in step 5?
+- ~~**Launch tasks.** The four built plus the four in step 5?~~ Yes, all
+  eight (2026-10-03, `design-decisions.md` §10).
 - **Weekly payout hold.** Is a 72-hour manual check before weekly and
   season payouts acceptable as a standing job?
 
