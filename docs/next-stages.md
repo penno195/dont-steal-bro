@@ -101,9 +101,16 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   developer products are enabled, the Season 1 Pass is created but stays
   disabled with its season. Ids, icons and descriptions are in
   `store-products.md`; icons come from `scripts/make-store-icons.ps1`.*
-- [ ] **12. Publish the Hub and Match places.** Set `hubPlaceId` and
+- [x] **12. Publish the Hub and Match places.** Set `hubPlaceId` and
   `matchPlaceId`; test teleport and the matchmaking queue for real
   (MemoryStore is off in Studio).
+  *Done 2026-10-04. A full live round works: queue, vote, teleport,
+  race on Factory, Decision Studio, results, back to the Hub. Getting
+  there needed the experience Public with its questionnaire done, the
+  Match place actually Published (not just saved), and a real map
+  loader (`MapLoaderService`). Racers are now held on their pads until
+  Race. **TEMP:** `partialGroupTimeoutSeconds` is 5 for solo testing;
+  set it back to 60 before launch.*
 - [ ] **13. Test on the published place**: leaderboard payouts to an
   offline player, receipt redelivery.
 - [ ] **14. Check platform assumptions** flagged in the leaderboard and
