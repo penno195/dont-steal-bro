@@ -39,6 +39,12 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   2026-10-03: built the same way, primitive-part dressing, enabled;
   as-built notes in wave1-briefs.md §5. All four still want a real-asset
   art pass.*
+- [ ] **4a. Art pass and rendering fixes on the four launch maps**, one
+  map per session, Factory first (flashing seen in playtest, likely
+  z-fighting). Survey each map in Studio, fix rendering faults, then swap
+  primitive dressing for Creator Store assets. Each asset must fit
+  `perf-budget.md`; School is already over on draw calls (step 16), so
+  its pass removes parts as well as adding them. Added 2026-10-04.
 - [x] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
@@ -180,6 +186,34 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   and the reviews themselves are the owner's.*
 - [ ] **20. Live-ops builds B1–B5** (`liveops-roadmap.md` §4). B1 and B3
   partly overlap rewards step 5's seasons; reconcile before building.
+
+## Stage 7: After launch, more content
+
+Added 2026-10-04. Nothing here starts before the soft launch (no new
+maps until then). The dates come from `liveops-roadmap.md` §4's week
+plan, which also says how each map ships. One map or one task per
+session.
+
+- [ ] **21. The seven unbuilt catalogue tasks** (`tasks-catalogue.md`):
+  Crate Winch, Cable Splice, Lock Tumbler, Morse Relay, Conveyor Sort,
+  Turret Calibration, Sensor Sweep. Build them in the order the maps
+  below need them. Each is a config file plus a handler and a view, like
+  step 5. Every one must pass the one-thumb rule and the step 15 audit.
+- [ ] **22. Wave 2a maps: Bunker, Prison** (live-ops W3, Season 1 opens).
+- [ ] **23. Wave 2b maps: Mall, Construction Site** (live-ops W8).
+- [ ] **24. Space Station** (live-ops W10, the wave 3 flagship, shipped on
+  its own). A gray-box exists (2026-09-25, 16 stations) and its config
+  and lighting preset are in the repo with `enabled = false`. It still
+  uses the four original tasks. `airlock-cycle` and `reactor-sync` have
+  Space Station stations in the catalogue (hull airlock, reactor core
+  sync), so consider swapping them in. It needs a full dressing pass
+  to wave 1's standard.
+- [ ] **25. Wave 3 rest: Aircraft Carrier, Deserted Island.**
+
+For each map, use the step 4 process: build or finish it in Studio,
+check it against `map-kit-spec.md` and the map validator, check perf
+against `perf-budget.md`, add it with `scripts/assemble-match-place.luau`,
+then enable its config.
 
 ## Decisions needed from the owner
 
