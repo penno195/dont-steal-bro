@@ -330,5 +330,81 @@ Notes / regressions vs last milestone:
 
 ## History
 
-No device measurements yet. The first row is due at the first gray-box
-map (P7-4).
+### 2026-10-04: launch maps in Studio (next-stages step 16, Studio half)
+
+Measured via Studio MCP in the Match place at commit `32125a5`, on the
+four launch maps plus the Decision Studio. Numbers come from Studio on a
+desktop PC, so frame times mean nothing here. Draw calls and triangles
+do carry over, but only as an upper bound: a phone on a low quality
+level may draw less. (Switching `EditQualityLevel` from Level01 to Level21
+barely moved them, so Studio can't estimate how much less.) Memory is not
+recorded: in Play Solo, client and server share Studio's own process.
+
+**Static audit** (`ServerStorage.Maps`, edit mode):
+
+| Map | Descendants | Parts | MeshParts | Unique meshes / textures | Lights | Emitters | Sounds |
+|---|---|---|---|---|---|---|---|
+| School | 6,761 | 5,461 | 175 | 27 / 34 | 0 | 0 | 0 |
+| Factory | 875 | 618 | 0 | 0 / 0 | 15 | 0 | 0 |
+| Museum | 1,098 | 807 | 0 | 0 / 0 | 27 | 0 | 0 |
+| Laboratory | 1,262 | 984 | 0 | 0 / 0 | 0 | 0 | 0 |
+| DecisionStudio | 1,056 | 413 | 76 | 8 / 1 | 38 | 19 | 0 |
+
+All are under the 12,000-descendant, 150-mesh and 100-texture rows, and
+the emitter and sound budgets. Each map streams in whole on the client
+(streamed descendant count ≈ the source count), so §2's 256-stud
+target radius doesn't cut anything on these footprints.
+
+**S4, render stats.** Method: a camera sweep over a 5×5 grid,
+at floor height and +20 studs, facing four directions, plus four
+overhead views (~200 views per map). Each view keeps the worst of
+four frames. "In round" is a live Studio test round in Race with
+1 human + 5 NPCs, which matches a full 6-racer lobby. "Map only" is
+the map cloned into the edit scene with its preset's shadows.
+
+| Map | Map only: draws / tris | In round: draws (+shadow) / tris | Views > 180 draws |
+|---|---|---|---|
+| School | 153 / 147k | **247 (+2) / 284k** | at least 6 (not counted) |
+| Factory | 73 / 6k | 64 (+4) / 34k | 0 / 200 |
+| Museum | 68 / 11k | 83 (+6) / 46k | 0 / 200 |
+| Laboratory | 65 / 3k | 70 (+0) / 22k | 0 |
+| DecisionStudio | 37 / 15k | not run in round | 0 |
+
+Shadow draw calls are negligible (0–6) on every map, so §5's first cut,
+global shadows, wouldn't buy anything measurable here.
+
+**School is the only miss**: draw calls run ~35% over the 180 target
+in its worst view, and triangles come within 6% of 300k. The worst
+view is at floor height, (-125.8, 10, 14.9), looking +X down the
+classroom wing. At that view, in round:
+
+- With only the map shown it's still 202 draws / 192k tris, so the
+  map is the problem, not gameplay. The gameplay layer adds about 45
+  draws: `PowerUpPickups` 19 draws / 10k tris, the 5 NPCs 18 / 31k,
+  the player's own character 3 / 7k.
+- In the map, triangles are concentrated: 17 `school chair` meshes
+  (`rbxassetid://6515978147`, ≈2.4k tris each, ≈41k total) and
+  17 `school desk` meshes (`8075243284`, ≈2k each, ≈33k). Three
+  laptops add another ≈9k.
+- Draw calls are not concentrated. Hiding any one `Dressing` room
+  removes at most ~7, and sometimes adds a few as batching
+  regroups. They come from the sheer part and material variety
+  across 3,715 primitive parts.
+
+**What to do about School.** The in-Studio miss is a strong hint, not a
+verdict, because the budget rows are low-confidence (§1 of
+`perf-budget.md`). If S7 on the reference phone shows School holding
+30 fps, leave it alone. If not, and `Render` dominates, cut in this
+order:
+(1) swap the chair and desk meshes for low-poly ones (≈60k tris back);
+(2) merge `Dressing` rooms' repeated primitive dressing into fewer
+unions or meshes with a shared material (the draw calls);
+(3) lighten the in-round pickups, whose 19 draws are a code-side
+lever (`PowerUpService` builds them) that helps every map.
+
+**S2:** server `DataSendKbps` during Race on Factory, 1 human + 5 NPCs:
+1.1 avg, 1.8 peak over 10 s. Flat, no per-second spikes.
+
+**Still open, all on the user:** S7–S9 on a real low-end phone (frame
+time, dominant MicroProfiler bucket, memory), School first. S3/S5/S6
+soak checks were last done statically (§4); they need Team Test.

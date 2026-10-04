@@ -147,6 +147,11 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   are locked to it since 2026-10-04, `design-decisions.md` §11).
 - [ ] **16. Performance check** against `perf-budget.md`, all launch maps,
   6 players.
+  *Studio half done 2026-10-04 (`perf-report.md` History): all maps pass
+  the static rows. Factory, Museum and Lab pass render too. School hits
+  ~247 draw calls in round (target 180), mostly its dressing; triangles
+  under 300k. The device half (S7–S9, School first) decides whether to
+  cut.*
 - [x] **17. Security pass**: re-run `security-audit.md` over code added
   since the tracker (rewards, coin offers, profile messages, throws).
   *Done 2026-10-04 (`security-audit.md` §7). One real leak, fixed: a
