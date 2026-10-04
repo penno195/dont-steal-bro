@@ -137,8 +137,8 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   stay unverified until step 13's test B.
   Follow-ups: period boards' publish-once read path built 2026-10-04
   (`leaderboard-scale.md` §9); matchmaking queue summary built 2026-10-04
-  (`matchmaking.md`). Name lookups (A5) still
-  open.
+  (`matchmaking.md`); name lookups capped and retried sooner 2026-10-04 (A5). All
+  three follow-ups done.
 
 ## Stage 5: Pre-launch hardening
 

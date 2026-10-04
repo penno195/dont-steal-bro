@@ -215,6 +215,73 @@ function LeaderboardLogic.displayNameFor(resolved: string?, userId: number): str
 	return string.format("Player %d", userId)
 end
 
+-- ===== the name cache (leaderboard-scale.md A5) ========================
+--
+-- UserService:GetUserInfosByUserIdsAsync is reported to allow ~250
+-- results a minute (its reference page gives no figure), and a fresh
+-- server can want 100 per board at once. So lookups are drawn from a
+-- per-minute allowance (a BudgetState with softCeiling unused), top
+-- ranks first; whatever does not fit waits for the next refresh. Each
+-- entry carries when it is next due rather than when it was resolved,
+-- so success, a deleted account and a failure can be due at different
+-- times.
+
+export type NameEntry = {
+	name: string?, -- nil: never resolved, or the account is gone
+	dueAt: number, -- look it up again from this time on
+}
+
+export type NameOutcome = "Resolved" | "Missing" | "Failed"
+
+-- `userIds` in rank order. Returns the ids to look up now: due or never
+-- seen, de-duplicated, at most `allowance` of them.
+function LeaderboardLogic.namesToLookUp(
+	userIds: { number },
+	cache: { [number]: NameEntry },
+	now: number,
+	allowance: number
+): { number }
+	local wanted: { number } = {}
+	local taken: { [number]: boolean } = {}
+	for _, userId in userIds do
+		if #wanted >= allowance then
+			break
+		end
+		local cached = cache[userId]
+		if not taken[userId] and (cached == nil or now >= cached.dueAt) then
+			taken[userId] = true
+			table.insert(wanted, userId)
+		end
+	end
+	return wanted
+end
+
+-- The new cache entry after a lookup. "Missing" is a deleted account:
+-- absent from a successful response, so it is not retried any sooner
+-- than a real name. "Failed" is the call itself erroring (a 429, an
+-- outage): retried soon, and a name already known is kept meanwhile
+-- rather than swapped for a placeholder.
+function LeaderboardLogic.nameAfterLookup(
+	previous: NameEntry?,
+	outcome: NameOutcome,
+	name: string?,
+	now: number,
+	ttlSeconds: number,
+	retrySeconds: number
+): NameEntry
+	if outcome == "Resolved" then
+		return { name = name, dueAt = now + ttlSeconds }
+	elseif outcome == "Missing" then
+		return { name = nil, dueAt = now + ttlSeconds }
+	end
+	return { name = if previous then previous.name else nil, dueAt = now + retrySeconds }
+end
+
+-- How many requests are left in the current window.
+function LeaderboardLogic.remaining(state: BudgetState, limits: BudgetLimits): number
+	return math.max(0, limits.perWindow - state.spent)
+end
+
 -- Sorts descending by streak, breaking ties by ascending userId so the
 -- order is total and identical on every server. OrderedDataStore
 -- already returns sorted pages, but ties come back in an unspecified

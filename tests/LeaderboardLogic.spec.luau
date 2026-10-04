@@ -334,3 +334,47 @@ TestRunner.describe("LeaderboardLogic shared period-board copy (leaderboard-scal
 		TestRunner.expect(LeaderboardLogic.publishLockKey("Weekly", "2026-W40")):toBe("lock|Weekly|2026-W40")
 	end)
 end)
+
+TestRunner.describe("LeaderboardLogic name lookups (leaderboard-scale.md A5)", function()
+	TestRunner.it("asks for unseen and due ids only, in rank order, once each", function()
+		local cache: { [number]: LeaderboardLogic.NameEntry } = {
+			[2] = { name = "Bo", dueAt = 500 }, -- fresh
+			[3] = { name = "Cy", dueAt = 50 }, -- due
+		}
+		local wanted = LeaderboardLogic.namesToLookUp({ 1, 2, 3, 1, 4 }, cache, 100, 10)
+		TestRunner.expect(#wanted):toBe(3)
+		TestRunner.expect(wanted[1]):toBe(1)
+		TestRunner.expect(wanted[2]):toBe(3)
+		TestRunner.expect(wanted[3]):toBe(4)
+	end)
+
+	TestRunner.it("stops at the allowance, keeping the top ranks", function()
+		local wanted = LeaderboardLogic.namesToLookUp({ 7, 8, 9 }, {}, 0, 2)
+		TestRunner.expect(#wanted):toBe(2)
+		TestRunner.expect(wanted[2]):toBe(8)
+		TestRunner.expect(#LeaderboardLogic.namesToLookUp({ 7 }, {}, 0, 0)):toBe(0)
+	end)
+
+	TestRunner.it("caches a name and a deleted account for the full TTL", function()
+		local resolved = LeaderboardLogic.nameAfterLookup(nil, "Resolved", "Ann", 100, 3600, 120)
+		TestRunner.expect(resolved.name):toBe("Ann")
+		TestRunner.expect(resolved.dueAt):toBe(3700)
+		local missing = LeaderboardLogic.nameAfterLookup(resolved, "Missing", nil, 100, 3600, 120)
+		TestRunner.expect(missing.name):toBe(nil)
+		TestRunner.expect(missing.dueAt):toBe(3700)
+	end)
+
+	TestRunner.it("retries a failed call soon and keeps the name it already had", function()
+		local failed = LeaderboardLogic.nameAfterLookup({ name = "Ann", dueAt = 0 }, "Failed", nil, 100, 3600, 120)
+		TestRunner.expect(failed.name):toBe("Ann")
+		TestRunner.expect(failed.dueAt):toBe(220)
+		TestRunner.expect(LeaderboardLogic.nameAfterLookup(nil, "Failed", nil, 100, 3600, 120).name):toBe(nil)
+	end)
+
+	TestRunner.it("reports what is left of a window, never below zero", function()
+		local limits = { perWindow = 200, windowSeconds = 60, softCeiling = 1 }
+		local state = LeaderboardLogic.spend(LeaderboardLogic.newBudget(0), 150)
+		TestRunner.expect(LeaderboardLogic.remaining(state, limits)):toBe(50)
+		TestRunner.expect(LeaderboardLogic.remaining(LeaderboardLogic.spend(state, 100), limits)):toBe(0)
+	end)
+end)

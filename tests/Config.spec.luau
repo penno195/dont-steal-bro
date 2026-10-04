@@ -120,6 +120,8 @@ local function validGameConfig(): Validate.GameConfig
 			refreshMaxSeconds = 120,
 			staleAfterSeconds = 300,
 			nameCacheTtlSeconds = 3600,
+			nameLookupsPerMinute = 200,
+			nameFailureRetrySeconds = 120,
 			maxWriteAttempts = 3,
 			backoffBaseSeconds = 1,
 			backoffCapSeconds = 60,
@@ -658,6 +660,25 @@ TestRunner.describe("Validate.checkGameConfig (shared period-board copy)", funct
 
 	TestRunner.it("refuses a copy that expires before its replacement is due", function()
 		TestRunner.expect(#issuesWith("shardTtlSeconds", 120) > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (name lookups, A5)", function()
+	local function issuesWith(field: string, value: number): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		config.leaderboard[field] = value
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("refuses an allowance that cannot fill one board", function()
+		TestRunner.expect(#issuesWith("nameLookupsPerMinute", 99) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a failure retry longer than the name TTL, or none", function()
+		TestRunner.expect(#issuesWith("nameFailureRetrySeconds", 3601) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith("nameFailureRetrySeconds", 0) > 0):toBeTruthy()
 	end)
 end)
 

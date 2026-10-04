@@ -797,6 +797,8 @@ export type LeaderboardConfig = {
 	refreshMaxSeconds: number,
 	staleAfterSeconds: number,
 	nameCacheTtlSeconds: number,
+	nameLookupsPerMinute: number, -- A5: per-server cap on resolved ids
+	nameFailureRetrySeconds: number,
 	maxWriteAttempts: number,
 	backoffBaseSeconds: number,
 	backoffCapSeconds: number,
@@ -2083,6 +2085,29 @@ local function checkLeaderboardConfig(leaderboard: LeaderboardConfig, issues: { 
 
 	if leaderboard.nameCacheTtlSeconds <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.nameCacheTtlSeconds", "must be positive")
+	end
+	-- Below topCount, a fresh server could never fill even one board's
+	-- names in its first minute.
+	if leaderboard.nameLookupsPerMinute < leaderboard.topCount then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard.nameLookupsPerMinute",
+			string.format("must be at least topCount (%s)", tostring(leaderboard.topCount))
+		)
+	end
+	if
+		leaderboard.nameFailureRetrySeconds <= 0
+		or leaderboard.nameFailureRetrySeconds > leaderboard.nameCacheTtlSeconds
+	then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard.nameFailureRetrySeconds",
+			"must be positive and no longer than nameCacheTtlSeconds"
+		)
 	end
 	if leaderboard.maxWriteAttempts < 1 then
 		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.maxWriteAttempts", "must be at least 1")

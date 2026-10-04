@@ -107,13 +107,16 @@ local periodRewardHandler: (kind: string, periodKey: string, rank: number, userI
 	)
 end
 
--- userId -> {name, resolvedAt}. A TTL rather than a permanent cache, so
+-- userId -> {name, dueAt}. A TTL rather than a permanent cache, so
 -- a RENAMED account corrects itself within an hour without costing a
 -- lookup per board render. A DELETED account never resolves and falls
 -- back to LeaderboardLogic.displayNameFor's placeholder every time,
 -- which is cheap because the failure is cached too.
-type NameEntry = { name: string?, resolvedAt: number }
-local nameCache: { [number]: NameEntry } = {}
+local nameCache: { [number]: LeaderboardLogic.NameEntry } = {}
+-- A5: lookups per minute, shared by every board this server resolves.
+local NAME_LIMITS: LeaderboardLogic.BudgetLimits =
+	{ perWindow = config.nameLookupsPerMinute, windowSeconds = 60, softCeiling = 1 }
+local nameBudget = LeaderboardLogic.newBudget(0)
 
 local function now(): number
 	return os.clock()
@@ -169,38 +172,43 @@ end
 -- per row. A 100-row board resolved one id at a time is 100 web calls
 -- every refresh, which is the write-amplification mistake in its
 -- read-shaped form.
+--
+-- A5: capped at nameLookupsPerMinute, top ranks first, so a fresh
+-- server resolving three boards at once cannot trip the rate limit. The
+-- rest stay as placeholders until a later refresh has allowance.
 local function resolveNames(userIds: { number })
 	local nowValue = now()
-	local wanted: { number } = {}
-
-	for _, userId in userIds do
-		local cached = nameCache[userId]
-		if cached == nil or nowValue - cached.resolvedAt > config.nameCacheTtlSeconds then
-			table.insert(wanted, userId)
-		end
-	end
-
+	nameBudget = LeaderboardLogic.rollWindow(nameBudget, nowValue, NAME_LIMITS)
+	local wanted = LeaderboardLogic.namesToLookUp(
+		userIds,
+		nameCache,
+		nowValue,
+		LeaderboardLogic.remaining(nameBudget, NAME_LIMITS)
+	)
 	if #wanted == 0 then
 		return
 	end
+	nameBudget = LeaderboardLogic.spend(nameBudget, #wanted)
 
+	local ttl, retry = config.nameCacheTtlSeconds, config.nameFailureRetrySeconds
 	local ok, infos = pcall(function()
 		return UserService:GetUserInfosByUserIdsAsync(wanted)
 	end)
 
 	if not ok then
-		-- Cache the FAILURE too, with a shorter life, so a persistent
-		-- outage doesn't mean a fresh batch of lookups every refresh.
+		-- Cached as a failure with a short retry, so an outage costs one
+		-- batch per retry window rather than one per refresh.
 		for _, userId in wanted do
-			nameCache[userId] = { name = nil, resolvedAt = nowValue - config.nameCacheTtlSeconds / 2 }
+			nameCache[userId] = LeaderboardLogic.nameAfterLookup(nameCache[userId], "Failed", nil, nowValue, ttl, retry)
 		end
-		warn("LeaderboardService: display name lookup failed - falling back to placeholders this cycle")
+		warn("LeaderboardService: display name lookup failed - retrying in " .. tostring(retry) .. "s")
 		return
 	end
 
 	local seen: { [number]: boolean } = {}
 	for _, info in infos :: { { Id: number, Username: string, DisplayName: string } } do
-		nameCache[info.Id] = { name = info.DisplayName, resolvedAt = nowValue }
+		nameCache[info.Id] =
+			LeaderboardLogic.nameAfterLookup(nameCache[info.Id], "Resolved", info.DisplayName, nowValue, ttl, retry)
 		seen[info.Id] = true
 	end
 
@@ -210,7 +218,8 @@ local function resolveNames(userIds: { number })
 	-- gives it a stable placeholder.
 	for _, userId in wanted do
 		if not seen[userId] then
-			nameCache[userId] = { name = nil, resolvedAt = nowValue }
+			nameCache[userId] =
+				LeaderboardLogic.nameAfterLookup(nameCache[userId], "Missing", nil, nowValue, ttl, retry)
 		end
 	end
 end

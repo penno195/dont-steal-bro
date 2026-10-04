@@ -293,6 +293,10 @@ local GameConfig: Validate.GameConfig = {
 		staleAfterSeconds = 300,
 
 		nameCacheTtlSeconds = 3600, -- a renamed account corrects itself within the hour
+		-- leaderboard-scale.md A5: GetUserInfosByUserIdsAsync is reported to
+		-- allow ~250 results/min (undocumented); stay under it per server.
+		nameLookupsPerMinute = 200,
+		nameFailureRetrySeconds = 120, -- a failed lookup (429, outage) is retried after this
 		maxWriteAttempts = 3,
 		backoffBaseSeconds = 1,
 		backoffCapSeconds = 60,

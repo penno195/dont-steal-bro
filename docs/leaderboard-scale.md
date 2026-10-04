@@ -21,7 +21,7 @@ so these could not be checked the same way.
 | A2 | `GetSortedAsync` has its own, much smaller budget than ordinary reads | The poll interval was chosen to sit far under it | **Confirmed.** It draws on List: 5 + 2n per server. One call per 60–120s is far under it |
 | A3 | There is a per-key write cooldown (order of seconds) | We never write the same key twice quickly, so this should be unreachable — but confirm the figure | **Corrected.** The docs now give per-key throughput, not a cooldown: 4 MB/min write, 25 MB/min read. Unreachable with ~100 B entries |
 | A4 | There are universe-wide throughput ceilings (bytes/min, requests/min) distinct from per-server budgets | **This is the one the analysis below concludes you hit first** | **Confirmed, but not the first limit.** Experience-wide ordered-store limits are List 300 + 2 × CCU and Write 300 + 20 × CCU per minute. At 20,000 CCU, §3's ~2,200 `GetSortedAsync`/min is ~5% of the 40,300 List allowance. The first limit is MemoryStore (§9, A7) |
-| A5 | `UserService:GetUserInfosByUserIdsAsync` has its own rate limit, separate from DataStore | The name cache is sized against a guess | **Partly confirmed.** The method's reference page gives no figure. A secondary source says 250 results per minute, with HTTP 429 above that. A fresh server resolving the all-time, daily and weekly boards asks for up to 300 ids in its first minute, and a failure caches placeholders for 30 minutes (half `nameCacheTtlSeconds`). Follow-up: spread the lookups and retry sooner |
+| A5 | `UserService:GetUserInfosByUserIdsAsync` has its own rate limit, separate from DataStore | The name cache is sized against a guess | **Partly confirmed.** The method's reference page gives no figure. A secondary source says 250 results per minute, with HTTP 429 above that. A fresh server resolving the all-time, daily and weekly boards asks for up to 300 ids in its first minute, and a failure caches placeholders for 30 minutes (half `nameCacheTtlSeconds`). **Mitigated 2026-10-04:** lookups are capped at `nameLookupsPerMinute` (200) per server, shared by all boards, top ranks first; the rest wait for a later refresh. A failed call retries after `nameFailureRetrySeconds` (120s) and keeps any name already known. Period boards now take names from the shared copy (§9). Still assumes the limit is per server |
 
 Checked against create.roblox.com on 2026-10-04: *Data store error
 codes and limits*, *Memory stores* and its *best practices* and
@@ -322,6 +322,6 @@ exists and loses the lock shows "Loading" until its next poll. That
 only happens at a period's start or after every server has been gone
 for 15 minutes.
 
-Still open: the matchmaking queue's sorted map (`matchmaking.md`), the
+Since built: the matchmaking queue summary (`matchmaking.md`). Still open: the
 all-time board's OrderedDataStore reads (§3, not needed until well past
-launch scale), and A5's name lookups for the all-time board.
+launch scale). A5 is mitigated (§0).
