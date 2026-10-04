@@ -123,8 +123,10 @@ cosmetic opts in, or doesn't, in its own file.
 
 *Applied (2026-10-02, user decision):* **what the leaderboards pay.**
 - The daily and weekly boards pay their **top 10, in three bands**:
-  #1, #2–3, #4–10. Daily pays 500 / 250 / 100 coins and weekly pays
-  four times that: 2000 / 1000 / 400. All PLACEHOLDER.
+  #1, #2–3, #4–10. Daily pays 75 / 50 / 25 coins and weekly pays
+  250 / 125 / 50, rescaled by "pricing" below; the first draft's
+  500 / 250 / 100 is superseded (confirmed by the user 2026-10-04). All
+  PLACEHOLDER until playtest.
 - **The all-time board never pays.** Being on it is the prize.
 - A band *can* name a limited cosmetic, but none does yet. Each limited
   item gets added later in its own cosmetic file. The field only takes a

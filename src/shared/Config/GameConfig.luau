@@ -617,9 +617,9 @@ local GameConfig: Validate.GameConfig = {
 		-- switch reaches every server within a minute.
 		refreshSeconds = 60,
 		auditLogCap = 200,
-		-- PLACEHOLDER: the developers' Roblox user ids. Empty = nobody
-		-- can run admin commands (edit the DataStore by hand instead).
-		adminUserIds = {},
+		-- The developers' Roblox user ids. Empty = nobody can run admin
+		-- commands (edit the DataStore by hand instead).
+		adminUserIds = { 11654855572 }, -- Corvus2026
 
 		-- What an override may touch. "*" = one path segment, a trailing
 		-- "**" = any depth. Roots: game = GameConfig, powerUp = PowerUps
