@@ -57,6 +57,16 @@ local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 
 local config = GameConfig.leaderboard
 
+-- Separate stores in Studio, like DataService's and LiveConfig's. With
+-- API access on, Studio otherwise shares production DataStores: a test
+-- win would land on the public all-time board, and a Studio session
+-- could write the period snapshot from Studio's own MemoryStore boards
+-- (which Roblox keeps apart from production), claiming the period
+-- before any live server so its real winners went unpaid.
+local STUDIO_SUFFIX = if RunService:IsStudio() then "_Studio" else ""
+local BOARD_STORE_NAME = config.storeName .. STUDIO_SUFFIX
+local SNAPSHOT_STORE_NAME = config.snapshotStoreName .. STUDIO_SUFFIX
+
 -- The first read's random spread after boot (startPolling).
 local FIRST_REFRESH_SPREAD_SECONDS = 15
 
@@ -942,7 +952,7 @@ function LeaderboardService:init()
 	-- never refreshes", which is exactly the Empty case the UI already
 	-- has to handle.
 	local ok, resolved = pcall(function()
-		return DataStoreService:GetOrderedDataStore(config.storeName, config.storeScope)
+		return DataStoreService:GetOrderedDataStore(BOARD_STORE_NAME, config.storeScope)
 	end)
 
 	if ok then
@@ -962,7 +972,7 @@ function LeaderboardService:init()
 	-- server that started at 3am from treating its first check as a
 	-- midnight it never witnessed.
 	local snapshotOk, resolvedSnapshot = pcall(function()
-		return DataStoreService:GetDataStore(config.snapshotStoreName)
+		return DataStoreService:GetDataStore(SNAPSHOT_STORE_NAME)
 	end)
 	if snapshotOk then
 		snapshotStore = resolvedSnapshot
