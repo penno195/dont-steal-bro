@@ -98,6 +98,60 @@ function BoardLogic.emptyText(tab: Tab): (string, string)
 	return "No streaks recorded yet", "The first win puts you at the top."
 end
 
+-- ===== the hub's wall boards ===============================================
+--
+-- The three HubLeaderboardSurface parts (hub-spec.md), one per tab,
+-- drawn by HubBoardController from the same broadcasts as the menu
+-- screen. A wall can't scroll, so it shows the top WALL_ROWS only.
+
+BoardLogic.WALL_ROWS = 10
+
+BoardLogic.WALL_TITLES = table.freeze({
+	Daily = "TODAY'S TOP STREAKS",
+	Weekly = "THIS WEEK'S TOP STREAKS",
+	AllTime = "ALL-TIME BEST STREAKS",
+} :: { [string]: string })
+
+export type WallRow = { rank: string, name: string, streak: string, isViewer: boolean }
+
+export type Wall = {
+	title: string,
+	rows: { WallRow },
+	-- Shown instead of rows when there are none: Loading or Empty.
+	message: string?,
+	detail: string?,
+	stale: boolean,
+}
+
+-- Only a Tab key gets a wall; anything else (a mistyped Period
+-- attribute) returns nil, so the controller skips that part.
+function BoardLogic.wall(tab: string, payload: Payload?, viewerId: number): Wall?
+	local title = BoardLogic.WALL_TITLES[tab]
+	if title == nil then
+		return nil
+	end
+	local v = BoardLogic.view(payload, viewerId)
+	if v.phase == "Loading" then
+		return { title = title, rows = {}, message = "Loading…", detail = nil, stale = false }
+	elseif v.phase == "Empty" then
+		local headline, body = BoardLogic.emptyText(tab :: Tab)
+		return { title = title, rows = {}, message = headline, detail = body, stale = v.stale }
+	end
+	local rows: { WallRow } = {}
+	for i, entry in v.rows do
+		if i > BoardLogic.WALL_ROWS then
+			break
+		end
+		table.insert(rows, {
+			rank = "#" .. entry.rank,
+			name = entry.displayName,
+			streak = tostring(entry.bestStreak),
+			isViewer = entry.userId == viewerId,
+		})
+	end
+	return { title = title, rows = rows, message = nil, detail = nil, stale = v.stale }
+end
+
 -- ===== virtualisation ======================================================
 --
 -- 100 rows built as 100 Frames each with a PlayerRow's worth of children

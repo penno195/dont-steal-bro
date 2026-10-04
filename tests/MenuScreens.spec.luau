@@ -566,3 +566,42 @@ describe("StoreScreenLogic coin offers (rewards step 6)", function()
 		expect(f.message):toBe("You don't have enough coins for that yet.")
 	end)
 end)
+
+describe("BoardLogic.wall", function()
+	local function payload(count: number, status: string?): BoardLogic.Payload
+		local entries = {}
+		for i = 1, count do
+			table.insert(entries, { rank = i, userId = i, bestStreak = 100 - i, displayName = "P" .. i })
+		end
+		return { entries = entries, status = status or "Fresh" }
+	end
+
+	it("skips a part whose Period isn't a tab", function()
+		expect(BoardLogic.wall("Monthly", payload(3), 1)):toBe(nil)
+	end)
+
+	it("says Loading before any broadcast", function()
+		local wall = BoardLogic.wall("Daily", nil, 1) :: BoardLogic.Wall
+		expect(wall.message):toBe("Loading…")
+		expect(#wall.rows):toBe(0)
+	end)
+
+	it("uses the tab's empty copy for an empty board", function()
+		local wall = BoardLogic.wall("Weekly", payload(0, "Empty"), 1) :: BoardLogic.Wall
+		expect(wall.message):toBe("A new week, an empty board")
+	end)
+
+	it("caps at the top WALL_ROWS and marks the viewer", function()
+		local wall = BoardLogic.wall("AllTime", payload(40), 3) :: BoardLogic.Wall
+		expect(#wall.rows):toBe(BoardLogic.WALL_ROWS)
+		expect(wall.rows[1].rank):toBe("#1")
+		expect(wall.rows[1].streak):toBe("99")
+		expect(wall.rows[3].isViewer):toBe(true)
+		expect(wall.rows[2].isViewer):toBe(false)
+		expect(wall.message):toBe(nil)
+	end)
+
+	it("carries the stale flag", function()
+		expect((BoardLogic.wall("Daily", payload(2, "Stale"), 1) :: BoardLogic.Wall).stale):toBe(true)
+	end)
+end)
