@@ -303,8 +303,8 @@ local function powerUpUsed(who: Who, powerUpId: string, succeeded: boolean)
 	log(resolve(who), TelemetryLogic.powerUpUsed(powerUpId, succeeded, roundMapId()))
 end
 
-local function stealShareChoice(who: Who, choice: string, streak: number, rung: number?)
-	log(resolve(who), TelemetryLogic.stealShareChoice(choice, streak, rung))
+local function stealShareChoice(who: Who, choice: string, streak: number, bots: number, rung: number?)
+	log(resolve(who), TelemetryLogic.stealShareChoice(choice, streak, bots, rung))
 end
 
 local function finaleOutcome(branch: string, winners: number, bots: number)

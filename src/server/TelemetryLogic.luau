@@ -231,11 +231,13 @@ end
 
 -- Value: the exact streak, so averages work; the band is for splitting.
 -- The rung is the one a win would pay at (launch-review.md §3 checks the
--- finale per rung).
-function TelemetryLogic.stealShareChoice(choice: string, streak: number, rung: number?): Record
+-- finale per rung). F2 is the Studio's bot finalists, not a streak band:
+-- the value already carries the streak, and only Bots = 0 rows measure
+-- players rather than NPC personalities (launch-review.md §0.4).
+function TelemetryLogic.stealShareChoice(choice: string, streak: number, bots: number, rung: number?): Record
 	return custom("StealShareChoice", streak, {
 		TelemetryLogic.field("Choice", choice),
-		TelemetryLogic.field("Streak", TelemetryLogic.streakBand(streak)),
+		TelemetryLogic.field("Bots", bots),
 		if rung ~= nil then TelemetryLogic.field("Rung", rung) else nil,
 	})
 end

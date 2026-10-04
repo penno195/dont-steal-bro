@@ -124,18 +124,16 @@ review uses until a fix ships.
 
 | Check | Why it can't run | Stand-in | Fix, if wanted |
 |---|---|---|---|
-| §3 A: steal rate by rung, **all-human Studios only** | `StealShareChoice` doesn't say whether the other finalists were bots | All-human steal rate without rungs, from `FinaleOutcome` with `Bots = 0`: (SoleStealer + 2·LoneSharer + 3·AllSteal) ÷ 3n. By rung, use every human choice and label it *mixed lobbies* | `StealShareChoice`'s F2 `Streak` band repeats its value (the streak) and nearly repeats F3 `Rung`. Swap it for `Bots` |
-| §3 dominance test: realised payoff of Steal vs Share | Needs each player's choice joined to their branch | None that's realised. Compute the expected payoff from each rung's observed steal rate (`payoff-table.md`) and say so | Same F2 slot, holding the branch instead of `Bots`. Only one of the two fits |
+| ~~§3 A: steal rate by rung, all-human Studios only~~ | **Fixed 2026-10-04.** `StealShareChoice`'s F2 is now `Bots` (bot finalists), replacing the `Streak` band, which repeated the value. Filter on `Bots = 0` | — | — |
+| §3 dominance test: realised payoff of Steal vs Share | Needs each player's choice joined to their branch. The free slot went to `Bots` (owner, 2026-10-04) | None that's realised. Compute the expected payoff from each rung's observed steal rate (`payoff-table.md`) and say so | No free field left on `StealShareChoice` |
 | §4.1 vote share vs times offered | `MapVoted` doesn't log which maps were on the ballot | Vote share vs play share (`MapPlayed`) | A field on `MapVoted` |
 | §4.1 NPC qualification rate per map | No event says a bot qualified. `FinaleOutcome` has no `Map` | Human qualification rate per map (`Round` funnel, step 3 ÷ step 1, split by `Map` and `Humans`) | — |
 | §4.2 task times by platform | No platform field | Creator Hub's own platform breakdown, if custom events have one (check at step 9) | — |
 | §5 bots' Studio steal rate | Bots have no `Player` to log against | Not measurable live. It's NPCBrain's logic, so test it headlessly or in Studio | — |
 | §5 leaderboard top 20 by NPC mix, §6 collusion, feeding, farming by account | Need per-account rows, which Creator Hub doesn't give | Investigate a reported or suspicious account by hand: leaderboard, its profile, live server logs. No pair analysis | Out of scope before launch |
 
-The first two rows hit the review's headline question (finale tension),
-so they matter most. Both are one-field changes to one event. Ask the
-owner before step 9 whether to make one, since step 9 is when the events
-get checked on a published place anyway.
+The first two rows hit the review's headline question (finale tension).
+Only one field was free, and the owner chose `Bots` (2026-10-04).
 
 ---
 
@@ -239,8 +237,8 @@ Report them separately (§5).
 
 ### 3.1 The three checks
 
-**A. Steal rate by rung compared with `p*`.** From `StealShareChoice`,
-steal rate by rung (bucketed if a rung is too thin), with a 95% interval
+**A. Steal rate by rung compared with `p*`.** From `StealShareChoice`
+with `Bots = 0`, steal rate by rung (bucketed if a rung is too thin), with a 95% interval
 (`±1.96·√(p(1−p)/n)`). A finding needs the **whole interval** to sit
 outside `p* ± 0.05`.
 

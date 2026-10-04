@@ -100,11 +100,11 @@ end)
 
 TestRunner.describe("TelemetryLogic custom events", function()
 	TestRunner.it("puts unbounded numbers in value, never in a field", function()
-		local choice = TelemetryLogic.stealShareChoice("Steal", 37, 4)
+		local choice = TelemetryLogic.stealShareChoice("Steal", 37, 0, 4)
 		TestRunner.expect(choice.kind):toBe("Custom")
 		TestRunner.expect(choice.value):toBe(37)
 		TestRunner.expect(choice.fields[1]):toBe("Choice: Steal")
-		TestRunner.expect(choice.fields[2]):toBe("Streak: 20+")
+		TestRunner.expect(choice.fields[2]):toBe("Bots: 0")
 		TestRunner.expect(choice.fields[3]):toBe("Rung: 4")
 
 		local loss = TelemetryLogic.streakLoss(12, "StudioLoss", "Museum")
@@ -113,7 +113,7 @@ TestRunner.describe("TelemetryLogic custom events", function()
 	end)
 
 	TestRunner.it("leaves the rung slot out when the caller has none", function()
-		TestRunner.expect(TelemetryLogic.stealShareChoice("Share", 0, nil).fields[3]):toBe(nil)
+		TestRunner.expect(TelemetryLogic.stealShareChoice("Share", 0, 2, nil).fields[3]):toBe(nil)
 	end)
 
 	TestRunner.it("labels the config resolution so a rollout splits", function()
@@ -166,7 +166,7 @@ TestRunner.describe("TelemetryLogic custom events", function()
 			TelemetryLogic.mapVoted("m"),
 			TelemetryLogic.mapPlayed("m", 3),
 			TelemetryLogic.powerUpUsed("p", true, "m"),
-			TelemetryLogic.stealShareChoice("Steal", 3, 1),
+			TelemetryLogic.stealShareChoice("Steal", 3, 1, 1),
 			TelemetryLogic.finaleOutcome("AllShare", 3, 1),
 			TelemetryLogic.streakLoss(3, "FailedToQualify", "m"),
 			TelemetryLogic.npcCountInRound(2, 4, "m"),

@@ -282,6 +282,15 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 
 	local outcome = Outcomes.resolve(finalists)
 
+	-- Bot finalists, for telemetry: only an all-human Studio's choices
+	-- measure players (launch-review.md §0.4).
+	local bots = 0
+	for _, id in qualifierIds do
+		if Participants.isNPCId(id) then
+			bots += 1
+		end
+	end
+
 	-- Set BEFORE any profile write, not after (P3-7). From this line on
 	-- the finale's result is committed, and every disconnect and
 	-- shutdown path must treat it as final - including one that fires
@@ -329,7 +338,7 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 		-- Defaulted choices included: the streak they were risking is
 		-- the one they brought into the Studio.
 		Loader.get("Telemetry")
-			.stealShareChoice(player, finalist.choice, streakBefore, ProgressionService.rungAtStake(streakBefore))
+			.stealShareChoice(player, finalist.choice, streakBefore, bots, ProgressionService.rungAtStake(streakBefore))
 
 		DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
 		DataService.recordRoundStat(player, "qualifications")
@@ -339,12 +348,6 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 		DataService.setPendingRoundOutcomeResolver(player, nil)
 	end
 
-	local bots = 0
-	for _, id in qualifierIds do
-		if Participants.isNPCId(id) then
-			bots += 1
-		end
-	end
 	Loader.get("Telemetry").finaleOutcome(outcome.branch, #outcome.winners, bots)
 
 	print(

@@ -174,10 +174,10 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   *Prepared 2026-10-04: `launch-review.md` now points at the shipped
   events, and lists the steps that must be ticked before launch (1, 9,
   13, 15, 16, 18) and the checks the events can't answer (§0.4). The
-  biggest gap: the finale's steal rate can't be limited to all-human
-  Studios, and Steal can't be compared with Share on realised payoff.
-  One field on `StealShareChoice` fixes either one. Owner decides
-  before step 9. The launch and the reviews themselves are the owner's.*
+  biggest gap, the finale's steal rate in all-human Studios, is fixed:
+  `StealShareChoice` now carries the Studio's bot finalists. Steal vs
+  Share on realised payoff stays unmeasured (no field left). The launch
+  and the reviews themselves are the owner's.*
 - [ ] **20. Live-ops builds B1–B5** (`liveops-roadmap.md` §4). B1 and B3
   partly overlap rewards step 5's seasons; reconcile before building.
 

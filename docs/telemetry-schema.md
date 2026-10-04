@@ -111,7 +111,7 @@ the step reached, and choice and branch are on the custom events below.
 | `MapVoted` | `mapVoted(who, mapId)` | – | `Map` | | |
 | `MapPlayed` | `mapPlayed(mapId, humans)`, anchor | humans | `Map` | `Humans` | |
 | `PowerUpUsed` | `powerUpUsed(who, powerUpId, succeeded)` | – | `PowerUp` | `Result` (`Landed`/`Refused`) | `Map` |
-| `StealShareChoice` | `stealShareChoice(who, choice, streak, rung?)` | streak | `Choice` | `Streak` band | `Rung` (the rung a win would pay at) |
+| `StealShareChoice` | `stealShareChoice(who, choice, streak, bots, rung?)` | streak | `Choice` | `Bots` (bot finalists in this Studio, 0–2; `0` = an all-human Studio) | `Rung` (the rung a win would pay at) |
 | `FinaleOutcome` | `finaleOutcome(branch, winners, bots)`, anchor | – | `Branch` | `Winners` | `Bots` |
 | `StreakLoss` | `streakLoss(who, streak, reason)` | streak lost | `Reason` | `Streak` band | `Map` |
 | `NPCCountInRound` | `npcCountInRound(bots, humans)`, anchor, after the fill | bots | `Bots` | `Humans` | `Map` |
@@ -138,7 +138,7 @@ longer custom events; they are the funnel steps above.
 2. **Do power-ups feel good?** `PowerUpUsed` by `Result` per power-up.
    High `Refused` = immunity/range/cooldown too punishing.
 3. **Is the finale balanced?** `FinaleOutcome` by `Branch`;
-   `StealShareChoice` by `Streak` band and `Rung`. Ideal: no strong
+   `StealShareChoice` by `Rung`, with `Bots = 0`. Ideal: no strong
    skew by streak.
 4. **Is anyone farming?** `StreakLoss` by `Reason` (high
    `ForfeitDisconnect` = dodging losses); `StreakWin` by `Bots`.
