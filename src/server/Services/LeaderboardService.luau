@@ -45,6 +45,7 @@ local RunService = game:GetService("RunService")
 local UserService = game:GetService("UserService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -52,6 +53,7 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local LeaderboardLogic = require(ServerScriptService.Server.LeaderboardLogic)
 local PeriodKeys = require(ServerScriptService.Server.PeriodKeys)
 local LeaderboardPayoutLogic = require(ServerScriptService.Server.LeaderboardPayoutLogic)
+local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 
 local config = GameConfig.leaderboard
 
@@ -235,7 +237,19 @@ local function fetchTopPage(): { LeaderboardLogic.Entry }?
 	return raw
 end
 
+-- Set in init. Q7 condition 1: a match server sends no board until
+-- Results (LeaderboardLogic.mayBroadcast), and sends both then.
+local isHub = false
+
+local function mayBroadcast(): boolean
+	local RoundService = Loader.get("RoundService") :: any
+	return LeaderboardLogic.mayBroadcast(RoundService.getState(), isHub)
+end
+
 local function broadcastBoard()
+	if not mayBroadcast() then
+		return
+	end
 	local status = LeaderboardLogic.cacheStatus(lastRefreshAt, now(), config.staleAfterSeconds, #cachedEntries > 0)
 
 	local payload = {}
@@ -668,6 +682,9 @@ local function catchUpMissedRollovers(bootTime: number)
 end
 
 local function broadcastPeriodBoards()
+	if not mayBroadcast() then
+		return
+	end
 	for _, rawKind in PERIOD_KINDS do
 		local kind = rawKind
 		local state = periodState[kind]
@@ -842,7 +859,7 @@ end
 
 local LeaderboardService: Loader.Service = {
 	name = "LeaderboardService",
-	dependencies = { "NetGuard", "ConfigValidator", "LiveConfig" },
+	dependencies = { "NetGuard", "ConfigValidator", "LiveConfig", "RoundService" },
 
 	submitBestStreak = submitBestStreak,
 	submitPeriodStreak = submitPeriodStreak,
@@ -907,6 +924,12 @@ local LeaderboardService: Loader.Service = {
 
 function LeaderboardService:init()
 	budget = LeaderboardLogic.newBudget(now())
+	isHub = StreakTagLogic.isHub(
+		game.PlaceId,
+		GameConfig.matchmaking.hubPlaceId,
+		RunService:IsStudio(),
+		Workspace:FindFirstChild("Hub") ~= nil
+	)
 
 	-- Studio has no live DataStore access unless the place is published
 	-- with API access enabled, and a failed GetOrderedDataStore here
@@ -950,6 +973,13 @@ function LeaderboardService:init()
 	-- already in memory - this costs nothing and is why per-viewer reads
 	-- are never needed.
 	Players.PlayerAdded:Connect(function()
+		broadcastBoard()
+		broadcastPeriodBoards()
+	end)
+	-- A match server held its boards all round; Results is when they
+	-- may go out, from the cache, at no request cost.
+	local RoundService = Loader.get("RoundService") :: any
+	RoundService.onEnter("Results", function()
 		broadcastBoard()
 		broadcastPeriodBoards()
 	end)

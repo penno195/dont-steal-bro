@@ -255,4 +255,19 @@ function LeaderboardLogic.dedupe(entries: { Entry }): { Entry }
 	return result
 end
 
+-- May this server send the boards to its clients right now?
+-- design-decisions.md Q7 condition 1: streaks show in the "hub and
+-- post-match leaderboard only". The boards carry user ids and streaks,
+-- and an exploiter reads every payload whether or not the menu opens,
+-- so the gate is what the server sends, not what the client shows. A
+-- match server's pre-round lobby is not the hub (see StreakTagLogic):
+-- its players are the ones about to race. So a match server sends only
+-- from Results on; the hub, in WaitingForPlayers for good, always may.
+function LeaderboardLogic.mayBroadcast(roundState: string, isHub: boolean): boolean
+	if roundState == "Results" or roundState == "Cleanup" then
+		return true
+	end
+	return isHub and roundState == "WaitingForPlayers"
+end
+
 return LeaderboardLogic

@@ -256,3 +256,26 @@ TestRunner.describe("LeaderboardLogic.dedupe", function()
 		TestRunner.expect(deduped[2].userId):toBe(1)
 	end)
 end)
+
+TestRunner.describe("LeaderboardLogic.mayBroadcast", function()
+	TestRunner.it("always lets the hub send while it waits for players", function()
+		TestRunner.expect(LeaderboardLogic.mayBroadcast("WaitingForPlayers", true)):toBe(true)
+	end)
+
+	TestRunner.it("holds a match server's boards from arrival until Results", function()
+		-- Q7 condition 1: the racers in the pre-round lobby are the
+		-- ones about to race, so it counts as live.
+		for _, state in { "WaitingForPlayers", "Loading", "Intro", "Race", "Qualified", "DecisionStudio" } do
+			TestRunner.expect(LeaderboardLogic.mayBroadcast(state, false)):toBe(false)
+		end
+	end)
+
+	TestRunner.it("holds a hub-run test round's boards too", function()
+		TestRunner.expect(LeaderboardLogic.mayBroadcast("Race", true)):toBe(false)
+	end)
+
+	TestRunner.it("sends post-match on either server", function()
+		TestRunner.expect(LeaderboardLogic.mayBroadcast("Results", false)):toBe(true)
+		TestRunner.expect(LeaderboardLogic.mayBroadcast("Cleanup", false)):toBe(true)
+	end)
+end)

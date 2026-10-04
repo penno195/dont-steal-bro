@@ -142,8 +142,12 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   (`mobile-checklist.md`): every task and the HUD, portrait.
 - [ ] **16. Performance check** against `perf-budget.md`, all launch maps,
   6 players.
-- [ ] **17. Security pass**: re-run `security-audit.md` over code added
+- [x] **17. Security pass**: re-run `security-audit.md` over code added
   since the tracker (rewards, coin offers, profile messages, throws).
+  *Done 2026-10-04 (`security-audit.md` §7). One real leak, fixed: a
+  match server sent the leaderboards (user ids + streaks) to every
+  client mid-round, breaking Q7 condition 1; it now sends them from
+  Results on. Knockback and aim are client-side and accepted (F11, F12).*
 - [ ] **18. Full playtests with real people** per `playtest-protocol.md`.
 
 ## Stage 6: Soft launch, then live-ops
