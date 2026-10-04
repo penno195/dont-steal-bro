@@ -533,6 +533,9 @@ export type MatchmakingConfig = {
 	backoffBaseSeconds: number,
 	backoffCapSeconds: number,
 	unavailableAfterFailures: number,
+	summaryShardCount: number, -- copies of the lease holder's queue summary
+	summaryStaleSeconds: number, -- past this, servers read the page themselves
+	summaryTtlSeconds: number,
 }
 
 -- ===== TeleportConfig: P5-2 ==============================================
@@ -2446,6 +2449,19 @@ local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number
 	end
 	if mm.unavailableAfterFailures < 1 then
 		bad("unavailableAfterFailures", "must be at least 1")
+	end
+
+	-- The queue summary. Under two ticks, one slow publish would send
+	-- every hub server back to reading the page; and a TTL under the
+	-- staleness window would drop a summary that is still usable.
+	if mm.summaryShardCount < 1 or mm.summaryShardCount ~= math.floor(mm.summaryShardCount) then
+		bad("summaryShardCount", "must be a whole number, at least 1")
+	end
+	if mm.summaryStaleSeconds < 2 * mm.formationTickSeconds then
+		bad("summaryStaleSeconds", "must be at least two formation ticks")
+	end
+	if mm.summaryTtlSeconds < mm.summaryStaleSeconds then
+		bad("summaryTtlSeconds", "must not be below summaryStaleSeconds")
 	end
 end
 

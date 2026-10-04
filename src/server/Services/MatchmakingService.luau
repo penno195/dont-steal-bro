@@ -10,13 +10,15 @@
 --
 -- Every hub server, every tick (GameConfig.matchmaking.formationTickSeconds):
 --
---   1. Reads the oldest page of the shared queue (one GetRangeAsync).
+--   1. Tries to hold the formation lease. The holder reads the oldest
+--      page of the shared queue (one GetRangeAsync); everyone else reads
+--      the summary the holder published, or the page if it is stale.
 --   2. For entries it OWNS (entry.jobId == this server): acts on any
 --      claim. If the group record exists it departs the player. If it
 --      never appears it reverts the claim. See MatchmakingLogic's header
 --      for why this is the only place a player is committed to a group.
---   3. Tries to hold the formation lease. The holder alone runs
---      selectGroups on the page and claims members.
+--   3. The lease holder alone runs selectGroups on the page, claims
+--      members, and publishes the resulting summary.
 --   4. Sends each of its own queued players their QueueState.
 --
 -- The lease is an EFFICIENCY measure: it stops ten servers fighting
@@ -264,19 +266,19 @@ end
 
 -- ===== forming a group (lease holder only) ================================
 
-local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
+local function formGroup(group: MatchmakingLogic.FormedGroup): string?
 	-- Reserve BEFORE claiming: if it fails nobody has been touched, and if
 	-- a claim fails later the reserved server is simply never used (it
 	-- doesn't start until someone teleports to it). The yield happens
 	-- before `started`, so it doesn't eat into the commit deadline.
 	local destination: MatchmakingLogic.Destination? = nil
 	if destinationProvider == nil and destinationRequired then
-		return false
+		return nil
 	end
 	if destinationProvider ~= nil then
 		destination = destinationProvider()
 		if destination == nil then
-			return false
+			return nil
 		end
 	end
 	local groupId = if destination then destination.groupId else HttpService:GenerateGUID(false)
@@ -312,7 +314,7 @@ local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
 		end)
 		if ok then
 			task.spawn(recordRecentOpponents, record)
-			return true
+			return groupId
 		end
 	end
 
@@ -324,7 +326,7 @@ local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
 			return MatchmakingLogic.release(current, groupId)
 		end, config.entryTtlSeconds)
 	end
-	return false
+	return nil
 end
 
 -- ===== acting on our own players' entries =================================
@@ -441,30 +443,87 @@ end
 
 -- ===== the loops ==========================================================
 
+-- ===== the queue summary (matchmaking.md, partition ceiling) ==============
+--
+-- The page read costs one unit per entry on the queue's one partition,
+-- which capped hub servers × queue length at ~1,000. So the lease holder
+-- alone reads it and publishes a summary into metaMap (hash-map keys
+-- spread across partitions); every other server reads one shard for 1
+-- unit. A stale or missing summary (lease handover, a stalled holder)
+-- sends a server back to the page for that tick, so nothing waits on it.
+
+local function readSummary(): ({ Entry }?, boolean)
+	local shard = math.random(1, config.summaryShardCount)
+	local ok, raw = pcall(function()
+		return metaMap:GetAsync(MatchmakingLogic.summaryShardKey(shard))
+	end)
+	if not ok then
+		return nil, false
+	end
+	local summary = MatchmakingLogic.decodeSummary(raw)
+	if
+		summary == nil or not MatchmakingLogic.isSummaryFresh(summary.publishedAt, now(), config.summaryStaleSeconds)
+	then
+		return nil, false
+	end
+	return summary.entries, summary.pageWasFull
+end
+
+local function publishSummary(entries: { Entry }, pageWasFull: boolean)
+	local value = MatchmakingLogic.encodeSummary(entries, pageWasFull, now())
+	for shard = 1, config.summaryShardCount do
+		-- A shard that fails stays old and goes stale; its readers fall
+		-- back to the page, so no retry here.
+		pcall(function()
+			metaMap:SetAsync(MatchmakingLogic.summaryShardKey(shard), value, config.summaryTtlSeconds)
+		end)
+	end
+end
+
 local function tick()
-	local entries, pageWasFull = readPage()
+	-- The lease is held even with the kill switch on: the holder still
+	-- publishes the summary everyone else reads.
+	local holdsLease = tryHoldLease()
+	local entries: { Entry }?, pageWasFull = nil, false
+	if not holdsLease then
+		entries, pageWasFull = readSummary()
+	end
+	if entries == nil then
+		entries, pageWasFull = readPage()
+	end
 	if entries == nil then
 		consecutiveFailures += 1
 		broadcastStatus(nil, false)
 		return
 	end
 	consecutiveFailures = 0
+	local page = entries :: { Entry }
 
 	local pending: PendingDepartures = {}
-	for _, entry in entries do
+	for _, entry in page do
 		handleOwnEntry(entry, pending)
 	end
 	dispatch(pending)
 
-	-- P8-5 kill switch: no new groups form, but owned entries above are
-	-- still serviced, so a group formed before the switch still departs.
-	if Loader.get("LiveConfig").flags().matchmakingEnabled and tryHoldLease() then
-		for _, group in MatchmakingLogic.selectGroups(entries, now(), logicConfig) do
-			formGroup(group)
+	if holdsLease then
+		-- P8-5 kill switch: no new groups form, but owned entries above are
+		-- still serviced, so a group formed before the switch still departs.
+		if Loader.get("LiveConfig").flags().matchmakingEnabled then
+			for _, group in MatchmakingLogic.selectGroups(page, now(), logicConfig) do
+				local groupId = formGroup(group)
+				if groupId ~= nil then
+					local userIds: { number } = {}
+					for _, member in group.members do
+						table.insert(userIds, member.userId)
+					end
+					page = MatchmakingLogic.markClaimed(page, userIds, groupId)
+				end
+			end
 		end
+		publishSummary(page, pageWasFull)
 	end
 
-	broadcastStatus(entries, pageWasFull)
+	broadcastStatus(page, pageWasFull)
 end
 
 local function writeFreshEntry(player: Player, ticket: Ticket): boolean

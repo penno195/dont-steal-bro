@@ -625,6 +625,108 @@ function MatchmakingLogic.queueStatus(
 	}
 end
 
+-- ===== the published queue summary (matchmaking.md, partition ceiling) =====
+--
+-- The queue is one sorted map on one partition, and a full page read
+-- costs one unit per entry. So only the lease holder reads the page; it
+-- publishes what the others need (who owns each entry, its state and
+-- claim token, and enqueue time for positions and wait estimates) as one
+-- compact hash-map value. Avoid lists, streaks and recent maps are left
+-- out: only the lease holder forms groups, and it reads the real page.
+--
+-- Owner job ids repeat for every player on a server, so they are listed
+-- once in `jobs` and rows point at them by index.
+
+export type Summary = {
+	publishedAt: number, -- os.time()
+	pageWasFull: boolean,
+	entries: { Entry },
+}
+
+local SUMMARY_VERSION = 1
+
+function MatchmakingLogic.encodeSummary(entries: { Entry }, pageWasFull: boolean, publishedAt: number): any
+	local jobs: { string } = {}
+	local jobIndex: { [string]: number } = {}
+	local rows: { { any } } = {}
+	for _, entry in entries do
+		local index = jobIndex[entry.jobId]
+		if index == nil then
+			table.insert(jobs, entry.jobId)
+			index = #jobs
+			jobIndex[entry.jobId] = index
+		end
+		local row: { any } = { entry.userId, index, entry.enqueuedAt, entry.state, entry.groupId }
+		table.insert(rows, row)
+	end
+	return { v = SUMMARY_VERSION, at = publishedAt, full = pageWasFull, jobs = jobs, rows = rows }
+end
+
+-- nil for anything malformed. Each row goes back through decodeEntry,
+-- so a summary obeys the same rules as the queue (a Claimed row without
+-- its token is refused), and one bad row refuses the whole summary: the
+-- caller then reads the page itself.
+function MatchmakingLogic.decodeSummary(raw: any): Summary?
+	if type(raw) ~= "table" or raw.v ~= SUMMARY_VERSION then
+		return nil
+	end
+	if not isFiniteNumber(raw.at) or type(raw.full) ~= "boolean" then
+		return nil
+	end
+	if type(raw.jobs) ~= "table" or type(raw.rows) ~= "table" then
+		return nil
+	end
+	local entries: { Entry } = {}
+	for _, row in raw.rows do
+		if type(row) ~= "table" then
+			return nil
+		end
+		local jobId = if isFiniteNumber(row[2]) then raw.jobs[row[2]] else nil
+		local entry = MatchmakingLogic.decodeEntry({
+			v = MatchmakingLogic.SCHEMA_VERSION,
+			userId = row[1],
+			jobId = jobId,
+			enqueuedAt = row[3],
+			state = row[4],
+			groupId = row[5],
+		})
+		if entry == nil then
+			return nil
+		end
+		table.insert(entries, entry)
+	end
+	return { publishedAt = raw.at, pageWasFull = raw.full, entries = entries }
+end
+
+-- Too old to trust: the lease holder has stopped publishing (handover,
+-- stall). A summary dated ahead of this server's clock counts as fresh.
+function MatchmakingLogic.isSummaryFresh(publishedAt: number, now: number, staleSeconds: number): boolean
+	return now - publishedAt < staleSeconds
+end
+
+-- The page as it stands after this tick's claims, so owners see a claim
+-- from the summary published the same tick rather than a tick later.
+-- Only Waiting entries change, the same rule `claim` enforces.
+function MatchmakingLogic.markClaimed(entries: { Entry }, userIds: { number }, groupId: string): { Entry }
+	local claimed: { [number]: boolean } = {}
+	for _, userId in userIds do
+		claimed[userId] = true
+	end
+	local out: { Entry } = {}
+	for _, entry in entries do
+		if claimed[entry.userId] and entry.state == "Waiting" then
+			table.insert(out, withState(entry, "Claimed", groupId))
+		else
+			table.insert(out, entry)
+		end
+	end
+	return out
+end
+
+function MatchmakingLogic.summaryShardKey(shard: number): string
+	return string.format("queueSummary|%d", shard)
+end
+
 -- ===== retry pacing ========================================================
 
 function MatchmakingLogic.backoffSeconds(consecutiveFailures: number, base: number, cap: number): number

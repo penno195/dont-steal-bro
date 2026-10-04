@@ -389,3 +389,77 @@ TestRunner.describe("MatchmakingLogic.backoffSeconds", function()
 		TestRunner.expect(MatchmakingLogic.backoffSeconds(10, 2, 30)):toBe(30)
 	end)
 end)
+
+TestRunner.describe("MatchmakingLogic queue summary (matchmaking.md, partition ceiling)", function()
+	local function mixedPage(): { Entry }
+		local page = { entry(1, nil, "jobA"), entry(2, nil, "jobB"), entry(3, nil, "jobA") }
+		page[2] = MatchmakingLogic.claim(page[2], "group-1") :: Entry
+		return page
+	end
+
+	TestRunner.it("round-trips owners, states, tokens and enqueue times", function()
+		local page = mixedPage()
+		local decoded = MatchmakingLogic.decodeSummary(MatchmakingLogic.encodeSummary(page, true, NOW))
+		TestRunner.expect(decoded ~= nil):toBe(true)
+		local summary = decoded :: MatchmakingLogic.Summary
+		TestRunner.expect(summary.publishedAt):toBe(NOW)
+		TestRunner.expect(summary.pageWasFull):toBe(true)
+		TestRunner.expect(#summary.entries):toBe(3)
+		for i, original in page do
+			local got = summary.entries[i]
+			TestRunner.expect(got.userId):toBe(original.userId)
+			TestRunner.expect(got.jobId):toBe(original.jobId)
+			TestRunner.expect(got.enqueuedAt):toBe(original.enqueuedAt)
+			TestRunner.expect(got.state):toBe(original.state)
+			TestRunner.expect(got.groupId):toBe(original.groupId)
+		end
+	end)
+
+	TestRunner.it("lists each owner server once", function()
+		local raw = MatchmakingLogic.encodeSummary(mixedPage(), false, NOW)
+		TestRunner.expect(#raw.jobs):toBe(2)
+	end)
+
+	TestRunner.it("gives the same positions and waits as the page it came from", function()
+		local page = queue(9)
+		local summary =
+			MatchmakingLogic.decodeSummary(MatchmakingLogic.encodeSummary(page, false, NOW)) :: MatchmakingLogic.Summary
+		local fromPage = MatchmakingLogic.queueStatus(page, 8, NOW, CONFIG, false)
+		local fromSummary = MatchmakingLogic.queueStatus(summary.entries, 8, NOW, CONFIG, summary.pageWasFull)
+		TestRunner.expect(fromSummary.position):toBe(fromPage.position)
+		TestRunner.expect(fromSummary.queueSize):toBe(fromPage.queueSize)
+		TestRunner.expect(fromSummary.estimatedWaitSeconds):toBe(fromPage.estimatedWaitSeconds)
+	end)
+
+	TestRunner.it("refuses the whole summary over one bad row", function()
+		local raw = MatchmakingLogic.encodeSummary(mixedPage(), false, NOW)
+		raw.rows[2][5] = nil -- a Claimed row without its token
+		TestRunner.expect(MatchmakingLogic.decodeSummary(raw)):toBe(nil)
+		local badJob = MatchmakingLogic.encodeSummary(mixedPage(), false, NOW)
+		badJob.rows[1][2] = 9
+		TestRunner.expect(MatchmakingLogic.decodeSummary(badJob)):toBe(nil)
+	end)
+
+	TestRunner.it("refuses missing and foreign-version values", function()
+		TestRunner.expect(MatchmakingLogic.decodeSummary(nil)):toBe(nil)
+		TestRunner.expect(MatchmakingLogic.decodeSummary({ v = 2, at = NOW, full = false, jobs = {}, rows = {} }))
+			:toBe(nil)
+		TestRunner.expect(MatchmakingLogic.decodeSummary({ v = 1, at = NOW, jobs = {}, rows = {} })):toBe(nil)
+	end)
+
+	TestRunner.it("goes stale after staleSeconds, and not before", function()
+		TestRunner.expect(MatchmakingLogic.isSummaryFresh(NOW, NOW + 9, 10)):toBe(true)
+		TestRunner.expect(MatchmakingLogic.isSummaryFresh(NOW, NOW + 10, 10)):toBe(false)
+		TestRunner.expect(MatchmakingLogic.isSummaryFresh(NOW + 5, NOW, 10)):toBe(true)
+	end)
+
+	TestRunner.it("marks this tick's claims, leaving everyone else and non-Waiting entries alone", function()
+		local page = mixedPage()
+		local marked = MatchmakingLogic.markClaimed(page, { 1, 2 }, "group-2")
+		TestRunner.expect(marked[1].state):toBe("Claimed")
+		TestRunner.expect(marked[1].groupId):toBe("group-2")
+		TestRunner.expect(marked[2].groupId):toBe("group-1") -- already claimed by another group
+		TestRunner.expect(marked[3].state):toBe("Waiting")
+		TestRunner.expect(page[1].state):toBe("Waiting") -- the input is not mutated
+	end)
+end)

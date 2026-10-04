@@ -136,7 +136,8 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   `GetUserInfosByUserIdsAsync`'s ~250/min on a fresh server. S1 and S5
   stay unverified until step 13's test B.
   Follow-ups: period boards' publish-once read path built 2026-10-04
-  (`leaderboard-scale.md` §9). Matchmaking queue and name lookups still
+  (`leaderboard-scale.md` §9); matchmaking queue summary built 2026-10-04
+  (`matchmaking.md`). Name lookups (A5) still
   open.
 
 ## Stage 5: Pre-launch hardening

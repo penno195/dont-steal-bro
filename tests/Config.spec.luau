@@ -170,6 +170,9 @@ local function validGameConfig(): Validate.GameConfig
 			backoffBaseSeconds = 2,
 			backoffCapSeconds = 30,
 			unavailableAfterFailures = 3,
+			summaryShardCount = 4,
+			summaryStaleSeconds = 10,
+			summaryTtlSeconds = 60,
 		},
 		teleport = {
 			matchPlaceId = 0,
@@ -1725,6 +1728,18 @@ TestRunner.describe("Validate.checkGameConfig (P5-1 matchmaking)", function()
 		config.matchmaking = nil :: any
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a queue summary that goes stale within two ticks, or expires before it is stale", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.summaryStaleSeconds = 3
+		end) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.summaryTtlSeconds = 5
+		end) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.summaryShardCount = 0
+		end) > 0):toBeTruthy()
 	end)
 
 	TestRunner.it("rejects a groupSize that isn't playerCount", function()

@@ -433,6 +433,13 @@ local GameConfig: Validate.GameConfig = {
 		backoffBaseSeconds = 2,
 		backoffCapSeconds = 30,
 		unavailableAfterFailures = 3, -- consecutive failed reads before the UI says so
+
+		-- matchmaking.md, partition ceiling: only the lease holder reads the
+		-- queue page and publishes a summary into metaMapName; every other
+		-- hub server reads one shard (1 unit) instead of the page.
+		summaryShardCount = 4,
+		summaryStaleSeconds = 10, -- older than this, a server reads the page itself
+		summaryTtlSeconds = 60,
 	},
 
 	-- P5-2: hub-to-match teleport. docs/teleport.md explains each number.

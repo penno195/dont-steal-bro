@@ -31,6 +31,7 @@ wrapper). Config: `GameConfig.matchmaking`.
 | HashMap `MatchGroups_v1` | groupId (GUID) | `GroupRecord` (members, npcSlots; P5-3 adds ballot, votes, result) — **the commit point** | `groupRecordTtlSeconds` |
 | HashMap `RecentOpponents_v1` | userId | recent co-players + expiry | `rematchCooldownSeconds` |
 | HashMap `MatchmakingMeta_v1` | `formationLease` | `{ holder = jobId }` | `leaseTtlSeconds` |
+| HashMap `MatchmakingMeta_v1` | `queueSummary` 1..N | the lease holder's queue summary: owner, state, claim token, enqueuedAt per entry | `summaryTtlSeconds` |
 | HashMap `RecentMaps_v1` (P5-3, `GameConfig.vote`) | userId | last few maps played, newest first | `vote.recentMapsTtlSeconds` |
 
 ## Why a player can't be double-booked
@@ -170,6 +171,21 @@ budget sketch's third lever, now required rather than optional: only
 the lease holder reads the full page, and it publishes each queued
 player's position and status in one small summary value (sharded if
 needed) that other servers read for 1 unit.
+
+**Built 2026-10-04.** Each tick, every hub server tries the lease. The
+holder reads the page, forms groups, marks the members it just claimed,
+and writes the summary into `summaryShardCount` (4) keys of
+`MatchmakingMeta_v1`. Every other server reads one random shard: 1 unit.
+The summary leaves out avoid lists, streaks and recent maps, because only
+the holder forms groups and it reads the real page. A summary older
+than `summaryStaleSeconds` (10s) or that fails to decode sends that
+server back to the page for that tick. That covers a lease handover (up
+to `leaseTtlSeconds`) and a holder that stalls, at the old cost, only
+while it lasts. Queue-partition load is now about 30 page reads/min ×
+queue length from the one holder (≤ 6,000 units/min), plus claims and
+refreshes, whatever the number of hub servers. The lease is now taken
+with the kill switch on too, so the summary keeps flowing. Claim
+discovery is no slower: the summary carries the claims made in the tick that published it.
 
 **Semantics this relies on**, also to verify:
 - A transform returning `nil` **cancels** the update. The sorted-map
