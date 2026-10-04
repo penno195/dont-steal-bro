@@ -10,16 +10,32 @@ is a finding. Every threshold is the value this review will *act* on,
 taken from the design docs, and none of them is a measurement. The first
 real review replaces the empty log rows.
 
-**The review can't run on day one without §0.** Only 3 of the 18 events
-in `telemetry-schema.md` are actually sent, and the sink uses a
-deprecated API. Fix that before launch, or week one produces a funnel
-with nothing in it.
+**§0's wiring is done** (next-stages steps 6–8, 2026-10-03). Every
+event is sent, through the current API. §0.4 lists the checks below that
+the shipped events still can't answer. Each one has a stand-in.
+
+**Gate before the soft launch** (next-stages, 2026-10-04): these steps
+must be ticked first. A soft launch with any of them open measures a bug
+instead of the design.
+
+| Step | Why it gates the launch |
+|---|---|
+| 9. Events reach Creator Hub | Studio can't send analytics. Unverified events can come back as an empty week one |
+| 13. Tests on the published place | Payouts, purchases and teleports only run there |
+| 15. Mobile audit | Most players will be on phones. A broken task shows up in §4.2 as abandonment that tuning can't fix |
+| 16. Device half of the perf check | School's draw calls (`perf-report.md`) decide whether it stays in the map rotation |
+| 18. Group playtests | The first finale played by real people should come from the playtest group, not from strangers |
+| 1. Price tuning | Uses the step 18 sessions. Prices can change later through live config, so this can slip if needed |
 
 ---
 
 ## 0. Pre-launch blocker: the instrumentation gap
 
 ### 0.1 Events that are defined but never sent
+
+> **Done (next-stages step 7, 2026-10-03).** All of them are sent. The
+> round events became steps of the `Round` funnel (`telemetry-schema.md`).
+> The text below is the original finding.
 
 `Telemetry.luau` exports 18 event functions. The only calls to them are
 in `MatchTeleportService` (`userMatched`, `roundStarted`, `mapPlayed`).
@@ -76,6 +92,12 @@ delay. Don't trust a `pcall` that returned nothing.
 
 ### 0.3 Events this review needs that the schema doesn't have
 
+> **Done (next-stages step 8, 2026-10-03).** All six exist:
+> `TaskAbandoned`, `PowerUpCollected`, `RoundEnded`, bot seats as
+> `StreakWin`'s `Bots` field, the rung as `StealShareChoice`'s `Rung`,
+> and the config version as the `Round` funnel's `Config` field. The text
+> below is the original finding.
+
 | Missing | Why | Suggested shape |
 |---|---|---|
 | Task abandoned | The brief asks for "too often abandoned". Completions alone can't show it. | `TaskAbandoned(taskId, secondsSpent)` when a player leaves a station with the task unfinished |
@@ -91,6 +113,29 @@ events say which group a round was in.
 
 **Recommendation:** make §0 its own task (wiring, the field mapping,
 the new events and a Studio check). Do it before the soft launch.
+
+### 0.4 Checks the shipped events can't answer (2026-10-04)
+
+Found by matching every check in §2–§6 against `telemetry-schema.md`.
+Creator Hub shows custom events as counts broken down by their fields.
+It can't join two events from the same round or the same player, so a
+check that needs a join has no source. Each row gives the stand-in the
+review uses until a fix ships.
+
+| Check | Why it can't run | Stand-in | Fix, if wanted |
+|---|---|---|---|
+| §3 A: steal rate by rung, **all-human Studios only** | `StealShareChoice` doesn't say whether the other finalists were bots | All-human steal rate without rungs, from `FinaleOutcome` with `Bots = 0`: (SoleStealer + 2·LoneSharer + 3·AllSteal) ÷ 3n. By rung, use every human choice and label it *mixed lobbies* | `StealShareChoice`'s F2 `Streak` band repeats its value (the streak) and nearly repeats F3 `Rung`. Swap it for `Bots` |
+| §3 dominance test: realised payoff of Steal vs Share | Needs each player's choice joined to their branch | None that's realised. Compute the expected payoff from each rung's observed steal rate (`payoff-table.md`) and say so | Same F2 slot, holding the branch instead of `Bots`. Only one of the two fits |
+| §4.1 vote share vs times offered | `MapVoted` doesn't log which maps were on the ballot | Vote share vs play share (`MapPlayed`) | A field on `MapVoted` |
+| §4.1 NPC qualification rate per map | No event says a bot qualified. `FinaleOutcome` has no `Map` | Human qualification rate per map (`Round` funnel, step 3 ÷ step 1, split by `Map` and `Humans`) | — |
+| §4.2 task times by platform | No platform field | Creator Hub's own platform breakdown, if custom events have one (check at step 9) | — |
+| §5 bots' Studio steal rate | Bots have no `Player` to log against | Not measurable live. It's NPCBrain's logic, so test it headlessly or in Studio | — |
+| §5 leaderboard top 20 by NPC mix, §6 collusion, feeding, farming by account | Need per-account rows, which Creator Hub doesn't give | Investigate a reported or suspicious account by hand: leaderboard, its profile, live server logs. No pair analysis | Out of scope before launch |
+
+The first two rows hit the review's headline question (finale tension),
+so they matter most. Both are one-field changes to one event. Ask the
+owner before step 9 whether to make one, since step 9 is when the events
+get checked on a published place anyway.
 
 ---
 
@@ -127,15 +172,19 @@ both hides whichever effect is real.
 | # | Step | Source |
 |---|---|---|
 | 0 | Joined the hub | Creator Hub (built in) |
-| 1 | Queued | `UserQueued` |
-| 2 | Matched | `UserMatched` |
-| 3 | In a round | `RoundStarted` (join by user via `UserMatched`) |
-| 4 | Completed a first task | first `TaskCompleted` per user per round |
-| 5 | Completed all tasks | `AllTasksCompleted` |
-| 6 | Qualified (top 3) | `Qualified`, placement 1–3 |
-| 7 | Locked a choice | `ChoiceLocked` |
-| 8 | Back in the hub | `ReturnedToHub` |
-| 9 | **Queued again** | a second `UserQueued` in the same session |
+| 1 | Queued | `Matchmaking` funnel step 1 |
+| 2 | Matched | `Matchmaking` funnel step 2 |
+| 3 | In a round | `Round` funnel step 1 (`Started`) |
+| 4 | Completed a first task | `TaskCompleted` with `Order = 1` |
+| 5 | Completed all tasks | `Round` funnel step 2 (`Finished`) |
+| 6 | Qualified (top 3) | `Round` funnel step 3 (`Qualified`) |
+| 7 | Locked a choice | `Round` funnel step 5 (`ChoiceLocked`) |
+| 8 | Back in the hub | `ReturnedToHub` with `Reason = RoundOver` |
+| 9 | **Queued again** | `Matchmaking` funnel sessions per player above 1 (each queue attempt is a new session) |
+
+The two funnels run in different places with different session ids,
+so Creator Hub shows them as two funnels. Steps 2→3 compare their
+totals over the same window. They are not one funnel.
 
 Retention (D1/D7) and session length come from Creator Hub's built-in
 dashboards. Compare those against the **similar experiences** benchmark
@@ -162,7 +211,7 @@ engineering or tunable problems and the fix doesn't need a design
 argument. **Most important drop:** 8→9 after a loss. The whole game
 assumes a reset makes you queue again ("one more go"), and requeue after
 a loss is the only direct test of that. Split it by the streak that was
-lost (`StreakLoss.streakLength`). Losing a 12-streak and not coming back
+lost (`StreakLoss`'s `Streak` band). Losing a 12-streak and not coming back
 is the failure mode that design-decisions.md Q7 accepted, so measure it.
 
 ---
@@ -413,8 +462,9 @@ Newest first. Copy the block for each weekly review.
 - **Config version at start:**
 - **Volume:** players, rounds, all-human Studios, human Studio choices
   by tier
-- **Instrumentation check:** every §0.1 event present? Anything missing
-  is logged here before any finding
+- **Instrumentation check:** every funnel step and custom event in
+  `telemetry-schema.md` present? Anything missing is logged here before
+  any finding
 
 | # | Finding | n | Change | Expected effect | Confirming metric | Wait | Priority |
 |---|---|---|---|---|---|---|---|
