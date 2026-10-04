@@ -270,4 +270,84 @@ function LeaderboardLogic.mayBroadcast(roundState: string, isHub: boolean): bool
 	return isHub and roundState == "WaitingForPlayers"
 end
 
+-- ===== the shared period-board copy (leaderboard-scale.md §9) ==========
+--
+-- A sorted map's GetRangeAsync costs one MemoryStore unit per row, and
+-- each sorted map sits on one partition, so every server reading the
+-- top 100 itself caps a period board at ~450 servers. Instead one
+-- server at a time reads the sorted map and publishes the rendered
+-- board, names included, as one hash-map value copied into a few shard
+-- keys. Everyone else reads a single shard: 1 unit, not 100.
+--
+-- The value is compact on purpose (32 KB cap, A8): 100 rows of
+-- {userId, streak, name} is ~4 KB. `v` lets a format change be told
+-- apart from a corrupt value; both decode to nil.
+
+export type Published = {
+	publishedAt: number, -- os.time(), so every server agrees on its age
+	entries: { Entry },
+}
+
+local PUBLISHED_VERSION = 1
+
+function LeaderboardLogic.encodePublished(entries: { Entry }, publishedAt: number): any
+	local rows: { { any } } = {}
+	for _, entry in entries do
+		local row: { any } = { entry.userId, entry.bestStreak, entry.displayName }
+		table.insert(rows, row)
+	end
+	return { v = PUBLISHED_VERSION, at = publishedAt, rows = rows }
+end
+
+-- nil for anything that is not a well-formed current-version value. A
+-- bad row drops the whole value rather than showing a board with holes:
+-- the caller then republishes, which repairs it.
+function LeaderboardLogic.decodePublished(value: any): Published?
+	if type(value) ~= "table" or value.v ~= PUBLISHED_VERSION then
+		return nil
+	end
+	if type(value.at) ~= "number" or type(value.rows) ~= "table" then
+		return nil
+	end
+	local entries: { Entry } = {}
+	for _, row in value.rows do
+		if type(row) ~= "table" then
+			return nil
+		end
+		local userId, streak, name = row[1], row[2], row[3]
+		if type(userId) ~= "number" or type(streak) ~= "number" or type(name) ~= "string" then
+			return nil
+		end
+		table.insert(entries, { userId = userId, bestStreak = streak, displayName = name })
+	end
+	return { publishedAt = value.at, entries = entries }
+end
+
+-- Is the shared copy recent enough that nobody should republish it? A
+-- copy dated in the future (another server's clock ahead of ours) counts
+-- as fresh: republishing would not fix a clock.
+function LeaderboardLogic.isPublishedFresh(
+	publishedAt: number,
+	nowSeconds: number,
+	republishAfterSeconds: number
+): boolean
+	return nowSeconds - publishedAt < republishAfterSeconds
+end
+
+-- Which shard this read uses, 1..shardCount, from a roll in [0, 1).
+function LeaderboardLogic.pickShard(shardCount: number, roll: number): number
+	local count = math.max(1, math.floor(shardCount))
+	return math.clamp(math.floor(math.clamp(roll, 0, 1) * count) + 1, 1, count)
+end
+
+-- Hash-map keys (128-character cap, A8). The period key is in every key,
+-- so a rollover moves everyone to fresh keys and the old ones expire.
+function LeaderboardLogic.publishedShardKey(kind: string, periodKey: string, shard: number): string
+	return string.format("%s|%s|%d", kind, periodKey, shard)
+end
+
+function LeaderboardLogic.publishLockKey(kind: string, periodKey: string): string
+	return string.format("lock|%s|%s", kind, periodKey)
+end
+
 return LeaderboardLogic

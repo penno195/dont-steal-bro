@@ -279,3 +279,58 @@ TestRunner.describe("LeaderboardLogic.mayBroadcast", function()
 		TestRunner.expect(LeaderboardLogic.mayBroadcast("Cleanup", false)):toBe(true)
 	end)
 end)
+
+TestRunner.describe("LeaderboardLogic shared period-board copy (leaderboard-scale.md §9)", function()
+	local entries: { LeaderboardLogic.Entry } = {
+		{ userId = 11, bestStreak = 9, displayName = "Ann" },
+		{ userId = 22, bestStreak = 4, displayName = "Player 22" },
+	}
+
+	TestRunner.it("round-trips a board, names and order included", function()
+		local decoded = LeaderboardLogic.decodePublished(LeaderboardLogic.encodePublished(entries, 1000))
+		TestRunner.expect(decoded ~= nil):toBe(true)
+		local published = decoded :: LeaderboardLogic.Published
+		TestRunner.expect(published.publishedAt):toBe(1000)
+		TestRunner.expect(#published.entries):toBe(2)
+		TestRunner.expect(published.entries[1].userId):toBe(11)
+		TestRunner.expect(published.entries[1].bestStreak):toBe(9)
+		TestRunner.expect(published.entries[2].displayName):toBe("Player 22")
+	end)
+
+	TestRunner.it("round-trips an empty board as a real (empty) copy, not a missing one", function()
+		local decoded = LeaderboardLogic.decodePublished(LeaderboardLogic.encodePublished({}, 5))
+		TestRunner.expect(decoded ~= nil):toBe(true)
+		TestRunner.expect(#(decoded :: LeaderboardLogic.Published).entries):toBe(0)
+	end)
+
+	TestRunner.it("rejects missing, foreign-version and malformed values", function()
+		TestRunner.expect(LeaderboardLogic.decodePublished(nil)):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished("board")):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished({ v = 2, at = 1, rows = {} })):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished({ v = 1, rows = {} })):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished({ v = 1, at = 1, rows = { { 1, "9", "A" } } })):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished({ v = 1, at = 1, rows = { { 1, 9 } } })):toBe(nil)
+	end)
+
+	TestRunner.it("counts a copy as fresh until republishAfter has passed", function()
+		TestRunner.expect(LeaderboardLogic.isPublishedFresh(100, 159, 60)):toBe(true)
+		TestRunner.expect(LeaderboardLogic.isPublishedFresh(100, 160, 60)):toBe(false)
+	end)
+
+	TestRunner.it("treats a copy from a server whose clock runs ahead as fresh", function()
+		TestRunner.expect(LeaderboardLogic.isPublishedFresh(200, 100, 60)):toBe(true)
+	end)
+
+	TestRunner.it("picks every shard in range, including at the roll's edges", function()
+		TestRunner.expect(LeaderboardLogic.pickShard(4, 0)):toBe(1)
+		TestRunner.expect(LeaderboardLogic.pickShard(4, 0.26)):toBe(2)
+		TestRunner.expect(LeaderboardLogic.pickShard(4, 0.999)):toBe(4)
+		TestRunner.expect(LeaderboardLogic.pickShard(4, 1)):toBe(4)
+		TestRunner.expect(LeaderboardLogic.pickShard(0, 0.5)):toBe(1)
+	end)
+
+	TestRunner.it("puts the period in every key, so a rollover starts on fresh keys", function()
+		TestRunner.expect(LeaderboardLogic.publishedShardKey("Daily", "2026-10-04", 3)):toBe("Daily|2026-10-04|3")
+		TestRunner.expect(LeaderboardLogic.publishLockKey("Weekly", "2026-W40")):toBe("lock|Weekly|2026-W40")
+	end)
+end)

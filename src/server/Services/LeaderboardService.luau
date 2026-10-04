@@ -473,6 +473,91 @@ local function refreshPeriodBoard(kind: string, periodKey: string): boolean
 	return true
 end
 
+-- ===== the shared copy (leaderboard-scale.md §9) ===========================
+--
+-- refreshPeriodBoard above costs 100 MemoryStore units on the board's
+-- one partition, which caps a board at ~450 servers reading it. So the
+-- poll loop reads a published copy instead (1 unit), and only the one
+-- server holding the publish lock reads the sorted map and republishes.
+-- The rollover still reads the sorted map directly: it is once per
+-- period, and it must see the final standings, not a copy.
+--
+-- These calls are not spent against `budget`: that is the DataStore
+-- request budget, and MemoryStore has no per-server one (A6).
+
+local publishedMap: MemoryStoreHashMap? = nil
+local shareConfig = config.periodShare
+-- Unique per server, so the lock's winner can recognise its own value.
+local publishToken = string.format("%s:%d", game.JobId, math.random(1, 2 ^ 30))
+
+local function applyPublished(kind: string, published: LeaderboardLogic.Published)
+	local state = periodState[kind]
+	state.entries = published.entries
+	-- The copy's real age, so staleness on the UI tracks the data and
+	-- not when this server happened to fetch it.
+	state.lastRefreshAt = now() - math.max(0, os.time() - published.publishedAt)
+end
+
+-- MemoryStoreHashMap:UpdateAsync: returning nil cancels, so only the
+-- first server since the lock expired gets its own token back.
+local function tryTakePublishLock(map: MemoryStoreHashMap, kind: string, periodKey: string): boolean
+	local ok, result = pcall(function()
+		return map:UpdateAsync(LeaderboardLogic.publishLockKey(kind, periodKey), function(current: any): any
+			if current ~= nil then
+				return nil
+			end
+			return publishToken
+		end, shareConfig.lockSeconds)
+	end)
+	return ok and result == publishToken
+end
+
+local function publishPeriodBoard(map: MemoryStoreHashMap, kind: string, periodKey: string)
+	local value = LeaderboardLogic.encodePublished(periodState[kind].entries, os.time())
+	for shard = 1, shareConfig.shardCount do
+		local ok = pcall(function()
+			map:SetAsync(LeaderboardLogic.publishedShardKey(kind, periodKey, shard), value, shareConfig.shardTtlSeconds)
+		end)
+		if not ok then
+			-- A shard left old is read as stale and republished by the
+			-- next server to land on it; no retry needed here.
+			warn(string.format("LeaderboardService: publishing %s %s shard %d failed", kind, periodKey, shard))
+		end
+	end
+end
+
+local function refreshPeriodBoardShared(kind: string, periodKey: string)
+	local map = publishedMap
+	if map == nil then
+		refreshPeriodBoard(kind, periodKey)
+		return
+	end
+
+	local shard = LeaderboardLogic.pickShard(shareConfig.shardCount, rng())
+	local ok, value = pcall(function()
+		return map:GetAsync(LeaderboardLogic.publishedShardKey(kind, periodKey, shard))
+	end)
+	if not ok then
+		-- MemoryStore struggling: keep the board this server has, and do
+		-- not pile a sorted-map read on top.
+		return
+	end
+
+	local published = LeaderboardLogic.decodePublished(value)
+	if published ~= nil then
+		applyPublished(kind, published)
+		if LeaderboardLogic.isPublishedFresh(published.publishedAt, os.time(), shareConfig.republishAfterSeconds) then
+			return
+		end
+	end
+
+	-- Missing or stale. One server republishes; the rest keep what they
+	-- have (a stale copy, or nothing on a fresh boot) until next poll.
+	if tryTakePublishLock(map, kind, periodKey) and refreshPeriodBoard(kind, periodKey) then
+		publishPeriodBoard(map, kind, periodKey)
+	end
+end
+
 -- ===== rollover ============================================================
 
 -- P4-4 asks for a frozen snapshot of the finishing standings written to
@@ -847,7 +932,7 @@ local function startPolling(bootTime: number)
 				local kind = rawKind
 				local state = periodState[kind]
 				if state.lastSeenKey ~= nil and mayRequest("Read", Enum.DataStoreRequestType.GetSortedAsync) then
-					refreshPeriodBoard(kind, state.lastSeenKey :: string)
+					refreshPeriodBoardShared(kind, state.lastSeenKey :: string)
 				end
 			end
 			broadcastPeriodBoards()
@@ -976,6 +1061,15 @@ function LeaderboardService:init()
 	end)
 	if snapshotOk then
 		snapshotStore = resolvedSnapshot
+	end
+
+	-- No Studio suffix needed: Roblox keeps Studio's MemoryStores apart
+	-- from production. A nil map falls back to direct sorted-map reads.
+	local shareOk, resolvedShare = pcall(function()
+		return MemoryStoreService:GetHashMap(shareConfig.mapName)
+	end)
+	if shareOk then
+		publishedMap = resolvedShare
 	end
 
 	local bootTime = os.time()

@@ -801,9 +801,19 @@ export type LeaderboardConfig = {
 	-- P4-4: daily/weekly boards.
 	snapshotStoreName: string,
 	periodGraceSeconds: number,
+	-- leaderboard-scale.md §9: the shared copy of each period board.
+	periodShare: LeaderboardPeriodShare,
 	-- Rewards-roadmap step 4: period kind -> bands of places.
 	-- Structurally LeaderboardPayoutLogic.PayoutTable.
 	payouts: { [string]: { LeaderboardPayoutBand } },
+}
+
+export type LeaderboardPeriodShare = {
+	mapName: string,
+	shardCount: number,
+	republishAfterSeconds: number,
+	lockSeconds: number,
+	shardTtlSeconds: number,
 }
 
 export type LeaderboardPayoutBand = {
@@ -2092,6 +2102,62 @@ local function checkLeaderboardConfig(leaderboard: LeaderboardConfig, issues: { 
 	end
 	if leaderboard.periodGraceSeconds <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.periodGraceSeconds", "must be positive")
+	end
+
+	-- The shared period-board copy. The order matters: a lock outliving
+	-- the republish age would let a copy go stale with nobody allowed to
+	-- replace it, and a copy expiring before it is due for replacement
+	-- would blank the board between publishes. And staleness must not
+	-- be reached by a copy that is merely awaiting its republish.
+	local share = leaderboard.periodShare
+	if type(share) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.periodShare", "must be a table")
+	else
+		if not isNonEmptyString(share.mapName) then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.mapName",
+				"must be a non-empty string"
+			)
+		end
+		if share.shardCount < 1 or share.shardCount ~= math.floor(share.shardCount) then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.shardCount",
+				"must be a whole number, at least 1"
+			)
+		end
+		if share.lockSeconds <= 0 or share.lockSeconds > share.republishAfterSeconds then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.lockSeconds",
+				"must be positive and no greater than republishAfterSeconds"
+			)
+		end
+		if share.republishAfterSeconds + leaderboard.refreshMaxSeconds >= leaderboard.staleAfterSeconds then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.republishAfterSeconds",
+				"plus refreshMaxSeconds must stay under staleAfterSeconds - a copy awaiting republish must not read as stale"
+			)
+		end
+		if share.shardTtlSeconds <= share.republishAfterSeconds + leaderboard.refreshMaxSeconds then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.shardTtlSeconds",
+				"must exceed republishAfterSeconds + refreshMaxSeconds, or the board blanks between publishes"
+			)
+		end
 	end
 	local payouts = leaderboard.payouts
 	if type(payouts) ~= "table" then

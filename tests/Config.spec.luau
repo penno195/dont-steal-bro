@@ -126,6 +126,13 @@ local function validGameConfig(): Validate.GameConfig
 			budget = { perWindow = 60, windowSeconds = 60, softCeiling = 0.7 },
 			snapshotStoreName = "TestSnapshots",
 			periodGraceSeconds = 3600,
+			periodShare = {
+				mapName = "TestShare",
+				shardCount = 4,
+				republishAfterSeconds = 60,
+				lockSeconds = 30,
+				shardTtlSeconds = 900,
+			},
 			payouts = {
 				Daily = { { maxRank = 1, currency = 500 }, { maxRank = 10, currency = 100 } },
 				Weekly = { { maxRank = 3, currency = 1000 } },
@@ -200,7 +207,13 @@ local function validGameConfig(): Validate.GameConfig
 		},
 		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
-		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0, studioEcho = false },
+		telemetry = {
+			enabled = true,
+			batchSize = 50,
+			flushIntervalSeconds = 10,
+			perMinuteLimit = 0,
+			studioEcho = false,
+		},
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
 		npcTitleTopRungsExcluded = 3,
@@ -611,6 +624,37 @@ TestRunner.describe("Validate.checkGameConfig (leaderboard payouts, rewards step
 
 	TestRunner.it("accepts a cosmetic-only band", function()
 		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 1, currency = 0, cosmeticId = "x" } } })):toBe(0)
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (shared period-board copy)", function()
+	local function issuesWith(field: string, value: any): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		config.leaderboard.periodShare[field] = value
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the fixture", function()
+		TestRunner.expect(#issuesWith("shardCount", 4)):toBe(0)
+	end)
+
+	TestRunner.it("refuses a fractional or zero shard count", function()
+		TestRunner.expect(#issuesWith("shardCount", 0) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith("shardCount", 2.5) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a lock that outlives the republish age", function()
+		TestRunner.expect(#issuesWith("lockSeconds", 61) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a republish age that would make a waiting copy read as stale", function()
+		TestRunner.expect(#issuesWith("republishAfterSeconds", 180) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a copy that expires before its replacement is due", function()
+		TestRunner.expect(#issuesWith("shardTtlSeconds", 120) > 0):toBeTruthy()
 	end)
 end)
 

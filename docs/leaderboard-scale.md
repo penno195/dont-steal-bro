@@ -299,3 +299,29 @@ needed before any launch past a few thousand CCU. One elected server per
 board reads the sorted map and publishes the rendered top 100 as one
 value, sharded across a few hash-map keys (the best-practices guide's
 remedy for a hot key). Everyone else reads one shard: 1 unit, not 100.
+
+**Built 2026-10-04** (`refreshPeriodBoardShared` in `LeaderboardService`,
+pure parts in `LeaderboardLogic`, tuning in
+`GameConfig.leaderboard.periodShare`). Each poll reads one random shard
+of the hash map `PeriodBoardsPublished_v1`: 1 unit. A copy older than
+`republishAfterSeconds` (60s), or a missing one, sends the reader for
+the publish lock, a hash-map `UpdateAsync` that only the first server
+since the lock expired wins (`lockSeconds`, 30s). The winner reads the
+sorted map (100 units), resolves the names and writes the board into
+all 4 shards. Readers get names from the copy, so they make no name
+lookups for period boards (helps A5). Rollover and catch-up still read
+the sorted map directly, because they need the final standings.
+
+New cost per board: about 100 units/min on the sorted map's partition
+in total, however many servers there are, plus 1 unit per server per
+poll spread over 4 hash keys. At 20,000 CCU that is ~555 reads/min per
+shard key, far under the ~30,000/min partition guide. What players see:
+a period board can be up to ~3 minutes old (republish age plus one poll
+interval), under `staleAfterSeconds`. A server that boots when no copy
+exists and loses the lock shows "Loading" until its next poll. That
+only happens at a period's start or after every server has been gone
+for 15 minutes.
+
+Still open: the matchmaking queue's sorted map (`matchmaking.md`), the
+all-time board's OrderedDataStore reads (§3, not needed until well past
+launch scale), and A5's name lookups for the all-time board.

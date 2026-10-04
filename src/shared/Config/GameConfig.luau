@@ -321,6 +321,16 @@ local GameConfig: Validate.GameConfig = {
 		-- very end of it. 1 hour is generous against a refresh interval
 		-- measured in minutes.
 		periodGraceSeconds = 3600,
+		-- leaderboard-scale.md §9: one server at a time reads each period
+		-- board's sorted map (100 units) and publishes it to a hash map;
+		-- every other server reads one shard (1 unit).
+		periodShare = {
+			mapName = "PeriodBoardsPublished_v1",
+			shardCount = 4, -- copies of the board, so no one key takes every read
+			republishAfterSeconds = 60, -- a copy older than this is replaced on the next read
+			lockSeconds = 30, -- how long one server holds the right to republish
+			shardTtlSeconds = 900, -- an abandoned copy (old period, dead servers) expires
+		},
 		-- What a finished period pays (design-decisions.md Q1, applied
 		-- 2026-10-02; rewards-roadmap.md step 4). Bands of places in
 		-- ascending maxRank: #1, #2-3, #4-10. The last band's maxRank is

@@ -135,6 +135,9 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   path before a large launch. Also, name lookups can exceed
   `GetUserInfosByUserIdsAsync`'s ~250/min on a fresh server. S1 and S5
   stay unverified until step 13's test B.
+  Follow-ups: period boards' publish-once read path built 2026-10-04
+  (`leaderboard-scale.md` §9). Matchmaking queue and name lookups still
+  open.
 
 ## Stage 5: Pre-launch hardening
 
