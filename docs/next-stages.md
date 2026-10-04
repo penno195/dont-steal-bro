@@ -70,7 +70,21 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   or more), station, pickup and spawn boxes, and other parts (no
   clipping). Mesh collisions are set to Box. All 58 nav nodes still path
   from the spawn. Factory now uses 67 unique textures and 23 meshes
-  (budget under 100 and 150). Still to do: Museum, Laboratory, School.*
+  (budget under 100 and 150). Museum dressed 2026-10-04. The Creator
+  Store had no usable museum pack (SEO spam and scripted NPCs), so 13
+  props were made with Studio's mesh generator: sarcophagus, Anubis,
+  pharaoh mask, bust, amphora, astronaut, lunar lander, Sputnik,
+  ammonite, knight, sculpture, palm and bench. Each is one mesh with one
+  texture, and the templates are in `ServerStorage.AssetQuarantine.MuseumGen`.
+  The Rotunda's primitive dino became a mounted T-Rex skeleton (Creator
+  Store 11786401282, no scripts, 23 meshes). Only its planted leg and
+  chest post collide, it stands in the NE quadrant clear of R1's seven
+  edges, and nothing hangs lower than 12.6 studs over a walkway. In Egypt,
+  Anubis replaced the four block statues, and the sarcophagus now sits in
+  its case. In total 72 props went into `Dressing/Props_*` and
+  `Dressing/Egypt`, against walls on both floors. Each was checked like
+  Factory's, and all 63 nav nodes still path from the spawn. Museum uses
+  13 textures and 35 meshes. Still to do: Laboratory, School.*
 - [x] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
