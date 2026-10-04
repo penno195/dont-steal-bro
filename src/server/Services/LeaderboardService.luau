@@ -57,6 +57,9 @@ local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 
 local config = GameConfig.leaderboard
 
+-- The first read's random spread after boot (startPolling).
+local FIRST_REFRESH_SPREAD_SECONDS = 15
+
 local store: OrderedDataStore? = nil
 local cachedEntries: { LeaderboardLogic.Entry } = {}
 local lastRefreshAt: number? = nil
@@ -812,8 +815,10 @@ local function startPolling(bootTime: number)
 	pollThread = task.spawn(function()
 		-- A random first delay as well as a random interval: a hundred
 		-- servers started by the same deploy would otherwise take their
-		-- first read at the same instant.
-		task.wait(LeaderboardLogic.nextRefreshDelay(0, config.refreshMaxSeconds, rng()))
+		-- first read at the same instant. Shorter than the interval,
+		-- because until it ends the server has no board to send and
+		-- the hub's wall and menu say "Loading…".
+		task.wait(LeaderboardLogic.nextRefreshDelay(0, FIRST_REFRESH_SPREAD_SECONDS, rng()))
 
 		-- By boot time, not now: if the delay above crossed a boundary,
 		-- checkRollovers handles that one as an ordinary rollover.

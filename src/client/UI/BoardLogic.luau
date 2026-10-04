@@ -102,9 +102,11 @@ end
 --
 -- The three HubLeaderboardSurface parts (hub-spec.md), one per tab,
 -- drawn by HubBoardController from the same broadcasts as the menu
--- screen. A wall can't scroll, so it shows the top WALL_ROWS only.
+-- screen. A wall can't scroll, so it shows the top WALL_ROWS only: five,
+-- because the hub's boards are 9 studs tall and ten rows were too small
+-- to read from the path on a phone. The full 100 is in the menu.
 
-BoardLogic.WALL_ROWS = 10
+BoardLogic.WALL_ROWS = 5
 
 BoardLogic.WALL_TITLES = table.freeze({
 	Daily = "TODAY'S TOP STREAKS",
