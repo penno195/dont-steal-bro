@@ -22,6 +22,7 @@ instead of the design.
 |---|---|
 | 9. Events reach Creator Hub | Studio can't send analytics. Unverified events can come back as an empty week one |
 | 13. Tests on the published place | Payouts, purchases and teleports only run there |
+| 4a, 14a–14d. Art, sound, images | A silent game with blank vote cards and imageless store items measures presentation, not the design (added 2026-10-04) |
 | 15. Mobile audit | Most players will be on phones. A broken task shows up in §4.2 as abandonment that tuning can't fix |
 | 16. Device half of the perf check | School's draw calls (`perf-report.md`) decide whether it stays in the map rotation |
 | 18. Group playtests | The first finale played by real people should come from the playtest group, not from strangers |

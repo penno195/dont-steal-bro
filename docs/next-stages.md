@@ -162,6 +162,22 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   (`leaderboard-scale.md` §9); matchmaking queue summary built 2026-10-04
   (`matchmaking.md`); name lookups capped and retried sooner 2026-10-04 (A5). All
   three follow-ups done.
+- [ ] **14a. Sound.** All 21 cues in `AudioLogic.luau` still point at
+  `PLACEHOLDER_ASSET`, so the game is silent. Pick or make a sound for
+  every cue and the three music beds (`audio-and-feel.md` is the brief),
+  upload them, and set the ids. Added 2026-10-04.
+- [ ] **14b. Map preview images.** Every map's `thumbnailAssetId` is
+  `rbxassetid://0`, so the Hub vote board shows blank cards. Capture
+  one image per launch map (after its 4a art pass), upload them, and set
+  the ids. Added 2026-10-04.
+- [ ] **14c. Experience thumbnails and icon.** The game icon and the
+  thumbnail set for the experience page, made from the art-passed maps.
+  Added 2026-10-04.
+- [ ] **14d. Store item images and categories.** Store items have no
+  image field and no category; the Store screen lists them by
+  `sortOrder` only. Add an image and a category to `StoreItemDef`
+  (validated, data-driven), give every item an image, and show the
+  categories as tabs or sections in the Store screen. Added 2026-10-04.
 
 ## Stage 5: Pre-launch hardening
 
@@ -194,8 +210,8 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
 - [ ] **19. Soft launch and first review** per `launch-review.md`; watch
   whether the finale stays tense or one strategy dominates.
   *Prepared 2026-10-04: `launch-review.md` now points at the shipped
-  events, and lists the steps that must be ticked before launch (1, 9,
-  13, 15, 16, 18) and the checks the events can't answer (§0.4). The
+  events, and lists the steps that must be ticked before launch (1, 4a, 9,
+  13, 14a–14d, 15, 16, 18) and the checks the events can't answer (§0.4). The
   biggest gap, the finale's steal rate in all-human Studios, is fixed:
   `StealShareChoice` now carries the Studio's bot finalists. Steal vs
   Share on realised payoff stays unmeasured (no field left). The launch
