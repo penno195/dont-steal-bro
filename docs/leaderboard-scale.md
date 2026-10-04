@@ -17,11 +17,16 @@ so these could not be checked the same way.
 
 | # | Assumption | Why it matters here | Status |
 |---|---|---|---|
-| A1 | Per-server request budgets are a formula of the form `base + perPlayer × playerCount`, replenished per minute, **and separate per request type** | The whole soft-ceiling policy assumes reads and writes draw on budgets that behave independently | **VERIFY** |
-| A2 | `GetSortedAsync` has its own, much smaller budget than ordinary reads | The poll interval was chosen to sit far under it | **VERIFY** |
-| A3 | There is a per-key write cooldown (order of seconds) | We never write the same key twice quickly, so this should be unreachable — but confirm the figure | **VERIFY** |
-| A4 | There are universe-wide throughput ceilings (bytes/min, requests/min) distinct from per-server budgets | **This is the one the analysis below concludes you hit first** | **VERIFY — highest priority** |
-| A5 | `UserService:GetUserInfosByUserIdsAsync` has its own rate limit, separate from DataStore | The name cache is sized against a guess | **VERIFY** |
+| A1 | Per-server request budgets are a formula of the form `base + perPlayer × playerCount`, replenished per minute, **and separate per request type** | The whole soft-ceiling policy assumes reads and writes draw on budgets that behave independently | **Confirmed 2026-10-04.** Separate per type, per minute. Ordered store: Read 60 + 40n, Write 30 + 5n, List 5 + 2n. `budget.perWindow = 60` sits at the Read floor, so it is conservative |
+| A2 | `GetSortedAsync` has its own, much smaller budget than ordinary reads | The poll interval was chosen to sit far under it | **Confirmed.** It draws on List: 5 + 2n per server. One call per 60–120s is far under it |
+| A3 | There is a per-key write cooldown (order of seconds) | We never write the same key twice quickly, so this should be unreachable — but confirm the figure | **Corrected.** The docs now give per-key throughput, not a cooldown: 4 MB/min write, 25 MB/min read. Unreachable with ~100 B entries |
+| A4 | There are universe-wide throughput ceilings (bytes/min, requests/min) distinct from per-server budgets | **This is the one the analysis below concludes you hit first** | **Confirmed, but not the first limit.** Experience-wide ordered-store limits are List 300 + 2 × CCU and Write 300 + 20 × CCU per minute. At 20,000 CCU, §3's ~2,200 `GetSortedAsync`/min is ~5% of the 40,300 List allowance. The first limit is MemoryStore (§9, A7) |
+| A5 | `UserService:GetUserInfosByUserIdsAsync` has its own rate limit, separate from DataStore | The name cache is sized against a guess | **Partly confirmed.** The method's reference page gives no figure. A secondary source says 250 results per minute, with HTTP 429 above that. A fresh server resolving the all-time, daily and weekly boards asks for up to 300 ids in its first minute, and a failure caches placeholders for 30 minutes (half `nameCacheTtlSeconds`). Follow-up: spread the lookups and retry sooner |
+
+Checked against create.roblox.com on 2026-10-04: *Data store error
+codes and limits*, *Memory stores* and its *best practices* and
+*sorted map* guides, and the `MarketplaceService` and `UserService`
+references.
 
 `GameConfig.leaderboard.budget` is deliberately config, so a corrected
 figure is an edit rather than a code change. And the service consults
@@ -270,17 +275,27 @@ protects.
 
 | # | Assumption | Status |
 |---|---|---|
-| A6 | MemoryStore has a per-server request budget *and* a universe-wide quota scaling with player count | **VERIFY** |
-| A7 | SortedMap `GetRangeAsync` is charged as a single request regardless of `count` | **VERIFY** — if it is charged per item, a 100-row read costs 100× what this design assumes |
-| A8 | MemoryStore item size and per-map item-count ceilings are comfortably above 100 entries | **VERIFY** |
-| A9 | `UpdateAsync` on a SortedMap is atomic under contention across servers | **VERIFY** — the write-on-improvement guarantee depends on it |
+| A6 | MemoryStore has a per-server request budget *and* a universe-wide quota scaling with player count | **Corrected 2026-10-04.** No per-server budget. The quota is experience-wide, 1000 + 120 × CCU request units per minute. There is also a per-partition limit, and **every sorted map sits on a single partition** (Roblox estimates ~30,000 units/min per partition; a safeguard, not a published quota) |
+| A7 | SortedMap `GetRangeAsync` is charged as a single request regardless of `count` | **Wrong.** It costs one request unit per item returned (1 if empty). A full 100-row read is 100 units |
+| A8 | MemoryStore item size and per-map item-count ceilings are comfortably above 100 entries | **Confirmed.** 32 KB per value, 128-character keys and sort keys, 1,000,000 items and 100 MB per map. No maximum `count` for `GetRangeAsync` is documented |
+| A9 | `UpdateAsync` on a SortedMap is atomic under contention across servers | **Confirmed.** On contention it retries the transform until it succeeds, the transform returns nil, or a retry cap is hit (then a conflict error) |
 
-**A7 is the one that would change the design.** The period boards add two
-`GetRangeAsync` calls per refresh cycle per server. At 20,000 CCU that is
-~74 reads/sec universe-wide on top of P4-3's ~37 — still small *if* a
-range read is one request, and a different conversation entirely if it
-isn't.
+**A7 was wrong, and it changes the design.** Every server, Hub and
+Match alike, reads both period boards every 60–120s
+(`startPolling` is unconditional). That is 2 × 100 units per ~90s,
+about 67 units/min per board per server. Each board is one sorted map,
+so one partition:
 
-The mitigation if A6 or A7 bite is the same one §3 already recommends
-for the all-time board: elect one server per period to refresh and
-publish, and have everyone else read the published copy.
+- **Per-partition: the first limit.** ~30,000 / 67 ≈ 450 servers per
+  board, roughly **2,500–3,000 CCU** at 6 seats per server. Past that,
+  period-board reads get throttled.
+- **Experience quota: fine on its own.** Both boards together cost about
+  22 × CCU units/min against 1000 + 120 × CCU, ~18%. But they share it
+  with matchmaking (`matchmaking.md`), whose queue map has the same
+  single-partition problem.
+
+The fix is the one §3 already recommends for the all-time board, now
+needed before any launch past a few thousand CCU. One elected server per
+board reads the sorted map and publishes the rendered top 100 as one
+value, sharded across a few hash-map keys (the best-practices guide's
+remedy for a hot key). Everyone else reads one shard: 1 unit, not 100.

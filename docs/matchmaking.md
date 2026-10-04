@@ -154,8 +154,22 @@ here, the same way `leaderboard-scale.md` does for DataStores.
 | Memory | 64 KB + 1.2 KB × CCU | Entries are ~200 B plus the avoid list |
 | Value size | 32 KB | Avoid list capped at `recentOpponentsCap` |
 | Expiration | ≤ 3,888,000 s | Checked in validation |
-| `GetRangeAsync` max count | **assumed 200** | `queuePageSize` cap in validation |
-| **Per-partition limits** | **not read** — the guide links a separate page | One SortedMap may sit on one partition, which would cap total throughput regardless of CCU |
+| `GetRangeAsync` max count | **assumed 200**; still undocumented (2026-10-04) | `queuePageSize` cap in validation |
+| **Per-partition limits** | **Read 2026-10-04:** every sorted map sits on **one** partition; Roblox estimates ~30,000 units/min per partition | **The queue's real ceiling.** See below |
+
+Rows 1–6 re-checked against current docs on 2026-10-04 and still
+correct.
+
+**The partition ceiling.** Every hub server reads the queue page every
+tick: up to `min(queue length, 200)` units, 30 times a minute. The
+queue map's one partition caps the total, so
+`hub servers × average queue length ≲ 1,000`. For example, 10 hub
+servers with 100 players waiting already reach it, whatever the CCU.
+That arrives well before the experience quota does. The fix is the
+budget sketch's third lever, now required rather than optional: only
+the lease holder reads the full page, and it publishes each queued
+player's position and status in one small summary value (sharded if
+needed) that other servers read for 1 unit.
 
 **Semantics this relies on**, also to verify:
 - A transform returning `nil` **cancels** the update. The sorted-map

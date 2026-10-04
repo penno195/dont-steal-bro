@@ -125,8 +125,16 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   (`leaderboard-scale.md` §8). The test steps are in
   `live-test-plan.md`. Needs Owner's id in `liveOps.adminUserIds`, an
   alt account, and both places republished.*
-- [ ] **14. Check platform assumptions** flagged in the leaderboard and
+- [x] **14. Check platform assumptions** flagged in the leaderboard and
   receipt docs against current Roblox documentation.
+  *Done 2026-10-04:* checked and recorded in `leaderboard-scale.md` §0 and §9,
+  `store-receipts.md` §7 and `matchmaking.md`. Found that `GetRangeAsync`
+  costs one unit per item and each sorted map is one partition (~30k
+  units/min). So the period boards (~2,500–3,000 CCU) and the matchmaking
+  queue (hub servers × queue length ≲ 1,000) need a publish-once read
+  path before a large launch. Also, name lookups can exceed
+  `GetUserInfosByUserIdsAsync`'s ~250/min on a fresh server. S1 and S5
+  stay unverified until step 13's test B.
 
 ## Stage 5: Pre-launch hardening
 
