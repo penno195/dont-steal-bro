@@ -115,8 +115,9 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   there needed the experience Public with its questionnaire done, the
   Match place actually Published (not just saved), and a real map
   loader (`MapLoaderService`). Racers are now held on their pads until
-  Race. **TEMP:** `partialGroupTimeoutSeconds` is 5 for solo testing;
-  set it back to 60 before launch.*
+  Race. `partialGroupTimeoutSeconds` was 5 for solo testing; back to
+  60 on 2026-10-04 for step 18 (live-tunable if a solo test needs it
+  short again).*
 - [ ] **13. Test on the published place**: leaderboard payouts to an
   offline player, receipt redelivery.
   *In progress 2026-10-04. Code review before testing found that a
@@ -159,6 +160,12 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   client mid-round, breaking Q7 condition 1; it now sends them from
   Results on. Knockback and aim are client-side and accepted (F11, F12).*
 - [ ] **18. Full playtests with real people** per `playtest-protocol.md`.
+  *Prepared 2026-10-04: matchmaking's partial-group wait is back to
+  60 s, so six friends queueing land in one match instead of each
+  getting NPCs after 5 s. `playtest-observation-sheet.xlsx` is the
+  moderator's workbook. Before the call: publish both places. Running
+  step 13's tests first is safer, since an S0 found there costs nobody's
+  evening. The sessions themselves are the owner's.*
 
 ## Stage 6: Soft launch, then live-ops
 
