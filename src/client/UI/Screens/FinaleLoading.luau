@@ -18,9 +18,11 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
+local Layout = require(script.Parent.Parent.Layout)
 local Theme = require(script.Parent.Parent.Theme)
 
 local create = vide.create
+local source = vide.source
 local derive = vide.derive
 local indexes = vide.indexes
 local cleanup = vide.cleanup
@@ -38,6 +40,10 @@ export type Store = {
 
 local COLUMN = 344
 local TILE_W = (COLUMN - Theme.spacing.sm) / 2
+-- Sideways the four tiles go in one row: a phone held sideways is only
+-- ~420 reference px tall, and the 2x2 grid pushed "Got it" off the
+-- bottom (playtest 2026-10-04). The rest of the card stays COLUMN wide.
+local WIDE = 4 * TILE_W + 3 * Theme.spacing.sm
 local TILE_H = 88
 local ICON = 32
 local CHIP_H = 32
@@ -177,12 +183,22 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 			end
 			return false
 		end)
+		local orientation =
+			source(Layout.orientationOf(controller.getUsableRect().width, controller.getUsableRect().height))
+		cleanup(controller.observeUsableRect(function(rect: Layout.Rect)
+			orientation(Layout.orientationOf(rect.width, rect.height))
+		end))
+		local width = derive(function()
+			return if orientation() == "Portrait" then COLUMN else WIDE
+		end)
 
 		local column = create("Frame")({
 			Name = "Column",
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromOffset(COLUMN, 0),
+			Size = function()
+				return UDim2.fromOffset(width(), 0)
+			end,
 			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundTransparency = 1,
 			list(Enum.FillDirection.Vertical, Theme.spacing.md),
@@ -255,7 +271,9 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				Name = "Rewards",
 				LayoutOrder = 5,
 				BackgroundTransparency = 1,
-				Size = UDim2.fromOffset(COLUMN, 0),
+				Size = function()
+					return UDim2.fromOffset(width(), 0)
+				end,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				create("UIGridLayout")({
 					CellSize = UDim2.fromOffset(TILE_W, TILE_H),
@@ -324,8 +342,38 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				}),
 			}),
 		}) :: Frame
-		column.Parent = gui
+		-- Fit to height: whatever the layout, a screen too short for the
+		-- card shrinks it rather than cutting off "Got it". A GuiObject
+		-- honours one UIScale and the column's is the global one, so the
+		-- fit goes on a full-screen holder, which scales about its centre.
+		local holder = create("Frame")({
+			Name = "Fit",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Parent = gui,
+		})
+		local fit = create("UIScale")({ Parent = holder }) :: UIScale
+		column.Parent = holder
 		cleanup(controller.attachScale(column))
+		local function refit()
+			local natural = column.AbsoluteSize.Y / math.max(fit.Scale, 0.01)
+			local room = gui.AbsoluteSize.Y - 2 * Theme.spacing.sm
+			local scale = if natural > 0 then math.clamp(room / natural, 0.5, 1) else 1
+			if math.abs(fit.Scale - scale) > 0.005 then
+				fit.Scale = scale
+			end
+		end
+		for _, signal in
+			{
+				column:GetPropertyChangedSignal("AbsoluteSize"),
+				gui:GetPropertyChangedSignal("AbsoluteSize"),
+			}
+		do
+			cleanup(signal:Connect(refit))
+		end
+		refit()
 	end)
 
 	return function()

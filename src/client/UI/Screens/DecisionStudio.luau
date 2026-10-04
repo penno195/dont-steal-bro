@@ -130,6 +130,7 @@ local HEAD_W = 76
 local INFO_W = 44 -- the (i) beside the title
 local SEAT_CHIP_H = 26 -- a seat's revealed choice, under the name
 local STAGE_CARD = Vector2.new(260, 180) -- the big card in the middle at the reveal
+local RAIL_W = 112 -- the menu's store/boards/settings rail down the right edge, sideways
 local CHOICE_W = 150
 local CHOICE_H = 132
 local HOLD_CHIP_H = 30
@@ -1315,9 +1316,9 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 		cleanup(controller.attachScale(info))
 
 		-- The reveal itself, big in the middle of the screen.
+		-- Placed with the corners below (DecisionLogic.revealStageX).
 		local centre = revealStage(store, step, order, banner)
 		centre.AnchorPoint = Vector2.new(0.5, 0.5)
-		centre.Position = UDim2.fromScale(0.5, 0.45)
 		centre.Parent = gui
 		cleanup(controller.attachScale(centre))
 		effect(function()
@@ -1442,6 +1443,18 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			local edge = EDGE * scale
 			info.AnchorPoint = if portrait() then Vector2.new(0.5, 0) else Vector2.new(0, 0)
 			info.Position = if portrait() then UDim2.new(0.5, 0, 0, top()) else UDim2.fromOffset(edge, top())
+			if portrait() then
+				centre.Position = UDim2.fromScale(0.5, 0.45)
+			else
+				local x = DecisionLogic.revealStageX(
+					guiRect().width,
+					edge + COLUMN * scale,
+					STAGE_CARD.X / 2 * scale,
+					GAP * scale,
+					RAIL_W * scale
+				)
+				centre.Position = UDim2.new(0, x, 0.45, 0)
+			end
 			stealButton.AnchorPoint = Vector2.new(0, 1)
 			stealButton.Position = UDim2.new(0, edge, 1, -(edge + margin))
 			shareButton.AnchorPoint = Vector2.new(1, 1)

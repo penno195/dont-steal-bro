@@ -625,6 +625,22 @@ function DecisionLogic.chatInset(chat: Rect?, usable: Rect, gap: number, maxFrac
 	return math.min(wanted, usable.y + usable.height * maxFraction)
 end
 
+-- The reveal card's centre x, sideways. Centred on the screen unless
+-- that would put it over the seat cards in the top-left column (a phone
+-- held sideways is only ~900 reference px wide; playtest 2026-10-04);
+-- then just right of them, but never into the right-hand button rail.
+function DecisionLogic.revealStageX(
+	screenWidth: number,
+	columnRight: number,
+	halfWidth: number,
+	gap: number,
+	rightReserve: number
+): number
+	local clear = columnRight + gap + halfWidth
+	local furthest = screenWidth - rightReserve - halfWidth
+	return math.max(screenWidth / 2, math.min(clear, furthest))
+end
+
 -- P6-7: the bottom margin for the decide stack. A player still typing
 -- when Choose opens has the on-screen keyboard over the bottom half of
 -- a portrait phone, which is exactly where the hold buttons sit, so the

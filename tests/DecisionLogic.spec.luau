@@ -413,3 +413,18 @@ describe("DecisionLogic.waitingNotice", function()
 		expect(DecisionLogic.waitingNotice(false, ids, {}, {})):toBe("Waiting for the finalists…")
 	end)
 end)
+
+describe("DecisionLogic.revealStageX (playtest 2026-10-04)", function()
+	it("stays centred when the seats column is clear of it", function()
+		expect(DecisionLogic.revealStageX(2000, 400, 130, 16, 112)):toBe(1000)
+	end)
+
+	it("moves right of the seats on a narrow sideways phone", function()
+		-- ~910 reference px wide: the column ends at 24 + 344.
+		expect(DecisionLogic.revealStageX(910, 368, 130, 16, 112)):toBe(514)
+	end)
+
+	it("never pushes into the right-hand rail", function()
+		expect(DecisionLogic.revealStageX(700, 368, 130, 16, 112)):toBe(458)
+	end)
+end)
