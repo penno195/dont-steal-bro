@@ -129,29 +129,51 @@ end
 
 -- ===== unlocking ===========================================================
 
--- Runs on every bestStreak change (and on join). Persists each newly
--- crossed rung and tells the player about each one.
+-- Persists one rung and tells its owner.
+local function grant(player: Player, def: TitleLogic.TitleDef)
+	local DataService = Loader.get("DataService") :: any
+	DataService.unlockTitle(player, def.id)
+	Net.fireClient("TitleUnlocked", player, {
+		title = titlePayload(def),
+		-- Sent to the OWNER only, and it's their own number, which
+		-- they already know - the reason TitleUnlocked is targeted
+		-- rather than broadcast.
+		minStreak = def.minStreak,
+	})
+	print(string.format("TitleService: %s unlocked %q at bestStreak %d", player.Name, def.id, def.minStreak))
+end
+
+-- Runs on every bestStreak change. Persists each newly crossed rung and
+-- tells the player about each one. The baseline comes from `onProfileLoaded`;
+-- before that the profile reads as bestStreak 0, which would both hide
+-- the title and re-announce every rung later, so it does nothing.
 local function refreshUnlocks(player: Player)
 	local DataService = Loader.get("DataService") :: any
+	local previous = lastKnownBestStreak[player]
+	if previous == nil or not DataService.isLoaded(player) then
+		return
+	end
 	local bestStreak = DataService.getBestStreak(player) :: number
-	local previous = lastKnownBestStreak[player] or 0
 
-	-- A range, not a single rung: bestStreak can cross several at once
-	-- (a profile migration, a config edit adding a rung below where the
-	-- player already is), and dropping the extras would leave titles
-	-- unlocked that nobody was told about.
+	-- A range, not a single rung: bestStreak can cross several at once,
+	-- and dropping the extras would leave titles unlocked that nobody
+	-- was told about.
 	for _, def in TitleLogic.newlyUnlocked(ladder, previous, bestStreak) do
-		DataService.unlockTitle(player, def.id)
-		Net.fireClient("TitleUnlocked", player, {
-			title = titlePayload(def),
-			-- Sent to the OWNER only, and it's their own number, which
-			-- they already know - the reason TitleUnlocked is targeted
-			-- rather than broadcast.
-			minStreak = def.minStreak,
-		})
-		print(string.format("TitleService: %s unlocked %q at bestStreak %d", player.Name, def.id, def.minStreak))
+		grant(player, def)
 	end
 
+	lastKnownBestStreak[player] = bestStreak
+end
+
+-- Join: set the baseline from the loaded profile, granting only rungs it
+-- has reached but doesn't hold (see TitleLogic.unownedReached).
+local function seedUnlocks(player: Player)
+	local DataService = Loader.get("DataService") :: any
+	local bestStreak = DataService.getBestStreak(player) :: number
+	local owned = DataService.getUnlockedTitles(player) :: { string }
+	for _, def in TitleLogic.unownedReached(ladder, owned, bestStreak) do
+		grant(player, def)
+	end
 	lastKnownBestStreak[player] = bestStreak
 end
 
@@ -283,16 +305,15 @@ function TitleService:init()
 		handleEquipIntent(player, payload.titleId)
 	end)
 
-	Players.PlayerAdded:Connect(function(player: Player)
-		-- The profile may not have loaded yet; DataService returns 0 for
-		-- a missing profile, which would record a bogus "last known
-		-- bestStreak" of 0 and re-fire every unlock on the next
-		-- refresh. Deferring to the first round-state broadcast avoids
-		-- guessing at load timing here.
-		task.defer(function()
-			refreshPlayer(player)
-			broadcastTitles()
-		end)
+	-- Not PlayerAdded: the profile loads after it, and until then it
+	-- reads as bestStreak 0. Seeding there left the Hub, where the
+	-- round state never changes to trigger another refresh, showing
+	-- the streak counter with no title under it.
+	local DataService = Loader.get("DataService") :: any
+	DataService.onLoaded(function(player: Player)
+		seedUnlocks(player)
+		wornTitleId[player.UserId] = resolveWornTitle(player)
+		broadcastTitles()
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)

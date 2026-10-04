@@ -90,6 +90,21 @@ function TitleLogic.newlyUnlocked(titles: { TitleDef }, previousBest: number, ne
 	return crossed
 end
 
+-- What a just-loaded profile has reached but doesn't own yet: rungs
+-- added below an existing player by a config edit, or a write that
+-- landed without its unlock. Join has no "previous best" to diff
+-- against, so this diffs against the stored list instead, and a
+-- returning player isn't re-told about every title they already hold.
+function TitleLogic.unownedReached(titles: { TitleDef }, ownedIds: { string }, bestStreak: number): { TitleDef }
+	local missing: { TitleDef } = {}
+	for _, def in TitleLogic.newlyUnlocked(titles, 0, bestStreak) do
+		if table.find(ownedIds, def.id) == nil then
+			table.insert(missing, def)
+		end
+	end
+	return missing
+end
+
 -- The top rung reached, which is what a player who has never chosen a
 -- title should be shown. nil below the first threshold.
 function TitleLogic.highestUnlocked(titles: { TitleDef }, bestStreak: number): TitleDef?

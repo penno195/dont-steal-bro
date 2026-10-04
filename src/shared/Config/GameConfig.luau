@@ -415,7 +415,7 @@ local GameConfig: Validate.GameConfig = {
 		metaMapName = "MatchmakingMeta_v1",
 
 		groupSize = 6, -- gdd.md; must equal playerCount
-		partialGroupTimeoutSeconds = 60, -- PLACEHOLDER: no locked value in docs/ yet; live-tunable, so solo tests can drop it with a config override
+		partialGroupTimeoutSeconds = 30, -- owner's choice 2026-10-04: long enough to fill a group, short enough not to annoy. Live-tunable
 		partialGroupMinPlayers = 1, -- P5-1: "with at least 1 player"
 		formationTickSeconds = 2, -- PLACEHOLDER: also the UI refresh rate and the claim-discovery latency
 		queuePageSize = 200, -- the oldest 200 waiting are the only ones who can form a group this tick

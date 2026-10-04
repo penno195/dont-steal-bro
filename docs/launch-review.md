@@ -150,7 +150,7 @@ benchmarks:
 | Drop | Expected | Finding if | Most likely cause | Fixability |
 |---|---|---|---|---|
 | 0→1 join→queue | Most people queue | < 70% | Hub doesn't point at the queue, or onboarding stalls (`onboarding.md`) | High: hub UI |
-| 1→2 queue→match | ~100%, NPC fill means nobody waits forever | < 95% | Players leave while waiting. Check wait time against `partialGroupTimeoutSeconds` (60) | High: live tunable |
+| 1→2 queue→match | ~100%, NPC fill means nobody waits forever | < 95% | Players leave while waiting. Check wait time against `partialGroupTimeoutSeconds` (30) | High: live tunable |
 | 2→3 match→round | ~100% | < 97% | Teleport failures (`teleport.md` retry path) | High: engineering |
 | 3→4 round→first task | ~100% | < 90% | Can't find a station or read a task (`station-readability.md`) | Medium |
 | 4→5 first task→all tasks | Race-dependent | Falls on one map or task only | That map or task (§4) | Medium |

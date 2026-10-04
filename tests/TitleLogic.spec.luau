@@ -82,6 +82,24 @@ TestRunner.describe("TitleLogic - permanence", function()
 	end)
 end)
 
+TestRunner.describe("TitleLogic.unownedReached", function()
+	TestRunner.it("reports nothing when every reached rung is owned", function()
+		TestRunner.expect(#TitleLogic.unownedReached(LADDER, { "got-one", "hot-streak" }, 7)):toBe(0)
+	end)
+
+	TestRunner.it("reports a reached rung missing from the stored list", function()
+		local missing = TitleLogic.unownedReached(LADDER, { "got-one" }, 7)
+		TestRunner.expect(#missing):toBe(1)
+		TestRunner.expect(missing[1].id):toBe("hot-streak")
+	end)
+
+	TestRunner.it("ignores owned titles above the current best", function()
+		-- Can't happen today (bestStreak never drops), but an owned id
+		-- must never make a rung count as reached.
+		TestRunner.expect(#TitleLogic.unownedReached(LADDER, { "menace" }, 0)):toBe(0)
+	end)
+end)
+
 TestRunner.describe("TitleLogic.newlyUnlocked", function()
 	TestRunner.it("reports the rung just crossed", function()
 		local crossed = TitleLogic.newlyUnlocked(LADDER, 4, 5)
