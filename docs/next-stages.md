@@ -45,6 +45,22 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   primitive dressing for Creator Store assets. Each asset must fit
   `perf-budget.md`; School is already over on draw calls (step 16), so
   its pass removes parts as well as adding them. Added 2026-10-04.
+  *Rendering half done 2026-10-04 in Match.rbxl, all six maps in
+  `ServerStorage.Maps`. The flashing was z-fighting: block parts sharing
+  a face plane with a different colour or material (Factory: line guards
+  against press pillars, tunnel walls against floors, the south wall
+  against the staff-room roof). On each pair, the smaller part's face
+  was pushed out 0.03 studs, repeated until a re-scan found none. Parts
+  under Stations, Spawns, Nav and Bounds were left alone. Faces moved:
+  SpaceStation 1,189, School 568, Museum 128, Factory 76, Laboratory 43,
+  DecisionStudio 1. Rotated and non-block parts weren't scanned.
+  Asset half: Factory's candidate pack is "Realistic Factory Props
+  Industrial Set" (Creator Store 89805968354629, free, no scripts, 399
+  PBR meshes, about 31 textures). It has forklifts, conveyors, pallets,
+  roll cages, a wrapping machine and hand trucks. It is parked in
+  `ServerStorage.AssetQuarantine` with a 15-mesh storage bundle
+  (76442414596854). Use a subset, because the texture budget is under
+  100. Still to do: dress Factory, then Museum, Laboratory and School.*
 - [x] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
@@ -202,12 +218,16 @@ session.
 - [ ] **22. Wave 2a maps: Bunker, Prison** (live-ops W3, Season 1 opens).
 - [ ] **23. Wave 2b maps: Mall, Construction Site** (live-ops W8).
 - [ ] **24. Space Station** (live-ops W10, the wave 3 flagship, shipped on
-  its own). A gray-box exists (2026-09-25, 16 stations) and its config
-  and lighting preset are in the repo with `enabled = false`. It still
-  uses the four original tasks. `airlock-cycle` and `reactor-sync` have
-  Space Station stations in the catalogue (hull airlock, reactor core
-  sync), so consider swapping them in. It needs a full dressing pass
-  to wave 1's standard.
+  its own). It is the most finished unreleased map. It's built (16
+  stations), dressed with Roblox's Beyond the Dark packs (2026-09-30,
+  seven `Dressing_*` folders), and already in Match.rbxl's
+  `ServerStorage.Maps`. Its config and lighting preset are in the repo
+  with `enabled = false`. Left: it still uses the four original tasks.
+  `airlock-cycle` and `reactor-sync` have Space Station stations in the
+  catalogue (hull airlock, reactor core sync), so consider swapping them
+  in. It also needs a check against wave 1's standard (validator, perf,
+  texture budget) and a music id. It could ship earlier than W10 if
+  the launch needs a fifth map.
 - [ ] **25. Wave 3 rest: Aircraft Carrier, Deserted Island.**
 
 For each map, use the step 4 process: build or finish it in Studio,
