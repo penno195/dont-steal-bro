@@ -19,7 +19,6 @@ local C = require(script.Parent.Parent.Components)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
 local Theme = require(script.Parent.Parent.Theme)
 local Tokens = require(script.Parent.Parent.Tokens)
-local UIScaleController = require(script.Parent.Parent.Parent.Controllers.UIScaleController)
 
 local create = vide.create
 
@@ -117,7 +116,7 @@ end
 -- than TextScaled: this is reading copy, so it wraps at a fixed size
 -- and the box grows to fit (it still scales with the global UIScale,
 -- which is what Text and HUD size drives).
-function PayoffExplainer.content(seats: number, maxHeight: number): ScrollingFrame
+function PayoffExplainer.content(seats: number): ScrollingFrame
 	local E = DecisionLogic.EXPLAINER
 	local children: { any } = {
 		create("UIListLayout")({
@@ -139,20 +138,18 @@ function PayoffExplainer.content(seats: number, maxHeight: number): ScrollingFra
 		AutomaticSize = Enum.AutomaticSize.Y,
 	}, children)
 
-	-- Sized to the content up to `maxHeight`, then it scrolls. In
-	-- portrait it never reaches the cap. A landscape phone is too short
-	-- for the whole sheet (mobile-audit's recurring issue #2).
+	-- Modal.open sets the height: the body's, up to what the screen has
+	-- room for, then it scrolls. An iPhone in portrait can be too short
+	-- for the whole sheet, not just a landscape phone (mobile audit).
 	return create("ScrollingFrame")({
 		Name = "ExplainerScroll",
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
 		Size = UDim2.fromOffset(C.Modal.CONTENT_WIDTH, 0),
-		AutomaticSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		ScrollBarThickness = 4,
-		create("UISizeConstraint")({ MaxSize = Vector2.new(math.huge, maxHeight) }),
 		body,
 	}) :: ScrollingFrame
 end
@@ -170,12 +167,7 @@ function PayoffExplainer.open(seats: number?, onClosed: (() -> ())?): () -> ()
 	close = C.Modal.open({
 		title = DecisionLogic.EXPLAINER.title,
 		content = function()
-			-- The usable height in reference px, minus the card's own
-			-- header, button and padding.
-			local rect = UIScaleController.getUsableRect()
-			local available = rect.height / math.max(C.Env.scale(), 0.01)
-			local chrome = Theme.touch.iconButton + Theme.touch.primaryHeight + 4 * Theme.spacing.lg
-			return PayoffExplainer.content(seats or 3, math.max(available - chrome, 160))
+			return PayoffExplainer.content(seats or 3)
 		end,
 		actions = { { label = "Got it", onActivate = done } },
 		dismissible = true,

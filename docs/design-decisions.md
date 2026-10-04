@@ -514,3 +514,26 @@ next-stages step 5: `alarm-killswitch`, `breaker-sequence`,
 add its id to the four launch maps' `enabledTaskIds`, and add it to the
 `AcceptedTaskIds` of every station whose Target list in
 `maps/wave1-briefs.md` names it (a Match.rbxl edit).
+
+## 11. Which way up is the game played on a phone?
+
+*Added 2026-10-04 (user decision), during the mobile audit
+(next-stages step 15). Replaces "portrait-first" in the ground rules.*
+
+**Decision:** Landscape only. The client sets
+`PlayerGui.ScreenOrientation = LandscapeSensor` from the first frame
+(`src/first/LoadingCover.client.luau`), so a phone plays either way up
+in landscape and never rotates upright, in both the Hub and the Match.
+Both `.rbxl` files also set `StarterGui.ScreenOrientation` to
+`LandscapeSensor`: Roblox copies StarterGui's value onto PlayerGui after
+ReplicatedFirst runs, so the Hub's old `Sensor` overrode the code (the
+code now re-asserts on change, as a backstop).
+
+**Why:** on an iPhone in portrait the whole game looked off; every
+screen already had a landscape layout.
+
+**Downstream:** the portrait branches of the layouts (RaceHUD,
+DecisionStudio, MenuShell, the task views) stay for now. They never run
+on a phone, but still apply to a tall Studio viewport or a tablet
+window. Tasks still need only one thumb. The mobile checklist now
+checks landscape only.

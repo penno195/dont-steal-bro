@@ -426,7 +426,7 @@ syntax version) is exactly what broke the original tool.
   Assume the client is fully compromised, because it will be.
 - **Data-driven.** Adding a map, task, power-up or title means adding one config
   file. If it needs a service edit, the abstraction is leaking.
-- **Mobile-first.** One thumb, portrait, on a cheap Android phone. If a mini-game
+- **Mobile-first.** One thumb, landscape (locked), on a cheap Android phone. If a mini-game
   needs two thumbs plus camera control, it is cut.
 - **`--!strict` everywhere**, and pure logic stays free of Roblox API calls so it
   can be tested in CI.

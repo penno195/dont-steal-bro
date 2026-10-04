@@ -54,7 +54,22 @@ gui.Name = "LoadingCover"
 gui.IgnoreGuiInset = true
 gui.ResetOnSpawn = false
 gui.DisplayOrder = 10000
-gui.Parent = player:WaitForChild("PlayerGui")
+local playerGui = player:WaitForChild("PlayerGui") :: PlayerGui
+gui.Parent = playerGui
+
+-- Landscape only, either way up (design-decisions.md §11), from the
+-- first frame so even this cover never shows upright. Roblox copies
+-- StarterGui.ScreenOrientation onto PlayerGui after this script runs,
+-- so a place whose StarterGui says otherwise (the Hub's said Sensor)
+-- would win; re-assert whenever it changes. StarterGui is set to
+-- LandscapeSensor in both .rbxl files too.
+local function lockLandscape()
+	if playerGui.ScreenOrientation ~= Enum.ScreenOrientation.LandscapeSensor then
+		playerGui.ScreenOrientation = Enum.ScreenOrientation.LandscapeSensor
+	end
+end
+lockLandscape()
+playerGui:GetPropertyChangedSignal("ScreenOrientation"):Connect(lockLandscape)
 
 local backdrop = Instance.new("Frame")
 backdrop.Size = UDim2.fromScale(1, 1)

@@ -139,7 +139,8 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
 ## Stage 5: Pre-launch hardening
 
 - [ ] **15. Mobile audit on a cheap Android phone**
-  (`mobile-checklist.md`): every task and the HUD, portrait.
+  (`mobile-checklist.md`): every task and the HUD, landscape (phones
+  are locked to it since 2026-10-04, `design-decisions.md` §11).
 - [ ] **16. Performance check** against `perf-budget.md`, all launch maps,
   6 players.
 - [x] **17. Security pass**: re-run `security-audit.md` over code added

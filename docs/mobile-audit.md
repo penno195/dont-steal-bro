@@ -39,6 +39,7 @@ but nothing locks orientation, so landscape has to work too.
 | 9 | Modal | Tap-outside catcher | The catcher is on the safe-area screen, so a tap in the notch strip isn't treated as a dismiss (the full-bleed scrim isn't `Active`). | Low | Harmless: a missed dismiss, never a wrong action. Leave it unless a playtest notices. |
 | 10 | Store | Item grid | Not virtualised: every item in a category is built. That's fine at the current catalogue size. | Low | Virtualise with `BoardLogic` (as Leaderboards does) once any category passes about 60 items. |
 | 11 | All (text) | Caption at the 0.75 scale floor | The `UITextSizeConstraint` minimum is in reference pixels, so under `UIScale` a caption can render at 7.5 pt. | Low | Only happens on a short axis under 360 pt, which is below the smallest supported phone. Acceptable. |
+| 12 | Decision Studio | "How it works" explainer | Found on an iPhone in portrait (next-stages step 15): the sheet was taller than the screen, so "Got it" sat off the bottom. The scroll relied on `AutomaticSize` under a `UISizeConstraint` whose cap was an estimate taken at open. | **High** | **Fixed.** `Modal.open` sizes any `ScrollingFrame` content from the laid-out card (`fitToScreen`): the body's height, up to what the safe-area screen leaves after the header, actions and padding, then it scrolls. Re-fits on screen and scale changes. |
 
 ### Passes worth recording
 
