@@ -60,7 +60,17 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   roll cages, a wrapping machine and hand trucks. It is parked in
   `ServerStorage.AssetQuarantine` with a 15-mesh storage bundle
   (76442414596854). Use a subset, because the texture budget is under
-  100. Still to do: dress Factory, then Museum, Laboratory and School.*
+  100. Factory dressed 2026-10-04: 53 pack props, scaled 1.3×, in
+  `Dressing/Props_{Yard,North,South,West,East}`. They include two
+  forklifts, wrapped and boxed pallets, pallet stacks, a floor conveyor
+  with crates on it, a wrapping machine, tool drawers, hand trucks and
+  pallet jacks. The yard's primitive forklift, crate stacks and pallets
+  were replaced; the barrels stay. Props sit against the outer walls
+  under the catwalks. Each one was checked against the nav edges (4.5 studs
+  or more), station, pickup and spawn boxes, and other parts (no
+  clipping). Mesh collisions are set to Box. All 58 nav nodes still path
+  from the spawn. Factory now uses 67 unique textures and 23 meshes
+  (budget under 100 and 150). Still to do: Museum, Laboratory, School.*
 - [x] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
