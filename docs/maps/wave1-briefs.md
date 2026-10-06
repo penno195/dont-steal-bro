@@ -27,7 +27,7 @@ per-map briefs, and they only repeat a shared rule when the map bends it.
 | Race time limit | 300 s | `GameConfig.raceDurationSeconds` (PLACEHOLDER) |
 | Mean task time | ~8.5 s | `tasks-catalogue.md` target-time midpoints |
 | Station arrival radius (NPC) | 6 studs | `GameConfig.npc.stationArrivalRadiusStuds` |
-| Aimed/Nearest power-up range | 24 studs | `GameConfig.powerUpUseRangeStuds` |
+| Aimed/Nearest power-up range | 40 studs | `GameConfig.powerUpUseRangeStuds` |
 | Streaming target radius | 200–300 (to be set from these gray-boxes) | `perf-budget.md` §2 |
 
 **Target a clean human run of about 120 s.** Six tasks at ~8.5 s take

@@ -72,8 +72,8 @@ local GameConfig: Validate.GameConfig = {
 	-- cone and slack are PLACEHOLDER, same stance as raceDurationSeconds.
 	powerUpInventorySlots = 3, -- matches store.loadoutSlots, so a full loadout fits
 	powerUpFullInventoryPolicy = "Refuse", -- picking up while full is refused (the world pickup stays available) rather than swapping the held item
-	powerUpUseRangeStuds = 24, -- max range for an Aimed/Nearest target
-	powerUpTargetConeDegrees = 90, -- full width of the lock-on cone an Aimed power-up picks its target from
+	powerUpUseRangeStuds = 40, -- max range for an Aimed/Nearest target
+	powerUpTargetConeDegrees = 50, -- full width of the lock-on cone an Aimed power-up picks its target from
 	-- Extra allowance when the server re-checks the target the client had
 	-- locked on to: the client saw that target a round trip ago, so a
 	-- lock that was legal on screen can be a few studs or degrees out by
