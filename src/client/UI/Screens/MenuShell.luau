@@ -50,6 +50,12 @@ MenuShell.COLUMN = 344
 MenuShell.GUTTER = Theme.spacing.lg
 -- The width the body can use: the column minus its side gutters.
 MenuShell.INNER = MenuShell.COLUMN - 2 * MenuShell.GUTTER
+-- A scrolling list's bar width. Roblox clips the list's content to
+-- AbsoluteWindowSize, which leaves the bar out even with
+-- VerticalScrollBarInset None, so content as wide as the list loses its
+-- right edge under the bar. A list is made this much wider than its
+-- content instead, and the bar sits in the gutter (playtest, 2026-10-06).
+MenuShell.SCROLLBAR = 4
 
 local HEADER_H = 56
 local FOOTER_H = Theme.touch.primaryHeight + 2 * Theme.spacing.md

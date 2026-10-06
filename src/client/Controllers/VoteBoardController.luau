@@ -290,6 +290,10 @@ local function buildBoard(state: any): Board
 	list.Size = UDim2.new(1, -32, 1, -100)
 	list.ScrollingDirection = Enum.ScrollingDirection.Y
 	list.ScrollBarThickness = 4
+	-- Cards are full-width (scale 1). With the default inset (None) the
+	-- bar still clips their right edge, so give it its own strip and the
+	-- canvas narrows to fit (playtest, 2026-10-06).
+	list.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
 	list.CanvasSize = UDim2.new()
 	list.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	local layout = Instance.new("UIListLayout")

@@ -223,11 +223,11 @@ local function body(store: Store, height: () -> number): { Instance }
 		return create("ScrollingFrame")({
 			Name = "Form",
 			Size = function()
-				return UDim2.fromOffset(MenuShell.INNER, height())
+				return UDim2.fromOffset(MenuShell.INNER + MenuShell.SCROLLBAR, height())
 			end,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			ScrollBarThickness = 4,
+			ScrollBarThickness = MenuShell.SCROLLBAR,
 			ScrollingDirection = Enum.ScrollingDirection.Y,
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			CanvasSize = UDim2.new(),

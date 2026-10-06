@@ -555,10 +555,11 @@ local function seasonTrack(store: Store, height: () -> number, pane: number): In
 			[true] = function()
 				return create("ScrollingFrame")({
 					Name = "Track",
-					Size = UDim2.fromScale(1, 1),
+					-- One bar wider than the rows: see MenuShell.SCROLLBAR.
+					Size = UDim2.new(1, MenuShell.SCROLLBAR, 1, 0),
 					BackgroundTransparency = 1,
 					BorderSizePixel = 0,
-					ScrollBarThickness = 4,
+					ScrollBarThickness = MenuShell.SCROLLBAR,
 					ScrollingDirection = Enum.ScrollingDirection.Y,
 					AutomaticCanvasSize = Enum.AutomaticSize.Y,
 					CanvasSize = UDim2.new(),
@@ -645,11 +646,12 @@ local function body(store: Store, height: () -> number, layout: MenuShell.BodyLa
 			Name = "Grid",
 			Position = UDim2.fromOffset(0, TAB_H + Theme.spacing.sm),
 			Size = function()
-				return UDim2.fromOffset(pane, gridHeight())
+				-- One bar wider than the cards: see MenuShell.SCROLLBAR.
+				return UDim2.fromOffset(pane + MenuShell.SCROLLBAR, gridHeight())
 			end,
 			BackgroundTransparency = 1,
 			BorderSizePixel = 0,
-			ScrollBarThickness = 4,
+			ScrollBarThickness = MenuShell.SCROLLBAR,
 			ScrollingDirection = Enum.ScrollingDirection.Y,
 			AutomaticCanvasSize = Enum.AutomaticSize.Y,
 			CanvasSize = UDim2.new(),
