@@ -252,4 +252,21 @@ function ComponentLogic.pushToast<T>(queue: { T }, item: T, max: number): ({ T }
 	return out, dropped
 end
 
+-- Repeats: a toast that says the same thing as one already up merges
+-- into it (count + fresh timer) rather than stacking a copy - three
+-- "No target"s were three full cards over the race (playtest,
+-- 2026-10-06). Returns the index of the match, or nil.
+function ComponentLogic.findToast<T>(queue: { T }, same: (T) -> boolean): number?
+	for i, entry in queue do
+		if same(entry) then
+			return i
+		end
+	end
+	return nil
+end
+
+function ComponentLogic.toastLabel(text: string, count: number): string
+	return if count > 1 then string.format("%s  ×%d", text, count) else text
+end
+
 return table.freeze(ComponentLogic)

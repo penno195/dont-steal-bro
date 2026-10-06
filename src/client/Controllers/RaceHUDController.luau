@@ -54,10 +54,13 @@ local ARROW_STEP = 5
 -- If the server never answers a use (a dropped remote), unstick the
 -- button rather than leaving it spinning for the rest of the race.
 local USE_TIMEOUT = 2
+-- How long a refusal's label stays above the slots.
+local REFUSAL_SECONDS = 1.5
 
 -- Short, player-facing versions of PowerUpService's refusal reasons
--- that a player can act on. Anything else is an internal refusal the
--- player couldn't do anything about, so it gets no toast.
+-- that a player can act on, shown at the slots (RaceHUD.Refusal).
+-- Anything else is an internal refusal the player couldn't do anything
+-- about, so it shows nothing.
 local REFUSALS: { [string]: string } = {
 	["no valid target"] = "No target",
 	["on cooldown"] = "Cooling down",
@@ -110,6 +113,9 @@ local slots = source(emptySlots())
 local selected = source(1)
 local aiming = source(false)
 local pending = source(false)
+local refusal = source(nil :: RaceHUD.Refusal?)
+-- The slot the use in flight was fired from, for the refusal shake.
+local firedSlot = 1
 local effects = source({} :: { HudLogic.Effect })
 local objective = source(nil :: RaceHUD.Objective?)
 
@@ -466,6 +472,7 @@ local function fire()
 		payload.aimZ = math.clamp(aim.z, -1, 1)
 	end
 	pending(true)
+	firedSlot = selected()
 	useToken += 1
 	local token = useToken
 	Net.fireServer("PowerUpUseIntent", payload)
@@ -607,6 +614,7 @@ local store: RaceHUD.Store = {
 	selected = selected,
 	aiming = aiming,
 	pending = pending,
+	refusal = refusal,
 	effects = effects,
 	objective = objective,
 	select = selectSlot,
@@ -716,7 +724,14 @@ local function onUseResult(payload: any)
 	pending(false)
 	local message = if payload.success then nil else REFUSALS[payload.reason]
 	if message ~= nil then
-		Toast.show(message, "warning")
+		local token = useToken
+		refusal({ text = message, slot = firedSlot, id = token })
+		task.delay(REFUSAL_SECONDS, function()
+			local current = refusal()
+			if current ~= nil and current.id == token then
+				refusal(nil)
+			end
+		end)
 	end
 end
 
@@ -870,6 +885,7 @@ local function onRoundState(payload: any)
 		slots(emptySlots())
 		selected(1)
 		pending(false)
+		refusal(nil)
 	end
 	if not racing then
 		mountPractice()

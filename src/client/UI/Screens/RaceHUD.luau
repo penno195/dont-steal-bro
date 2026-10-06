@@ -81,6 +81,12 @@ export type Objective = { bearing: number, distance: number }
 -- outlive a remount), and list entries should be frozen: Vide treats a
 -- frozen table as unchanged when the same one comes back, which is what
 -- stops a task row or effect chip redrawing when nothing about it moved.
+-- A use the server refused for a reason the player can act on ("No
+-- target", "Cooling down"). Shown at the slots, where the thumb is,
+-- rather than as a toast (playtest, 2026-10-06). `id` changes per
+-- refusal, so the same text twice still shakes the slot twice.
+export type Refusal = { text: string, slot: number, id: number }
+
 export type Store = {
 	selfId: number,
 	qualifierCount: number,
@@ -92,6 +98,7 @@ export type Store = {
 	selected: () -> number,
 	aiming: () -> boolean,
 	pending: () -> boolean, -- a use is on its way to the server
+	refusal: () -> Refusal?, -- the latest refused use, nil once it has faded
 	effects: () -> { HudLogic.Effect },
 	objective: () -> Objective?,
 	select: (index: number) -> (),
@@ -151,6 +158,10 @@ local CANCEL_RADIUS = SLOT / 2
 -- The discard bin, over the left end of the slot row while a held item
 -- is dragged.
 local BIN = SLOT
+-- The refused-use shake: degrees per step, SHAKE_STEP seconds apart.
+local SHAKE = { -7, 7, -5, 5, -2, 0 }
+local SHAKE_STEP = 0.035
+local REFUSAL_H = 28
 
 local CATEGORY_ICON: { [string]: string } = { HardControl = "lock", Movement = "slow", Vision = "eye" }
 local EFFECT_ICONS = { "boost", "lock", "slow", "eye", "warning" }
@@ -483,6 +494,8 @@ local function powerUpSlot(
 
 	local button = create("TextButton")({
 		Name = "Slot",
+		-- Rotation, not Position: the row's UIListLayout owns Position.
+		Rotation = 0,
 		LayoutOrder = function()
 			return slot().index
 		end,
@@ -547,6 +560,27 @@ local function powerUpSlot(
 	button.InputBegan:Connect(function(input: InputObject)
 		press(slot().index, input)
 	end)
+
+	-- A short shake when a use from this slot is refused. Skipped under
+	-- reduced motion; the label above the slots still says why.
+	local shookFor = 0
+	vide.effect(function()
+		local r = store.refusal()
+		if r == nil or r.id == shookFor or r.slot ~= vide.untrack(slot).index then
+			return
+		end
+		shookFor = r.id
+		if Env.reducedMotion() then
+			return
+		end
+		task.spawn(function()
+			for _, angle in SHAKE do
+				button.Rotation = angle
+				task.wait(SHAKE_STEP)
+			end
+			button.Rotation = 0
+		end)
+	end)
 	return button
 end
 
@@ -580,6 +614,45 @@ local function discardBin(shown: () -> boolean, over: () -> boolean): Frame
 			icon.Position = UDim2.fromScale(0.5, 0.5)
 			return icon
 		end)(),
+	}) :: Frame
+end
+
+-- Why the last use was refused, floating above the slots' right end.
+-- The bin floats above the left end and only shows mid-drag, so the two
+-- don't meet.
+local function refusalLabel(store: Store): Frame
+	return create("Frame")({
+		Name = "Refusal",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, 0, 0, -GAP),
+		Size = UDim2.fromOffset(0, REFUSAL_H),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Visible = function()
+			return store.refusal() ~= nil
+		end,
+		BackgroundColor3 = Theme.elevation[3].surface,
+		BackgroundTransparency = 0.1,
+		Base.corner(Theme.radius.md),
+		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = Theme.color.warning,
+			Thickness = 2,
+		}),
+		create("UIPadding")({
+			PaddingLeft = UDim.new(0, Theme.spacing.sm),
+			PaddingRight = UDim.new(0, Theme.spacing.sm),
+		}),
+		Base.text("body", {
+			Name = "Text",
+			Size = UDim2.fromOffset(0, REFUSAL_H),
+			AutomaticSize = Enum.AutomaticSize.X,
+			TextColor3 = Theme.color.warning,
+			Text = function()
+				local r = store.refusal()
+				return if r then r.text else ""
+			end,
+		}),
 	}) :: Frame
 end
 
@@ -708,6 +781,7 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 			Size = UDim2.fromOffset(width, 0),
 			BackgroundTransparency = 1,
 			bin,
+			refusalLabel(store),
 		}),
 		create("Frame")({
 			Name = "Slots",
@@ -1037,6 +1111,11 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			Parent = gui,
 		}) :: Frame
 		cleanup(controller.attachScale(top))
+		-- Race toasts: compact, and hung under this stack (Toast.setCompact).
+		C.Toast.setCompact(true, top)
+		cleanup(function()
+			C.Toast.setCompact(false)
+		end)
 
 		-- Landscape task list, top-left.
 		local tasks = create("Frame")({

@@ -208,4 +208,21 @@ describe("ComponentLogic tabs and toasts", function()
 		expect(#q):toBe(2)
 		expect(q[1]):toBe("b")
 	end)
+
+	it("finds a repeat to merge into, or nil", function()
+		local q = { "No target", "Cooling down" }
+		local function is(text: string)
+			return function(entry: string)
+				return entry == text
+			end
+		end
+		expect(ComponentLogic.findToast(q, is("Cooling down"))):toBe(2)
+		expect(ComponentLogic.findToast(q, is("Ava froze you!"))):toBe(nil)
+		expect(ComponentLogic.findToast({}, is("No target"))):toBe(nil)
+	end)
+
+	it("shows a repeat count only past one", function()
+		expect(ComponentLogic.toastLabel("No target", 1)):toBe("No target")
+		expect(ComponentLogic.toastLabel("No target", 3)):toBe("No target  ×3")
+	end)
 end)
