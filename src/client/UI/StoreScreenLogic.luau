@@ -33,6 +33,7 @@ export type Item = {
 	robuxPrice: number,
 	coinPrice: number?, -- CoinOffer only
 	sortOrder: number,
+	imageAssetId: number, -- 0 = no art yet (disabled items only, Validate enforces it)
 	grants: { Grant },
 }
 

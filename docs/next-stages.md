@@ -237,11 +237,21 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   presets, with gameplay-only captions in the game's font. The README
   there has the Creator Hub upload path and how the set meets Roblox's
   thumbnail rules. Uploading them is the owner's job.*
-- [ ] **14d. Store item images and categories.** Store items have no
+- [x] **14d. Store item images and categories.** Store items have no
   image field and no category; the Store screen lists them by
   `sortOrder` only. Add an image and a category to `StoreItemDef`
   (validated, data-driven), give every item an image, and show the
   categories as tabs or sections in the Store screen. Added 2026-10-04.
+  *Done 2026-10-06. `StoreItemDef.imageAssetId` is validated: enabled
+  items need one, and 0 is legal only while disabled. All 15 items have
+  a 512×512 picture from `scripts/make-store-icons.ps1`: the 5 Robux
+  products' existing icons, plus 10 new coin-offer badges, one per
+  power-up, each with a gold coin. They are uploaded and show on the
+  store card and in the preview panel. The categories already existed
+  as tabs (Season / Bundles / Power / Style / Coins). They are derived
+  from each item's grants in `StoreScreenLogic.categoryOf`, so no
+  config field was added: a field could disagree with what the item
+  contains.*
 
 ## Stage 5: Pre-launch hardening
 

@@ -28,6 +28,10 @@ descriptions exactly as below; they match what the in-game store shows.
 Each product's icon is `assets/store/<key>.png`, where `<key>` is the
 `key` in its config file (e.g. `currency-small.png`). The icons come from
 `scripts/make-store-icons.ps1`; re-run it after changing the art.
+The same file is the in-game store picture: each config's `imageAssetId`
+is that PNG uploaded as an Image (Studio MCP `upload_image`, PNGs served
+from localhost). Coin offers have no Dashboard entry but get a picture the
+same way. After changing the art, re-upload and paste the new id.
 
 ### Developer Products (Monetization > Developer Products)
 

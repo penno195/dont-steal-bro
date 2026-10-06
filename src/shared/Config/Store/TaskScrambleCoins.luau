@@ -17,6 +17,7 @@ local TaskScrambleCoins: Validate.StoreItemDef = {
 	robuxPrice = 0,
 	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 110,
+	imageAssetId = 75719915646307, -- assets/store/task-scramble-coins.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "task-scramble", amount = 1 },
 	},

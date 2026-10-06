@@ -17,6 +17,7 @@ local SprintBoostCoins: Validate.StoreItemDef = {
 	robuxPrice = 0,
 	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 108,
+	imageAssetId = 83756197821128, -- assets/store/sprint-boost-coins.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 1 },
 	},

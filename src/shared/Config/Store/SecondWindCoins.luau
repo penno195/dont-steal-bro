@@ -17,6 +17,7 @@ local SecondWindCoins: Validate.StoreItemDef = {
 	robuxPrice = 0,
 	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 106,
+	imageAssetId = 97705706170400, -- assets/store/second-wind-coins.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "second-wind", amount = 1 },
 	},

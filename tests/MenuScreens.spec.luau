@@ -111,6 +111,7 @@ local function item(key: string, kind: string, grants: { any }, enabled: boolean
 		displayName = key,
 		robuxPrice = 10,
 		sortOrder = 1,
+		imageAssetId = 1,
 		grants = grants,
 	}
 end
@@ -541,6 +542,7 @@ describe("StoreScreenLogic coin offers (rewards step 6)", function()
 		robuxPrice = 0,
 		coinPrice = 150,
 		sortOrder = 1,
+		imageAssetId = 1,
 		grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 1 } },
 	}
 

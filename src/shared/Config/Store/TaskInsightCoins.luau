@@ -17,6 +17,7 @@ local TaskInsightCoins: Validate.StoreItemDef = {
 	robuxPrice = 0,
 	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 109,
+	imageAssetId = 113164662600424, -- assets/store/task-insight-coins.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "task-insight", amount = 1 },
 	},

@@ -17,6 +17,7 @@ local PhaseStepCoins: Validate.StoreItemDef = {
 	robuxPrice = 0,
 	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 104,
+	imageAssetId = 92120590160872, -- assets/store/phase-step-coins.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "phase-step", amount = 1 },
 	},

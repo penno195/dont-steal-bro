@@ -1318,6 +1318,7 @@ local function validProduct(key: string): Validate.StoreItemDef
 		description = "A thing you can buy.",
 		robuxPrice = 49,
 		sortOrder = 1,
+		imageAssetId = 654321,
 		grants = { { kind = "Currency", amount = 500 } },
 	}
 end
@@ -1363,6 +1364,22 @@ TestRunner.describe("Validate.checkStoreItem (P4-5)", function()
 		-- holding their Robux.
 		local def = validProduct("t")
 		def.assetId = 0
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an ENABLED entry with no image, allows a disabled one (14d)", function()
+		local def = validProduct("t")
+		def.imageAssetId = 0
+		local issues = runWithStore({ { fileName = "T.luau", def = def } })
+		TestRunner.expect(#issues):toBe(1)
+		TestRunner.expect(issues[1].field):toBe("imageAssetId")
+		def.enabled = false
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a non-integer imageAssetId", function()
+		local def = validProduct("t")
+		def.imageAssetId = 1.5
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 

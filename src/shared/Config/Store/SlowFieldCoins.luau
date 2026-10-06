@@ -17,6 +17,7 @@ local SlowFieldCoins: Validate.StoreItemDef = {
 	robuxPrice = 0,
 	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 107,
+	imageAssetId = 82877670286920, -- assets/store/slow-field-coins.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "slow-field", amount = 1 },
 	},

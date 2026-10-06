@@ -17,6 +17,7 @@ local BlindCoins: Validate.StoreItemDef = {
 	robuxPrice = 0,
 	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 101,
+	imageAssetId = 100075217143813, -- assets/store/blind-coins.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "blind", amount = 1 },
 	},

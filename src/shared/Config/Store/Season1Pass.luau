@@ -16,6 +16,7 @@ local Season1Pass: Validate.StoreItemDef = {
 	description = "Unlock Season 1's premium track: founder cosmetics, coins and power-ups as you win. Only wins until the season ends count.",
 	robuxPrice = 199, -- PLACEHOLDER: display only, never read for a grant
 	sortOrder = 10,
+	imageAssetId = 130933629115331, -- assets/store/season-1-pass.png
 	grants = {},
 }
 

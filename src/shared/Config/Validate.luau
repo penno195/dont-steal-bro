@@ -405,6 +405,14 @@ export type StoreItemDef = {
 	robuxPrice: number, -- DISPLAY ONLY - see checkStoreItem for why a grant never reads this
 	coinPrice: number?, -- CoinOffer only: what it costs in coins, deducted server-side
 	sortOrder: number,
+	-- The store card's and preview panel's picture (next-stages 14d):
+	-- a 512x512 full-colour image, drawn untinted. Source art is
+	-- assets/store/<key>.png (scripts/make-store-icons.ps1), the same file
+	-- a Robux product uses as its Creator Dashboard icon. 0 = not uploaded
+	-- yet, legal only while the entry is disabled. Which tab an item sits
+	-- in is NOT a field: StoreScreenLogic.categoryOf derives it from
+	-- `grants`, so a tab can never disagree with what the item contains.
+	imageAssetId: number,
 	-- A DeveloperProduct grants at least one thing. A GamePass grants
 	-- nothing here: every pass is a season pass, and what it unlocks is
 	-- that season's premium track (SeasonDef below).
@@ -1530,6 +1538,26 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 			fileName,
 			"robuxPrice",
 			string.format("expected a non-negative integer, got %s", tostring(def.robuxPrice))
+		)
+	end
+
+	if type(def.imageAssetId) ~= "number" or def.imageAssetId < 0 or def.imageAssetId % 1 ~= 0 then
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"imageAssetId",
+			string.format("expected a non-negative integer, got %s", tostring(def.imageAssetId))
+		)
+	elseif def.enabled and def.imageAssetId == 0 then
+		-- An enabled item with no picture would sit in the grid as a
+		-- blank card next to ones that have art.
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"imageAssetId",
+			"enabled = true but imageAssetId is 0 - upload assets/store/<key>.png and paste its id here, or set enabled = false"
 		)
 	end
 

@@ -15,6 +15,7 @@ local CurrencyLarge: Validate.StoreItemDef = {
 	description = "250 coins. The same coins you earn from playing - these just arrive sooner.",
 	robuxPrice = 249, -- ten power-ups at about 25 R$ each; display only
 	sortOrder = 31,
+	imageAssetId = 96446701704970, -- assets/store/currency-large.png
 	grants = {
 		{ kind = "Currency", amount = 250 }, -- ten power-ups (Q1 pricing, 2026-10-02)
 	},

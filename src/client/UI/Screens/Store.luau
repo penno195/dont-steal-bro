@@ -44,6 +44,7 @@ local TAB_H = 48
 local CARD_H = 92
 local PANEL_H = 212
 local PREVIEW = 72
+local CARD_IMAGE = 48 -- the item picture, top-right of a card; the name wraps beside it
 
 export type Store = {
 	items: { StoreScreenLogic.Item },
@@ -81,6 +82,32 @@ local function priceText(item: StoreScreenLogic.Item): string
 		return string.format("%d coins", item.coinPrice or 0)
 	end
 	return string.format("R$ %d", item.robuxPrice)
+end
+
+-- An item's picture (StoreItemDef.imageAssetId), drawn in its own
+-- colours. `item` may be a source (the panel's selection). An item with
+-- no art yet (0, disabled only) shows nothing; the card's rarity edge
+-- and name still read.
+local function itemImage(
+	item: StoreScreenLogic.Item? | () -> StoreScreenLogic.Item?,
+	size: number,
+	props: { [string]: any }
+): Instance
+	local get: () -> StoreScreenLogic.Item? = if type(item) == "function"
+		then item
+		else function()
+			return item :: StoreScreenLogic.Item?
+		end
+	props.Name = "Image"
+	props.BackgroundTransparency = 1
+	props.Size = UDim2.fromOffset(size, size)
+	props.ScaleType = Enum.ScaleType.Fit
+	props.Image = function()
+		local i = get()
+		return if i and i.imageAssetId ~= 0 then "rbxassetid://" .. i.imageAssetId else ""
+	end
+	(props :: any)[1] = Base.corner(Theme.radius.md)
+	return create("ImageLabel")(props)
 end
 
 local function card(
@@ -139,9 +166,13 @@ local function card(
 						end,
 					}),
 					Base.padding(Theme.spacing.sm),
+					itemImage(item, CARD_IMAGE, {
+						AnchorPoint = Vector2.new(1, 0),
+						Position = UDim2.fromScale(1, 0),
+					}),
 					Base.text("label", {
 						Name = "Name",
-						Size = UDim2.new(1, 0, 0, 2 * Theme.type.label.size),
+						Size = UDim2.new(1, -(CARD_IMAGE + Theme.spacing.xs), 0, 2 * Theme.type.label.size),
 						Text = item.displayName,
 						TextWrapped = true,
 						TextXAlignment = Enum.TextXAlignment.Left,
@@ -323,10 +354,9 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 		anchorPoint = if layout.split then Vector2.zero else Vector2.new(0, 1),
 		position = if layout.split then UDim2.fromOffset(pane + MenuShell.GUTTER, 0) else UDim2.fromScale(0, 1),
 		children = {
-			-- Preview. Every sellable item is still a placeholder with no
-			-- asset id (enabled = false in config), so there is no model to
-			-- put in a ViewportFrame yet; the rarity-edged tile stands in
-			-- and docs/menu-screens.md tracks the swap.
+			-- Preview: the item's picture on a rarity-edged tile. A
+			-- cosmetic still has no 3D ViewportFrame preview;
+			-- docs/menu-screens.md tracks that.
 			create("Frame")({
 				Name = "Preview",
 				Size = UDim2.fromOffset(PREVIEW, PREVIEW),
@@ -338,7 +368,7 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 					end,
 					Thickness = 2,
 				}),
-				C.Icons.view("shop", 36, Theme.color.inkMuted),
+				itemImage(item, PREVIEW, {}),
 			}),
 			Base.text("title", {
 				Name = "Name",

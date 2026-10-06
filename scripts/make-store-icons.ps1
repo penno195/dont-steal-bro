@@ -162,3 +162,106 @@ foreach ($p in @(@(150, 110, 22), @(372, 104, 16), @(256, 92, 12), @(400, 400, 1
 }
 Draw-Label $g 'PASS' 430 46 (Rgb 255 220 90)
 Save-Icon $c 'season-1-pass.png'
+
+# ===== coin offers: one power-up each, bought with coins (next-stages 14d) ==
+# One big badge in the power-up's colour with its glyph, and a gold coin
+# on the badge's edge to say "bought with coins". No price on the art:
+# the store card prints it, and a price baked into an image goes stale.
+function New-CoinOffer($top, $bottom, $badge) {
+	$c = New-Icon $top $bottom; $g = $c[1]
+	$g.FillEllipse((Brush $badge), 106, 86, 300, 300)
+	$g.DrawEllipse((Pen $ink 14), 106, 86, 300, 300)
+	return $c
+}
+function Finish-CoinOffer($c, [string]$name) {
+	$g = $c[1]
+	$g.FillEllipse((Brush $ink), 318, 318, 116, 116)
+	Draw-Coin $g 376 372 50
+	Save-Icon $c $name
+}
+$white = Rgb 255 255 255
+
+# Sprint Boost: the bolt.
+$c = New-CoinOffer (Rgb 70 200 255) (Rgb 20 80 190) (Rgb 40 140 230); $g = $c[1]
+$bolt = Bolt-Points 256 236 1.15
+$g.FillPolygon((Brush (Rgb 255 230 60)), $bolt); $g.DrawPolygon((Pen $ink 10), $bolt)
+Finish-CoinOffer $c 'sprint-boost-coins.png'
+
+# Slow Field: rings spreading out.
+$c = New-CoinOffer (Rgb 190 140 255) (Rgb 80 40 170) (Rgb 130 80 220); $g = $c[1]
+foreach ($r in 30, 64, 98) { $g.DrawEllipse((Pen $white 16), 256 - $r, 236 - $r, $r * 2, $r * 2) }
+Finish-CoinOffer $c 'slow-field-coins.png'
+
+# Push-Trip: a shove arrow.
+$c = New-CoinOffer (Rgb 255 120 140) (Rgb 170 30 60) (Rgb 230 60 90); $g = $c[1]
+$p = Pen $white 30
+$g.DrawLine($p, 170, 236, 340, 236); $g.DrawLine($p, 280, 176, 342, 236); $g.DrawLine($p, 280, 296, 342, 236)
+Finish-CoinOffer $c 'push-trip-coins.png'
+
+# Freeze: a snowflake.
+$c = New-CoinOffer (Rgb 170 240 255) (Rgb 40 140 200) (Rgb 70 190 240); $g = $c[1]
+$p = Pen $white 16
+for ($i = 0; $i -lt 6; $i++) {
+	$a = [Math]::PI / 3 * $i
+	$ex = 256 + [Math]::Cos($a) * 108; $ey = 236 + [Math]::Sin($a) * 108
+	$g.DrawLine($p, 256, 236, $ex, $ey)
+	$mx = 256 + [Math]::Cos($a) * 66; $my = 236 + [Math]::Sin($a) * 66
+	foreach ($side in -1, 1) {
+		$b = $a + $side * 0.75
+		$g.DrawLine($p, $mx, $my, $mx + [Math]::Cos($b) * 34, $my + [Math]::Sin($b) * 34)
+	}
+}
+Finish-CoinOffer $c 'freeze-coins.png'
+
+# Phase-Step: a ghost, half see-through.
+$c = New-CoinOffer (Rgb 150 230 210) (Rgb 30 120 120) (Rgb 50 170 160); $g = $c[1]
+$ghost = New-Object System.Drawing.Drawing2D.GraphicsPath
+$ghost.AddArc(176, 136, 160, 160, 180, 180)
+$ghost.AddLine(336, 216, 336, 330)
+$ghost.AddLine(336, 330, 309, 304); $ghost.AddLine(309, 304, 283, 330); $ghost.AddLine(283, 330, 256, 304)
+$ghost.AddLine(256, 304, 229, 330); $ghost.AddLine(229, 330, 203, 304); $ghost.AddLine(203, 304, 176, 330)
+$ghost.CloseFigure()
+$g.FillPath((Brush (Rgb 255 255 255 190)), $ghost); $g.DrawPath((Pen $ink 10), $ghost)
+$g.FillEllipse((Brush $ink), 218, 196, 26, 34); $g.FillEllipse((Brush $ink), 268, 196, 26, 34)
+Finish-CoinOffer $c 'phase-step-coins.png'
+
+# Second Wind: a medic cross.
+$c = New-CoinOffer (Rgb 130 230 140) (Rgb 20 120 60) (Rgb 50 180 90); $g = $c[1]
+$cross = New-Object System.Drawing.Drawing2D.GraphicsPath
+$cross.AddRectangle((New-Object System.Drawing.RectangleF 222, 142, 68, 188))
+$cross.AddRectangle((New-Object System.Drawing.RectangleF 162, 202, 188, 68))
+$cross.FillMode = 'Winding'
+$g.FillPath((Brush $white), $cross)
+Finish-CoinOffer $c 'second-wind-coins.png'
+
+# Overclock: a clock face.
+$c = New-CoinOffer (Rgb 255 200 110) (Rgb 200 100 20) (Rgb 240 140 40); $g = $c[1]
+$g.FillEllipse((Brush $white), 156, 136, 200, 200); $g.DrawEllipse((Pen $ink 12), 156, 136, 200, 200)
+for ($i = 0; $i -lt 12; $i++) {
+	$a = [Math]::PI / 6 * $i
+	$g.DrawLine((Pen $ink 6), 256 + [Math]::Cos($a) * 80, 236 + [Math]::Sin($a) * 80, 256 + [Math]::Cos($a) * 92, 236 + [Math]::Sin($a) * 92)
+}
+$g.DrawLine((Pen $ink 12), 256, 236, 256, 166); $g.DrawLine((Pen (Rgb 230 60 60) 10), 256, 236, 310, 260)
+Finish-CoinOffer $c 'overclock-coins.png'
+
+# Task Scramble: a question mark.
+$c = New-CoinOffer (Rgb 255 140 220) (Rgb 160 30 130) (Rgb 210 70 180); $g = $c[1]
+Draw-Label $g '?' 236 220 $white
+Finish-CoinOffer $c 'task-scramble-coins.png'
+
+# Task Insight: a magnifying glass.
+$c = New-CoinOffer (Rgb 255 235 120) (Rgb 200 150 20) (Rgb 240 190 40); $g = $c[1]
+$g.DrawLine((Pen $ink 34), 296, 276, 350, 330)
+$g.FillEllipse((Brush (Rgb 200 240 255)), 166, 146, 150, 150); $g.DrawEllipse((Pen $ink 20), 166, 146, 150, 150)
+$g.FillEllipse((Brush (Rgb 255 255 255 220)), 196, 172, 40, 28)
+Finish-CoinOffer $c 'task-insight-coins.png'
+
+# Blind: an eye, struck through.
+$c = New-CoinOffer (Rgb 130 130 160) (Rgb 30 30 50) (Rgb 70 70 100); $g = $c[1]
+$eye = New-Object System.Drawing.Drawing2D.GraphicsPath
+$eye.AddBezier((Pt 150 236), (Pt 200 160), (Pt 312 160), (Pt 362 236))
+$eye.AddBezier((Pt 362 236), (Pt 312 312), (Pt 200 312), (Pt 150 236))
+$g.FillPath((Brush $white), $eye); $g.DrawPath((Pen $ink 12), $eye)
+$g.FillEllipse((Brush $ink), 222, 202, 68, 68)
+$g.DrawLine((Pen (Rgb 230 60 60) 22), 170, 150, 342, 322)
+Finish-CoinOffer $c 'blind-coins.png'

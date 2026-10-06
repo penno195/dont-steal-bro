@@ -17,6 +17,7 @@ local PushTripCoins: Validate.StoreItemDef = {
 	robuxPrice = 0,
 	coinPrice = 25, -- one rung-0 win of any outcome (design-decisions.md Q1, 2026-10-02 pricing)
 	sortOrder = 105,
+	imageAssetId = 134997602836955, -- assets/store/push-trip-coins.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "push-trip", amount = 1 },
 	},

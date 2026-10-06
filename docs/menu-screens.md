@@ -72,11 +72,11 @@ them touches a remote.
 
 ## Decisions made here
 
-- **No 3D item preview yet.** The prompt asks for a viewport preview. Every
-  sellable item is still a placeholder (`enabled = false`, asset id 0), so
-  there's no model to render. The panel shows a tile with the rarity edge
-  instead. When assets exist, swap the `Preview` frame in `Store.luau` for a
-  `ViewportFrame`; nothing else changes.
+- **No 3D item preview yet.** The prompt asks for a viewport preview. Since
+  next-stages 14d (2026-10-06) every item has a 2D picture
+  (`StoreItemDef.imageAssetId`), shown on its card and in the panel's
+  rarity-edged `Preview` tile. A 3D preview would swap that tile in
+  `Store.luau` for a `ViewportFrame`; nothing else changes.
 - **Client copy of the cosmetic slot map.** `StoreEquipIntent` needs the slot
   name, and `CosmeticLogic` lives in ServerScriptService.
   `StoreScreenLogic.slotFor` is a copy, and the spec asserts it matches the
