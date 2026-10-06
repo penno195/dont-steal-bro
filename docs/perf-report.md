@@ -408,3 +408,25 @@ lever (`PowerUpService` builds them) that helps every map.
 **Still open, all on the user:** S7–S9 on a real low-end phone (frame
 time, dominant MicroProfiler bucket, memory), School first. S3/S5/S6
 soak checks were last done statically (§4); they need Team Test.
+
+### 2026-10-06: School cut (next-stages step 4a)
+
+Cuts (1) and (2) above were applied, plus a third lever the 2026-10-04
+pass missed: **SurfaceGuis**. Each one is its own draw call. At the old
+worst view, disabling all 83 dropped draws from 136 to 67. Changes:
+the bookshelves, desks and chairs became generated low-poly meshes,
+hidden micro-parts were removed, and the 51 non-station SurfaceGuis got
+a `MaxDistance` of 40 or 120 studs. The 32 station SurfaceGuis were left
+unchanged. Capping them at 80 studs would take that view from 95 to 71,
+but it changes what players can read in-round, so it's an owner call.
+
+| School, Edit, map only | Before | After |
+|---|---|---|
+| Parts / descendants | 5,461 / 6,761 | 3,060 / 4,063 |
+| Unique meshes / textures | 27 / 34 | 25 / 21 |
+| Old worst view (-125.8, 10, 14.9) +X: draws / tris | 152 / 145k | 95 / 69k |
+| 200-view sweep max: draws / tris | 153 / 147k | 97 / 80k |
+
+In round, the old map-only cost was about 1.3× the Edit figure, plus
+about 45 draws for gameplay. That projects roughly 170 draws, under
+the 180 target. The real check is still S7 on the reference phone.

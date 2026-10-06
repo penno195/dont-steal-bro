@@ -39,7 +39,7 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   2026-10-03: built the same way, primitive-part dressing, enabled;
   as-built notes in wave1-briefs.md §5. All four still want a real-asset
   art pass.*
-- [ ] **4a. Art pass and rendering fixes on the four launch maps**, one
+- [x] **4a. Art pass and rendering fixes on the four launch maps**, one
   map per session, Factory first (flashing seen in playtest, likely
   z-fighting). Survey each map in Studio, fix rendering faults, then swap
   primitive dressing for Creator Store assets. Each asset must fit
@@ -96,7 +96,20 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   scaling freshly generated meshes while Roblox was still processing
   them. The same meshes placed without trouble two days later. Each prop
   was checked like Factory's, and all 83 nav nodes still path from the
-  spawn. The Lab uses 74 textures and 41 meshes. Still to do: School.*
+  spawn. The Lab uses 74 textures and 41 meshes. School done
+  2026-10-06. This pass cut weight and dressed nothing new. The six
+  bookshelves (about 300 parts each, one part per book) became one
+  generated bookcase mesh each, turned to face into the rooms.
+  The 17 desks and 17 chairs (about 2.4k and 2k triangles each) became
+  one low-poly desk-and-chair mesh per seat. Each seat keeps its
+  `CollisionHull`, and the papers on desks were raised 0.33 studs to
+  the new desk tops. Hidden micro-detail was removed: pens, notebook
+  rings, separate paper sheets, book page layers and the open
+  textbook's pages. The 51 decorative SurfaceGuis got a `MaxDistance`
+  (40 studs for small text, 120 for signs). Templates are in
+  `AssetQuarantine.SchoolGen`. Result: 5,461 → 3,060 parts, and the
+  worst draw calls 153 → 97 and triangles 147k → 80k over a 200-view
+  sweep (`perf-report.md` History). All 74 nav nodes still path.*
 - [x] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
