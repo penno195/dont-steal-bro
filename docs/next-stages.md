@@ -226,9 +226,17 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   a square. The shots were uploaded through Studio MCP's
   `upload_image`, and all four load. Wave 2 and 3 maps keep
   `rbxassetid://0` until they're built.*
-- [ ] **14c. Experience thumbnails and icon.** The game icon and the
+- [x] **14c. Experience thumbnails and icon.** The game icon and the
   thumbnail set for the experience page, made from the art-passed maps.
-  Added 2026-10-04.
+  Added 2026-10-04. *Done 2026-10-06. The files are in
+  `assets/experience/`: a 512×512 icon (two finalists over STEAL /
+  SHARE) and five 1920×1080 thumbnails. They show the Decision Studio
+  hero, the School race, Factory sabotage with the real STUNNED and
+  BLINDED labels, the Museum "top 3 make the final" shot and the Lab win
+  streak. All are Studio captures of the launch maps under their own
+  presets, with gameplay-only captions in the game's font. The README
+  there has the Creator Hub upload path and how the set meets Roblox's
+  thumbnail rules. Uploading them is the owner's job.*
 - [ ] **14d. Store item images and categories.** Store items have no
   image field and no category; the Store screen lists them by
   `sortOrder` only. Add an image and a category to `StoreItemDef`
