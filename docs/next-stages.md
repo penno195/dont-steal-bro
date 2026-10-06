@@ -84,7 +84,19 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   its case. In total 72 props went into `Dressing/Props_*` and
   `Dressing/Egypt`, against walls on both floors. Each was checked like
   Factory's, and all 63 nav nodes still path from the spawn. Museum uses
-  13 textures and 35 meshes. Still to do: Laboratory, School.*
+  13 textures and 35 meshes. Laboratory dressed 2026-10-06 (begun
+  2026-10-04). 65 props went into `Dressing/Props_{Reactor,Labs,Upper}`.
+  The ground floor and labs got Creator Store crates, AC units,
+  condensers and kits, plus generated fume hoods, benches, chemical
+  cabinets and gas racks. The upper floor got generated desks in Comms
+  and Security, a cabinet in Comms, and a couch and planters in
+  Director's office, plus seating, bins and crates. Templates are in
+  `ServerStorage.AssetQuarantine.LabGen`. Studio crashed four times
+  during placement on 2026-10-04. The likely cause was cloning and
+  scaling freshly generated meshes while Roblox was still processing
+  them. The same meshes placed without trouble two days later. Each prop
+  was checked like Factory's, and all 83 nav nodes still path from the
+  spawn. The Lab uses 74 textures and 41 meshes. Still to do: School.*
 - [x] **5. Build the four remaining launch tasks**, one per session:
   `alarm-killswitch`, `breaker-sequence`, `reactor-sync`,
   `airlock-cycle` (adds the Hold and Timing styles). Config + handler +
