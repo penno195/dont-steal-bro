@@ -10,7 +10,7 @@ local Laboratory: Validate.MapDef = {
 	id = "Laboratory",
 	displayName = "Laboratory",
 	description = "Science says trust no one. Peer-reviewed.",
-	thumbnailAssetId = "rbxassetid://0", -- PLACEHOLDER
+	thumbnailAssetId = "rbxassetid://71417359474644", -- 2026-10-06 art-passed interior shot
 	lightingPreset = "Laboratory", -- Config/LightingPresets/Laboratory.luau (P7-5)
 	musicTrackId = "rbxassetid://0", -- PLACEHOLDER
 	-- Full registered set for now; prune after playtesting.

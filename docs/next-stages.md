@@ -215,10 +215,17 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   `PLACEHOLDER_ASSET`, so the game is silent. Pick or make a sound for
   every cue and the three music beds (`audio-and-feel.md` is the brief),
   upload them, and set the ids. Added 2026-10-04.
-- [ ] **14b. Map preview images.** Every map's `thumbnailAssetId` is
+- [x] **14b. Map preview images.** Every map's `thumbnailAssetId` is
   `rbxassetid://0`, so the Hub vote board shows blank cards. Capture
   one image per launch map (after its 4a art pass), upload them, and set
-  the ids. Added 2026-10-04.
+  the ids. Added 2026-10-04. *Done 2026-10-06. There is one 512×512
+  interior shot per launch map, taken under its own lighting preset:
+  School's classroom, Factory's line with the Emergency Stop, Museum's
+  T-Rex in the Rotunda, and the Lab's glowing reactor core. Each
+  subject sits at the centre, because the vote card crops the image to
+  a square. The shots were uploaded through Studio MCP's
+  `upload_image`, and all four load. Wave 2 and 3 maps keep
+  `rbxassetid://0` until they're built.*
 - [ ] **14c. Experience thumbnails and icon.** The game icon and the
   thumbnail set for the experience page, made from the art-passed maps.
   Added 2026-10-04.

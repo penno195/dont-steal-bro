@@ -10,7 +10,7 @@ local Museum: Validate.MapDef = {
 	id = "Museum",
 	displayName = "Museum",
 	description = "Priceless exhibits. Worthless friends.",
-	thumbnailAssetId = "rbxassetid://0", -- PLACEHOLDER
+	thumbnailAssetId = "rbxassetid://137978132964474", -- 2026-10-06 art-passed interior shot
 	lightingPreset = "Museum", -- Config/LightingPresets/Museum.luau (P7-5)
 	musicTrackId = "rbxassetid://0", -- PLACEHOLDER
 	-- Full registered set for now; prune after playtesting.

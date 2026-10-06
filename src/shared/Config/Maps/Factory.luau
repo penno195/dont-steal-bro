@@ -10,7 +10,7 @@ local Factory: Validate.MapDef = {
 	id = "Factory",
 	displayName = "Factory",
 	description = "Clock in, fix the line, clock your mates.",
-	thumbnailAssetId = "rbxassetid://0", -- PLACEHOLDER
+	thumbnailAssetId = "rbxassetid://112433103080362", -- 2026-10-06 art-passed interior shot
 	lightingPreset = "Factory", -- Config/LightingPresets/Factory.luau (P7-5)
 	musicTrackId = "rbxassetid://0", -- PLACEHOLDER
 	-- Full registered set for now; prune after playtesting.

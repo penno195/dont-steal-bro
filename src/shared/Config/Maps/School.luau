@@ -10,7 +10,7 @@ local School: Validate.MapDef = {
 	id = "School",
 	displayName = "School",
 	description = "Detention for anyone caught stealing. So, everyone.",
-	thumbnailAssetId = "rbxassetid://0", -- PLACEHOLDER
+	thumbnailAssetId = "rbxassetid://108407970537618", -- 2026-10-06 art-passed interior shot
 	lightingPreset = "School", -- Config/LightingPresets/School.luau (P7-5)
 	musicTrackId = "rbxassetid://0", -- PLACEHOLDER
 	-- Full registered set for now; prune after playtesting.
