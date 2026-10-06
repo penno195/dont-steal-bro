@@ -48,6 +48,9 @@ local CARD_IMAGE = 48 -- the item picture, top-right of a card; the name wraps b
 
 export type Store = {
 	items: { StoreScreenLogic.Item },
+	-- The tab it opens on; nil = the first. The hub's coin balance opens
+	-- straight on "Currency".
+	initialCategory: StoreScreenLogic.Category?,
 	rarityOf: (StoreScreenLogic.Grant) -> string?,
 	-- One line per grant ("500 coins", "Founder's Trail"), for the panel.
 	grantText: (StoreScreenLogic.Grant) -> string,
@@ -596,7 +599,8 @@ end
 local function body(store: Store, height: () -> number, layout: MenuShell.BodyLayout): { Instance }
 	local pane = layout.pane
 	local cardW = (pane - Theme.spacing.sm) / 2
-	local tabIndex = source(1)
+	local initial = store.initialCategory
+	local tabIndex = source(if initial then table.find(StoreScreenLogic.CATEGORIES, initial) or 1 else 1)
 	-- Cast: derive widens a string-literal union back to `string`.
 	local category = derive(function(): StoreScreenLogic.Category
 		return StoreScreenLogic.CATEGORIES[tabIndex()]

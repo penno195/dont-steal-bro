@@ -13,6 +13,11 @@
 -- (RaceHUD and the Decision Studio own the screen then), and while a
 -- menu is open.
 --
+-- THE COIN BALANCE: hub only, top-right under Roblox's top bar - where
+-- players look for a currency. The "+" says it's a button: it opens the
+-- store on the Coins tab. Hidden while a menu is open (the store shows
+-- its own balance) and in a match place, where the HUD owns the corners.
+--
 -- RESULTS opens itself on entering Results - but only once the Decision
 -- Studio screen is gone (DecisionStudioController.isActive), because
 -- the reveal outlives the Studio phase (docs/decision-studio.md).
@@ -26,10 +31,13 @@
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
@@ -177,12 +185,13 @@ local function closeMenu()
 	syncLauncher()
 end
 
-local function open(menu: Menu)
+local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?)
 	closeMenu()
 	openMenu = menu
 	if menu == "Store" then
 		unmountMenu = StoreScreen.mount(UIScaleController, {
 			items = items,
+			initialCategory = storeCategory,
 			rarityOf = rarityOf,
 			grantText = grantText,
 			cosmeticName = cosmeticName,
@@ -244,12 +253,50 @@ end
 
 -- ===== launcher ==============================================================
 
+-- Same check as QueueController's: the hub place, or in Studio a place
+-- with a Hub model when no hub place id is configured.
+local function isHubServer(): boolean
+	local hubPlaceId = GameConfig.matchmaking.hubPlaceId
+	if hubPlaceId == 0 then
+		return RunService:IsStudio() and Workspace:FindFirstChild("Hub") ~= nil
+	end
+	return game.PlaceId == hubPlaceId
+end
+
 local function mountLauncher()
 	local gui = UIScaleController.createScreen("MenuLauncher", { displayOrder = Theme.displayOrder.hud })
 	local visible = source(true)
+	local coinsVisible = source(false)
+	local inHub = isHubServer()
 	syncLauncher = function()
-		visible(openMenu == nil and not IN_PLAY[roundState() or ""])
+		local free = openMenu == nil and not IN_PLAY[roundState() or ""]
+		visible(free)
+		coinsVisible(free and inHub)
 	end
+
+	vide.root(function()
+		local coins = C.CurrencyPill({
+			amount = function()
+				local s = storeState()
+				return if s then s.currency else 0
+			end,
+			onActivate = function()
+				open("Store", "Currency")
+			end,
+			order = 0,
+			anchorPoint = Vector2.new(1, 0),
+			position = UDim2.new(1, -Theme.spacing.md, 0, Theme.spacing.md),
+		})
+		UIScaleController.attachScale(coins)
+		create("Frame")({
+			Name = "CoinBalance",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Visible = coinsVisible,
+			coins,
+			Parent = gui,
+		})
+	end)
 
 	vide.root(function()
 		local column = create("Frame")({
