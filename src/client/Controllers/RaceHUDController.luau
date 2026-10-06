@@ -38,6 +38,7 @@ local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
+local ComponentLogic = require(script.Parent.Parent.UI.Components.ComponentLogic)
 local Toast = require(script.Parent.Parent.UI.Components.Toast)
 local HudLogic = require(script.Parent.Parent.UI.HudLogic)
 local RaceHUD = require(script.Parent.Parent.UI.Screens.RaceHUD)
@@ -54,11 +55,12 @@ local ARROW_STEP = 5
 -- If the server never answers a use (a dropped remote), unstick the
 -- button rather than leaving it spinning for the rest of the race.
 local USE_TIMEOUT = 2
--- How long a refusal's label stays above the slots.
+-- How long a refusal's note stays above the slots. An explanation
+-- stays as long as a toast of the same text would.
 local REFUSAL_SECONDS = 1.5
 
 -- Short, player-facing versions of PowerUpService's refusal reasons
--- that a player can act on, shown at the slots (RaceHUD.Refusal).
+-- that a player can act on, shown at the slots (RaceHUD.SlotNote).
 -- Anything else is an internal refusal the player couldn't do anything
 -- about, so it shows nothing.
 local REFUSALS: { [string]: string } = {
@@ -83,9 +85,9 @@ for _, entry in Cosmetics do
 		callingCardImage[def.id] = def.cardImageAssetId :: number
 	end
 end
--- Power-up ids whose description has been toasted this session. The
--- first pickup of each type explains it once; after that it's just
--- the slot icon, so a long race doesn't nag.
+-- Power-up ids whose description has been shown this session. The
+-- first pickup of each type explains it once, above the slots; after
+-- that it's just the slot icon, so a long race doesn't nag.
 local explained: { [string]: boolean } = {}
 
 local function roleColor(role: string): Color3?
@@ -113,9 +115,23 @@ local slots = source(emptySlots())
 local selected = source(1)
 local aiming = source(false)
 local pending = source(false)
-local refusal = source(nil :: RaceHUD.Refusal?)
+local note = source(nil :: RaceHUD.SlotNote?)
+local noteId = 0
 -- The slot the use in flight was fired from, for the refusal shake.
 local firedSlot = 1
+
+-- Puts a note above the slots for `seconds`, replacing any already up.
+local function showNote(text: string, slot: number, kind: "info" | "warning", seconds: number)
+	noteId += 1
+	local id = noteId
+	note({ text = text, slot = slot, id = id, kind = kind })
+	task.delay(seconds, function()
+		local current = note()
+		if current ~= nil and current.id == id then
+			note(nil)
+		end
+	end)
+end
 local effects = source({} :: { HudLogic.Effect })
 local objective = source(nil :: RaceHUD.Objective?)
 
@@ -614,7 +630,7 @@ local store: RaceHUD.Store = {
 	selected = selected,
 	aiming = aiming,
 	pending = pending,
-	refusal = refusal,
+	note = note,
 	effects = effects,
 	objective = objective,
 	select = selectSlot,
@@ -681,7 +697,8 @@ local function onInventory(payload: any)
 			local def = if id ~= nil then powerUpDefs[id] else nil
 			if def ~= nil and not explained[def.id] then
 				explained[def.id] = true
-				Toast.show(string.format("%s: %s", def.displayName, def.description), "info")
+				local text = string.format("%s: %s", def.displayName, def.description)
+				showNote(text, index, "info", ComponentLogic.toastSeconds(text))
 			end
 			list[index] = table.freeze({
 				index = index,
@@ -724,14 +741,7 @@ local function onUseResult(payload: any)
 	pending(false)
 	local message = if payload.success then nil else REFUSALS[payload.reason]
 	if message ~= nil then
-		local token = useToken
-		refusal({ text = message, slot = firedSlot, id = token })
-		task.delay(REFUSAL_SECONDS, function()
-			local current = refusal()
-			if current ~= nil and current.id == token then
-				refusal(nil)
-			end
-		end)
+		showNote(message, firedSlot, "warning", REFUSAL_SECONDS)
 	end
 end
 
@@ -885,7 +895,7 @@ local function onRoundState(payload: any)
 		slots(emptySlots())
 		selected(1)
 		pending(false)
-		refusal(nil)
+		note(nil)
 	end
 	if not racing then
 		mountPractice()

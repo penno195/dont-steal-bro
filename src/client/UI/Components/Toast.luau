@@ -11,16 +11,16 @@
 -- CallingCard cosmetic on the "X used Y on you" toast. It sits beside
 -- the kind icon, never in place of it.
 --
--- At most MAX_VISIBLE at once; a new one pushes out the oldest
+-- Small on purpose (playtest, 2026-10-06: full-width 52-tall cards
+-- walled off the top of the view): one row as wide as its text, at most
+-- MAX_VISIBLE at once, a new one pushing out the oldest
 -- (ComponentLogic.pushToast). Each stays ComponentLogic.toastSeconds.
 -- A repeat of one already up merges into it: a count ("No target  ×3")
 -- and a fresh timer, never a second card (ComponentLogic.findToast).
 --
--- Toast.setCompact(true, below) while a race is on (RaceHUD.mount): shorter
--- cards sized to their text, tighter gaps and at most COMPACT_MAX, so the
--- stack doesn't wall off the top of the view mid-race (playtest,
--- 2026-10-06). `below` is the race HUD's top stack; toasts hang under
--- it and follow it as it grows (effect chips, portrait task bar).
+-- Toast.follow(frame) hangs the stack under `frame` and tracks it as it
+-- grows - the race HUD's top stack (RaceHUD.mount), so toasts never
+-- cover the timer. Toast.follow(nil) returns it to the top.
 -- Toasts never take focus or input - they can't steal a tap mid-race.
 -- Kind is shown by an icon AND a stripe colour, never colour alone.
 
@@ -45,7 +45,6 @@ export type Props = {
 	kind: Kind?,
 	imageAssetId: number?,
 	layoutOrder: number?,
-	compact: boolean?,
 }
 
 local KIND: { [Kind]: { color: string, icon: string } } = {
@@ -55,25 +54,26 @@ local KIND: { [Kind]: { color: string, icon: string } } = {
 	danger = { color = "danger", icon = "close" },
 }
 
-local MAX_VISIBLE = 3
-local WIDTH = 360 - 2 * Theme.spacing.lg
-local HEIGHT = Theme.spacing.xxxl + Theme.spacing.xs -- 52
-local IMAGE = HEIGHT - 2 * Theme.spacing.xs -- 44, inset like the text
-local COMPACT_MAX = 2
-local COMPACT_HEIGHT = Theme.spacing.xxl + Theme.spacing.xs -- 36
-local COMPACT_ICON = Theme.spacing.lg
-local COMPACT_IMAGE = COMPACT_HEIGHT - 2 * Theme.spacing.xs -- 28
+local MAX_VISIBLE = 2
+local WIDTH = 360 - 2 * Theme.spacing.lg -- the widest a card gets
+local HEIGHT = Theme.spacing.xxl + Theme.spacing.xs -- 36
+local ICON = Theme.spacing.lg
+local IMAGE = HEIGHT - 2 * Theme.spacing.xs -- 28, inset like the text
 
 local Toast = {}
 
--- The race version: one row laid out left to right, as wide as its text
--- (up to WIDTH, then truncated).
-local function compactCard(props: Props, accent: Color3, icon: string, imageId: number?): Frame
+-- One row laid out left to right, as wide as its text (up to WIDTH,
+-- then truncated).
+function Toast.card(props: Props): Frame
+	local kindKey: Kind = props.kind or "info"
+	local kind = KIND[kindKey]
+	local accent = Theme.color[kind.color]
+	local imageId = props.imageAssetId
 	local hasImage = imageId ~= nil and imageId > 0
-	local textMax = WIDTH - COMPACT_ICON - 4 * Theme.spacing.sm - (if hasImage then COMPACT_IMAGE else 0)
+	local textMax = WIDTH - ICON - 4 * Theme.spacing.sm - (if hasImage then IMAGE else 0)
 	return create("Frame")({
 		Name = "Toast",
-		Size = UDim2.fromOffset(0, COMPACT_HEIGHT),
+		Size = UDim2.fromOffset(0, HEIGHT),
 		AutomaticSize = Enum.AutomaticSize.X,
 		LayoutOrder = props.layoutOrder or 0,
 		BackgroundColor3 = Theme.elevation[3].surface,
@@ -101,84 +101,24 @@ local function compactCard(props: Props, accent: Color3, icon: string, imageId: 
 		create("Frame")({
 			Name = "IconSlot",
 			LayoutOrder = 2,
-			Size = UDim2.fromOffset(COMPACT_ICON, COMPACT_ICON),
+			Size = UDim2.fromOffset(ICON, ICON),
 			BackgroundTransparency = 1,
-			Icons.view(icon, COMPACT_ICON, accent),
+			Icons.view(kind.icon, ICON, accent),
 		}),
 		Base.text("body", {
 			Name = "Message",
 			LayoutOrder = 3,
-			Size = UDim2.fromOffset(0, COMPACT_HEIGHT),
+			Size = UDim2.fromOffset(0, HEIGHT),
 			AutomaticSize = Enum.AutomaticSize.X,
 			Text = props.text,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 			TextXAlignment = Enum.TextXAlignment.Left,
-			create("UISizeConstraint")({ MaxSize = Vector2.new(textMax, COMPACT_HEIGHT) }),
+			create("UISizeConstraint")({ MaxSize = Vector2.new(textMax, HEIGHT) }),
 		}),
 		if hasImage
 			then create("ImageLabel")({
 				Name = "Image",
 				LayoutOrder = 4,
-				Size = UDim2.fromOffset(COMPACT_IMAGE, COMPACT_IMAGE),
-				BackgroundTransparency = 1,
-				Image = string.format("rbxassetid://%d", imageId :: number),
-				ScaleType = Enum.ScaleType.Fit,
-				Base.corner(Theme.radius.sm),
-			})
-			else nil,
-	}) :: Frame
-end
-
-function Toast.card(props: Props): Frame
-	local kindKey: Kind = props.kind or "info"
-	local kind = KIND[kindKey]
-	local accent = Theme.color[kind.color]
-	local imageId = props.imageAssetId
-	if props.compact then
-		return compactCard(props, accent, kind.icon, imageId)
-	end
-	local hasImage = imageId ~= nil and imageId > 0
-	local imageInset = if hasImage then IMAGE + Theme.spacing.sm else 0
-	local textInset = Theme.spacing.md * 2 + Theme.spacing.xl + Theme.spacing.sm + imageInset
-	return create("Frame")({
-		Name = "Toast",
-		Size = UDim2.fromOffset(WIDTH, HEIGHT),
-		LayoutOrder = props.layoutOrder or 0,
-		BackgroundColor3 = Theme.elevation[3].surface,
-		Base.corner(Theme.radius.md),
-		create("UIStroke")({
-			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Color = Theme.color.line,
-			Transparency = Theme.elevation[3].strokeTransparency,
-		}),
-		create("Frame")({
-			Name = "Stripe",
-			Size = UDim2.new(0, Theme.spacing.xs, 1, 0),
-			BackgroundColor3 = accent,
-			Base.corner(Theme.radius.sm),
-		}),
-		create("Frame")({
-			Name = "IconSlot",
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, Theme.spacing.md, 0.5, 0),
-			Size = UDim2.fromOffset(Theme.spacing.xl, Theme.spacing.xl),
-			BackgroundTransparency = 1,
-			Icons.view(kind.icon, Theme.spacing.xl, accent),
-		}),
-		Base.text("body", {
-			Name = "Message",
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, Theme.spacing.md + Theme.spacing.xl + Theme.spacing.sm, 0.5, 0),
-			Size = UDim2.new(1, -textInset, 1, -Theme.spacing.sm),
-			Text = props.text,
-			TextXAlignment = Enum.TextXAlignment.Left,
-		}),
-		if hasImage
-			then create("ImageLabel")({
-				Name = "Image",
-				AnchorPoint = Vector2.new(1, 0.5),
-				Position = UDim2.new(1, -Theme.spacing.xs, 0.5, 0),
 				Size = UDim2.fromOffset(IMAGE, IMAGE),
 				BackgroundTransparency = 1,
 				Image = string.format("rbxassetid://%d", imageId :: number),
@@ -202,7 +142,6 @@ type Entry = {
 }
 
 local queue = source({} :: { Entry })
-local compact = source(false)
 local stackY = source(Theme.spacing.sm)
 local hostStarted = false
 local gui: ScreenGui? = nil
@@ -224,9 +163,7 @@ local function startHost()
 			BackgroundTransparency = 1,
 			Active = false,
 			create("UIListLayout")({
-				Padding = function()
-					return UDim.new(0, if compact() then Theme.spacing.xs else Theme.spacing.sm)
-				end,
+				Padding = UDim.new(0, Theme.spacing.xs),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				HorizontalAlignment = Enum.HorizontalAlignment.Center,
 			}),
@@ -238,7 +175,6 @@ local function startHost()
 					end,
 					kind = entry.kind,
 					imageAssetId = entry.imageAssetId,
-					compact = vide.untrack(compact),
 				})
 				-- Reactive: when the oldest drops out, the rest renumber.
 				vide.effect(function()
@@ -274,19 +210,17 @@ local function expire(entry: Entry)
 	end)
 end
 
--- Race mode on or off. Cards already up keep their size; new ones use
--- the new mode. With `below`, the stack sits just under that element
--- (in real pixels, so both guis' insets and scales cancel out).
-function Toast.setCompact(on: boolean, below: GuiObject?)
+-- Hang the stack just under `below` (in real pixels, so both guis'
+-- insets and scales cancel out), or back at the top with nil.
+function Toast.follow(below: GuiObject?)
 	if not hostStarted then
 		startHost()
 	end
-	compact(on)
 	for _, conn in followConns do
 		conn:Disconnect()
 	end
 	followConns = {}
-	local target = if on then below else nil
+	local target = below
 	if target == nil then
 		stackY(Theme.spacing.sm)
 		return
@@ -318,7 +252,7 @@ function Toast.show(text: string, kind: Kind?, imageAssetId: number?)
 		return
 	end
 	local entry: Entry = { text = text, kind = resolved, imageAssetId = imageAssetId, count = source(1), token = 0 }
-	queue((ComponentLogic.pushToast(current, entry, if compact() then COMPACT_MAX else MAX_VISIBLE)))
+	queue((ComponentLogic.pushToast(current, entry, MAX_VISIBLE)))
 	expire(entry)
 end
 

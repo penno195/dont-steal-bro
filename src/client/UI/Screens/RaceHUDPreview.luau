@@ -115,7 +115,7 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 		selected = selected,
 		aiming = aiming,
 		pending = pending,
-		refusal = function()
+		note = function()
 			return nil
 		end,
 		effects = effects,
