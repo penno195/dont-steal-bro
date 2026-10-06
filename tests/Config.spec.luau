@@ -483,6 +483,31 @@ TestRunner.describe("Validate.checkMap", function()
 	end)
 end)
 
+TestRunner.describe("Validate.checkPowerUp impact", function()
+	local function impactIssues(target: Validate.PowerUpTarget, impact: any): number
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.target = target
+		powerUp.impact = impact
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		return #issues
+	end
+
+	TestRunner.it("accepts a valid impact on a thrown item", function()
+		TestRunner.expect(impactIssues("Aimed", { style = "Frost", rgb = { 150, 215, 255 } })):toBe(0)
+	end)
+
+	TestRunner.it("rejects an impact on a Self item", function()
+		TestRunner.expect(impactIssues("Self", { style = "Frost", rgb = { 150, 215, 255 } })):toBe(1)
+	end)
+
+	TestRunner.it("rejects an unknown style and a bad colour", function()
+		TestRunner.expect(impactIssues("Aimed", { style = "Lava", rgb = { 1, 2, 3 } })):toBe(1)
+		TestRunner.expect(impactIssues("Aimed", { style = "Flash", rgb = { 1, 2, 300 } })):toBe(1)
+		TestRunner.expect(impactIssues("Aimed", { style = "Flash", rgb = { 1, 2 } })):toBe(1)
+	end)
+end)
+
 TestRunner.describe("Validate.checkPowerUp (design-decisions.md Q8)", function()
 	TestRunner.it("rejects a Robux price with no free acquisition path", function()
 		local issues = {}

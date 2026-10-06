@@ -150,6 +150,17 @@ local POWERUP_TARGETS: { PowerUpTarget } = { "Self", "Aimed", "Area", "Nearest" 
 local POWERUP_RARITIES: { PowerUpRarity } = { "Common", "Uncommon", "Rare" }
 local POWERUP_DESCRIPTION_MAX = 48
 
+-- How a thrown item's landing looks (ThrowController draws each one).
+-- The orb in flight keeps the role colour, so "an attack is coming"
+-- reads the same for every item; the impact says WHICH item hit.
+export type PowerUpImpactStyle = "Frost" | "Flash" | "Shockwave" | "Glitch"
+export type PowerUpImpact = {
+	style: PowerUpImpactStyle,
+	rgb: { number }, -- 0-255 RGB triple, so this stays free of Color3
+}
+
+local POWERUP_IMPACT_STYLES: { PowerUpImpactStyle } = { "Frost", "Flash", "Shockwave", "Glitch" }
+
 -- Two acquisition paths per powerups.md's intro. `robuxPrice` is only
 -- ever a convenience purchase, never exclusive - design-decisions.md Q8:
 -- "every purchasable item is also earnable for free through normal
@@ -197,6 +208,9 @@ export type PowerUpDef = {
 	-- GameConfig.powerUpThrow's shunt; this scales it for this item
 	-- (Push/Trip's whole point is the shove). nil = 1. Only on thrown items.
 	shuntScale: number?,
+	-- A thrown item's own landing effect and colour. nil = the plain
+	-- role-coloured blast. Only on thrown items.
+	impact: PowerUpImpact?,
 	acquisition: PowerUpAcquisition,
 }
 
@@ -252,8 +266,9 @@ export type TitleDef = {
 --
 -- WHY "Reveal" AND "Projectile" HAVE NO COLOUR FIELD, unlike every other
 -- visual category: their colour already MEANS something. A thrown
--- power-up is tinted by its role (PowerUpLogic.ROLE_RGB) so a victim can
--- read what's coming at them, and a Steal/Share reveal is coloured by the
+-- power-up is tinted by its role (PowerUpLogic.ROLE_RGB) in flight and by
+-- its own PowerUpDef.impact on landing, so a victim can read what's
+-- coming at them and what hit them, and a Steal/Share reveal is coloured by the
 -- outcome. A cosmetic that could repaint either would sell confusion, so
 -- those two skins only ever change shape and texture - the renderer keeps
 -- supplying the colour. The type has nowhere to put one, by design.
@@ -1316,6 +1331,37 @@ function Validate.checkPowerUp(fileName: string, def: PowerUpDef, issues: { Issu
 			issue(issues, "PowerUp", fileName, "shuntScale", "only a thrown (Aimed/Nearest) item has a shunt")
 		elseif shuntScale < 0 or shuntScale > 5 then
 			issue(issues, "PowerUp", fileName, "shuntScale", "must be between 0 and 5")
+		end
+	end
+	local impact = def.impact
+	if impact ~= nil then
+		if def.target ~= "Aimed" and def.target ~= "Nearest" then
+			issue(issues, "PowerUp", fileName, "impact", "only a thrown (Aimed/Nearest) item has an impact")
+		end
+		if not inSet(impact.style, POWERUP_IMPACT_STYLES) then
+			issue(
+				issues,
+				"PowerUp",
+				fileName,
+				"impact.style",
+				string.format(
+					"expected one of [%s], got %s",
+					table.concat(POWERUP_IMPACT_STYLES, ", "),
+					tostring(impact.style)
+				)
+			)
+		end
+		local rgb = impact.rgb
+		local rgbOk = type(rgb) == "table" and #rgb == 3
+		if rgbOk then
+			for _, channel in rgb do
+				if type(channel) ~= "number" or channel < 0 or channel > 255 then
+					rgbOk = false
+				end
+			end
+		end
+		if not rgbOk then
+			issue(issues, "PowerUp", fileName, "impact.rgb", "must be three numbers from 0 to 255")
 		end
 	end
 

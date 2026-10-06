@@ -24,6 +24,7 @@ local TaskScramble: Validate.PowerUpDef = {
 	cooldownSeconds = 10,
 	rarity = "Common",
 	hardControl = false,
+	impact = { style = "Glitch", rgb = { 190, 90, 255 } }, -- purple pixel cubes
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

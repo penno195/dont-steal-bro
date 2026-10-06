@@ -19,6 +19,7 @@ local Blind: Validate.PowerUpDef = {
 	cooldownSeconds = 12,
 	rarity = "Uncommon",
 	hardControl = false,
+	impact = { style = "Flash", rgb = { 255, 245, 200 } }, -- blinding white flash and dark smoke
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

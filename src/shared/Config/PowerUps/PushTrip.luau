@@ -21,6 +21,7 @@ local PushTrip: Validate.PowerUpDef = {
 	rarity = "Common",
 	hardControl = true,
 	shuntScale = 2, -- the shove IS this item; the other throws only nudge
+	impact = { style = "Shockwave", rgb = { 255, 140, 40 } }, -- orange blast ring
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 
