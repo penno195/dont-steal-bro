@@ -367,6 +367,7 @@ local function seatCard(
 		BackgroundColor3 = Theme.elevation[2].surface,
 		Base.corner(Theme.radius.md),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Thickness = function()
 				return if seat().isSelf or verdict() ~= nil then 2 else 1
@@ -905,6 +906,7 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 		BackgroundColor3 = Theme.elevation[3].surface,
 		Base.corner(Theme.radius.md),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			Thickness = 2,
 			Color = function()
 				local c = copy()

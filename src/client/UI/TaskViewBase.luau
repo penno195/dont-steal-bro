@@ -341,6 +341,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			Visible = explainerOpen,
 			Base.corner(Theme.radius.md),
 			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 				Color = Theme.color.brand,
 				Thickness = 2,
@@ -470,6 +471,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				Size = UDim2.new(1, 0, 0, STATUS_HEIGHT),
 				Base.corner(Theme.radius.md),
 				create("UIStroke")({
+					BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					Color = function()
 						return Theme.color[style().color]

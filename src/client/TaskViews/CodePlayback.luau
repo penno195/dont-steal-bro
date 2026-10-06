@@ -105,6 +105,7 @@ local function keyVisual(key: InputAdapters.SequenceKey, state: Base.Source<Base
 			Base.corner(Theme.radius.md),
 			-- The idle fill matches the card; the outline makes it a key.
 			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 				Color = Theme.color.line,
 				Thickness = 2,
@@ -276,6 +277,7 @@ return TaskViewBase.define({
 				BackgroundColor3 = LCD_GLASS,
 				Base.corner(Theme.radius.sm),
 				create("UIStroke")({
+					BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					Color = LCD_INK,
 					Transparency = 0.6,

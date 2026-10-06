@@ -66,6 +66,7 @@ local function contents(
 			BackgroundColor3 = Theme.elevation[2].surface,
 			Base.corner(Theme.radius.md),
 			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 				Color = function()
 					return if status() == "active" then Theme.color.warning else Theme.color.line

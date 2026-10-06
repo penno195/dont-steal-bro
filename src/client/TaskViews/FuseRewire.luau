@@ -198,6 +198,7 @@ return TaskViewBase.define({
 							end,
 							Base.corner(Theme.radius.md),
 							create("UIStroke")({
+								BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 								ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 								Color = function()
 									return if held() == id then Theme.color.focus else Theme.color.line
@@ -336,6 +337,7 @@ return TaskViewBase.define({
 				Visible = false,
 				Base.corner(Theme.radius.pill),
 				create("UIStroke")({
+					BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					Color = WIRE_OUTLINE,
 					Thickness = 1.5,
@@ -386,6 +388,7 @@ return TaskViewBase.define({
 			Visible = false,
 			Base.corner(Theme.radius.pill),
 			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 				Color = WIRE_OUTLINE,
 				Thickness = 2,

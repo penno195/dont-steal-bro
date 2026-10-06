@@ -501,6 +501,7 @@ local function powerUpSlot(
 		end,
 		Base.corner(Theme.radius.md),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = function(): Color3
 				if not isSelected() then
@@ -568,6 +569,7 @@ local function discardBin(shown: () -> boolean, over: () -> boolean): Frame
 		BackgroundTransparency = 0.15,
 		Base.corner(Theme.radius.md),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = Theme.color.danger,
 			Thickness = 2,

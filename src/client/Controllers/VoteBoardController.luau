@@ -152,6 +152,7 @@ local function buildCard(list: ScrollingFrame, mapId: string, index: number): Ca
 	stroke.Thickness = 3
 	stroke.Transparency = 1
 	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.BorderStrokePosition = Enum.BorderStrokePosition.Inner -- see Base.focusRing
 	stroke.Parent = button
 
 	local thumb = Instance.new("ImageLabel")

@@ -53,6 +53,7 @@ local function PlayerRow(props: Props): Frame
 		BackgroundColor3 = Theme.elevation[2].surface,
 		Base.corner(Theme.radius.md),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = if props.isLocalPlayer then Theme.color.brand else Theme.color.line,
 			Thickness = if props.isLocalPlayer then 2 else 1,

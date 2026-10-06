@@ -119,6 +119,7 @@ function Modal.card(props: Props): Frame
 		SelectionBehaviorRight = Enum.SelectionBehavior.Stop,
 		Base.corner(Theme.radius.lg),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = Theme.color.line,
 			Transparency = Theme.elevation[3].strokeTransparency,

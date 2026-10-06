@@ -241,6 +241,7 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 						BackgroundColor3 = Theme.color.surfaceRaised,
 						Base.corner(Theme.radius.pill),
 						create("UIStroke")({
+							BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 							ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 							Color = function()
 								return if isSelf() then Theme.color.brand else Theme.color.line

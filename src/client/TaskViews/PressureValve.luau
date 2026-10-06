@@ -272,6 +272,7 @@ return TaskViewBase.define({
 						BackgroundColor3 = Theme.color.danger,
 						Base.corner(Theme.radius.pill),
 						create("UIStroke")({
+							BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 							ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 							Color = Color3.fromHex("#5A0F14"),
 							Thickness = 4,

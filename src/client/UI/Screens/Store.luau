@@ -156,6 +156,7 @@ local function card(
 					Base.corner(Theme.radius.md),
 					create("UIStroke")({
 						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+						BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 						Color = function()
 							return if isSelected()
 								then Theme.color.focus
@@ -290,7 +291,7 @@ local function flowBanner(store: Store, pane: number): Instance
 		ZIndex = 5,
 		Base.corner(Theme.radius.md),
 		Base.padding(Theme.spacing.md),
-		create("UIStroke")({ Color = color, Thickness = 2 }),
+		create("UIStroke")({ BorderStrokePosition = Enum.BorderStrokePosition.Inner, Color = color, Thickness = 2 }),
 		Base.text("body", {
 			Name = "Message",
 			Size = UDim2.new(1, 0, 1, -(Theme.touch.primaryHeight + Theme.spacing.sm)),
@@ -363,6 +364,7 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 				BackgroundColor3 = Theme.color.background,
 				Base.corner(Theme.radius.md),
 				create("UIStroke")({
+					BorderStrokePosition = Enum.BorderStrokePosition.Inner,
 					Color = function()
 						return Theme.color[RARITY_COLOR[rarity() or ""] or "line"]
 					end,

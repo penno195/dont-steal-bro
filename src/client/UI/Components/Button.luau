@@ -73,6 +73,7 @@ local function Button(props: Props): TextButton
 					end,
 					Base.corner(Theme.radius.md),
 					create("UIStroke")({
+						BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 						Color = function()
 							return Theme.color[style().stroke]

@@ -83,7 +83,11 @@ function Base.focusRing(focused: Source<boolean>): Instance
 	return create("UIStroke")({
 		Name = "FocusRing",
 		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		BorderStrokePosition = Enum.BorderStrokePosition.Outer,
+		-- Inner, like every border stroke in the UI: an Outer stroke
+		-- draws past the element's edge, so a card flush against a
+		-- ScrollingFrame's (or any ClipsDescendants) edge lost that side
+		-- of its outline (playtest, 2026-10-06).
+		BorderStrokePosition = Enum.BorderStrokePosition.Inner,
 		Color = Theme.color.focus,
 		Thickness = 3,
 		Enabled = focused,

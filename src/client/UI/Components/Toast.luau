@@ -68,6 +68,7 @@ function Toast.card(props: Props): Frame
 		BackgroundColor3 = Theme.elevation[3].surface,
 		Base.corner(Theme.radius.md),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = Theme.color.line,
 			Transparency = Theme.elevation[3].strokeTransparency,

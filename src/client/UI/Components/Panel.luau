@@ -38,6 +38,7 @@ local function Panel(props: Props): Frame
 	local body: { any } = {
 		Base.corner(Theme.radius.lg),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = Theme.color.line,
 			Transparency = level.strokeTransparency,
