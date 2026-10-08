@@ -129,4 +129,83 @@ function NavigationViewLogic.read(payload: any): State?
 	}
 end
 
+-- ===== the path line ========================================================
+-- Waist-high dots along a smoothed route, with a pulse that runs from
+-- the player towards the station and repeats (owner, 2026-10-08).
+
+export type Point = { x: number, y: number, z: number }
+
+local function lerp(a: Point, b: Point, t: number): Point
+	return { x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, z = a.z + (b.z - a.z) * t }
+end
+
+local function distance(a: Point, b: Point): number
+	local dx, dy, dz = a.x - b.x, a.y - b.y, a.z - b.z
+	return math.sqrt(dx * dx + dy * dy + dz * dz)
+end
+
+-- Rounds the route's corners (Chaikin corner cutting). Each pass swaps
+-- every corner for two points a quarter of the way along its sides, so
+-- the curve never overshoots the route the way a spline can, and the
+-- two ends stay exactly where they were.
+function NavigationViewLogic.smooth(points: { Point }, passes: number): { Point }
+	local current = points
+	for _ = 1, passes do
+		if #current < 3 then
+			return current
+		end
+		local nextPoints = { current[1] }
+		for i = 1, #current - 1 do
+			local a, b = current[i], current[i + 1]
+			if i > 1 then
+				table.insert(nextPoints, lerp(a, b, 0.25))
+			end
+			if i < #current - 1 then
+				table.insert(nextPoints, lerp(a, b, 0.75))
+			end
+		end
+		table.insert(nextPoints, current[#current])
+		current = nextPoints
+	end
+	return current
+end
+
+-- Evenly spaced dots along a polyline: one every `spacing` studs from
+-- the start, at most `maxCount` of them. Each carries how far along the
+-- path it is, which the pulse runs on.
+function NavigationViewLogic.dots(
+	points: { Point },
+	spacing: number,
+	maxCount: number
+): { { point: Point, along: number } }
+	local out = {}
+	if #points == 0 or spacing <= 0 then
+		return out
+	end
+	table.insert(out, { point = points[1], along = 0 })
+	local walked = 0 -- path length before the current segment
+	local nextAt = spacing
+	for i = 1, #points - 1 do
+		local a, b = points[i], points[i + 1]
+		local length = distance(a, b)
+		while length > 0 and nextAt <= walked + length do
+			if #out >= maxCount then
+				return out
+			end
+			table.insert(out, { point = lerp(a, b, (nextAt - walked) / length), along = nextAt })
+			nextAt += spacing
+		end
+		walked += length
+	end
+	return out
+end
+
+-- How lit a dot is, 0..1, `along` studs down the path at time `now`.
+-- A peak every `wavelength` studs, moving towards the station at
+-- `speed` studs a second, with a short tail behind each peak.
+function NavigationViewLogic.pulse(along: number, now: number, speed: number, wavelength: number): number
+	local behind = (now * speed - along) % wavelength / wavelength -- 0 at a peak
+	return math.max(0, 1 - behind * 3)
+end
+
 return NavigationViewLogic

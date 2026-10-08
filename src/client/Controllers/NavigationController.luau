@@ -37,11 +37,21 @@ local ANSWER_TIMEOUT = 3
 -- How long a purchase spinner waits for the round to switch on.
 local PURCHASE_TIMEOUT = 30
 
--- The line: how wide, how far above the floor, and how far down to look
--- for the floor under a waypoint (NavNodes and station parts sit at
--- whatever height they were placed).
-local LINE_WIDTH = 0.7
-local LINE_LIFT = 0.3
+-- The line. Dots at waist height, one every DOT_SPACING studs, growing
+-- and brightening as a pulse passes; a pulse every PULSE_WAVELENGTH
+-- studs, moving at PULSE_SPEED towards the station.
+local DOT_HEIGHT = 2.6
+local DOT_SPACING = 2.5
+local MAX_DOTS = 120 -- 300 studs of path; further than that just stops
+local DOT_SIZE = 0.4
+local DOT_PEAK = 0.85
+local DOT_TRANSPARENCY = 0.45 -- between pulses; 0 at a peak
+local PULSE_SPEED = 22
+local PULSE_WAVELENGTH = 20
+local SMOOTH_PASSES = 3 -- corner-cutting rounds; more = wider curves
+local RESHAPE_SECONDS = 0.15 -- how often the dots re-anchor to the player
+-- How far down to look for the floor under a waypoint (NavNodes and
+-- station parts sit at whatever height they were placed).
 local FLOOR_REACH = 14
 
 local selfId = Players.LocalPlayer.UserId
@@ -154,22 +164,17 @@ local function openSheet()
 end
 
 -- ===== the path line =========================================================
+-- Waist-high dots along the route, its corners rounded off, with a pulse
+-- running from the player towards the station (owner, 2026-10-08). The
+-- dots are pooled: a new route or a step forward moves them rather than
+-- rebuilding them. A Highlight drawn on top of everything keeps them
+-- showing, faintly, through a floor or a wall in the way.
 
-local lineFolder: Folder? = nil
-local linePoints: { Attachment } = {} -- on the terrain: an attachment needs a part
-local startAttachment: Attachment? = nil
-
-local function clearLine()
-	if lineFolder ~= nil then
-		lineFolder:Destroy()
-		lineFolder = nil
-	end
-	for _, attachment in linePoints do
-		attachment:Destroy()
-	end
-	table.clear(linePoints)
-	startAttachment = nil
-end
+local lineModel: Model? = nil
+local pool: { BasePart } = {}
+local dotAlong: { number } = {} -- each shown dot's distance down the path
+local route: { Vector3 } = {} -- the server's waypoints, at waist height
+local reshapeAt = 0
 
 local function rootOf(): (BasePart?, Humanoid?)
 	local character = Players.LocalPlayer.Character
@@ -179,27 +184,122 @@ local function rootOf(): (BasePart?, Humanoid?)
 	return character:FindFirstChild("HumanoidRootPart") :: BasePart?, character:FindFirstChildOfClass("Humanoid")
 end
 
-local function feet(): Vector3?
+local function waist(): Vector3?
 	local root, humanoid = rootOf()
 	if root == nil then
 		return nil
 	end
 	local drop = root.Size.Y / 2 + (if humanoid then humanoid.HipHeight else 2)
-	return root.Position - Vector3.new(0, drop - LINE_LIFT, 0)
+	return root.Position - Vector3.new(0, drop - DOT_HEIGHT, 0)
+end
+
+local function toPoint(v: Vector3): NavigationViewLogic.Point
+	return { x = v.X, y = v.Y, z = v.Z }
+end
+
+local function clearLine()
+	route = {}
+	table.clear(dotAlong)
+	if lineModel ~= nil then
+		lineModel:Destroy()
+		lineModel = nil
+	end
+	for _, part in pool do
+		part:Destroy() -- spares sit outside the model
+	end
+	table.clear(pool)
+end
+
+local function ensureModel(): Model
+	if lineModel ~= nil then
+		return lineModel
+	end
+	local model = Instance.new("Model")
+	model.Name = "NavigationPath"
+	local highlight = Instance.new("Highlight")
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.FillColor = Theme.color.brand
+	highlight.FillTransparency = 0.6
+	highlight.OutlineTransparency = 1
+	highlight.Adornee = model
+	highlight.Parent = model
+	model.Parent = Workspace
+	lineModel = model
+	return model
+end
+
+local function dot(model: Model): BasePart
+	local part = Instance.new("Part")
+	part.Name = "Dot"
+	part.Shape = Enum.PartType.Ball
+	part.Size = Vector3.one * DOT_SIZE
+	part.Material = Enum.Material.Neon
+	part.Color = Theme.color.brand
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Parent = model
+	return part
+end
+
+-- Lays the dots out from where the player stands now.
+local function reshape()
+	local from = waist()
+	if from == nil or #route == 0 then
+		return
+	end
+	local points = { toPoint(from) }
+	for _, point in route do
+		table.insert(points, toPoint(point))
+	end
+	local dots = NavigationViewLogic.dots(NavigationViewLogic.smooth(points, SMOOTH_PASSES), DOT_SPACING, MAX_DOTS + 1)
+
+	local model = ensureModel()
+	local parts: { BasePart } = {}
+	local cframes: { CFrame } = {}
+	table.clear(dotAlong)
+	-- The first dot is at the player's own waist; skip it.
+	for i = 2, #dots do
+		local n = i - 1
+		if n > #pool then
+			table.insert(pool, dot(model))
+		end
+		local part = pool[n]
+		part.Parent = model
+		local p = dots[i].point
+		table.insert(parts, part)
+		table.insert(cframes, CFrame.new(p.x, p.y, p.z))
+		dotAlong[n] = dots[i].along
+	end
+	Workspace:BulkMoveTo(parts, cframes, Enum.BulkMoveMode.FireCFrameChanged)
+	-- Spares come out of the model, so the Highlight doesn't draw them.
+	for n = math.max(#dots, 1), #pool do
+		pool[n].Parent = nil
+	end
+end
+
+local function animate(now: number)
+	for n, along in dotAlong do
+		local lit = NavigationViewLogic.pulse(along, now, PULSE_SPEED, PULSE_WAVELENGTH)
+		local part = pool[n]
+		part.Size = Vector3.one * (DOT_SIZE + (DOT_PEAK - DOT_SIZE) * lit)
+		part.Transparency = DOT_TRANSPARENCY * (1 - lit)
+	end
 end
 
 -- The floor under a waypoint, or the waypoint itself over a gap.
 local function grounded(point: Vector3, params: RaycastParams): Vector3
 	local hit = Workspace:Raycast(point + Vector3.new(0, 2, 0), Vector3.new(0, -FLOOR_REACH, 0), params)
-	return if hit then hit.Position + Vector3.new(0, LINE_LIFT, 0) else point
+	return if hit then hit.Position else point
 end
 
-local function drawLine(points: { Vector3 })
-	clearLine()
+local function setRoute(points: { Vector3 })
 	if #points == 0 then
+		clearLine()
 		return
 	end
-
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	local exclude: { Instance } = {}
@@ -208,43 +308,16 @@ local function drawLine(points: { Vector3 })
 			table.insert(exclude, player.Character)
 		end
 	end
+	if lineModel ~= nil then
+		table.insert(exclude, lineModel)
+	end
 	params.FilterDescendantsInstances = exclude
 
-	local folder = Instance.new("Folder")
-	folder.Name = "NavigationPath"
-	local terrain = Workspace.Terrain
-	local color = ColorSequence.new(Theme.color.brand)
-
-	local previous: Attachment? = nil
-	local function addPoint(position: Vector3): Attachment
-		local attachment = Instance.new("Attachment")
-		attachment.Name = "NavigationPoint"
-		attachment.Parent = terrain
-		attachment.WorldPosition = position
-		table.insert(linePoints, attachment)
-		if previous ~= nil then
-			local beam = Instance.new("Beam")
-			beam.Attachment0 = previous
-			beam.Attachment1 = attachment
-			beam.Color = color
-			beam.Width0 = LINE_WIDTH
-			beam.Width1 = LINE_WIDTH
-			beam.FaceCamera = true
-			beam.LightEmission = 1
-			beam.Transparency = NumberSequence.new(0.15)
-			beam.Segments = 1
-			beam.Parent = folder
-		end
-		previous = attachment
-		return attachment
-	end
-
-	startAttachment = addPoint(feet() or grounded(points[1], params))
+	route = {}
 	for _, point in points do
-		addPoint(grounded(point, params))
+		table.insert(route, grounded(point, params) + Vector3.new(0, DOT_HEIGHT, 0))
 	end
-	folder.Parent = Workspace
-	lineFolder = folder
+	reshape()
 end
 
 local function onPath(payload: any)
@@ -257,7 +330,7 @@ local function onPath(payload: any)
 		end
 	end
 	if on() then
-		drawLine(points)
+		setRoute(points)
 	else
 		clearLine()
 	end
@@ -354,16 +427,18 @@ function NavigationController:init()
 end
 
 function NavigationController:start()
-	-- The line's first point follows the player's feet.
+	-- The dots re-anchor to the player a few times a second, and pulse
+	-- every frame.
 	RunService.RenderStepped:Connect(function()
-		local start = startAttachment
-		if start == nil then
+		if #route == 0 then
 			return
 		end
-		local position = feet()
-		if position ~= nil then
-			start.WorldPosition = position
+		local now = os.clock()
+		if now >= reshapeAt then
+			reshapeAt = now + RESHAPE_SECONDS
+			reshape()
 		end
+		animate(now)
 	end)
 end
 

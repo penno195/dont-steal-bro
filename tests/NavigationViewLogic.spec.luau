@@ -129,3 +129,45 @@ describe("StoreScreenLogic and Navigation", function()
 		expect(#StoreScreenLogic.itemsIn({ item }, "Bundles", nil)):toBe(1)
 	end)
 end)
+
+describe("NavigationViewLogic path line", function()
+	local function p(x: number, z: number): NavigationViewLogic.Point
+		return { x = x, y = 0, z = z }
+	end
+
+	it("rounds a corner off but keeps both ends", function()
+		local smoothed = NavigationViewLogic.smooth({ p(0, 0), p(10, 0), p(10, 10) }, 1)
+		expect(#smoothed):toBe(4)
+		expect(smoothed[1].x):toBe(0)
+		expect(smoothed[4].z):toBe(10)
+		-- The corner itself is gone.
+		for _, point in smoothed do
+			expect(point.x == 10 and point.z == 0):toBe(false)
+		end
+	end)
+
+	it("leaves a straight two-point path alone", function()
+		expect(#NavigationViewLogic.smooth({ p(0, 0), p(10, 0) }, 3)):toBe(2)
+	end)
+
+	it("spaces dots evenly across segments", function()
+		local dots = NavigationViewLogic.dots({ p(0, 0), p(3, 0), p(3, 4) }, 2, 100)
+		expect(#dots):toBe(4) -- 0, 2, 4, 6 along a 7-stud path
+		expect(dots[3].along):toBe(4)
+		expect(dots[3].point.x):toBe(3)
+		expect(dots[3].point.z):toBe(1)
+	end)
+
+	it("stops at the cap", function()
+		expect(#NavigationViewLogic.dots({ p(0, 0), p(100, 0) }, 1, 10)):toBe(10)
+	end)
+
+	it("moves the pulse towards the station", function()
+		-- At t=0 the peak is at 0; a second later it's `speed` studs on.
+		expect(NavigationViewLogic.pulse(0, 0, 10, 40)):toBe(1)
+		expect(NavigationViewLogic.pulse(10, 1, 10, 40)):toBe(1)
+		expect(NavigationViewLogic.pulse(10, 0, 10, 40) < 1):toBe(true)
+		-- and repeats a wavelength later
+		expect(NavigationViewLogic.pulse(50, 1, 10, 40)):toBe(1)
+	end)
+end)
