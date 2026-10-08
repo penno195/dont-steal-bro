@@ -9,11 +9,14 @@ where the rung is how many title-ladder rungs the winner's streak reaches
 leaves out (it's the same for Steal and Share, so it can't tip the choice).
 
 Until 2026-10-02 (rewards-roadmap.md step 2c) this doc priced payoffs in
-abstract **value units (VU)** over five `bountyTiers`. The current coin
-bases (100 / 50 / 25) are exactly 5× the old tier-1 VU (20 / 10 / 5), so
-the conversion is clean: **1 VU = 5 coins at rung 0**. Every number here is
-a PLACEHOLDER starting value, to be corrected by the telemetry in §4 (and
-rewards-roadmap.md step 7), not a final one.
+abstract **value units (VU)** over five `bountyTiers`. The first coin
+bases (100 / 50 / 25) were exactly 5× the old tier-1 VU (20 / 10 / 5), so
+the conversion was clean: **1 VU = 5 coins at rung 0**. On 2026-10-08 the
+owner raised the sole-steal base to **250** ("a much bigger reason to
+steal", design-decisions.md Q1), so the bases are now **250 / 50 / 25** and
+every table below uses them. Every number here is a PLACEHOLDER starting
+value, to be corrected by the telemetry in §4 (and rewards-roadmap.md
+step 7), not a final one.
 
 Players never see these numbers while choices are open. The payoff table
 on screen names prizes in words (BIG / MEDIUM / SMALL), because an amount
@@ -73,17 +76,18 @@ rather than needing to be forced in separately.
 
 | L (sole steal) | M (lone share vs. 2 stealers) | S (3-share) | Closs (streak 1) |
 |---|---|---|---|
-| 120 coins | 60 coins | 30 coins | 10 coins |
+| 300 coins | 60 coins | 30 coins | 10 coins |
 
-Plugging in: `p* = 1 / (1 + √((60+10)/(120−30))) = 1 / (1 + √0.78) ≈ 0.53`.
+Plugging in: `p* = 1 / (1 + √((60+10)/(300−30))) = 1 / (1 + √0.26) ≈ 0.66`.
+(At the old 100 base, L was 120 and p* was 0.53.)
 
 ### Three population assumptions, at this streak
 
 | Assumption | p | EV(Steal) | EV(Share) | Favored |
 |---|---|---|---|---|
-| Mostly cooperative | 0.2 | **73.2** | 18.4 | Steal, strongly |
-| Mixed (≈ equilibrium) | 0.53 | 18.5 | 18.5 | Indifferent |
-| Mostly greedy | 0.8 | −4.8 | **36.4** | Share, strongly |
+| Mostly cooperative | 0.2 | **188.4** | 18.4 | Steal, overwhelmingly |
+| Mixed (≈ equilibrium) | 0.66 | 25.3 | 25.3 | Indifferent |
+| Mostly greedy | 0.8 | 2.4 | **36.4** | Share, strongly |
 
 Reading this: if you believe the table is mostly going to Share, betraying
 them is the single most profitable move in the game — that's the
@@ -121,41 +125,67 @@ conversion) and the current PLACEHOLDER `winRewards`:
 
 | Streak going in (n) | Rung after a win | L / M / S (coins) | Closs = 10n | p* |
 |---|---|---|---|---|
-| 0 (first-ever finale) | 1 | 110 / 55 / 27 | 0 | 0.55 |
-| 1 | 2 | 120 / 60 / 30 | 10 | 0.53 |
-| 4 | 5 | 150 / 75 / 37 | 40 | 0.50 |
-| 8 | 9 | 190 / 95 / 47 | 80 | 0.47 |
-| 12 | 11 | 210 / 105 / 52 | 120 | 0.46 |
-| 18 | 14 | 240 / 120 / 60 | 180 | 0.44 |
-| 30 | 17 | 270 / 135 / 67 | 300 | 0.41 |
-| 49 | 21 (top) | 310 / 155 / 77 | 490 | 0.38 |
+| 0 (first-ever finale) | 1 | 275 / 55 / 27 | 0 | 0.68 |
+| 1 | 2 | 300 / 60 / 30 | 10 | 0.66 |
+| 4 | 5 | 375 / 75 / 37 | 40 | 0.63 |
+| 8 | 9 | 475 / 95 / 47 | 80 | 0.61 |
+| 12 | 11 | 525 / 105 / 52 | 120 | 0.59 |
+| 18 | 14 | 600 / 120 / 60 | 180 | 0.57 |
+| 30 | 17 | 675 / 135 / 67 | 300 | 0.54 |
+| 49 | 21 (top) | 775 / 155 / 77 | 490 | 0.51 |
 
 (Amounts are floored, as `currencyFor` does.) Streak 0 is a real case,
 not an edge: a first-ever finalist has nothing to lose, so their p* is the
 table's highest. The old VU table needed a fix for it, because its lowest
 tier started at streak 1; the rung formula covers streak 0 by construction.
 
-`p*` falls monotonically from 0.55 to 0.38 as streak climbs — exactly the
+`p*` falls monotonically from 0.68 to 0.51 as streak climbs — exactly the
 "more to lose, more cautious" effect the brief asks for, derived rather
 than hand-set. It doesn't hit 0: even at streak 49, Steal remains the
-better response whenever a player believes fewer than ~38% of the table
-will steal, so a high-streak lobby is never a foregone conclusion.
+better response whenever a player believes fewer than ~51% of the table
+will steal, so a high-streak lobby is never a foregone conclusion. The
+250 base lifted every row by about 0.13 (it was 0.55 → 0.38) but left the
+downward slope intact.
 
 ### The same three scenarios, at streak 18 (rung 14)
 
 | Assumption | p | EV(Steal) | EV(Share) | Favored |
 |---|---|---|---|---|
-| Mostly cooperative | 0.2 | **88.8** | −14.4 | Steal, very strongly |
-| Mixed (≈ equilibrium) | 0.44 | −46.6 | −46.6 | Indifferent |
-| Mostly greedy | 0.8 | −163.2 | **21.6** | Share, decisively |
+| Mostly cooperative | 0.2 | **319.2** | −14.4 | Steal, overwhelmingly |
+| Mixed (≈ equilibrium) | 0.57 | −37.7 | −37.7 | Indifferent |
+| Mostly greedy | 0.8 | −148.8 | **21.6** | Share, decisively |
 
-Notice the swings are far more violent than at streak 1 (−163.2 vs. −4.8
+Notice the swings are far more violent than at streak 1 (−148.8 vs. 2.4
 at the greedy extreme; a *negative* Share EV at the cooperative extreme,
 which streak 1 never sees). This is the intended effect of §3's asymmetric scaling:
 a high-streak player isn't just risking a bigger number, they're playing a
 version of the same game with dramatically higher variance at both ends,
 which is what should make the Decision Studio feel like the climax the
 GDD frames it as once someone's sitting on a real streak.
+
+### What the 250 base does to the outcome mix (recheck, 2026-10-08)
+
+The tension still holds: neither choice dominates at any streak, and p*
+still falls as the streak climbs. But a population sitting at p* now
+steals more often than not at low streaks, and that moves the outcome
+mix. If each finalist steals independently at the p* for their row:
+
+| Streak going in | p* | 3-Steal (all lose) | Sole steal | 3-Share |
+|---|---|---|---|---|
+| 0 | 0.68 | 31% | 21% | 3% |
+| 1 | 0.66 | 29% | 23% | 4% |
+| 18 | 0.57 | 19% | 31% | 8% |
+| 49 | 0.51 | 13% | 37% | 12% |
+
+At low streaks, the predicted 3-Steal rate (~30%) is above §4's
+15–20% warning line for "trust has collapsed". That is the cost of a
+much bigger reason to steal. It is a prediction, not a measurement:
+real players lean toward cooperating (and the Q5 reputation display
+pushes that way), so the telemetry in §4 decides whether it lands. If
+3-Steal really does run above ~20%, the levers are: raise `c₀`, raise
+`M` (the lone sharer's reward), or trim `L` back toward 200. 3-Share
+becoming rare (3–4%) is intended here, since a formality finale was
+what the change was meant to kill.
 
 ## 4. Telemetry: three metrics to watch, and which way to move the numbers
 

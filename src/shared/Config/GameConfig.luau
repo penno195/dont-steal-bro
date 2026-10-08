@@ -46,10 +46,11 @@ local GameConfig: Validate.GameConfig = {
 	-- applied 2026-10-02): currency for the outcome tier, scaled by the
 	-- winner's title-ladder rung after this win, plus a chance at a random
 	-- drop. Replaced the five VU bountyTiers (rewards-roadmap.md 2c).
-	-- Every number is PLACEHOLDER until playtest.
+	-- Every number is PLACEHOLDER until playtest. soleStealer went 100
+	-- -> 250 on 2026-10-08 ("a much bigger reason to steal", Q1).
 	winRewards = {
 		-- Rung 0 pays the base; rung 21 (streak 50) pays 3.1x.
-		currency = { soleStealer = 100, loneSharer = 50, allShare = 25, perRungBonus = 0.1 },
+		currency = { soleStealer = 250, loneSharer = 50, allShare = 25, perRungBonus = 0.1 },
 		drop = {
 			-- 10% at rung 0, up to the 50% cap by rung 20.
 			baseChance = 0.1,
