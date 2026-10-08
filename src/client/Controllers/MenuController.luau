@@ -472,6 +472,13 @@ local MenuController: Loader.Controller = {
 		open("Locker")
 	end,
 	repeatLastLoadout = repeatLastLoadout,
+	-- For BuyBackController: which menu is up (nil = none), and the
+	-- round state as this controller last heard it.
+	currentMenu = function(): string?
+		return openMenu
+	end,
+	roundState = roundState,
+	isHubServer = isHubServer,
 }
 
 function MenuController:init()

@@ -487,6 +487,14 @@ hidden through the intro, Negotiate and Choose.
   log line. The normal flow can't get there: the server chooses the
   product and refuses the prompt once the offer is gone. Only a
   tampered client calling the prompt directly can.
+- **Managed pricing (2026-10-08, user decision):** the owner put the
+  products on Roblox's managed pricing, so the prices above are the
+  starting points, not a guarantee. The offer card shows the price
+  Roblox reports for the product (falling back to the config price),
+  so it always matches the purchase prompt. Claude recommended turning
+  managed pricing off for these eight, because it prices each tier on
+  its own and could make a longer streak cheaper to save than a
+  shorter one. Whether to do that is the owner's call.
 
 ## 8. Are starting power-ups sold for Robux?
 
