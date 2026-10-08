@@ -11,13 +11,13 @@ local NavigationRoundCoins: Validate.StoreItemDef = {
 	key = "navigation-round-coins",
 	kind = "CoinOffer",
 	assetId = 0, -- a CoinOffer has no Roblox asset
-	enabled = false, -- the toggle has shipped; enable once the art id is in
+	enabled = true,
 	displayName = "Navigation",
 	description = "A path to your nearest unfinished station, for the rest of this round, bought with coins.",
 	robuxPrice = 0,
 	coinPrice = 100, -- owner's pick (2026-10-08), a little above Robux parity (~85)
 	sortOrder = 201,
-	imageAssetId = 0, -- shares navigation-round.png (drawn); paste the same uploaded id
+	imageAssetId = 71005604676256, -- shares navigation-round.png
 	grants = {
 		{ kind = "NavigationRound", amount = 1 },
 	},

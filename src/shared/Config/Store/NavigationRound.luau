@@ -17,7 +17,7 @@ local NavigationRound: Validate.StoreItemDef = {
 	description = "A path to your nearest unfinished station, for the rest of this round.",
 	robuxPrice = 99, -- display only
 	sortOrder = 200,
-	imageAssetId = 0, -- assets/store/navigation-round.png: drawn, upload it and paste the id
+	imageAssetId = 71005604676256, -- assets/store/navigation-round.png
 	grants = {
 		{ kind = "NavigationRound", amount = 1 },
 	},
