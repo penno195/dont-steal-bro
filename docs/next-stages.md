@@ -152,7 +152,7 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   `RoundEnded` and `StreakWin` (bot seats ride on it as `Bots`);
   `StealShareChoice` gets `Rung`, the Round funnel gets `Config`. See
   `telemetry-schema.md`.*
-- [ ] **9. Check on a published place** that events reach Creator Hub
+- [x] **9. Check on a published place** that events reach Creator Hub
   analytics (allow up to 24 hours). Studio can't send analytics at all;
   there, set `telemetry.studioEcho = true` to see what would be sent.
   Needs step 12's published places.
@@ -160,8 +160,16 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   events print with the right fields (`Map` is `none` only in Studio,
   where the arrival gate never calls `roundStarted`). Found and fixed:
   nothing flushed the queue on a timer, so `RoundEnded`/`StreakLoss`
-  waited for a player to leave. Still to do: the Creator Hub check on
-  the published places.*
+  waited for a player to leave.*
+  *Done 2026-10-08. Creator Hub (Analytics → Funnels, and Explore with
+  source "Custom events") shows both funnels (`Round` 17 users through
+  all 6 steps, `Matchmaking` 5 → 4) and all 13 custom event names
+  (`TaskCompleted`, `MapVoted`, `MapPlayed`, `PowerUpUsed`,
+  `PowerUpCollected`, `TaskAbandoned`, `StealShareChoice`,
+  `FinaleOutcome`, `StreakLoss`, `StreakWin`, `NPCCountInRound`,
+  `RoundEnded`, `ReturnedToHub`). `TaskCompleted` by custom field 2
+  splits into the four real maps, with no `none`. Purchases not checked
+  (no live purchase made).*
 
 ## Stage 4: Assets, products, publishing
 
