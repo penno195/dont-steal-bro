@@ -524,7 +524,9 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		create("Frame")({
 			Name = "Complete",
 			Size = UDim2.fromScale(1, 1),
-			ZIndex = 20,
+			-- Over the card, under the close button (ZIndex 10), so X
+			-- still closes the sheet early.
+			ZIndex = 5,
 			Visible = complete,
 			Active = true, -- swallows taps meant for the task underneath
 			BackgroundColor3 = Theme.elevation[3].surface,
@@ -541,8 +543,14 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
 			(function()
-				local badge = Icons.view("check-badge", 72, Theme.color.success)
+				-- Half the card's height, square, so it reads at any
+				-- window size.
+				local badge = Icons.view("check-badge", 0, Theme.color.success)
 				badge.LayoutOrder = 0
+				badge.Size = UDim2.fromScale(0.5, 0.5)
+				local square =
+					create("UIAspectRatioConstraint")({ AspectRatio = 1, DominantAxis = Enum.DominantAxis.Height })
+				square.Parent = badge
 				return badge
 			end)(),
 			Base.text("display", {

@@ -198,7 +198,7 @@ swap one, change its `assetId` in `AudioLogic.CUES`.
 
 | Cue | Pick | Alternates |
 |---|---|---|
-| HubAmbience | 80257380636383 APM "Game Lobby" (182 s), owner's pick, volume 0.25 | 1844644501 APM "Ballroom Fox"; 1845880323 APM "Sly Sophie" (123 s); 15675069601 Roblox_UI_Loop_Calm_Music |
+| HubAmbience | 80257380636383 APM "Game Lobby" (182 s), owner's pick, volume 0.125 (every music cue halved 2026-10-08) | 1844644501 APM "Ballroom Fox"; 1845880323 APM "Sly Sophie" (123 s); 15675069601 Roblox_UI_Loop_Calm_Music |
 | RaceBed | 1837768143 APM "Big League (c)" (122 s) | maps can each set their own `musicTrackId` (all are still placeholders) |
 | RaceTension | 9043365842 APM "HEARTBEAT 02 96BPM": no key, so it sits on any bed | 9043366464 APM "TICK TOCK 06 120BPM" (would compete with TimerTick) |
 | StudioBed | 1843943906 APM "Tension Repeat Drones 40" | 9112795463 PSE "Hollow Rumble 1" (drone loop) |

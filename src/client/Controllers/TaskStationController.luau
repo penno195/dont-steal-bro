@@ -47,6 +47,8 @@ local activeView: TaskViewTypes.TaskView? = nil
 local activeStationId: string? = nil
 local activeAttempt = 0
 local stopGuards: (() -> ())? = nil
+-- True once the server is holding this attempt's completion (see finish).
+local holding = false
 
 -- Prompts show only on your own unfinished stations during Race: the
 -- server rejects any other station, and a Start that silently does
@@ -76,6 +78,11 @@ end
 -- Ends the current attempt for any reason but success. `tellServer` is
 -- false only when the server is the one that ended it.
 local function finish(tellServer: boolean)
+	-- The server is only holding a completion it has already accepted
+	-- (TaskResult's `completing`): closing the view must not abort it.
+	if holding then
+		tellServer = false
+	end
 	local view, stationId = activeView, activeStationId
 	if view == nil or stationId == nil then
 		return
@@ -198,6 +205,7 @@ local function onChallenge(payload: any)
 		return
 	end
 
+	holding = false
 	activeView = view
 	activeStationId = stationId
 	activeAttempt = payload.attempt :: number
@@ -242,6 +250,16 @@ local function onResult(payload: any)
 	end
 
 	activeView.onResult(payload.stationId, payload.success, payload.feedback, payload.completing == true)
+
+	-- The last step landed and the view shows COMPLETE: walking off or
+	-- pressing X now just closes it, the completion still counts.
+	if payload.completing == true then
+		holding = true
+		if stopGuards ~= nil then
+			stopGuards()
+			stopGuards = nil
+		end
+	end
 
 	if payload.success then
 		activeView = nil

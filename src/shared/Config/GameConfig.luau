@@ -38,7 +38,7 @@ local GameConfig: Validate.GameConfig = {
 		loadingSeconds = 5,
 		introSeconds = 5,
 		qualifiedSeconds = 3,
-		resultsSeconds = 20, -- must outlast DecisionLogic.revealLength (~15 s) plus reading the result; was 16 before the heartbeat reveal
+		resultsSeconds = 24, -- must outlast DecisionLogic.revealLength (~17 s) plus reading the result; was 16 before the heartbeat reveal
 		cleanupSeconds = 5,
 	},
 

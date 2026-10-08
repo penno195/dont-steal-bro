@@ -48,17 +48,18 @@ DecisionLogic.TIMING = table.freeze({
 	holdSeconds = 0.8, -- hold-to-confirm; long enough that a brushed thumb can't lock
 	ackTimeout = 1.5, -- resend the same choice if no DecisionLockedIn came back
 	ackRetries = 2,
-	-- Slowed 2026-09-26, and again 2026-10-08 (owner): each card comes up
+	-- Slowed 2026-09-26, and twice more 2026-10-08 (owner: "a couple of
+	-- seconds for each and 4-5 for the last one"): each card comes up
 	-- face down in the middle of the screen, sits there `suspense`
 	-- seconds under a heartbeat (DecisionLogic.heartbeats), then turns.
-	-- The LAST card waits longest. The whole reveal is ~15 s for three
+	-- The LAST card waits longest. The whole reveal is ~17 s for three
 	-- seats, which GameConfig.roundTimers.resultsSeconds has to outlast
 	-- (Cleanup sends everyone home).
 	lead = 3.0, -- revealAt -> the first card TURNS (it comes up face down `suspense` before)
-	cardGap = 3.4, -- between turns
-	finalGap = 5.0, -- the gap before the last card's turn instead of cardGap
-	suspense = 2.0, -- face down, name showing, before each turn
-	finalSuspense = 3.6, -- the same, for the last card
+	cardGap = 4.0, -- between turns
+	finalGap = 6.0, -- the gap before the last card's turn instead of cardGap
+	suspense = 2.5, -- face down, name showing, before each turn
+	finalSuspense = 4.5, -- the same, for the last card
 	outcomeAfter = 1.6, -- last turn -> outcome
 	resultAfter = 2.4, -- outcome -> result panel
 })
