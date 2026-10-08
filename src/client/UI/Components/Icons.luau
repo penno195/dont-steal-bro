@@ -43,7 +43,7 @@ local ICONS: { [string]: Icon } = {
 	-- Carl Olsen, Sbed, Zeromancer, DarkZaitzev; credit them in-game).
 	lock = { glyph = "🔒", image = "rbxassetid://104226281842552" },
 	info = { glyph = "i" },
-	warning = { glyph = "!" },
+	warning = { glyph = "!", image = "rbxassetid://94459837108575" },
 	coin = { glyph = "¢", image = "rbxassetid://122080278870723" },
 	gem = { glyph = "◆", image = "rbxassetid://91124997557663" },
 	star = { glyph = "★" },
@@ -59,13 +59,15 @@ local ICONS: { [string]: Icon } = {
 
 	-- Race HUD (P6-3). Status effect icons are keyed by category, so a
 	-- new effect in an existing category needs no new art.
-	arrow = { glyph = "▲" }, -- objective compass; rotated, so it must point up
-	trash = { glyph = "🗑" }, -- the power-up discard bin
-	down = { glyph = "▼" }, -- below the qualification line
-	pending = { glyph = "○" }, -- task not done yet
+	-- The silhouettes without a pack source are drawn by make-ui-icons.ps1.
+	arrow = { glyph = "▲", image = "rbxassetid://120767400257382" }, -- objective compass; rotated, so it must point up
+	chevron = { glyph = "⌃", image = "rbxassetid://86275122876329" }, -- objective a floor up (turned 180 for down)
+	trash = { glyph = "🗑", image = "rbxassetid://73911474022830" }, -- the power-up discard bin
+	down = { glyph = "▼", image = "rbxassetid://107723111049144" }, -- below the qualification line
+	pending = { glyph = "○", image = "rbxassetid://91187308390505" }, -- task not done yet
 	slow = { glyph = "🐌", image = "rbxassetid://114450983188248" }, -- Movement debuff
 	eye = { glyph = "👁", image = "rbxassetid://99292701416698" }, -- Vision debuff
-	boost = { glyph = "⏩" }, -- any buff
+	boost = { glyph = "⏩", image = "rbxassetid://136608479953566" }, -- any buff
 
 	-- Station markers (P7-6).
 	rival = { glyph = "👤", image = "rbxassetid://103224537713261" }, -- a rival is working at this station
@@ -87,7 +89,8 @@ local ICONS: { [string]: Icon } = {
 	["info-button"] = { glyph = "i", image = "rbxassetid://91647157562980", fullColor = true },
 	["check-badge"] = { glyph = "✓", image = "rbxassetid://115035144784851", fullColor = true },
 	["cross-badge"] = { glyph = "✕", image = "rbxassetid://82032145962986", fullColor = true },
-	restart = { glyph = "🔄" }, -- start the task over (no art yet)
+	-- Drawn to match the pack's coins by scripts/make-ui-icons.ps1.
+	restart = { glyph = "🔄", image = "rbxassetid://132275802112019", fullColor = true },
 }
 
 local Icons = {}

@@ -75,8 +75,9 @@ export type Slot = { index: number, id: string?, name: string?, aimable: boolean
 -- How the player is aiming: along the first-person camera (hold
 -- left-click / L2), or along a drag from the slot (touch).
 export type AimMode = "Camera" | "Drag"
--- Degrees clockwise from screen-up, and studs on the ground plane.
-export type Objective = { bearing: number, distance: number }
+-- Degrees clockwise from screen-up, studs away in a straight line, and
+-- whether the station is on your floor or one up or down.
+export type Objective = { bearing: number, distance: number, level: HudLogic.Level }
 
 -- What the HUD reads. Sources are owned by whoever mounts it (so they
 -- outlive a remount), and list entries should be frozen: Vide treats a
@@ -242,6 +243,11 @@ local function card(name: string, order: number, size: UDim2, children: { any })
 		BackgroundColor3 = Theme.color.surface,
 		BackgroundTransparency = 0.15,
 		Base.corner(Theme.radius.md),
+		-- Lit from above, so a card reads as a raised panel, not a hole.
+		create("UIGradient")({
+			Color = ColorSequence.new(Theme.color.surfaceRaised, Theme.color.surface),
+			Rotation = 90,
+		}),
 		create("UIStroke")({ Color = Theme.color.line, Transparency = 0.6, Thickness = 1 }),
 		Base.padding(Theme.spacing.xs),
 	}
@@ -327,18 +333,33 @@ local function placementCard(standing: () -> HudLogic.Standing?): Frame
 	return placement
 end
 
+-- The compass. A station a floor up or down turns the arrow, the
+-- distance and the card's edge blue or orange, and adds a chevron
+-- pointing that way, so it's told by shape as well as colour (P6-8).
 local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean): Frame
-	local arrow = Icons.view("arrow", 28, Theme.color.ink)
+	local level = derive(function(): HudLogic.Level
+		local o = objective()
+		return if o then o.level else "level"
+	end)
+	local tint = function(): Color3
+		local l = level()
+		return if l == "above" then Theme.color.above elseif l == "below" then Theme.color.below else Theme.color.ink
+	end
+	local arrow = Icons.view("arrow", 28, tint)
 	arrow.LayoutOrder = 1
 	local done = Icons.view("check", 28, Theme.color.success)
 	done.LayoutOrder = 1
+	local chevron = Icons.view("chevron", 14, tint)
+	chevron.LayoutOrder = 1
 	effect(function()
 		local o = objective()
 		arrow.Rotation = if o then o.bearing else 0
 		arrow.Visible = o ~= nil and not allDone()
 		done.Visible = allDone()
+		chevron.Visible = level() ~= "level" and not allDone()
+		chevron.Rotation = if level() == "below" then 180 else 0
 	end)
-	return card("Objective", 3, UDim2.fromOffset(PILL, RING), {
+	local panel = card("Objective", 3, UDim2.fromOffset(PILL, RING), {
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -347,19 +368,44 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 		}),
 		arrow,
 		done,
-		Base.text("label", {
-			Name = "Distance",
+		create("Frame")({
+			Name = "Reading",
 			LayoutOrder = 2,
+			BackgroundTransparency = 1,
 			Size = UDim2.fromOffset(PILL - 2 * Theme.spacing.xs, 20),
-			Text = derive(function()
-				local o = objective()
-				if allDone() then
-					return "Done"
-				end
-				return if o then tostring(math.floor(o.distance)) else "-"
-			end),
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, Theme.spacing.xxs),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			chevron,
+			Base.text("label", {
+				Name = "Distance",
+				LayoutOrder = 2,
+				Size = UDim2.fromOffset(40, 20),
+				TextColor3 = function(): Color3
+					return if allDone() then Theme.color.ink else tint()
+				end,
+				Text = derive(function()
+					local o = objective()
+					if allDone() then
+						return "Done"
+					end
+					return if o then tostring(math.floor(o.distance)) else "-"
+				end),
+			}),
 		}),
 	})
+	local stroke = panel:FindFirstChildOfClass("UIStroke") :: UIStroke
+	effect(function()
+		local plain = level() == "level" or allDone()
+		stroke.Color = if plain then Theme.color.line else tint()
+		stroke.Transparency = if plain then 0.6 else 0
+		stroke.Thickness = if plain then 1 else 2
+	end)
+	return panel
 end
 
 local function effectChip(entry: () -> HudLogic.Effect, now: () -> number): Frame

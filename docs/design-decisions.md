@@ -192,6 +192,16 @@ step 7a). Every amount is still unconfirmed until a playtest.
 - Not addressed: high-rung snowball (a rung-21 stealer earns 12
   power-ups a win). Left for playtest.
 
+*Applied (2026-10-08, user decision):* **a much bigger reason to steal.**
+- **Win payouts are now 250 / 50 / 25** (sole stealer / lone sharer /
+  all share), up from 100 / 50 / 25. At rung 0, a sole steal now buys
+  ten power-ups. This reverses the "win payouts unchanged" line above,
+  so payoff-table.md's Steal/Share balance has to be rechecked.
+- **The stakes have to be easy to see:** the Studio shows each choice's
+  payout in large type, plus the win's **chance of an item drop as a
+  percentage**, with its own icon. Only your own numbers are shown, as
+  in the Q7 reveal case.
+
 ## 2. Round timer expires with <3 finished
 
 **Decision:** Rank finishers by task-completion percentage (tiebreak:
@@ -448,6 +458,24 @@ hidden through the intro, Negotiate and Choose.
   titles case's "after the result is in" to this slightly earlier
   moment, but doesn't change `TitleService` by itself.
 
+### Applied case: buying back a streak (2026-10-08, user decision)
+
+- **Who:** any player who loses a round while holding a streak of 1 or
+  more. That covers Studio losers, 4th–6th place, and anyone below Q2's
+  50% floor. The offer appears on their own end screen. There's **no
+  limit** on how often it can be bought.
+- **Price, by the streak being saved:** 1 → 99 R$, 2 → 119, 3 → 149,
+  4 → 179, 5 → 209, 6 → 239, 7 → 269, **8 or more → 299 (the cap)**.
+  Every price ends in 9.
+- **Effect:** the reset from this loss is cancelled. The streak stays
+  as it was and isn't increased.
+- **Q7 still holds:** the offer and its price (which reveals your
+  streak) are only ever sent to that player, and only after the match.
+- **Known cost:** a leaderboard streak can now survive a loss for
+  money, which works against Q7's "everyone but the winner resets".
+  The owner accepted this. P0-7's paid-vs-free tripwire should also
+  track how many saves are bought on top-100 streaks.
+
 ## 8. Are starting power-ups sold for Robux?
 
 **Decision:** Power-ups may be purchased with Robux, provided **every**
@@ -500,6 +528,22 @@ the many who own nothing.
 - Practice pickups (`practice-area.md`) never appear in the Locker. In
   the HUD they're marked as practice and carry no count badge, while
   owned stock always shows one.
+
+### Applied case: Navigation (2026-10-08, user decision)
+
+- **What it does:** a toggle next to the direction HUD in a match. While
+  it's on, a path line leads to the nearest station the player hasn't
+  finished yet, until the round ends.
+- **For one round:** 99 R$, or a coin price (still PLACEHOLDER, set
+  at roughly Robux parity when it's built). **Unlimited:** a 899 R$
+  pass, sold for Robux only.
+- **Why Q8 still holds:** every free player can turn it on in any round
+  by paying coins. Robux only buys the convenience of never paying again,
+  not anything a free player can't have. This is the first coin offer
+  that isn't power-up stock, so `CoinOffer` validation will need to allow
+  it as a named exception.
+- The path line is drawn only on the owner's client. Nobody else can see
+  that a player is using it.
 
 ---
 

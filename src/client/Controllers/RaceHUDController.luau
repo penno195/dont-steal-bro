@@ -52,6 +52,10 @@ local source = vide.source
 -- writes when it has moved a whole ARROW_STEP.
 local SEARCH_INTERVAL = 0.2
 local ARROW_STEP = 5
+-- How far above or below you a station can sit and still count as on
+-- your floor: about two-thirds of a storey, so stairs and a raised
+-- station base stay "level" but the floor above does not.
+local LEVEL_BAND = 8
 -- If the server never answers a use (a dropped remote), unstick the
 -- button rather than leaving it spinning for the rest of the race.
 local USE_TIMEOUT = 2
@@ -770,6 +774,7 @@ local function runObjective(): () -> ()
 	local sinceSearch = math.huge
 	local lastBearing: number? = nil
 	local lastDistance: number? = nil
+	local lastLevel: HudLogic.Level? = nil
 
 	local connection = RunService.RenderStepped:Connect(function(dt: number)
 		local character = Players.LocalPlayer.Character
@@ -807,10 +812,11 @@ local function runObjective(): () -> ()
 		local offset = goal.Position - position
 		local bearing =
 			HudLogic.quantize(HudLogic.bearing(look.X, look.Z, offset.X, offset.Z) + ARROW_STEP / 2, ARROW_STEP)
-		local distance = math.floor(Vector2.new(offset.X, offset.Z).Magnitude)
-		if bearing ~= lastBearing or distance ~= lastDistance then
-			lastBearing, lastDistance = bearing, distance
-			objective(table.freeze({ bearing = bearing, distance = distance }))
+		local distance = math.floor(offset.Magnitude)
+		local level: HudLogic.Level = HudLogic.level(offset.Y, LEVEL_BAND)
+		if bearing ~= lastBearing or distance ~= lastDistance or level ~= lastLevel then
+			lastBearing, lastDistance, lastLevel = bearing, distance, level
+			objective(table.freeze({ bearing = bearing, distance = distance, level = level }))
 		end
 	end)
 

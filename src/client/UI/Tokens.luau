@@ -107,6 +107,11 @@ Tokens.color = table.freeze({
 	warning = "#FFC53D",
 	success = "#3CCB7F",
 	focus = "#FFFFFF",
+	-- The objective compass: a station a floor up or down. Blue against
+	-- orange is the pair every colour-vision type keeps apart, and the
+	-- chevron's direction says it too.
+	above = "#5AC8FA",
+	below = "#FF8A3D",
 	scrim = "#000000",
 
 	-- THE DECISION PAIR. Red for Steal, green for Share (the owner's
