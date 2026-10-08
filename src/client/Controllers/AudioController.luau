@@ -189,7 +189,8 @@ local function play(cueId: string, at: BasePart?, assetId: string?)
 	if def.spatial and at ~= nil then
 		sound.Parent = at
 	end
-	sound.TimePosition = 0
+	-- A swapped-in asset isn't the one startAt was measured on.
+	sound.TimePosition = if assetId == nil then def.startAt or 0 else 0
 	sound:Play()
 	table.insert(voices, { sound = sound, priority = def.priority, startedAt = now })
 	if def.duck ~= nil then

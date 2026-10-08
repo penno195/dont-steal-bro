@@ -211,10 +211,12 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   (`leaderboard-scale.md` §9); matchmaking queue summary built 2026-10-04
   (`matchmaking.md`); name lookups capped and retried sooner 2026-10-04 (A5). All
   three follow-ups done.
-- [ ] **14a. Sound.** All 21 cues in `AudioLogic.luau` still point at
+- [x] **14a. Sound.** All 21 cues in `AudioLogic.luau` still point at
   `PLACEHOLDER_ASSET`, so the game is silent. Pick or make a sound for
   every cue and the three music beds (`audio-and-feel.md` is the brief),
-  upload them, and set the ids. Added 2026-10-04.
+  upload them, and set the ids. Added 2026-10-04. Done 2026-10-08:
+  all 21 cues set from licensed libraries (`audio-and-feel.md` §8,
+  with alternates); the owner still has to audition them.
 - [x] **14b. Map preview images.** Every map's `thumbnailAssetId` is
   `rbxassetid://0`, so the Hub vote board shows blank cards. Capture
   one image per launch map (after its 4a art pass), upload them, and set

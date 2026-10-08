@@ -6,9 +6,9 @@ in `tests/`), `src/client/Controllers/AudioController.luau` and
 `FeelController.luau` (the Roblox half), and `UI/Components/Feel.luau`
 (the punch hook screens bind to).
 
-Every asset id is `rbxassetid://0` until sound design delivers. The
-controller skips placeholder cues without a sound, so the game plays
-fine with no audio at all.
+Every cue has a real sound (§8). The controller still skips a
+placeholder (`rbxassetid://0`) silently, so a cue can be blanked
+without breaking anything.
 
 ## 1. The emotional brief
 
@@ -180,3 +180,55 @@ None of this can be checked headlessly. Check it with real assets:
 5. Turn on reduced motion: no camera movement, flashes only.
 6. Respawn mid-round, then complete a task: particles fire on the new
    character.
+
+## 8. The sounds (next-stages 14a, 2026-10-08)
+
+**Licensing rule:** every sound comes from a library Roblox licenses to
+all experiences: Roblox's own `Roblox_UI_*` pack (creator Roblox),
+**APMOfficial** (APM Music) and **ProSoundEffects**. Never take a sound
+from a random user upload. Those are often ripped from other games
+(Minecraft, TF2 and the like) and get taken down, which silently mutes
+the cue live. All picks and alternates below were checked to load in a
+Match playtest.
+
+Picks were made from library names and descriptions, without listening.
+**Audition every one** at `https://create.roblox.com/store/asset/<id>`. To
+swap one, change its `assetId` in `AudioLogic.CUES`.
+
+| Cue | Pick | Alternates |
+|---|---|---|
+| HubAmbience | 1844644501 APM "Ballroom Fox" (170 s): the lobby is a 1940s hotel | 1845880323 APM "Sly Sophie" (123 s); 15675069601 Roblox_UI_Loop_Calm_Music |
+| RaceBed | 1837768143 APM "Big League (c)" (122 s) | maps can each set their own `musicTrackId` (all are still placeholders) |
+| RaceTension | 9043365842 APM "HEARTBEAT 02 96BPM": no key, so it sits on any bed | 9043366464 APM "TICK TOCK 06 120BPM" (would compete with TimerTick) |
+| StudioBed | 1843943906 APM "Tension Repeat Drones 40" | 9112795463 PSE "Hollow Rumble 1" (drone loop) |
+| QueueReady | 15675043410 Roblox_UI_Tonal_Stinger | 1840084286 APM "Musical Doorbell (d)" |
+| TimerTick | 9114212929 PSE "Dvd Player Button 13" (hard click) | 15675032796 Roblox_UI_Small_Click |
+| TaskStart | 15675059323 Roblox_UI_Bright_Click | — |
+| TaskSuccess | 9048770070 APM "Seven Leaf Clover - Hit3" (mallets) | 15675016548 Roblox_UI_Piano_Hello |
+| TaskFail | 9113085665 PSE "Alarm Buzzer 3" | 15675075163 Roblox_UI_Delete |
+| PowerUpPickup | 15675055424 Roblox_UI_Cute_Pop | — |
+| PowerUpUsedByYou | 9120733055 PSE "Whoosh Rising Swish Airy 1" | 9120733724 (same set, other pitch) |
+| PowerUpHitYou | 9113520887 PSE "Body Hit With Rubber Glove 7" | 9113572282 PSE "Boxing Hits 10"; 1841250549 APM "Bludgeon" |
+| Qualified | 1837769261 APM "Time Attack (sting)" | 9047102381 APM "Game Day Warrior Sting 1" |
+| NotQualified | 9125449274 PSE conch-shell honk (weak, deflating) | 9047060880 APM "Slow Fuse Sting" |
+| LockIn | 9119727134 PSE "Switch Impact On Flip Up Large Metal 2" | 9120371230 PSE "Vehicle Door Bump Slamming Metal Door 9" |
+| OtherLockIn | 9114214262 PSE "Dvd Player Button 4" | — |
+| RevealRiser | 9043343295 APM "REVERSE NOISE HARD END 09", `startAt` 2.1 s | 1837834352 APM "REVERSE HARD STOP-Metal Build 02" (4.0 s: use `startAt` 2.0) |
+| RevealCard | 9038652624 APM "Big Hair Rock - Hit 3" | 9116710746 PSE "Metal Impacts Hard Clanking Hits 5" |
+| RevealOutcome | 1835333323 APM "Angry Heavy Hitter Hit" | 1839696994 APM "Fatal Impact" |
+| Win | 9038758612 APM "Tomorrow Begins Today - Stinger" (13 s, bright) | 9047296345 APM "Welcome Home Sting" |
+| Loss | 110140058364323 APM "Pathos and Persistence - Sting 2" (5 s, low) | 9048284985 APM "Dirty Secrets - Sting 1" |
+
+**`startAt`** (`CueDef`) starts a one-shot partway into its asset. The
+riser's hard stop is 4.1 s in, and the first card turns 2.0 s after the
+riser starts (`DecisionLogic` `lead`), so the riser starts at 2.1 s. If
+`lead` changes, change `startAt` with it.
+
+**Finding more:** the Creator Store's v2 search API
+(`apis.roblox.com/toolbox-service/v2/assets:search?searchCategoryType=Audio&query=...`)
+returns creator names and durations, so the results can be filtered
+down to the three libraries above. Keyword search ranks popular user
+uploads first, so the licensed sounds sit deep in the results. Search
+ProSoundEffects with its own literal vocabulary ("Whoosh Rising Swish",
+"Alarm Buzzer"). Abstract game words like "level complete" find
+nothing there.

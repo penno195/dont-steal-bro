@@ -34,6 +34,21 @@ describe("AudioLogic.CUES", function()
 		end
 	end)
 
+	it("gives every cue a real asset", function()
+		for id, def in AudioLogic.CUES do
+			assert(not AudioLogic.isPlaceholder(def.assetId), id .. ": still a placeholder")
+		end
+	end)
+
+	it("only offsets the start of a one-shot, and never before 0", function()
+		for id, def in AudioLogic.CUES do
+			if def.startAt ~= nil then
+				assert(def.startAt >= 0, id .. ": negative startAt")
+				assert(not def.looped, id .. ": a bed would loop back past its startAt")
+			end
+		end
+	end)
+
 	it("never lets the reveal or a resolution be dropped for budget", function()
 		for _, id in { "RevealRiser", "RevealCard", "RevealOutcome", "Win", "Loss" } do
 			expect(AudioLogic.CUES[id].priority):toBe(100)

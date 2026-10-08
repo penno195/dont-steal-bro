@@ -7,9 +7,11 @@
 -- emotional brief each cue is written against.
 --
 -- ADDING A CUE is one row in CUES plus one call to AudioController.play
--- from whatever moment triggers it. Asset ids are PLACEHOLDERS
--- ("rbxassetid://0") until sound design lands; the controller skips a
--- placeholder silently, so the game is playable with no audio at all.
+-- from whatever moment triggers it. Every asset comes from a library
+-- Roblox licenses to all experiences (Roblox's own UI pack, APM Music,
+-- Pro Sound Effects), so none can be revoked out from under the game;
+-- the picks and their alternates are in docs/audio-and-feel.md §8. A
+-- placeholder ("rbxassetid://0") is skipped silently.
 
 local AudioLogic = {}
 
@@ -41,6 +43,9 @@ export type CueDef = {
 	-- server events turning into a wall of identical sounds.
 	cooldown: number,
 	duck: DuckDef?,
+	-- Seconds into the asset a play starts from, when a stock sound's
+	-- moment lands too late (a riser whose hard stop must hit a beat).
+	startAt: number?,
 }
 
 export type Bed = "Hub" | "Race" | "Studio" | "None"
@@ -61,13 +66,11 @@ local function cue(def: CueDef): CueDef
 	return table.freeze(def)
 end
 
-local P = AudioLogic.PLACEHOLDER_ASSET
-
 AudioLogic.CUES = table.freeze({
 	-- Beds (Music, looped). RaceBed's asset is only the fallback: the map's
 	-- own MapDef.musicTrackId wins when it's set (resolveRaceBed).
 	HubAmbience = cue({
-		assetId = P,
+		assetId = "rbxassetid://1844644501", -- APM "Ballroom Fox" (170 s)
 		category = "Music",
 		volume = 0.5,
 		looped = true,
@@ -76,7 +79,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0,
 	}),
 	RaceBed = cue({
-		assetId = P,
+		assetId = "rbxassetid://1837768143", -- APM "Big League (c)" (122 s)
 		category = "Music",
 		volume = 0.55,
 		looped = true,
@@ -88,7 +91,7 @@ AudioLogic.CUES = table.freeze({
 	-- intensity (raceIntensity). One stem for every map, so a new map
 	-- never needs its own "tense" mix.
 	RaceTension = cue({
-		assetId = P,
+		assetId = "rbxassetid://9043365842", -- APM "HEARTBEAT 02 96BPM" (60 s): no key, sits on any bed
 		category = "Music",
 		volume = 0.6,
 		looped = true,
@@ -97,7 +100,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0,
 	}),
 	StudioBed = cue({
-		assetId = P,
+		assetId = "rbxassetid://1843943906", -- APM "Tension Repeat Drones 40" (129 s)
 		category = "Music",
 		volume = 0.45,
 		looped = true,
@@ -108,7 +111,7 @@ AudioLogic.CUES = table.freeze({
 
 	-- Hub.
 	QueueReady = cue({
-		assetId = P,
+		assetId = "rbxassetid://15675043410", -- Roblox_UI_Tonal_Stinger
 		category = "SFX",
 		volume = 0.8,
 		looped = false,
@@ -120,7 +123,7 @@ AudioLogic.CUES = table.freeze({
 
 	-- Race.
 	TimerTick = cue({
-		assetId = P,
+		assetId = "rbxassetid://9114212929", -- PSE "Dvd Player Button 13": a hard, dry click
 		category = "SFX",
 		volume = 0.5,
 		looped = false,
@@ -129,7 +132,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.5,
 	}),
 	TaskStart = cue({
-		assetId = P,
+		assetId = "rbxassetid://15675059323", -- Roblox_UI_Bright_Click
 		category = "SFX",
 		volume = 0.6,
 		looped = false,
@@ -138,7 +141,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.3,
 	}),
 	TaskSuccess = cue({
-		assetId = P,
+		assetId = "rbxassetid://9048770070", -- APM "Seven Leaf Clover - Hit3": mallets, 1.9 s
 		category = "SFX",
 		volume = 0.9,
 		looped = false,
@@ -148,7 +151,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.6, attack = 0.03, hold = 0.3, release = 0.5 },
 	}),
 	TaskFail = cue({
-		assetId = P,
+		assetId = "rbxassetid://9113085665", -- PSE "Alarm Buzzer 3"
 		category = "SFX",
 		volume = 0.75,
 		looped = false,
@@ -157,7 +160,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.3,
 	}),
 	PowerUpPickup = cue({
-		assetId = P,
+		assetId = "rbxassetid://15675055424", -- Roblox_UI_Cute_Pop
 		category = "SFX",
 		volume = 0.7,
 		looped = false,
@@ -170,7 +173,7 @@ AudioLogic.CUES = table.freeze({
 	-- (it was done to you). Different pitch register AND envelope, not
 	-- just different samples. See docs/audio-and-feel.md §2.
 	PowerUpUsedByYou = cue({
-		assetId = P,
+		assetId = "rbxassetid://9120733055", -- PSE "Whoosh Rising Swish Airy 1"
 		category = "SFX",
 		volume = 0.8,
 		looped = false,
@@ -179,7 +182,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.2,
 	}),
 	PowerUpHitYou = cue({
-		assetId = P,
+		assetId = "rbxassetid://9113520887", -- PSE "Body Hit With Rubber Glove 7"
 		category = "SFX",
 		volume = 0.9,
 		looped = false,
@@ -189,7 +192,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.55, attack = 0.02, hold = 0.25, release = 0.4 },
 	}),
 	Qualified = cue({
-		assetId = P,
+		assetId = "rbxassetid://1837769261", -- APM "Time Attack (sting)"
 		category = "SFX",
 		volume = 1,
 		looped = false,
@@ -199,7 +202,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.25, attack = 0.05, hold = 1.2, release = 0.8 },
 	}),
 	NotQualified = cue({
-		assetId = P,
+		assetId = "rbxassetid://9125449274", -- PSE conch-shell honk: a weak, deflating blow
 		category = "SFX",
 		volume = 0.7,
 		looped = false,
@@ -211,7 +214,7 @@ AudioLogic.CUES = table.freeze({
 
 	-- Decision Studio.
 	LockIn = cue({
-		assetId = P,
+		assetId = "rbxassetid://9119727134", -- PSE "Switch Impact On Flip Up Large Metal 2"
 		category = "SFX",
 		volume = 0.9,
 		looped = false,
@@ -222,7 +225,7 @@ AudioLogic.CUES = table.freeze({
 	}),
 	-- Someone else locked in: quieter, so your own lock stays the loud one.
 	OtherLockIn = cue({
-		assetId = P,
+		assetId = "rbxassetid://9114214262", -- PSE "Dvd Player Button 4": the same idea, lighter
 		category = "SFX",
 		volume = 0.5,
 		looped = false,
@@ -234,7 +237,7 @@ AudioLogic.CUES = table.freeze({
 	-- is never buried under music, and the bed is ducked for the whole
 	-- sequence on top of that (revealDuck).
 	RevealRiser = cue({
-		assetId = P,
+		assetId = "rbxassetid://9043343295", -- APM "REVERSE NOISE HARD END 09" (4.1 s)
 		category = "SFX",
 		volume = 0.8,
 		looped = false,
@@ -242,9 +245,12 @@ AudioLogic.CUES = table.freeze({
 		priority = 100,
 		cooldown = 0,
 		duck = { level = 0.3, attack = 0.2, hold = 0.8, release = 0.2 },
+		-- Its hard stop is at 4.1 s; starting 2.1 s in lands it on the
+		-- first card's turn (DecisionLogic's lead, 2.0 s).
+		startAt = 2.1,
 	}),
 	RevealCard = cue({
-		assetId = P,
+		assetId = "rbxassetid://9038652624", -- APM "Big Hair Rock - Hit 3"
 		category = "SFX",
 		volume = 1,
 		looped = false,
@@ -254,7 +260,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.2, attack = 0.02, hold = 0.5, release = 0.3 },
 	}),
 	RevealOutcome = cue({
-		assetId = P,
+		assetId = "rbxassetid://1835333323", -- APM "Angry Heavy Hitter Hit"
 		category = "SFX",
 		volume = 1,
 		looped = false,
@@ -264,7 +270,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.1, attack = 0.02, hold = 1.0, release = 0.5 },
 	}),
 	Win = cue({
-		assetId = P,
+		assetId = "rbxassetid://9038758612", -- APM "Tomorrow Begins Today - Stinger" (13 s, bright)
 		category = "SFX",
 		volume = 1,
 		looped = false,
@@ -274,7 +280,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.15, attack = 0.05, hold = 2.5, release = 1.5 },
 	}),
 	Loss = cue({
-		assetId = P,
+		assetId = "rbxassetid://110140058364323", -- APM "Pathos and Persistence - Sting 2" (5 s, low)
 		category = "SFX",
 		volume = 0.9,
 		looped = false,
