@@ -77,14 +77,13 @@ both together.
 | `SprintBoostStock.luau` | 3716319307 | enabled |
 | `StarterLoadoutBundle.luau` | 3716319616 | enabled |
 | `Season1Pass.luau` | 2006972979 | on sale on Roblox, disabled in config |
-| `NavigationRound.luau` | not created yet | disabled |
-| `NavigationPass.luau` | not created yet | disabled |
+| `NavigationRound.luau` | 3717313833 | enabled |
+| `NavigationPass.luau` | 2021852267 | enabled |
 
-Navigation's art is drawn (`assets/store/navigation-round.png` and
-`navigation-pass.png`; the coin offer shares the round's image). Enable
-`NavigationRoundCoins.luau` first: Validate refuses to boot with Robux
-Navigation on sale and no coin round. The in-match toggle appears once
-any of the three is enabled.
+Navigation's art is in `assets/store/navigation-round.png` and
+`navigation-pass.png` (the coin offer shares the round's image). Keep
+`NavigationRoundCoins.luau` enabled: Validate refuses to boot with Robux
+Navigation on sale and no coin round.
 
 ## 4. Test (step 13)
 
