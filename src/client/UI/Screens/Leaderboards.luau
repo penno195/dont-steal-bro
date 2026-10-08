@@ -24,6 +24,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
+local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+
 local BoardLogic = require(script.Parent.Parent.BoardLogic)
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
@@ -36,6 +38,8 @@ local derive = vide.derive
 local effect = vide.effect
 local values = vide.values
 local switch = vide.switch
+local indexes = vide.indexes
+local cleanup = vide.cleanup
 
 local TAB_H = 48
 local ROW_H = 56 -- PlayerRow's height
@@ -43,6 +47,8 @@ local GAP = Theme.spacing.xs
 local OVERSCAN = 4
 local BANNER_H = 28
 local PINNED_H = ROW_H + Theme.spacing.sm
+local CHIP_H = 36 -- one prize band
+local NOTE_H = 16 -- when the board pays, or that it never does
 
 export type Store = {
 	selfId: number,
@@ -171,6 +177,117 @@ local function pinned(view: () -> BoardLogic.View, selfId: number): Instance
 	})
 end
 
+-- What this board pays (BoardLogic.prizes), under the tabs: one chip per
+-- band, then when it pays. The all-time board shows only its note.
+local PAYOUTS: { [string]: { BoardLogic.PrizeBand } } = GameConfig.leaderboard.payouts :: any
+
+local function prizeHeight(prizes: BoardLogic.Prizes): number
+	return if #prizes.chips > 0 then CHIP_H + Theme.spacing.xs + NOTE_H else NOTE_H
+end
+
+local function prizeChip(chip: () -> BoardLogic.PrizeChip, count: () -> number, order: number): Frame
+	local coin = C.Icons.view("coin", 18, Theme.color.ink)
+	coin.LayoutOrder = 2
+	local gem = C.Icons.view("gem", 14, Theme.color.ink)
+	gem.LayoutOrder = 4
+	effect(function()
+		gem.Visible = chip().item
+	end)
+	return create("Frame")({
+		Name = "Prize" .. order,
+		LayoutOrder = order,
+		Size = function()
+			local n = math.max(1, count())
+			return UDim2.fromOffset((MenuShell.INNER - (n - 1) * Theme.spacing.xs) / n, CHIP_H)
+		end,
+		BackgroundColor3 = Theme.color.surfaceRaised,
+		Base.corner(Theme.radius.sm),
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, Theme.spacing.xs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		Base.text("caption", {
+			Name = "Places",
+			LayoutOrder = 1,
+			AutomaticSize = Enum.AutomaticSize.X,
+			TextScaled = false,
+			TextWrapped = false,
+			TextSize = Theme.type.caption.size,
+			Size = UDim2.fromOffset(0, CHIP_H),
+			Text = function()
+				return chip().places
+			end,
+			TextColor3 = Theme.color.inkMuted,
+		}),
+		coin :: any,
+		Base.text("label", {
+			Name = "Coins",
+			LayoutOrder = 3,
+			AutomaticSize = Enum.AutomaticSize.X,
+			TextScaled = false,
+			TextWrapped = false,
+			TextSize = Theme.type.label.size,
+			Size = UDim2.fromOffset(0, CHIP_H),
+			Text = function()
+				return chip().coins
+			end,
+		}),
+		gem :: any,
+	}) :: Frame
+end
+
+local function prizeStrip(prizes: () -> BoardLogic.Prizes, order: number): Frame
+	local chips = derive(function()
+		return prizes().chips
+	end)
+	local count = derive(function()
+		return #chips()
+	end)
+	return create("Frame")({
+		Name = "Prizes",
+		LayoutOrder = order,
+		Size = function()
+			return UDim2.fromOffset(MenuShell.INNER, prizeHeight(prizes()))
+		end,
+		BackgroundTransparency = 1,
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Vertical,
+			Padding = UDim.new(0, Theme.spacing.xs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		create("Frame")({
+			Name = "Chips",
+			LayoutOrder = 1,
+			Size = UDim2.fromOffset(MenuShell.INNER, CHIP_H),
+			BackgroundTransparency = 1,
+			Visible = function()
+				return count() > 0
+			end,
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				Padding = UDim.new(0, Theme.spacing.xs),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			indexes(chips, function(chip: () -> BoardLogic.PrizeChip, index: number)
+				return prizeChip(chip, count, index) :: any
+			end) :: any,
+		}),
+		Base.text("caption", {
+			Name = "Note",
+			LayoutOrder = 2,
+			Size = UDim2.fromOffset(MenuShell.INNER, NOTE_H),
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Text = function()
+				return prizes().note
+			end,
+			TextColor3 = Theme.color.inkMuted,
+		}),
+	}) :: Frame
+end
+
 local function body(store: Store, height: () -> number): { Instance }
 	local tabIndex = source(1)
 	-- Cast: derive widens a string-literal union back to `string`.
@@ -192,15 +309,40 @@ local function body(store: Store, height: () -> number): { Instance }
 		table.insert(tabs, { label = TAB_LABELS[id], icon = if id == "AllTime" then "trophy" else "star" })
 	end
 
-	-- Height left for the list once the tabs, the banner (when shown)
-	-- and the pinned row have taken theirs.
+	local prizes = derive(function(): BoardLogic.Prizes
+		return BoardLogic.prizes(tab(), PAYOUTS[tab()])
+	end)
+
+	-- Height left for the list once the tabs, the prize strip, the
+	-- banner (when shown) and the pinned row have taken theirs.
 	local listHeight = derive(function()
-		local h = height() - TAB_H - Theme.spacing.sm - PINNED_H
+		local h = height() - TAB_H - Theme.spacing.sm - PINNED_H - prizeHeight(prizes()) - Theme.spacing.xs
 		if stale() then
 			h -= BANNER_H + Theme.spacing.xs
 		end
 		return math.max(0, h)
 	end)
+
+	-- A Loading/Empty message sits where MenuShell puts it (centred a
+	-- little high) when the list has room, and at the list's top when it
+	-- doesn't: sideways on a phone, the prize strip leaves less height
+	-- than the message needs, and centring it ran it up into the chips.
+	local function fit(message: Frame): Frame
+		local tall = source(0)
+		local function read()
+			tall(message.AbsoluteSize.Y / math.max(C.Env.scale(), 0.01))
+		end
+		local connection = message:GetPropertyChangedSignal("AbsoluteSize"):Connect(read)
+		cleanup(function()
+			connection:Disconnect()
+		end)
+		read()
+		message.AnchorPoint = Vector2.new(0.5, 0)
+		effect(function()
+			message.Position = UDim2.new(0.5, 0, 0, math.max(0, listHeight() * 0.4 - tall() / 2))
+		end)
+		return message
+	end
 
 	return {
 		C.TabBar({
@@ -222,6 +364,7 @@ local function body(store: Store, height: () -> number): { Instance }
 				Padding = UDim.new(0, Theme.spacing.xs),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
+			prizeStrip(prizes, 0),
 			-- Staleness: icon AND words, never a colour alone.
 			create("Frame")({
 				Name = "StaleBanner",
@@ -248,10 +391,10 @@ local function body(store: Store, height: () -> number): { Instance }
 				-- so a refresh updates rows in place instead of rebuilding.
 				switch(phase)({
 					Loading = function()
-						return MenuShell.message("Loading the board", "Boards update every minute or two.", true)
+						return fit(MenuShell.message("Loading the board", "Boards update every minute or two.", true))
 					end,
 					Empty = function()
-						return MenuShell.message(
+						return fit(MenuShell.message(
 							derive(function()
 								return (BoardLogic.emptyText(tab()))
 							end),
@@ -259,7 +402,7 @@ local function body(store: Store, height: () -> number): { Instance }
 								local _, line = BoardLogic.emptyText(tab())
 								return line
 							end)
-						)
+						))
 					end,
 					Ready = function()
 						return list(tab, view, store.selfId, listHeight) :: any

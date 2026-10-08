@@ -569,6 +569,41 @@ describe("StoreScreenLogic coin offers (rewards step 6)", function()
 	end)
 end)
 
+describe("BoardLogic.prizes", function()
+	local daily = {
+		{ maxRank = 1, currency = 75 },
+		{ maxRank = 3, currency = 50 },
+		{ maxRank = 10, currency = 25, cosmeticId = "crown" },
+	}
+
+	it("turns bands into place ranges with their coins", function()
+		local p = BoardLogic.prizes("Daily", daily)
+		expect(#p.chips):toBe(3)
+		expect(p.chips[1].places):toBe("#1")
+		expect(p.chips[1].coins):toBe("75")
+		expect(p.chips[2].places):toBe("#2-3")
+		expect(p.chips[3].places):toBe("#4-10")
+		expect(p.chips[3].item):toBe(true)
+		expect(p.chips[1].item):toBe(false)
+	end)
+
+	it("says how many places pay, and when", function()
+		expect(BoardLogic.prizes("Daily", daily).note):toBe("Paid to the top 10 when the day ends.")
+		expect(BoardLogic.prizes("Weekly", daily).note):toBe("Paid to the top 10 when the week ends.")
+	end)
+
+	it("never pays the all-time board, even if handed bands", function()
+		local p = BoardLogic.prizes("AllTime", daily)
+		expect(#p.chips):toBe(0)
+		expect(p.note):toBe("No prizes here. Being on it is the prize.")
+	end)
+
+	it("treats a period with no bands as unpaid", function()
+		expect(#BoardLogic.prizes("Weekly", nil).chips):toBe(0)
+		expect(#BoardLogic.prizes("Weekly", {}).chips):toBe(0)
+	end)
+end)
+
 describe("BoardLogic.wall", function()
 	local function payload(count: number, status: string?): BoardLogic.Payload
 		local entries = {}
