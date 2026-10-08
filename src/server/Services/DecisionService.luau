@@ -867,6 +867,17 @@ local function beginDecisionStudio()
 
 	Net.fireAllClients("DecisionParticipants", { qualifierIds = qualifierIds, reputation = reputation })
 
+	-- Each human finalist's own stakes, to them alone (design-decisions.md
+	-- Q1's 2026-10-08 case). Rung-scaled, so they carry a level: the one
+	-- pre-lock-in exception to Q7, and only because nobody else gets it.
+	local ProgressionService = Loader.get("ProgressionService") :: any
+	for _, id in qualifierIds do
+		local player = Players:GetPlayerByUserId(id)
+		if player ~= nil then
+			Net.fireClient("DecisionStakes", player, ProgressionService.stakesFor(player))
+		end
+	end
+
 	-- "With a clear announcement to the others" (P3-7 case 1's own
 	-- requirement). Fired AFTER DecisionParticipants so a client already
 	-- has the roster this refers to, and separately from it so the

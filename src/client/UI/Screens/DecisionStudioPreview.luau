@@ -22,6 +22,9 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Clock = require(ReplicatedStorage.Shared.Clock)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
 local DecisionStudio = require(script.Parent.DecisionStudio)
+local PayoutLogic = require(script.Parent.Parent.PayoutLogic)
+
+local PREVIEW_STAKES = PayoutLogic.parseStakes({ soleStealer = 300, loneSharer = 60, allShare = 30, dropChance = 0.14 })
 
 local source = vide.source
 
@@ -122,6 +125,10 @@ function DecisionStudioPreview.mount(controller: any): () -> ()
 		acked = acked,
 		reveal = reveal,
 		personal = personal,
+		-- Rung 2's numbers, so the stakes face is always on show here.
+		stakes = function()
+			return PREVIEW_STAKES
+		end,
 		chat = function()
 			return nil
 		end,

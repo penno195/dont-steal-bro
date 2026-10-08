@@ -201,6 +201,15 @@ step 7a). Every amount is still unconfirmed until a playtest.
   payout in large type, plus the win's **chance of an item drop as a
   percentage**, with its own icon. Only your own numbers are shown, as
   in the Q7 reveal case.
+- **Applied (2026-10-08, user decision): your own real numbers, from
+  the intro on.** Each finalist sees their own rung-scaled payouts and
+  drop chance before lock-in. This makes an exception to Q7's "words
+  only before lock-in" (the 2026-10-02 after-lock-in case), but only
+  for your own screen. The numbers go to their owner alone
+  (`DecisionStakes`, targeted), never to another finalist or a
+  spectator. **Share shows the all-share amount in large type,
+  captioned with the lone-sharer amount** ("50 if both steal"). Steal is
+  captioned "only if both share".
 
 ## 2. Round timer expires with <3 finished
 

@@ -81,3 +81,45 @@ describe("PayoutLogic wording", function()
 		expect(PayoutLogic.dropIcon({ kind = "Cosmetic", id = "x", rarity = "Rare", duplicate = false })):toBe("gem")
 	end)
 end)
+
+describe("PayoutLogic stakes", function()
+	local raw = { soleStealer = 275, loneSharer = 55, allShare = 27, dropChance = 0.3 }
+
+	it("reads a whole stakes packet", function()
+		local s = PayoutLogic.parseStakes(raw) :: PayoutLogic.Stakes
+		expect(s.soleStealer):toBe(275)
+		expect(s.dropChance):toBeCloseTo(0.3)
+	end)
+
+	it("rejects a packet missing any number", function()
+		expect(PayoutLogic.parseStakes(nil)):toBe(nil)
+		expect(PayoutLogic.parseStakes({ soleStealer = 250, loneSharer = 50, allShare = 25 })):toBe(nil)
+		expect(PayoutLogic.parseStakes({ soleStealer = "250", loneSharer = 50, allShare = 25, dropChance = 0.1 })):toBe(
+			nil
+		)
+	end)
+
+	it("clamps the drop chance into 0..1", function()
+		local s =
+			PayoutLogic.parseStakes({ soleStealer = 1, loneSharer = 1, allShare = 1, dropChance = 3 }) :: PayoutLogic.Stakes
+		expect(s.dropChance):toBe(1)
+	end)
+
+	it("words Steal and Share", function()
+		local s = PayoutLogic.parseStakes(raw) :: PayoutLogic.Stakes
+		local steal = PayoutLogic.stakesCopy(s, "Steal")
+		expect(steal.amount):toBe("275")
+		expect(steal.caption):toBe("only if both share")
+		local share = PayoutLogic.stakesCopy(s, "Share")
+		expect(share.amount):toBe("27")
+		expect(share.caption):toBe("55 if both steal")
+	end)
+
+	it("rounds the drop chance to a whole percent", function()
+		local s = PayoutLogic.parseStakes(raw) :: PayoutLogic.Stakes
+		expect(PayoutLogic.dropChanceLine(s)):toBe("30% item drop")
+		local low =
+			PayoutLogic.parseStakes({ soleStealer = 1, loneSharer = 1, allShare = 1, dropChance = 0.1 }) :: PayoutLogic.Stakes
+		expect(PayoutLogic.dropChanceLine(low)):toBe("10% item drop")
+	end)
+end)

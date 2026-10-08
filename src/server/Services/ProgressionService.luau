@@ -520,6 +520,23 @@ local ProgressionService: Loader.Service = {
 		return RewardLogic.rungFor(rungThresholds, streak + 1)
 	end,
 
+	-- What each outcome would pay `player`, and their drop chance, at
+	-- the rung a win would put them on: the Studio's stakes panel
+	-- (design-decisions.md Q1, "a much bigger reason to steal"). The
+	-- same RewardLogic calls rollReward makes, so the panel can't
+	-- promise a different number from the one a win pays.
+	stakesFor = function(player: Player): { [string]: number }
+		local DataService = Loader.get("DataService") :: any
+		local rung = RewardLogic.rungFor(rungThresholds, (DataService.getStreak(player) :: number) + 1)
+		local config = GameConfig.winRewards
+		return {
+			soleStealer = RewardLogic.currencyFor(config, "SoleStealer", rung),
+			loneSharer = RewardLogic.currencyFor(config, "LoneSharer", rung),
+			allShare = RewardLogic.currencyFor(config, "AllShare", rung),
+			dropChance = RewardLogic.dropChanceFor(config, rung),
+		}
+	end,
+
 	-- Re-exported so a caller (DecisionService) maps an outcome branch
 	-- to a reason code through the same function the tests cover,
 	-- rather than keeping its own copy of the mapping.

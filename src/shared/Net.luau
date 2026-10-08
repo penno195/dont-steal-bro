@@ -898,6 +898,19 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Server -> one finalist: their own stakes for the stakes panel -
+	-- {soleStealer, loneSharer, allShare, dropChance} at the rung a win
+	-- would put them on (design-decisions.md Q1's 2026-10-08 case).
+	-- Fired once, with DecisionParticipants. Targeted (fireClient), never
+	-- broadcast: the amounts scale with the streak (Q7 condition 1).
+	DecisionStakes = {
+		name = "DecisionStakes",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Server -> client (broadcast): "when someone locks in, broadcast
 	-- only that they locked in, never what they chose" (the task's own
 	-- requirement, verbatim) - this payload is ONLY ever {playerId}.

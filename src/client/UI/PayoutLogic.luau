@@ -112,4 +112,58 @@ function PayoutLogic.summary(payout: Payout, nameOf: NameOf?): string
 	return string.format("%s · %s: %s", coins, PayoutLogic.dropLabel(drop), dropText)
 end
 
+-- ===== the stakes, before the choice ========================================
+--
+-- What each outcome would pay you, shown over the hold buttons from the
+-- intro on (DecisionStakes; design-decisions.md Q1's 2026-10-08 case,
+-- your own numbers only - the one pre-lock-in exception to Q7).
+
+export type Stakes = {
+	soleStealer: number,
+	loneSharer: number,
+	allShare: number,
+	dropChance: number, -- 0..1
+}
+
+export type StakesCopy = {
+	amount: string, -- the large-type number
+	caption: string, -- when it pays
+}
+
+-- nil for anything malformed, the same stance as parse: no panel
+-- beats a wrong number.
+function PayoutLogic.parseStakes(raw: any): Stakes?
+	if type(raw) ~= "table" then
+		return nil
+	end
+	for _, key in { "soleStealer", "loneSharer", "allShare", "dropChance" } do
+		if type(raw[key]) ~= "number" then
+			return nil
+		end
+	end
+	return table.freeze({
+		soleStealer = raw.soleStealer,
+		loneSharer = raw.loneSharer,
+		allShare = raw.allShare,
+		dropChance = math.clamp(raw.dropChance, 0, 1),
+	})
+end
+
+-- A button's own stakes. Share's large number is the all-share amount,
+-- captioned with the lone-sharer one (user decision, 2026-10-08).
+function PayoutLogic.stakesCopy(stakes: Stakes, choice: string): StakesCopy
+	if choice == "Steal" then
+		return table.freeze({ amount = tostring(stakes.soleStealer), caption = "only if both share" })
+	end
+	return table.freeze({
+		amount = tostring(stakes.allShare),
+		caption = string.format("%d if both steal", stakes.loneSharer),
+	})
+end
+
+-- "10% item drop". Rounded, so a 0.3 that floats as 0.29999 still reads 30.
+function PayoutLogic.dropChanceLine(stakes: Stakes): string
+	return string.format("%d%% item drop", math.floor(stakes.dropChance * 100 + 0.5))
+end
+
 return PayoutLogic

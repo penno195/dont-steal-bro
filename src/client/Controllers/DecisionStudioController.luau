@@ -11,6 +11,8 @@
 --     ever {playerId}.
 --   - everyone's choices from DecisionReveal, the first and only packet
 --     that carries them.
+--   - its own stakes (what each outcome would pay it, and its drop
+--     chance) from DecisionStakes, targeted, at the Studio's start.
 --   - its own streak before/after, and a win's payout, from
 --     DecisionPersonalResult, which the server fires to this player
 --     alone, after the reveal.
@@ -69,6 +71,7 @@ local acked = source(false)
 local reveal = source(nil :: DecisionLogic.Reveal?)
 local personal = source(nil :: DecisionLogic.Personal?)
 local payout = source(nil :: PayoutLogic.Payout?)
+local stakes = source(nil :: PayoutLogic.Stakes?)
 local chat = source(nil :: DecisionLogic.Rect?)
 local keyboard = source(nil :: number?)
 
@@ -191,6 +194,7 @@ local function resetStudio()
 	reveal(nil)
 	personal(nil)
 	payout(nil)
+	stakes(nil)
 	confirm(DecisionLogic.OPEN)
 end
 
@@ -239,6 +243,7 @@ local store: DecisionStudio.Store = {
 	reveal = reveal,
 	personal = personal,
 	payout = payout,
+	stakes = stakes,
 	nameOf = DropNames,
 	chat = chat,
 	keyboard = keyboard,
@@ -645,6 +650,12 @@ function DecisionStudioController:init()
 		if parsed ~= nil then
 			reveal(parsed)
 		end
+	end)
+
+	-- Your own stakes, right after DecisionParticipants (whose reset
+	-- cleared the last round's). Q1's 2026-10-08 case.
+	Net.onClientEvent("DecisionStakes", function(payload: any)
+		stakes(PayoutLogic.parseStakes(payload))
 	end)
 
 	Net.onClientEvent("DecisionPersonalResult", function(payload: any)

@@ -98,6 +98,9 @@ export type Store = {
 	-- Never another finalist's (user decision, Q7's 2026-10-02 case).
 	payout: (() -> PayoutLogic.Payout?)?,
 	nameOf: PayoutLogic.NameOf?, -- a drop's display name, from config
+	-- Your own stakes, on the hold buttons from the intro on
+	-- (DecisionStakes, Q1's 2026-10-08 case). nil shows the plain face.
+	stakes: (() -> PayoutLogic.Stakes?)?,
 	chat: () -> DecisionLogic.Rect?, -- Roblox's chat window, screen pixels
 	keyboard: (() -> number?)?, -- on-screen keyboard's top edge, screen pixels; nil when closed
 	-- The ready-up notice (DecisionLogic.waitingNotice); nil hides it.
@@ -134,6 +137,9 @@ local RAIL_W = 112 -- the menu's store/boards/settings rail down the right edge,
 local CHOICE_W = 150
 local CHOICE_H = 132
 local HOLD_CHIP_H = 30
+local STAKES_COINS_H = 32 -- the face once your stakes arrive: 26 + 32 + 14 + 14 + 24 + 4 gaps fits CHOICE_H
+local STAKES_LINE_H = 14
+local STAKES_CHIP_H = 24
 local CHAT_W = 320 -- the chat line between the buttons, landscape
 local EDGE = Theme.spacing.lg -- buttons' distance from the screen edges
 local CHAT_MAX_FRACTION = 0.3
@@ -618,13 +624,71 @@ local function holdHint(choice: Choice): string
 	return "HOLD"
 end
 
+-- One icon + text line of the stakes: the coins, then the drop chance.
+local function stakesLine(
+	name: string,
+	order: number,
+	iconKey: string,
+	height: number,
+	textStyle: string,
+	ink: Color3,
+	text: () -> string,
+	shown: () -> boolean
+): Frame
+	local icon = Icons.view(iconKey, height - Theme.spacing.xxs, ink)
+	icon.LayoutOrder = 1
+	return create("Frame")({
+		Name = name,
+		LayoutOrder = order,
+		Size = UDim2.new(1, 0, 0, height),
+		BackgroundTransparency = 1,
+		Visible = shown,
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, Theme.spacing.xs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		icon :: any,
+		Base.text(textStyle, {
+			Name = "Text",
+			LayoutOrder = 2,
+			AutomaticSize = Enum.AutomaticSize.X,
+			TextScaled = false,
+			TextWrapped = false,
+			TextSize = Theme.type[textStyle].size,
+			Size = UDim2.fromOffset(0, height),
+			Text = text,
+			TextColor3 = ink,
+		}),
+	}) :: Frame
+end
+
 -- The hold button's face: both choices the same shape and size, told
--- apart by colour, icon, word and side of the screen.
-local function holdFace(choice: Choice): Frame
+-- apart by colour, icon, word and side of the screen. Once your stakes
+-- arrive, the icon gives way to them: what this choice pays you in
+-- large type, when it pays, and your item-drop chance (design-decisions
+-- Q1's 2026-10-08 case). Both buttons show the drop: either win rolls it.
+local function holdFace(choice: Choice, store: Store): Frame
 	local style = decisionStyle(choice)
 	local fill, ink = Theme.color[style.color], Theme.color[style.on]
+	local stakesSource = store.stakes
+	local stakes = derive(function(): PayoutLogic.Stakes?
+		return if stakesSource then stakesSource() else nil
+	end)
+	local hasStakes = derive(function()
+		return stakes() ~= nil
+	end)
+	local copy = derive(function(): PayoutLogic.StakesCopy?
+		local s = stakes()
+		return if s then PayoutLogic.stakesCopy(s, choice) else nil
+	end)
 	local icon = Icons.view(style.icon, 36, ink)
 	icon.LayoutOrder = 1
+	effect(function()
+		icon.Visible = not hasStakes()
+	end)
 	return create("Frame")({
 		Name = "Face" .. choice,
 		Size = UDim2.fromScale(1, 1),
@@ -634,7 +698,9 @@ local function holdFace(choice: Choice): Frame
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, Theme.spacing.xs),
+			Padding = function()
+				return UDim.new(0, if hasStakes() then Theme.spacing.xxs else Theme.spacing.xs)
+			end,
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
 		icon :: any,
@@ -645,10 +711,34 @@ local function holdFace(choice: Choice): Frame
 			Text = style.label,
 			TextColor3 = ink,
 		}),
+		stakesLine("Coins", 3, "coin", STAKES_COINS_H, "headline", ink, function()
+			local c = copy()
+			return if c then c.amount else ""
+		end, hasStakes),
+		Base.text("caption", {
+			Name = "When",
+			LayoutOrder = 4,
+			Size = UDim2.new(1, -Theme.spacing.sm, 0, STAKES_LINE_H),
+			Text = function()
+				local c = copy()
+				return if c then c.caption else ""
+			end,
+			TextColor3 = ink,
+			Visible = hasStakes,
+		}),
+		stakesLine("Drop", 5, "gift", STAKES_LINE_H, "caption", ink, function()
+			local s = stakes()
+			return if s then PayoutLogic.dropChanceLine(s) else ""
+		end, hasStakes),
 		create("Frame")({
 			Name = "HoldChip",
-			LayoutOrder = 3,
-			Size = UDim2.fromOffset(CHOICE_W - 2 * Theme.spacing.lg, HOLD_CHIP_H),
+			LayoutOrder = 6,
+			Size = function()
+				return UDim2.fromOffset(
+					CHOICE_W - 2 * Theme.spacing.lg,
+					if hasStakes() then STAKES_CHIP_H else HOLD_CHIP_H
+				)
+			end,
 			BackgroundColor3 = ink,
 			BackgroundTransparency = 0.1,
 			Base.corner(Theme.radius.pill),
@@ -682,7 +772,7 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 		hb:Disconnect()
 	end)
 
-	local faceFrame = holdFace(choice)
+	local faceFrame = holdFace(choice, store)
 	faceFrame.ZIndex = 1
 	local button = create("TextButton")({
 		Name = "Hold" .. choice,

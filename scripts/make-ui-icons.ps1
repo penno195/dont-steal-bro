@@ -171,3 +171,16 @@ $g.CompositingMode = 'SourceCopy'
 $g.FillPath($hole, (RoundRect 110 26 36 16 6))
 foreach ($x in @(86, 120, 154)) { $g.FillPath($hole, (RoundRect $x 108 16 110 8)) }
 Save-Icon $bmp $g 'trash'
+
+# gift: a win's item-drop chance on the Decision Studio's stakes. A box
+# and its wider lid, a ribbon gap cut down both, two bow loops on top.
+$bmp, $g = New-Canvas
+$g.FillPath($fill, (RoundRect 40 128 176 112 12))
+$g.FillPath($fill, (RoundRect 24 84 208 40 10))
+$bow = New-Object System.Drawing.Pen $white, 22
+$g.DrawEllipse($bow, 62, 26, 62, 46)
+$g.DrawEllipse($bow, 132, 26, 62, 46)
+$g.CompositingMode = 'SourceCopy'
+$g.FillRectangle($hole, 116, 84, 24, 160)
+$g.FillRectangle($hole, 24, 124, 208, 6)
+Save-Icon $bmp $g 'gift'
