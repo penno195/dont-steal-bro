@@ -50,6 +50,35 @@ describe("TaskViewLogic.windowSize", function()
 	end)
 end)
 
+describe("TaskViewLogic.fitCard", function()
+	local CHROME = { width = 24, height = 128 }
+
+	it("wraps the content in the chrome when there's room", function()
+		local w, h = TaskViewLogic.fitCard({ width = 548, height = 276 }, CHROME, 300, 1400, 900, 24)
+		expect(w):toBe(572)
+		expect(h):toBe(404)
+	end)
+
+	it("keeps the header's minimum width round narrow content", function()
+		local w, h = TaskViewLogic.fitCard({ width = 240, height = 332 }, CHROME, 300, 1400, 900, 24)
+		expect(w):toBe(324)
+		expect(h):toBe(460)
+	end)
+
+	it("shrinks both axes evenly on a short screen, leaving no spare width", function()
+		-- 400 tall: 400 - 48 gap - 128 chrome = 224 for content, k = 0.5.
+		local w, h = TaskViewLogic.fitCard({ width = 600, height = 448 }, CHROME, 300, 1400, 400, 24)
+		expect(w):toBe(324)
+		expect(h):toBe(352)
+	end)
+
+	it("never goes negative", function()
+		local w, h = TaskViewLogic.fitCard({ width = 600, height = 448 }, CHROME, 300, 10, 10, 24)
+		expect(w):toBe(0)
+		expect(h):toBe(0)
+	end)
+end)
+
 describe("TaskViewLogic.flash", function()
 	it("blanks between items so a repeated digit reads as two flashes", function()
 		-- 1s per item, lit for the first 60%.

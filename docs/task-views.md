@@ -18,7 +18,9 @@ for the handler, config and remote. This page covers only the view.
 1. **Server half first** — config, handler, submission remote, per
    `how-to-add-a-task.md`. Your `TaskDef.verb` picks your adapter.
 2. **Create `src/client/TaskViews/<Name>.luau`** and return
-   `TaskViewBase.define({ taskId, title, explainer, build, onProgress? })`.
+   `TaskViewBase.define({ taskId, title, explainer, contentSize, build, onProgress? })`.
+   `contentSize` is what `build` lays out at a fit scale of 1, in reference
+   px (a function of the challenge if it varies); the card wraps it.
    The card shows no title; `title` and `explainer` (a sentence or two
    on how to play) appear behind the header's (i). The registry picks
    it up; nothing else is edited.
@@ -74,9 +76,13 @@ for the handler, config and remote. This page covers only the view.
 
 ## What the shell guarantees
 
-- **Presentation:** full-screen sheet on any touch device or small
-  screen; a centred window on a big mouse/gamepad screen
-  (`Tokens.taskView.windowMinShortAxis`). Re-decided live on rotate.
+- **Presentation:** a card sized to the view's content (`contentSize`:
+  the play area's natural size, plus header and status line), scaled
+  down evenly to fit the screen (`TaskViewLogic.fitCard`). On any touch
+  device or small screen it slides up over a near-black backdrop that
+  swallows touches (a sheet); on a big mouse/gamepad screen it grows in
+  over a dimmed world (a window, `Tokens.taskView.windowMinShortAxis`).
+  Re-decided live on rotate.
 - **Input lock:** controls and camera are frozen from open to close and
   restored on every close path. The lock works at the input layer
   (`ControlModule:Disable`); it never touches `WalkSpeed`/`JumpPower`,

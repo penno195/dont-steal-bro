@@ -32,15 +32,13 @@ local RunService = game:GetService("RunService")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Parent.UI.Components.Base)
-local ComponentLogic = require(script.Parent.Parent.UI.Components.ComponentLogic)
-local Env = require(script.Parent.Parent.UI.Components.Env)
 local InputAdapters = require(script.Parent.Parent.UI.InputAdapters)
+local TaskArt = require(script.Parent.Parent.UI.TaskArt)
 local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
 local TaskViewLogic = require(script.Parent.Parent.UI.TaskViewLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local create = vide.create
-local derive = vide.derive
 local source = vide.source
 
 type Challenge = {
@@ -57,6 +55,10 @@ type Feedback = {
 local KEY_SIZE = Vector2.new(88, 72)
 local DISPLAY_HEIGHT = Theme.spacing.xxxl + Theme.spacing.lg
 local CELL_WIDTH = 44
+local BEZEL = 18 -- the LCD's steel bezel, each side
+local PLATE_INSET = 22 -- the keypad plate's margin round the keys
+local KEY_FACE = Color3.fromHex("#E4E8EE")
+local KEY_INK = Color3.fromHex("#1B2028")
 -- Share of each digit's slot it's lit for; the rest is the dark gap.
 local FLASH_ON = 0.65
 -- Let the sheet finish sliding in before the first digit, or it's missed.
@@ -91,34 +93,14 @@ end
 -- FuseRewire.luau for why onProgress can't reach the sources directly).
 local handlers: { [any]: (Feedback) -> () } = setmetatable({}, { __mode = "k" }) :: any
 
-local function keyVisual(key: InputAdapters.SequenceKey, state: Base.Source<Base.State>): { Instance }
-	local style = derive(function()
-		return ComponentLogic.variantStyle("secondary", state())
-	end)
-	return {
-		create("Frame")({
-			Name = "Surface",
-			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Env.animate(function(): Color3
-				return Theme.color[style().fill]
-			end, Theme.motion.fast),
-			Base.corner(Theme.radius.md),
-			-- The idle fill matches the card; the outline makes it a key.
-			create("UIStroke")({
-				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-				Color = Theme.color.line,
-				Thickness = 2,
-			}),
-			Base.text("headline", {
-				Size = UDim2.fromScale(1, 1),
-				Text = key.label,
-				TextColor3 = function()
-					return Theme.color[style().ink]
-				end,
-			}),
-		}),
-	}
+-- A chunky light-grey key (UI/TaskArt.button), greyed out while the
+-- code plays (the adapter disables the pad then).
+local function keyVisual(
+	key: InputAdapters.SequenceKey,
+	state: Base.Source<Base.State>,
+	focused: Base.Source<boolean>
+): { Instance }
+	return TaskArt.button(key.label, KEY_FACE, { sliceScale = 0.45, ink = KEY_INK })(state, focused)
 end
 
 local function lcdText(props: { [any]: any }): TextLabel
@@ -139,6 +121,12 @@ return TaskViewBase.define({
 	taskId = "code-playback",
 	title = "Code Playback",
 	explainer = "Watch the code flash up, one digit per box, then type it on the keypad. A wrong digit clears it and you start again.",
+	-- The LCD over the wide (5 x 2) keypad on its plate, which a card
+	-- this shape always picks (see relayout).
+	contentSize = Vector2.new(
+		5 * KEY_SIZE.X + 4 * Theme.spacing.md + 2 * PLATE_INSET,
+		DISPLAY_HEIGHT + Theme.spacing.sm + 2 * KEY_SIZE.Y + Theme.spacing.md + 2 * PLATE_INSET
+	),
 
 	build = function(ctx)
 		local challenge = ctx.challenge :: Challenge
@@ -255,58 +243,60 @@ return TaskViewBase.define({
 			)
 		end
 
-		local lcd = create("Frame")({
-			Name = "CodeDisplay",
+		-- The LCD sits in a screwed steel bezel (UI/TaskArt.plate).
+		local lcd = TaskArt.plate({
+			name = "CodeDisplay",
+			sliceScale = 0.35,
 			AnchorPoint = Vector2.new(0.5, 0),
 			Position = UDim2.fromScale(0.5, 0),
 			Size = UDim2.fromOffset(
-				count * CELL_WIDTH + (count - 1) * Theme.spacing.sm + 2 * Theme.spacing.lg,
+				count * CELL_WIDTH + (count - 1) * Theme.spacing.sm + 2 * Theme.spacing.lg + 2 * BEZEL,
 				DISPLAY_HEIGHT
 			),
-			BackgroundColor3 = Theme.color.surface,
-			Base.corner(Theme.radius.md),
+		})
+		create("UIPadding")({
+			PaddingTop = UDim.new(0, Theme.spacing.sm),
+			PaddingBottom = UDim.new(0, Theme.spacing.sm + 2),
+			PaddingLeft = UDim.new(0, BEZEL),
+			PaddingRight = UDim.new(0, BEZEL),
+			Parent = lcd,
+		})
+		create("Frame")({
+			Name = "Glass",
+			Parent = lcd,
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = LCD_GLASS,
+			Base.corner(Theme.radius.sm),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = LCD_INK,
+				Transparency = 0.6,
+				Thickness = 2,
+			}),
 			create("UIPadding")({
-				PaddingTop = UDim.new(0, Theme.spacing.sm),
+				PaddingTop = UDim.new(0, Theme.spacing.xs),
 				PaddingBottom = UDim.new(0, Theme.spacing.sm),
-				PaddingLeft = UDim.new(0, Theme.spacing.sm),
-				PaddingRight = UDim.new(0, Theme.spacing.sm),
 			}),
 			create("Frame")({
-				Name = "Glass",
+				Name = "Cells",
+				BackgroundTransparency = 1,
 				Size = UDim2.fromScale(1, 1),
-				BackgroundColor3 = LCD_GLASS,
-				Base.corner(Theme.radius.sm),
-				create("UIStroke")({
-					BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-					Color = LCD_INK,
-					Transparency = 0.6,
-					Thickness = 2,
+				create("UIListLayout")({
+					FillDirection = Enum.FillDirection.Horizontal,
+					HorizontalAlignment = Enum.HorizontalAlignment.Center,
+					SortOrder = Enum.SortOrder.LayoutOrder,
+					Padding = UDim.new(0, Theme.spacing.sm),
 				}),
-				create("UIPadding")({
-					PaddingTop = UDim.new(0, Theme.spacing.xs),
-					PaddingBottom = UDim.new(0, Theme.spacing.sm),
-				}),
-				create("Frame")({
-					Name = "Cells",
-					BackgroundTransparency = 1,
-					Size = UDim2.fromScale(1, 1),
-					create("UIListLayout")({
-						FillDirection = Enum.FillDirection.Horizontal,
-						HorizontalAlignment = Enum.HorizontalAlignment.Center,
-						SortOrder = Enum.SortOrder.LayoutOrder,
-						Padding = UDim.new(0, Theme.spacing.sm),
-					}),
-					cells,
-				}),
-				lcdText({
-					Name = "Error",
-					Text = "ERR",
-					Visible = showError,
-				}),
+				cells,
 			}),
-		}) :: Frame
-		-- 4 cells come to ~232 reference px; the narrowest play area (a
+			lcdText({
+				Name = "Error",
+				Text = "ERR",
+				Visible = showError,
+			}),
+		})
+		-- 4 cells in the bezel come to ~268 reference px; the narrowest play area (a
 		-- 270-point phone at the 0.75 scale floor) is ~312, so no fit pass.
 
 		local keypadArea = create("Frame")({
@@ -322,7 +312,7 @@ return TaskViewBase.define({
 		-- The hidden pad is disabled, so a keyboard digit fires only once.
 		local wide = source(false)
 		local fits: { () -> number } = {}
-		local function pad(columns: number, isWide: boolean): Frame
+		local function pad(columns: number, isWide: boolean): ImageLabel
 			local active = function()
 				return wide() == isWide
 			end
@@ -339,23 +329,32 @@ return TaskViewBase.define({
 					ctx.submit("KeypadDigitSubmit", { digit = tonumber(id) })
 					ctx.cue("Active")
 				end,
-				visual = function(key, state)
-					return keyVisual(key, state)
+				visual = function(key, state, focused)
+					return keyVisual(key, state, focused)
 				end,
 			})
 			grid.Name = if isWide then "WideKeypad" else "Keypad"
-			grid.AnchorPoint = Vector2.new(0.5, 1)
-			grid.Position = UDim2.fromScale(0.5, 1)
+			grid.AnchorPoint = Vector2.new(0.5, 0.5)
+			grid.Position = UDim2.fromScale(0.5, 0.5)
+			-- The keys sit on a steel plate (UI/TaskArt.plate) that is
+			-- what gets placed, shown and fitted.
+			local plate = TaskArt.plate({
+				name = grid.Name .. "Plate",
+				AnchorPoint = Vector2.new(0.5, 1),
+				Position = UDim2.fromScale(0.5, 1),
+				Size = UDim2.fromOffset(grid.Size.X.Offset + 2 * PLATE_INSET, grid.Size.Y.Offset + 2 * PLATE_INSET),
+			})
+			grid.Parent = plate
 			vide.effect(function()
-				grid.Visible = active()
+				plate.Visible = active()
 			end)
 			-- Shrink-only fit. Both absolute sizes carry the same
 			-- ancestor scaling, so their ratio is scale-independent;
-			-- the grid's own UIScale is divided back out first.
-			local fitScale = create("UIScale")({ Parent = grid }) :: UIScale
+			-- the plate's own UIScale is divided back out first.
+			local fitScale = create("UIScale")({ Parent = plate }) :: UIScale
 			-- Returns the scale it settled on, so relayout can compare pads.
 			table.insert(fits, function(): number
-				local room, native = keypadArea.AbsoluteSize, grid.AbsoluteSize / fitScale.Scale
+				local room, native = keypadArea.AbsoluteSize, plate.AbsoluteSize / fitScale.Scale
 				if room.X <= 0 or room.Y <= 0 or native.X <= 0 or native.Y <= 0 then
 					return 0
 				end
@@ -365,8 +364,8 @@ return TaskViewBase.define({
 				end
 				return scale
 			end)
-			grid.Parent = keypadArea
-			return grid
+			plate.Parent = keypadArea
+			return plate
 		end
 		pad(3, false)
 		pad(5, true)

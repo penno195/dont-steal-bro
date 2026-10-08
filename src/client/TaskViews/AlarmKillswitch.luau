@@ -4,15 +4,20 @@
 -- `alarm-killswitch`) - see src/server/TaskHandlers/AlarmKillswitch.luau
 -- for the server half. Built on UI/TaskViewBase like PressureValve.luau:
 -- the shell owns the window, close, timer and status line; this file
--- owns the beacon, the KILL button and the hold bar.
+-- owns the siren, the KILL button and its ring of lamps.
 --
--- A red alarm beacon flashes over a big mushroom KILL button. Press and
--- the bar under it fills over the rolled hold length; let go before it
--- is full and it empties (the server says so too - `early`). When the
--- bar fills the view lets go for the player, a hair past full so
--- network jitter never makes an honest hold look short, and the beacon
--- goes dark. The bar is a client-side picture of the server's clock,
--- never read back for validation: only the press/release edges travel.
+-- A steel panel (art: UI/TaskArt) with a red siren flashing on top and a
+-- big mushroom KILL button in a hazard-striped collar, labelled PRESS &
+-- HOLD. Between the collar and the button a ring of lamps is the hold
+-- meter: press and they light amber one by one round the ring over the
+-- rolled hold length; let go before the ring is full and it goes dark
+-- (the server says so too - `early`). Until the first press a halo
+-- breathes behind the button, so it reads as "this is the thing". When
+-- the ring fills the view lets go for the player, a hair past full so
+-- network jitter never makes an honest hold look short, the ring turns
+-- green and the siren dies. The ring is a client-side picture of the
+-- server's clock, never read back for validation: only the press/release
+-- edges travel.
 --
 -- The button is Base.interactive's job everywhere else, but it only
 -- reports a finished tap; Hold needs the press and the release, so this
@@ -26,10 +31,9 @@ local UserInputService = game:GetService("UserInputService")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
-local Base = require(script.Parent.Parent.UI.Components.Base)
 local Env = require(script.Parent.Parent.UI.Components.Env)
+local TaskArt = require(script.Parent.Parent.UI.TaskArt)
 local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
-local Theme = require(script.Parent.Parent.UI.Theme)
 
 local create = vide.create
 local source = vide.source
@@ -43,17 +47,28 @@ type Feedback = {
 	early: boolean?,
 }
 
--- Reference px. layout() scales the whole stack to fit the area.
-local BEACON = 56
-local BUTTON = 150
-local BAR = 12
-local GAP = Theme.spacing.md
--- Released for the player this long past a full bar (see header).
+-- Reference px; the art is drawn at 2x these. layout() scales the panel.
+local PLATE = Vector2.new(240, 280)
+local SIREN = 72
+local SIREN_OVERLAP = 20 -- the siren's base sits on the plate's top edge
+local WELL = Vector2.new(120, 116) -- the button's centre on the plate
+local BUTTON = 120
+local RING_RADIUS = 71.5 -- between the collar and the button
+local LAMPS = 24
+local LAMP = 12
+local WIDTH = PLATE.X
+local HEIGHT = SIREN - SIREN_OVERLAP + PLATE.Y
+-- Released for the player this long past a full ring (see header).
 local RELEASE_MARGIN_SECONDS = 0.1
-local FLASH_RATE = 4 -- beacon flashes per second while the alarm blares
-local BEACON_ON = Color3.fromHex("#FF3B30")
-local BEACON_OFF = Color3.fromHex("#4A1512")
-local BUTTON_RIM = Color3.fromHex("#5A0F14")
+local FLASH_RATE = 4 -- siren flashes per second while the alarm blares
+local SIREN_ON = Color3.new(1, 1, 1)
+local SIREN_OFF = Color3.fromRGB(95, 80, 80)
+local SIREN_GLOW = Color3.fromHex("#FF3B30")
+local LAMP_OFF = Color3.fromHex("#3A3F48")
+local LAMP_HOLD = Color3.fromHex("#FFC53D")
+local LAMP_DONE = Color3.fromHex("#3CCB7F")
+local BUTTON_HELD = Color3.fromRGB(200, 200, 200)
+local BREATHE_RATE = 1.6 -- the idle halo's breaths per second
 
 -- Per-attempt feedback handlers, keyed by the attempt's ctx (see
 -- FuseRewire.luau for why onProgress can't reach the sources directly).
@@ -70,7 +85,8 @@ end
 return TaskViewBase.define({
 	taskId = "alarm-killswitch",
 	title = "Alarm Killswitch",
-	explainer = "Press and HOLD the KILL button until the bar fills. Let go early and it resets.",
+	explainer = "Press and HOLD the red KILL button until the ring of lights is full. Let go early and it resets.",
+	contentSize = Vector2.new(WIDTH, HEIGHT),
 
 	build = function(ctx)
 		local challenge = ctx.challenge :: Challenge
@@ -79,16 +95,20 @@ return TaskViewBase.define({
 		local pressInput: InputObject? = nil -- the touch/click holding it down
 		local pressedAt = 0
 		local finishing = false -- released for the player; waiting on the server
-		local silenced = false
+		local everPressed = false
 		local fill = source(0)
 		local held = source(false)
+		local silenced = source(false)
+		local sirenLit = source(true)
+		local breath = source(0) -- 0..1, the idle halo
 
 		local function press(input: InputObject)
-			if pressInput ~= nil or finishing or silenced then
+			if pressInput ~= nil or finishing or silenced() then
 				return
 			end
 			pressInput = input
 			pressedAt = os.clock()
+			everPressed = true
 			held(true)
 			ctx.submit("HoldSubmit", { pressed = true })
 			ctx.setStatus("Keep holding...", "Active")
@@ -103,7 +123,7 @@ return TaskViewBase.define({
 			ctx.submit("HoldSubmit", { pressed = false })
 			if early then
 				fill(0)
-				ctx.setStatus("Let go too soon", "Bad")
+				ctx.setStatus("Let go too soon - hold it longer", "Bad")
 				ctx.cue("Bad")
 			else
 				finishing = true
@@ -127,14 +147,6 @@ return TaskViewBase.define({
 			end
 		end)
 
-		local beacon = create("Frame")({
-			Name = "Beacon",
-			AnchorPoint = Vector2.new(0.5, 0),
-			BackgroundColor3 = BEACON_ON,
-			Base.corner(Theme.radius.pill),
-			create("UIStroke")({ Color = BUTTON_RIM, Thickness = 3 }),
-		}) :: Frame
-
 		local startedAt = os.clock()
 		local conn = RunService.Heartbeat:Connect(function()
 			local now = os.clock()
@@ -146,14 +158,11 @@ return TaskViewBase.define({
 				end
 			end
 			-- Flashes until silenced; a steady glow under reduced motion.
-			if silenced then
-				beacon.BackgroundColor3 = BEACON_OFF
-			elseif Env.reducedMotion() then
-				beacon.BackgroundColor3 = BEACON_ON
-			else
-				local on = math.floor((now - startedAt) * FLASH_RATE * 2) % 2 == 0
-				beacon.BackgroundColor3 = if on then BEACON_ON else BEACON_OFF
-			end
+			local still = Env.reducedMotion()
+			sirenLit(not silenced() and (still or math.floor((now - startedAt) * FLASH_RATE * 2) % 2 == 0))
+			breath(
+				if everPressed or still then 0 else 0.5 - 0.5 * math.cos((now - startedAt) * BREATHE_RATE * 2 * math.pi)
+			)
 		end)
 		vide.cleanup(function()
 			conn:Disconnect()
@@ -164,14 +173,14 @@ return TaskViewBase.define({
 			if feedback.holding or not feedback.early then
 				if not feedback.holding then
 					-- The server counted it: the alarm dies before "Done!".
-					silenced = true
+					silenced(true)
 					fill(1)
 					ctx.setStatus("Alarm off!", "Good")
 				end
 				return
 			end
 			-- Early by the server's clock: our own release already reset
-			-- the bar, unless we let go for the player and jitter ate the
+			-- the ring, unless we let go for the player and jitter ate the
 			-- margin - then it's on us, so just ask again without a buzz.
 			if finishing then
 				finishing = false
@@ -180,98 +189,120 @@ return TaskViewBase.define({
 			end
 		end
 
-		ctx.setStatus("Hold KILL to silence it")
+		ctx.setStatus("Press and hold KILL")
 
-		local bar = create("Frame")({
-			Name = "HoldBar",
-			AnchorPoint = Vector2.new(0.5, 0),
-			BackgroundColor3 = Theme.color.surface,
-			Base.corner(Theme.radius.pill),
-			create("Frame")({
-				Name = "Fill",
-				BorderSizePixel = 0,
-				Size = function()
-					return UDim2.fromScale(fill(), 1)
-				end,
-				BackgroundColor3 = function()
-					return if fill() >= 1 then Theme.color.success else Theme.color.warning
-				end,
-				Base.corner(Theme.radius.pill),
-			}),
-		}) :: Frame
+		-- The hold meter: lamp i lights once the fill passes its share,
+		-- clockwise from the top.
+		local ring: { Instance } = {}
+		for i = 1, LAMPS do
+			local angle = (i - 0.5) / LAMPS * 2 * math.pi
+			table.insert(
+				ring,
+				TaskArt.lamp({
+					name = "Lamp" .. i,
+					size = LAMP,
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = UDim2.fromOffset(
+						WELL.X + RING_RADIUS * math.sin(angle),
+						WELL.Y - RING_RADIUS * math.cos(angle)
+					),
+					ZIndex = 2,
+					colour = function()
+						if silenced() then
+							return LAMP_DONE
+						end
+						return if fill() * LAMPS >= i - 0.5 then LAMP_HOLD else LAMP_OFF
+					end,
+				})
+			)
+		end
 
-		local button = create("TextButton")({
+		local button = create("ImageButton")({
 			Name = "KillButton",
-			Text = "",
 			AutoButtonColor = false,
-			AnchorPoint = Vector2.new(0.5, 0),
 			BackgroundTransparency = 1,
+			Image = "",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromOffset(WELL.X, WELL.Y),
 			Size = UDim2.fromOffset(BUTTON, BUTTON),
+			ZIndex = 3,
 			InputBegan = function(input: InputObject)
 				if isPress(input) then
 					press(input)
 				end
 			end,
-			create("Frame")({
-				Name = "Surface",
+			TaskArt.glow({
+				size = BUTTON * 1.5,
+				Position = UDim2.fromScale(0.5, 0.5),
+				colour = Color3.fromHex("#FFE2B0"),
+				transparency = function()
+					return 1 - breath() * 0.6
+				end,
+			}),
+			create("ImageLabel")({
+				Name = "Cap",
+				BackgroundTransparency = 1,
+				Image = TaskArt.image.killButton,
 				AnchorPoint = Vector2.new(0.5, 0.5),
 				Position = UDim2.fromScale(0.5, 0.5),
 				-- Pushed in while held, like a real mushroom button.
 				Size = function()
-					return if held() then UDim2.fromScale(0.92, 0.92) else UDim2.fromScale(1, 1)
+					return if held() then UDim2.fromScale(0.9, 0.9) else UDim2.fromScale(1, 1)
 				end,
-				BackgroundColor3 = Theme.color.danger,
-				Base.corner(Theme.radius.pill),
-				create("UIStroke")({
-					BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-					Color = BUTTON_RIM,
-					Thickness = 6,
-				}),
-				create("UIGradient")({
-					Rotation = 90,
-					Color = function()
-						local low = if held() then Color3.fromRGB(140, 140, 140) else Color3.fromRGB(170, 170, 170)
-						return ColorSequence.new(Color3.new(1, 1, 1), low)
-					end,
-				}),
-				Base.text("headline", {
-					Size = UDim2.fromScale(1, 1),
-					Text = "KILL",
-					TextColor3 = Theme.color.onDanger,
-				}),
+				ImageColor3 = function()
+					return if held() then BUTTON_HELD else Color3.new(1, 1, 1)
+				end,
 			}),
-		}) :: TextButton
+		}) :: ImageButton
+		table.insert(ring, button)
 
-		-- Beacon, button and bar stacked and centred, scaled down as one
-		-- when the area is short (a monitor's window is ~260 reference px).
-		local stack = create("Frame")({
+		local plate = create("ImageLabel")({
+			Name = "Plate",
+			BackgroundTransparency = 1,
+			Image = TaskArt.image.killPlate,
+			Position = UDim2.fromOffset(0, SIREN - SIREN_OVERLAP),
+			Size = UDim2.fromOffset(PLATE.X, PLATE.Y),
+			ring,
+		}) :: ImageLabel
+
+		local panel = create("Frame")({
 			Name = "Panel",
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(BUTTON, BEACON + GAP + BUTTON + GAP + BAR),
+			Size = UDim2.fromOffset(WIDTH, HEIGHT),
+			TaskArt.glow({
+				size = SIREN * 2.2,
+				Position = UDim2.fromOffset(WIDTH / 2, SIREN * 0.45),
+				colour = SIREN_GLOW,
+				transparency = function()
+					return if sirenLit() then 0.35 else 1
+				end,
+			}),
+			plate,
+			create("ImageLabel")({
+				Name = "Siren",
+				BackgroundTransparency = 1,
+				Image = TaskArt.image.siren,
+				AnchorPoint = Vector2.new(0.5, 0),
+				Position = UDim2.fromOffset(WIDTH / 2, 0),
+				Size = UDim2.fromOffset(SIREN, SIREN),
+				ZIndex = 2,
+				ImageColor3 = function()
+					return if sirenLit() then SIREN_ON else SIREN_OFF
+				end,
+			}),
 		}) :: Frame
-		local fit = create("UIScale")({ Parent = stack }) :: UIScale
-		beacon.Size = UDim2.fromOffset(BEACON, BEACON)
-		beacon.Position = UDim2.fromScale(0.5, 0)
-		beacon.Parent = stack
-		button.Position = UDim2.new(0.5, 0, 0, BEACON + GAP)
-		button.Parent = stack
-		bar.Size = UDim2.fromOffset(BUTTON, BAR)
-		bar.Position = UDim2.new(0.5, 0, 0, BEACON + GAP + BUTTON + GAP)
-		bar.Parent = stack
 
+		local fit = create("UIScale")({ Parent = panel }) :: UIScale
 		local function layout()
 			local s = Env.scale()
 			local size = ctx.area.AbsoluteSize
 			if size.X <= 0 or size.Y <= 0 or s <= 0 then
 				return
 			end
-			local w, h = size.X / s, size.Y / s
-			local natural = stack.Size.Y.Offset
-			-- Shrinks to fit; never grows past 1.4x so it stays thumb-sized.
-			fit.Scale = math.min(w / BUTTON, h / natural, 1.4)
+			-- Shrinks to fit; never grows past 1.3x so it stays crisp.
+			fit.Scale = math.min(size.X / s / WIDTH, size.Y / s / HEIGHT, 1.3)
 		end
 		local areaChanged = ctx.area:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
 		vide.cleanup(function()
@@ -282,7 +313,7 @@ return TaskViewBase.define({
 			task.defer(layout)
 		end)
 
-		return { stack :: Instance }
+		return { panel :: Instance }
 	end,
 
 	onProgress = function(ctx, feedback)

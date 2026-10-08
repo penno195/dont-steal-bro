@@ -3,16 +3,23 @@
 -- The client half of the Timing reference task (tasks-catalogue.md #11,
 -- `reactor-sync`) - see src/server/TaskHandlers/ReactorSync.luau for the
 -- server half. Built on UI/TaskViewBase like PressureValve.luau: the shell
--- owns the window, close, timer and status line; this file owns the dial
--- and the SYNC button.
+-- owns the window, close, timer and status line; this file owns the
+-- gauge and the SYNC button.
+--
+-- A reactor's CORE OUTPUT gauge (art: UI/TaskArt): a needle swings
+-- across a 150-degree arc of tick lamps, and the ticks inside the green
+-- band are lit, with a bright marker at each of its exact edges (the
+-- ticks alone would round the band to a tick). Track position 0..1 maps
+-- linearly to the arc, so "inside the band" on screen is exactly
+-- TimingLogic.within.
 --
 -- The needle is drawn by TimingLogic.position - the SAME function the
 -- server checks the stop against - on this attempt's clock (seconds since
 -- the view opened, i.e. since the challenge landed). A tap sends that
 -- clock reading (TimingSubmit), freezes the needle where it stopped, and
 -- waits for the server's verdict: the next sweep's start, speed and band
--- come back in its feedback. Three lamps count syncs; three pips are the
--- lives a miss costs.
+-- come back in its feedback. Three lamps count syncs; three red lamps are
+-- the lives a miss costs.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -21,6 +28,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Parent.UI.Components.Base)
 local Env = require(script.Parent.Parent.UI.Components.Env)
+local TaskArt = require(script.Parent.Parent.UI.TaskArt)
 local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local TimingLogic = require(ReplicatedStorage.Shared.TimingLogic)
@@ -48,44 +56,50 @@ type Feedback = {
 	bandCenter: number,
 }
 
--- Reference px; layout() scales the whole panel to the area.
-local WIDTH = 300
-local LAMP = 22
-local DIAL_HEIGHT = 56
-local BUTTON_HEIGHT = 96
-local GAP = Theme.spacing.md
+-- Reference px; the art is drawn at 2x these. layout() scales the panel.
+local GAUGE = Vector2.new(320, 220)
+local PIVOT = Vector2.new(160, 165) -- the needle's hub on the gauge
+local ARC_RADIUS = 115
+local ARC_DEGREES = 75 -- either side of straight up
+local TICKS = 61
+local TICK = Vector2.new(4, 16)
+local NEEDLE = Vector2.new(32, 240) -- hub at the image's centre
+local LAMP = 28
+local LIFE = 20
+local ROW_HEIGHT = 30
+local BUTTON = Vector2.new(290, 80)
+local GAP = Theme.spacing.sm
+local WIDTH = GAUGE.X
+local HEIGHT = GAUGE.Y + GAP + ROW_HEIGHT + GAP + BUTTON.Y
 -- A tap with no answer after this long un-freezes the needle (a dropped
 -- stop - too early, or the server had no honest time left for it).
 local VERDICT_TIMEOUT = 1
 
-local DIAL_FACE = Color3.fromHex("#14202B")
-local NEEDLE = Color3.fromHex("#F2F5F8")
-local LAMP_OFF = Color3.fromHex("#3A3A3A")
-local LAMP_ON = Color3.fromHex("#3DDC84")
+local TICK_OFF = Color3.fromHex("#22364A")
+local BAND = Color3.fromHex("#3CCB7F")
+local BAND_EDGE = Color3.fromHex("#B8FFD6")
+local LAMP_OFF = Color3.fromHex("#3A3F48")
+local LIFE_ON = Color3.fromHex("#F0524F")
+local BUTTON_COLOUR = Color3.fromHex("#FF9A3C")
 
 -- Per-attempt feedback handlers, keyed by the attempt's ctx (see
 -- FuseRewire.luau for why onProgress can't reach the sources directly).
 local handlers: { [any]: (Feedback) -> () } = setmetatable({}, { __mode = "k" }) :: any
 
-local function row(children: { Instance }, height: number, order: number): Frame
-	return create("Frame")({
-		BackgroundTransparency = 1,
-		LayoutOrder = order,
-		Size = UDim2.new(1, 0, 0, height),
-		create("UIListLayout")({
-			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Center,
-			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, Theme.spacing.sm),
-		}),
-		children,
-	}) :: Frame
+local function degrees(pos: number): number
+	return (pos * 2 - 1) * ARC_DEGREES
+end
+
+local function onArc(pos: number, radius: number): UDim2
+	local a = math.rad(degrees(pos))
+	return UDim2.fromOffset(PIVOT.X + radius * math.sin(a), PIVOT.Y - radius * math.cos(a))
 end
 
 return TaskViewBase.define({
 	taskId = "reactor-sync",
 	title = "Reactor Sync",
-	explainer = "Tap SYNC while the needle is in the green band. Three syncs in a row win it. Each miss costs a life, and losing all three starts you over.",
+	explainer = "Tap SYNC while the needle is in the green zone. Three syncs win it. Each miss costs a red light, and losing all three starts you over.",
+	contentSize = Vector2.new(WIDTH, HEIGHT),
 
 	build = function(ctx)
 		local challenge = ctx.challenge :: Challenge
@@ -96,6 +110,7 @@ return TaskViewBase.define({
 
 		local sweepStart = challenge.sweepStart
 		local period = challenge.period
+		local half = challenge.bandHalfWidth
 		local band = source(challenge.bandCenter)
 		local hits = source(0)
 		local lives = source(challenge.lives)
@@ -144,103 +159,143 @@ return TaskViewBase.define({
 			ctx.submit("TimingSubmit", { at = now })
 		end
 
-		local lamps: { Instance } = {}
+		local gaugeChildren: { Instance } = {}
+		for i = 0, TICKS - 1 do
+			local pos = i / (TICKS - 1)
+			table.insert(
+				gaugeChildren,
+				create("Frame")({
+					Name = "Tick" .. i,
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					BorderSizePixel = 0,
+					Position = onArc(pos, ARC_RADIUS),
+					Size = UDim2.fromOffset(TICK.X, TICK.Y),
+					Rotation = degrees(pos),
+					BackgroundColor3 = function()
+						return if TimingLogic.within(pos, band(), half) then BAND else TICK_OFF
+					end,
+					Base.corner(Theme.radius.pill),
+				})
+			)
+		end
+		for _, side in { -1, 1 } do
+			table.insert(
+				gaugeChildren,
+				create("Frame")({
+					Name = if side < 0 then "BandStart" else "BandEnd",
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					BorderSizePixel = 0,
+					Position = function()
+						return onArc(math.clamp(band() + side * half, 0, 1), ARC_RADIUS)
+					end,
+					Rotation = function()
+						return degrees(math.clamp(band() + side * half, 0, 1))
+					end,
+					Size = UDim2.fromOffset(3, TICK.Y + 12),
+					BackgroundColor3 = BAND_EDGE,
+					ZIndex = 2,
+					Base.corner(Theme.radius.pill),
+				})
+			)
+		end
+		table.insert(
+			gaugeChildren,
+			create("ImageLabel")({
+				Name = "Needle",
+				BackgroundTransparency = 1,
+				Image = TaskArt.image.needle,
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromOffset(PIVOT.X, PIVOT.Y),
+				Size = UDim2.fromOffset(NEEDLE.X, NEEDLE.Y),
+				ZIndex = 3,
+				Rotation = function()
+					return degrees(needle())
+				end,
+			})
+		)
+
+		local gauge = create("ImageLabel")({
+			Name = "Gauge",
+			LayoutOrder = 1,
+			BackgroundTransparency = 1,
+			Image = TaskArt.image.gauge,
+			Size = UDim2.fromOffset(GAUGE.X, GAUGE.Y),
+			gaugeChildren,
+		}) :: ImageLabel
+
+		local readout: { Instance } = {
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				Padding = UDim.new(0, Theme.spacing.xs),
+			}),
+		}
 		for i = 1, challenge.hitsNeeded do
 			table.insert(
-				lamps,
-				create("Frame")({
-					Name = "Sync" .. i,
-					Size = UDim2.fromOffset(LAMP, LAMP),
-					BackgroundColor3 = function()
-						return if hits() >= i then LAMP_ON else LAMP_OFF
+				readout,
+				TaskArt.lamp({
+					name = "Sync" .. i,
+					size = LAMP,
+					LayoutOrder = i,
+					colour = function()
+						return if hits() >= i then BAND else LAMP_OFF
 					end,
-					Base.corner(Theme.radius.pill),
 				})
 			)
 		end
-		local pips: { Instance } = {}
+		table.insert(
+			readout,
+			create("Frame")({
+				Name = "Spacer",
+				BackgroundTransparency = 1,
+				LayoutOrder = 50,
+				Size = UDim2.fromOffset(28, 1),
+			})
+		)
 		for i = 1, challenge.lives do
 			table.insert(
-				pips,
-				create("Frame")({
-					Name = "Life" .. i,
-					Size = UDim2.fromOffset(LAMP * 0.6, LAMP * 0.6),
-					BackgroundColor3 = function()
-						return if lives() >= i then Theme.color.danger else LAMP_OFF
+				readout,
+				TaskArt.lamp({
+					name = "Life" .. i,
+					size = LIFE,
+					LayoutOrder = 100 + i,
+					colour = function()
+						return if lives() >= i then LIFE_ON else LAMP_OFF
 					end,
-					Base.corner(Theme.radius.pill),
 				})
 			)
 		end
-
-		local dial = create("Frame")({
-			Name = "Dial",
-			LayoutOrder = 3,
-			Size = UDim2.new(1, 0, 0, DIAL_HEIGHT),
-			BackgroundColor3 = DIAL_FACE,
-			ClipsDescendants = true,
-			Base.corner(Theme.radius.md),
-			create("Frame")({
-				Name = "Band",
-				AnchorPoint = Vector2.new(0.5, 0),
-				BorderSizePixel = 0,
-				Position = function()
-					return UDim2.fromScale(band(), 0)
-				end,
-				Size = UDim2.fromScale(challenge.bandHalfWidth * 2, 1),
-				BackgroundColor3 = Theme.color.success,
-				BackgroundTransparency = 0.25,
-			}),
-			create("Frame")({
-				Name = "Needle",
-				AnchorPoint = Vector2.new(0.5, 0),
-				BorderSizePixel = 0,
-				Position = function()
-					return UDim2.fromScale(needle(), 0)
-				end,
-				Size = UDim2.new(0, 4, 1, 0),
-				BackgroundColor3 = NEEDLE,
-			}),
-		}) :: Frame
 
 		local button = Base.interactive({
 			name = "SyncButton",
-			size = Vector2.new(WIDTH, BUTTON_HEIGHT),
-			radius = Theme.radius.lg,
+			size = BUTTON,
+			radius = UDim.new(0, 20),
 			onActivate = onTap,
-			visual = function()
-				return {
-					create("Frame")({
-						Name = "Surface",
-						Size = UDim2.fromScale(1, 1),
-						BackgroundColor3 = Theme.color.primary,
-						Base.corner(Theme.radius.lg),
-						Base.text("headline", {
-							Size = UDim2.fromScale(1, 1),
-							Text = "SYNC",
-							TextColor3 = Theme.color.onPrimary,
-						}),
-					}),
-				}
-			end,
+			visual = TaskArt.button("SYNC", BUTTON_COLOUR),
 		})
-		button.LayoutOrder = 4
+		button.LayoutOrder = 3
 
-		local natural = LAMP + GAP + LAMP * 0.6 + GAP + DIAL_HEIGHT + GAP + BUTTON_HEIGHT
 		local panel = create("Frame")({
 			Name = "Panel",
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(WIDTH, natural),
+			Size = UDim2.fromOffset(WIDTH, HEIGHT),
 			create("UIListLayout")({
 				SortOrder = Enum.SortOrder.LayoutOrder,
 				HorizontalAlignment = Enum.HorizontalAlignment.Center,
 				Padding = UDim.new(0, GAP),
 			}),
-			row(lamps, LAMP, 1),
-			row(pips, LAMP * 0.6, 2),
-			dial,
+			gauge,
+			create("Frame")({
+				Name = "Readout",
+				LayoutOrder = 2,
+				BackgroundTransparency = 1,
+				Size = UDim2.new(1, 0, 0, ROW_HEIGHT),
+				readout,
+			}),
 			button,
 		}) :: Frame
 
@@ -251,7 +306,7 @@ return TaskViewBase.define({
 			if size.X <= 0 or size.Y <= 0 or s <= 0 then
 				return
 			end
-			fit.Scale = math.min(size.X / s / WIDTH, size.Y / s / natural, 1.3)
+			fit.Scale = math.min(size.X / s / WIDTH, size.Y / s / HEIGHT, 1.3)
 		end
 		local areaChanged = ctx.area:GetPropertyChangedSignal("AbsoluteSize"):Connect(layout)
 		vide.cleanup(function()

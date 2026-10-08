@@ -6,13 +6,15 @@
 -- shell owns the window, close, timer and status line; this file owns
 -- the sockets, the fuses and what a drop looks like.
 --
--- The match is visible: each fuse and its socket show the same amperage
--- (and colour stripe). Either row can be picked first - drag a fuse onto
--- a socket or a socket onto a fuse, or tap one then the other. The held
--- piece lights red and a live wire in its stripe colour follows the
--- thumb; hovering a piece on the other row flashes green if the amps
--- match and red if not. A drop only SENDS the pair; once the server
--- accepts it a wire stays strung between the two and both turn green.
+-- Sockets (copper clips) along the top, glass fuses along the bottom,
+-- all steel tiles (art: UI/TaskArt). The match is visible: each fuse and
+-- its socket carry the same amp plate, in the same colour. Either row can
+-- be picked first - drag a fuse onto a socket or a socket onto a fuse, or
+-- tap one then the other. The held piece glows red and a live wire in its
+-- plate colour follows the thumb; hovering a piece on the other row
+-- flashes green if the amps match and red if not. A drop only SENDS the
+-- pair; once the server accepts it a wire stays strung between the two
+-- and both glow green.
 --
 -- Right and wrong are never colour alone: amps are printed on every
 -- piece, a wired socket shows a check, a rejected one a cross.
@@ -25,6 +27,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Base = require(script.Parent.Parent.UI.Components.Base)
 local Icons = require(script.Parent.Parent.UI.Components.Icons)
 local InputAdapters = require(script.Parent.Parent.UI.InputAdapters)
+local TaskArt = require(script.Parent.Parent.UI.TaskArt)
 local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -46,14 +49,15 @@ type Feedback = {
 
 type Kind = "fuse" | "slot"
 
--- 4 x 64 plus gaps fits a 360-point portrait sheet inside its margins.
+-- 4 x 64 plus gaps and the plates' 8-point rims fits a 360-point sheet.
 local CELL = 64
+local PLATE_INSET = 8
 local GAP = Theme.spacing.md
-local STRIPE = 8
+local WIRE_SPAN = 96 -- room between the rows for the wires
 local REJECT_SECONDS = 0.4
 local BLINK_HZ = 6
-local WIRE = 6 -- wire thickness
-local PLUG = 18 -- the plug on the end of a wire being dragged
+local WIRE = 8 -- wire thickness
+local PLUG = 22 -- the plug on the end of a wire being dragged
 local WIRE_OUTLINE = Color3.fromHex("#0B0E14")
 
 -- Stripe per rating, kept clear of the red/green feedback fills. The
@@ -71,12 +75,21 @@ local AMP_COLORS: { [number]: Color3 } = {
 -- is spec-level but the sources it updates are built per attempt.
 local handlers: { [any]: (Feedback) -> () } = setmetatable({}, { __mode = "k" }) :: any
 
-local function row(name: string, children: { Instance }, anchorY: number): Frame
-	local frame = create("Frame")({
-		Name = name,
-		BackgroundTransparency = 1,
+local function row(name: string, children: { Instance }, anchorY: number): ImageLabel
+	-- Each row is bolted to its own steel plate (UI/TaskArt.plate).
+	local plate = TaskArt.plate({
+		name = name .. "Plate",
+		sliceScale = 0.35,
 		AnchorPoint = Vector2.new(0.5, anchorY),
 		Position = UDim2.fromScale(0.5, anchorY),
+		Size = UDim2.fromOffset(4 * CELL + 3 * GAP + 2 * PLATE_INSET, CELL + 2 * PLATE_INSET),
+	})
+	local frame = create("Frame")({
+		Name = name,
+		Parent = plate,
+		BackgroundTransparency = 1,
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(4 * CELL + 3 * GAP, CELL),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
@@ -88,13 +101,15 @@ local function row(name: string, children: { Instance }, anchorY: number): Frame
 	for _, child in children do
 		child.Parent = frame
 	end
-	return frame
+	return plate
 end
 
 return TaskViewBase.define({
 	taskId = "fuse-rewire",
 	title = "Fuse Rewire",
 	explainer = "Drag a wire from each fuse to the socket with the same amps. Wire all four to restore power.",
+	-- Both plated rows, with WIRE_SPAN between them for the wires.
+	contentSize = Vector2.new(4 * CELL + 3 * GAP + 2 * PLATE_INSET, 2 * (CELL + 2 * PLATE_INSET) + WIRE_SPAN),
 
 	build = function(ctx)
 		local challenge = ctx.challenge :: Challenge
@@ -189,46 +204,64 @@ return TaskViewBase.define({
 				radius = Theme.radius.md,
 				onActivate = function() end, -- Drag listens for Activated itself
 				visual = function()
+					-- The state colour (placed, held, hover verdict, reject)
+					-- lights a glow and a ring round the tile; idle shows neither.
+					local state = function(): Color3
+						return fill(id, idle)
+					end
 					return {
-						create("Frame")({
-							Name = "Surface",
-							Size = UDim2.fromScale(1, 1),
-							BackgroundColor3 = function()
-								return fill(id, idle)
+						TaskArt.glow({
+							size = CELL * 1.7,
+							Position = UDim2.fromScale(0.5, 0.5),
+							colour = state,
+							transparency = function()
+								return if isLit(id) then 0.35 else 1
 							end,
-							Base.corner(Theme.radius.md),
-							create("UIStroke")({
-								BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-								ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-								Color = function()
-									return if held() == id then Theme.color.focus else Theme.color.line
-								end,
-								-- Thicker ring on the held piece: the pick is shape, not just fill.
-								Thickness = function()
-									return if held() == id then 3 else 2
-								end,
-							}),
+						}) :: Instance,
+						create("ImageLabel")({
+							Name = "Surface",
+							BackgroundTransparency = 1,
+							Image = if kinds[id] == "slot" then TaskArt.image.socket else TaskArt.image.fuse,
+							Size = UDim2.fromScale(1, 1),
 							create("Frame")({
-								Name = "Stripe",
-								BorderSizePixel = 0,
-								Size = UDim2.new(1, 0, 0, STRIPE),
-								BackgroundColor3 = AMP_COLORS[amps[id]] or Theme.color.line,
+								Name = "Ring",
+								BackgroundTransparency = 1,
+								Size = UDim2.fromScale(1, 1),
 								Base.corner(Theme.radius.md),
+								create("UIStroke")({
+									Color = function()
+										return if held() == id then Theme.color.focus else state()
+									end,
+									-- Thicker ring on the held piece: the pick is shape, not just colour.
+									Thickness = function()
+										return if held() == id then 4 else 3
+									end,
+									Transparency = function()
+										return if isLit(id) then 0 else 1
+									end,
+								}),
 							}),
-							Base.text("title", {
-								Position = UDim2.fromOffset(0, STRIPE),
-								Size = UDim2.new(1, 0, 1, -STRIPE),
-								Text = ampText(id),
-								TextColor3 = function()
-									return if isLit(id) then Theme.color.inkOnLight else Theme.color.ink
-								end,
+							-- The amp plate, in the amp's colour, across the tile's foot.
+							create("Frame")({
+								Name = "Rating",
+								AnchorPoint = Vector2.new(0.5, 0),
+								Position = UDim2.fromOffset(CELL / 2, CELL * 0.69),
+								Size = UDim2.fromOffset(CELL * 0.66, CELL * 0.24),
+								BackgroundColor3 = AMP_COLORS[amps[id]] or Theme.color.line,
+								Base.corner(Theme.radius.sm),
+								create("UIStroke")({ Color = WIRE_OUTLINE, Thickness = 1.5 }),
+								Base.text("label", {
+									Size = UDim2.fromScale(1, 1),
+									Text = ampText(id),
+									TextColor3 = WIRE_OUTLINE,
+								}),
 							}),
 							-- Corner badge: the non-colour half of right/wrong.
 							create("Frame")({
 								Name = "Badge",
 								BackgroundTransparency = 1,
-								AnchorPoint = Vector2.new(1, 1),
-								Position = UDim2.new(1, -2, 1, -2),
+								AnchorPoint = Vector2.new(0.5, 0.5),
+								Position = UDim2.new(1, -6, 0, 6),
 								Size = UDim2.fromOffset(22, 22),
 								vide.show(function()
 									return kinds[id] == "slot" and isPlaced(id)

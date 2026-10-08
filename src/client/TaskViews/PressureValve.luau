@@ -31,6 +31,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Parent.UI.Components.Base)
 local Env = require(script.Parent.Parent.UI.Components.Env)
+local TaskArt = require(script.Parent.Parent.UI.TaskArt)
 local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -71,7 +72,7 @@ local ANGLE_FULL = 135
 local BUTTON = 132
 local BUTTON_SHARE = 0.42
 local FITTING_Y = 0.9
-local BAR = 8
+local BAR = 14
 local GAP = Theme.spacing.md
 -- How quickly the needle catches up with the server's count (per second).
 local NEEDLE_RATE = 14
@@ -128,6 +129,11 @@ return TaskViewBase.define({
 	taskId = "pressure-valve",
 	title = "Pressure Valve",
 	explainer = "Tap PUMP fast to push the needle into the red and blow the steam. Too slow and the pressure leaks away - watch the bar.",
+	-- layout() at its cap: the gauge as big as the button allows.
+	contentSize = Vector2.new(
+		BUTTON / BUTTON_SHARE,
+		BUTTON / BUTTON_SHARE * (FITTING_Y + BUTTON_SHARE / 2) + GAP + BAR
+	),
 
 	build = function(ctx)
 		local challenge = ctx.challenge :: Challenge
@@ -233,23 +239,11 @@ return TaskViewBase.define({
 
 		ctx.setStatus("Tap to build pressure")
 
-		local bar = create("Frame")({
-			Name = "TimeLeft",
-			AnchorPoint = Vector2.new(0.5, 0),
-			BackgroundColor3 = Theme.color.surface,
-			Base.corner(Theme.radius.pill),
-			create("Frame")({
-				Name = "Fill",
-				BorderSizePixel = 0,
-				Size = function()
-					return UDim2.fromScale(timeLeft(), 1)
-				end,
-				BackgroundColor3 = function()
-					return if timeLeft() < 0.3 then Theme.color.danger else Theme.color.warning
-				end,
-				Base.corner(Theme.radius.pill),
-			}),
-		}) :: Frame
+		local bar = TaskArt.meter(timeLeft, function()
+			return if timeLeft() < 0.3 then Theme.color.danger else Theme.color.warning
+		end)
+		bar.Name = "TimeLeft"
+		bar.AnchorPoint = Vector2.new(0.5, 0)
 
 		local button = Base.interactive({
 			name = "PumpButton",
@@ -264,27 +258,21 @@ return TaskViewBase.define({
 			-- (Base.interactive already bounces the visual on press.)
 			visual = function()
 				return {
-					create("Frame")({
+					-- The red mushroom cap (UI/TaskArt), lettered here.
+					create("ImageLabel")({
 						Name = "Surface",
+						BackgroundTransparency = 1,
+						Image = TaskArt.image.cap,
 						AnchorPoint = Vector2.new(0.5, 0.5),
 						Position = UDim2.fromScale(0.5, 0.5),
 						Size = UDim2.fromScale(1, 1),
-						BackgroundColor3 = Theme.color.danger,
-						Base.corner(Theme.radius.pill),
-						create("UIStroke")({
-							BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-							ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-							Color = Color3.fromHex("#5A0F14"),
-							Thickness = 4,
-						}),
-						create("UIGradient")({
-							Rotation = 90,
-							Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(170, 170, 170)),
-						}),
 						Base.text("headline", {
-							Size = UDim2.fromScale(1, 1),
+							AnchorPoint = Vector2.new(0.5, 0.5),
+							Position = UDim2.fromScale(0.5, 0.52),
+							Size = UDim2.fromScale(0.72, 0.3),
 							Text = "PUMP",
-							TextColor3 = Theme.color.onDanger,
+							TextColor3 = Color3.fromHex("#FFF4F2"),
+							create("UIStroke")({ Color = Color3.fromHex("#5A0606"), Thickness = 2.5 }),
 						}),
 					}),
 				}

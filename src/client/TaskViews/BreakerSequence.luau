@@ -6,13 +6,13 @@
 -- CodePlayback.luau: the shell owns the window, close, timer and status
 -- line; this file owns the breaker bank.
 --
--- Six breakers in a 3x2 bank, each with a lamp over its lever. Watching,
--- the lamps flash one at a time in the sequence's order
--- (TaskViewLogic.flash) and the bank is locked. Then the player flips
--- them in that order: a flip the SERVER accepted latches up with a green
--- lamp (the handler's feedback echoes it); a wrong one drops every lever
--- and the same sequence flashes again, or a new one after the server's
--- replay cap (feedback carries it).
+-- A row of breakers on a steel panel (art: UI/TaskArt), each with a
+-- glass lamp over its lever. Watching, the lamps flash one at a time in
+-- the sequence's order (TaskViewLogic.flash) and the bank is locked.
+-- Then the player flips them in that order: a flip the SERVER accepted
+-- latches up with a green lamp (the handler's feedback echoes it); a
+-- wrong one drops every lever and the same sequence flashes again, or a
+-- new one after the server's replay cap (feedback carries it).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -22,6 +22,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Base = require(script.Parent.Parent.UI.Components.Base)
 local Env = require(script.Parent.Parent.UI.Components.Env)
 local InputAdapters = require(script.Parent.Parent.UI.InputAdapters)
+local TaskArt = require(script.Parent.Parent.UI.TaskArt)
 local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
 local TaskViewLogic = require(script.Parent.Parent.UI.TaskViewLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -43,7 +44,10 @@ type Feedback = {
 }
 
 local KEY_SIZE = Vector2.new(88, 128)
-local COLUMNS = 3
+-- The breakers sit in one row, like a real panel: landscape has the width.
+local PLATE_INSET = 18 -- how far the steel panel overhangs the bank
+local LEVER_ON_Y = 43
+local LEVER_OFF_Y = 56
 local PER_SWITCH_SECONDS = 0.6
 -- Share of each switch's slot its lamp is lit; the rest is the dark gap.
 local FLASH_ON = 0.65
@@ -55,8 +59,7 @@ local REPLAY_PAUSE = 0.8
 local LAMP_OFF = Color3.fromHex("#3A3A3A")
 local LAMP_FLASH = Color3.fromHex("#FFC83D")
 local LAMP_ON = Color3.fromHex("#3DDC84")
-local PANEL = Color3.fromHex("#2B2F36")
-local LEVER = Color3.fromHex("#D9DDE3")
+local LABEL_INK = Color3.fromHex("#0E1015")
 
 local KEY_CODES: { Enum.KeyCode } = {
 	Enum.KeyCode.One,
@@ -78,6 +81,11 @@ return TaskViewBase.define({
 	taskId = "breaker-sequence",
 	title = "Breaker Sequence",
 	explainer = "Watch the lamps flash, then flip the breakers in the same order. A wrong flip drops them all and the lamps flash again.",
+	-- One row of breakers on the panel (the adapter spaces keys Theme.spacing.md).
+	contentSize = function(challenge)
+		local n = math.clamp(challenge.switchCount, 1, #KEY_CODES)
+		return Vector2.new(n * KEY_SIZE.X + (n - 1) * Theme.spacing.md + 2 * PLATE_INSET, KEY_SIZE.Y + 2 * PLATE_INSET)
+	end,
 
 	build = function(ctx)
 		local challenge = ctx.challenge :: Challenge
@@ -151,58 +159,53 @@ return TaskViewBase.define({
 			local isOn = function(): boolean
 				return latched()[n] == true
 			end
+			local lampColour = Env.animate(function(): Color3
+				if flashing() == n then
+					return LAMP_FLASH
+				end
+				return if isOn() then LAMP_ON else LAMP_OFF
+			end, Theme.motion.fast)
+			-- The module art (UI/TaskArt): lamp socket centred 20 down,
+			-- lever slot 41..97, number plate 107..119 (reference px).
 			return {
-				create("Frame")({
+				create("ImageLabel")({
 					Name = "Breaker",
+					BackgroundTransparency = 1,
+					Image = TaskArt.image.breaker,
 					Size = UDim2.fromScale(1, 1),
-					BackgroundColor3 = PANEL,
-					Base.corner(Theme.radius.md),
-					create("UIStroke")({
-						BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-						Color = Theme.color.line,
-						Thickness = 2,
+					TaskArt.glow({
+						size = 64,
+						Position = UDim2.fromOffset(KEY_SIZE.X / 2, 20),
+						colour = lampColour,
+						transparency = function()
+							return if flashing() == n or isOn() then 0.3 else 1
+						end,
+					}) :: Instance,
+					TaskArt.lamp({
+						name = "Lamp",
+						size = 28,
+						AnchorPoint = Vector2.new(0.5, 0.5),
+						Position = UDim2.fromOffset(KEY_SIZE.X / 2, 20),
+						colour = lampColour,
 					}),
-					create("Frame")({
-						Name = "Lamp",
+					-- The lever, thrown up to ON when latched.
+					create("ImageLabel")({
+						Name = "Lever",
+						BackgroundTransparency = 1,
+						Image = TaskArt.image.lever,
 						AnchorPoint = Vector2.new(0.5, 0),
-						Position = UDim2.new(0.5, 0, 0, Theme.spacing.sm),
-						Size = UDim2.fromOffset(24, 24),
-						BackgroundColor3 = Env.animate(function(): Color3
-							if flashing() == n then
-								return LAMP_FLASH
-							end
-							return if isOn() then LAMP_ON else LAMP_OFF
+						Size = UDim2.fromOffset(36, 40),
+						Position = Env.animate(function(): UDim2
+							return UDim2.fromOffset(KEY_SIZE.X / 2, if isOn() then LEVER_ON_Y else LEVER_OFF_Y)
 						end, Theme.motion.fast),
-						Base.corner(Theme.radius.pill),
-						create("UIStroke")({ Color = Color3.new(0, 0, 0), Transparency = 0.5, Thickness = 2 }),
-					}),
-					-- The lever's slot, with the lever thrown up when latched.
-					create("Frame")({
-						Name = "Slot",
-						AnchorPoint = Vector2.new(0.5, 0),
-						Position = UDim2.new(0.5, 0, 0, 44),
-						Size = UDim2.fromOffset(28, 52),
-						BackgroundColor3 = Color3.new(0, 0, 0),
-						BackgroundTransparency = 0.4,
-						Base.corner(Theme.radius.sm),
-						create("Frame")({
-							Name = "Lever",
-							AnchorPoint = Vector2.new(0.5, 0),
-							Position = Env.animate(function(): UDim2
-								return if isOn() then UDim2.new(0.5, 0, 0, 2) else UDim2.new(0.5, 0, 0.5, -2)
-							end, Theme.motion.fast),
-							Size = UDim2.new(1, 4, 0.5, 0),
-							BackgroundColor3 = LEVER,
-							Base.corner(Theme.radius.sm),
-						}),
 					}),
 					Base.text("label", {
-						AnchorPoint = Vector2.new(0.5, 1),
-						Position = UDim2.new(0.5, 0, 1, -Theme.spacing.xs),
-						Size = UDim2.new(1, 0, 0, 22),
+						Name = "Number",
+						AnchorPoint = Vector2.new(0.5, 0.5),
+						Position = UDim2.fromOffset(KEY_SIZE.X / 2, 113.5),
+						Size = UDim2.fromOffset(48, 11),
 						Text = key.label,
-						TextColor3 = LEVER,
+						TextColor3 = LABEL_INK,
 					}),
 				}),
 			}
@@ -210,7 +213,7 @@ return TaskViewBase.define({
 
 		local bank = InputAdapters.Sequence({
 			keys = keys,
-			columns = COLUMNS,
+			columns = switchCount,
 			keySize = KEY_SIZE,
 			disabled = watching,
 			onPress = function(id: string)
@@ -230,11 +233,20 @@ return TaskViewBase.define({
 		bank.Name = "BreakerBank"
 		bank.AnchorPoint = Vector2.new(0.5, 0.5)
 		bank.Position = UDim2.fromScale(0.5, 0.5)
+		-- The steel panel the breakers are bolted to, overhanging the bank.
+		TaskArt.plate({
+			Position = UDim2.fromOffset(-PLATE_INSET, -PLATE_INSET),
+			Size = UDim2.new(1, 2 * PLATE_INSET, 1, 2 * PLATE_INSET),
+			ZIndex = 0,
+		}).Parent =
+			bank
 
-		-- Shrink-only fit to the play area (see CodePlayback.luau's pads).
+		-- Shrink-only fit to the play area (see CodePlayback.luau's pads),
+		-- counting the panel's overhang.
 		local fitScale = create("UIScale")({ Parent = bank }) :: UIScale
 		local function fit()
-			local room, native = ctx.area.AbsoluteSize, bank.AbsoluteSize / fitScale.Scale
+			local room = ctx.area.AbsoluteSize
+			local native = bank.AbsoluteSize / fitScale.Scale + Vector2.one * 2 * PLATE_INSET * Env.scale()
 			if room.X <= 0 or room.Y <= 0 or native.X <= 0 or native.Y <= 0 then
 				return
 			end

@@ -25,6 +25,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Parent.UI.Components.Base)
 local Env = require(script.Parent.Parent.UI.Components.Env)
+local TaskArt = require(script.Parent.Parent.UI.TaskArt)
 local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -40,14 +41,14 @@ type Feedback = {
 	reset: boolean,
 }
 
--- Art: 971x987, background cut out. Points below are shares of it.
-local TANK_IMAGE = "rbxassetid://73939709599473"
+-- Art: 502x498, transparent PNG cropped to the tank. Points below are shares of it.
+local TANK_IMAGE = "rbxassetid://104118102672304"
 task.spawn(function()
 	pcall(ContentProvider.PreloadAsync, ContentProvider, { TANK_IMAGE })
 end)
-local TANK_ASPECT = 971 / 987
-local BRASS_CENTRE = Vector2.new(0.28, 0.788)
-local OUTLET = Vector2.new(0.965, 0.476) -- the pipe's open mouth, facing right
+local TANK_ASPECT = 502 / 498
+local BRASS_CENTRE = Vector2.new(0.294, 0.806)
+local OUTLET = Vector2.new(0.99, 0.468) -- the pipe's open mouth, facing right
 
 -- The button's native edge; layout() scales it to BUTTON_SHARE of the
 -- tank's width - about twice the brass, so it's comfortably thumb-sized.
@@ -55,7 +56,7 @@ local BUTTON = 132
 local BUTTON_SHARE = 0.34
 local MAX_TANK = 340 -- reference px; past this the button is a billboard
 local THERMO_SHARE = 0.17 -- thermometer width as a share of tank height
-local BAR = 8
+local BAR = 14
 local GAP = Theme.spacing.md
 
 local FILL_RATE = 14 -- how quickly the mercury catches up (per second)
@@ -76,6 +77,8 @@ return TaskViewBase.define({
 	taskId = "vent-purge",
 	title = "Vent Purge",
 	explainer = "Tap the brass button fast to fill the gauge and purge the tank. Too slow and the gas builds back up - watch the bar.",
+	-- layout() at its cap: the tank at MAX_TANK with the thermometer beside it.
+	contentSize = Vector2.new(MAX_TANK * (TANK_ASPECT + THERMO_SHARE) + GAP, MAX_TANK + GAP + BAR),
 
 	build = function(ctx)
 		local challenge = ctx.challenge :: Challenge
@@ -245,23 +248,11 @@ return TaskViewBase.define({
 
 		ctx.setStatus("Tap the button to purge")
 
-		local bar = create("Frame")({
-			Name = "GasMeter",
-			AnchorPoint = Vector2.new(0.5, 0),
-			BackgroundColor3 = Theme.color.surface,
-			Base.corner(Theme.radius.pill),
-			create("Frame")({
-				Name = "Fill",
-				BorderSizePixel = 0,
-				Size = function()
-					return UDim2.fromScale(gasLeft(), 1)
-				end,
-				BackgroundColor3 = function()
-					return if gasLeft() < 0.3 then Theme.color.danger else Theme.color.warning
-				end,
-				Base.corner(Theme.radius.pill),
-			}),
-		}) :: Frame
+		local bar = TaskArt.meter(gasLeft, function()
+			return if gasLeft() < 0.3 then Theme.color.danger else Theme.color.warning
+		end)
+		bar.Name = "GasMeter"
+		bar.AnchorPoint = Vector2.new(0.5, 0)
 
 		-- Mostly invisible: the art already draws the button. A faint ring
 		-- marks it, and it's what Base.interactive bounces on press.
