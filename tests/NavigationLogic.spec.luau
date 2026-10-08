@@ -123,3 +123,22 @@ TestRunner.describe("StoreLogic and Navigation rounds", function()
 		TestRunner.expect(StoreLogic.grantsNavigationRound({ { kind = "Currency", amount = 1 } })):toBe(false)
 	end)
 end)
+
+TestRunner.describe("NavigationLogic.shortlist", function()
+	local function at(id: string, x: number, y: number): { stationId: string, position: NavigationLogic.Point }
+		return { stationId = id, position = { x = x, y = y, z = 0 } }
+	end
+
+	TestRunner.it("ranks by weighted distance and caps the count", function()
+		local list = NavigationLogic.shortlist({ x = 0, y = 0, z = 0 }, {
+			at("far", 50, 0),
+			at("upstairs", 0, 10), -- 30 weighted
+			at("near", 5, 0),
+			at("mid", 20, 0),
+		}, 3)
+		TestRunner.expect(#list):toBe(3)
+		TestRunner.expect(list[1]):toBe("near")
+		TestRunner.expect(list[2]):toBe("mid")
+		TestRunner.expect(list[3]):toBe("upstairs")
+	end)
+end)

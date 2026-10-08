@@ -23,6 +23,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local PathLogic = require(ReplicatedStorage.Shared.PathLogic)
 local StoreConfig = require(ReplicatedStorage.Shared.Config.Store)
 local C = require(script.Parent.Parent.UI.Components)
 local Modal = require(script.Parent.Parent.UI.Components.Modal)
@@ -49,6 +50,7 @@ local DOT_TRANSPARENCY = 0.45 -- between pulses; 0 at a peak
 local PULSE_SPEED = 22
 local PULSE_WAVELENGTH = 20
 local SMOOTH_PASSES = 3 -- corner-cutting rounds; more = wider curves
+local SMOOTH_STEP = 1.5 -- studs between the points it cuts, which caps how wide
 local RESHAPE_SECONDS = 0.15 -- how often the dots re-anchor to the player
 -- How far down to look for the floor under a waypoint (NavNodes and
 -- station parts sit at whatever height they were placed).
@@ -250,11 +252,26 @@ local function reshape()
 	if from == nil or #route == 0 then
 		return
 	end
-	local points = { toPoint(from) }
+	-- Start from where the player is along the route, so the part
+	-- already run is dropped and the line never leads back to its start.
+	local routePoints: { NavigationViewLogic.Point } = {}
 	for _, point in route do
-		table.insert(points, toPoint(point))
+		table.insert(routePoints, toPoint(point))
 	end
-	local dots = NavigationViewLogic.dots(NavigationViewLogic.smooth(points, SMOOTH_PASSES), DOT_SPACING, MAX_DOTS + 1)
+	local here = toPoint(from)
+	local closest = PathLogic.closest(here, routePoints[1], routePoints)
+	local points = { here }
+	for i = math.max(closest.segment, 1), #routePoints do
+		table.insert(points, routePoints[i])
+	end
+	-- Rounded on a dense copy, so a corner is cut by a stud or so at
+	-- most and the curve can't swing through the wall it turns round.
+	local dense = {}
+	for _, entry in NavigationViewLogic.dots(points, SMOOTH_STEP, math.huge) do
+		table.insert(dense, entry.point)
+	end
+	table.insert(dense, points[#points])
+	local dots = NavigationViewLogic.dots(NavigationViewLogic.smooth(dense, SMOOTH_PASSES), DOT_SPACING, MAX_DOTS + 1)
 
 	local model = ensureModel()
 	local parts: { BasePart } = {}

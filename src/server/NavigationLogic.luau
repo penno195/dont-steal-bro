@@ -69,6 +69,25 @@ function NavigationLogic.nearestStation(from: Point, stations: { { stationId: st
 	return bestId
 end
 
+-- The `count` nearest stations by the same weighted distance, nearest
+-- first. NavigationService routes each on foot and keeps the shortest,
+-- since the nearest in a straight line can be behind a wall.
+function NavigationLogic.shortlist(
+	from: Point,
+	stations: { { stationId: string, position: Point } },
+	count: number
+): { string }
+	local ranked = table.clone(stations)
+	table.sort(ranked, function(a, b)
+		return weightedDistance(from, a.position) < weightedDistance(from, b.position)
+	end)
+	local out = {}
+	for i = 1, math.min(count, #ranked) do
+		table.insert(out, ranked[i].stationId)
+	end
+	return out
+end
+
 -- ===== when to resend =======================================================
 
 -- A route is resent only when what it says changed: a new target, or a

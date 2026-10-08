@@ -22,13 +22,21 @@ local ServerScriptService = game:GetService("ServerScriptService")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local PathLogic = require(ReplicatedStorage.Shared.PathLogic)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local NavigationLogic = require(ServerScriptService.Server.NavigationLogic)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 
--- How often a switched-on player's route is rebuilt. Rebuilding is a
--- BFS over a few dozen nodes, and a route is only sent when it changed.
+-- How often a switched-on player is checked. A check is cheap; a route
+-- is rebuilt only when refresh says it must be.
 local REFRESH_SECONDS = 0.5
+-- Further than this from the line (studs) and the player gets a new one.
+local OFF_ROUTE_STUDS = 10
+-- A route older than this (seconds) is rebuilt anyway.
+local ROUTE_MAX_AGE = 8
+-- How many of the straight-line nearest stations are routed on foot to
+-- find the really nearest. Each costs up to a few ComputeAsync calls.
+local SHORTLIST = 3
 
 local PERK: Validate.StorePerk = "UnlimitedNavigation"
 
@@ -37,6 +45,12 @@ type PlayerState = {
 	chargedRoundId: string?, -- the race a round was spent on
 	wantsOnRoundId: string?, -- asked to switch on, was offered a purchase
 	lastRouteKey: string?,
+	-- The route last sent, where it was built from, and when.
+	routeTarget: string?,
+	route: { Vector3 }?,
+	routeFrom: Vector3?,
+	routeAt: number,
+	computing: boolean,
 }
 
 local states: { [Player]: PlayerState } = {}
@@ -44,7 +58,7 @@ local states: { [Player]: PlayerState } = {}
 local function stateFor(player: Player): PlayerState
 	local state = states[player]
 	if state == nil then
-		state = { on = false }
+		state = { on = false, routeAt = 0, computing = false }
 		states[player] = state
 	end
 	return state
@@ -52,6 +66,14 @@ end
 
 local function toPoint(position: Vector3): NavigationLogic.Point
 	return { x = position.X, y = position.Y, z = position.Z }
+end
+
+local function toPoints(positions: { Vector3 }): { NavigationLogic.Point }
+	local out = {}
+	for _, position in positions do
+		table.insert(out, toPoint(position))
+	end
+	return out
 end
 
 -- In Race, with stations assigned. A finished racer still counts, and
@@ -100,36 +122,83 @@ local function sendPath(player: Player, stationId: string?, points: { Vector3 })
 end
 
 local function clearPath(player: Player)
-	stateFor(player).lastRouteKey = nil
+	local state = stateFor(player)
+	state.lastRouteKey = nil
+	state.routeTarget = nil
+	state.route = nil
 	Net.fireClient("NavigationPath", player, { stationId = nil, points = {} })
 end
 
--- Rebuilds one player's route: their nearest unfinished station, then
--- the NavNode chain to it, ending on the station itself.
+-- Keeps one player's route current. A route is rebuilt only when it has
+-- to be: no target yet, the target is finished, the player has strayed
+-- off the line, or it's ROUTE_MAX_AGE old (a door may have opened).
+-- Otherwise the client trims the part already run, and nothing is sent.
+--
+-- Rebuilding yields (ComputeAsync), so it runs in its own thread, one
+-- per player at a time.
 local function refresh(player: Player)
+	local state = stateFor(player)
+	if state.computing then
+		return
+	end
 	local character = player.Character
 	local root = if character then character:FindFirstChild("HumanoidRootPart") :: BasePart? else nil
 	if root == nil then
 		return
 	end
+	local from = root.Position
 
 	local TaskService = Loader.get("TaskService") :: any
+	local remaining: { [string]: Vector3 } = {}
 	local candidates: { { stationId: string, position: NavigationLogic.Point } } = {}
 	for _, assignment in TaskService.getRemainingStations(player.UserId) do
 		local part = TaskService.getStationPart(assignment.stationId) :: BasePart?
 		if part ~= nil then
+			remaining[assignment.stationId] = part.Position
 			table.insert(candidates, { stationId = assignment.stationId, position = toPoint(part.Position) })
 		end
 	end
 
-	local targetId = NavigationLogic.nearestStation(toPoint(root.Position), candidates)
-	local points: { Vector3 } = {}
-	if targetId ~= nil then
-		local target = (TaskService.getStationPart(targetId) :: BasePart).Position
-		points = (Loader.get("NPCService") :: any).routeBetween(root.Position, target)
-		table.insert(points, target)
+	local route = state.route
+	local stale = state.routeTarget == nil
+		or not remaining[state.routeTarget :: string]
+		or route == nil
+		or state.routeFrom == nil
+		or os.clock() - state.routeAt > ROUTE_MAX_AGE
+		or PathLogic.closest(toPoint(from), toPoint(state.routeFrom :: Vector3), toPoints(route :: { Vector3 })).distance
+			> OFF_ROUTE_STUDS
+	if not stale then
+		return
 	end
-	sendPath(player, targetId, points)
+
+	-- The nearest few by straight line, then whichever is shortest on
+	-- foot: the straight-line nearest can be behind a wall.
+	state.computing = true
+	local NPCService = Loader.get("NPCService") :: any
+	local bestId: string? = nil
+	local bestRoute: { Vector3 } = {}
+	local bestLength = math.huge
+	-- pcall: a throw mid-route must not leave `computing` stuck on.
+	pcall(function()
+		for _, stationId in NavigationLogic.shortlist(toPoint(from), candidates, SHORTLIST) do
+			local points = NPCService.walkableRoute(from, remaining[stationId]) :: { Vector3 }
+			local length = PathLogic.length(toPoint(from), toPoints(points))
+			if length < bestLength then
+				bestId, bestRoute, bestLength = stationId, points, length
+			end
+		end
+	end)
+	state.computing = false
+
+	-- Switched off, or left, while that was computing.
+	if not state.on or states[player] ~= state then
+		return
+	end
+	state.routeTarget = bestId
+	state.route = bestRoute
+	state.routeFrom = from
+	state.routeAt = os.clock()
+	sendPath(player, bestId, bestRoute)
 end
 
 local function switchOn(player: Player)
@@ -157,7 +226,8 @@ local function switchOn(player: Player)
 		state.on = true
 		state.wantsOnRoundId = nil
 		state.lastRouteKey = nil
-		refresh(player)
+		state.route = nil
+		task.spawn(refresh, player)
 	elseif answer == "NeedsPurchase" then
 		state.wantsOnRoundId = roundId
 	end
@@ -236,7 +306,7 @@ function NavigationService:start()
 		elapsed = 0
 		for player, state in states do
 			if state.on then
-				refresh(player)
+				task.spawn(refresh, player)
 			end
 		end
 	end)

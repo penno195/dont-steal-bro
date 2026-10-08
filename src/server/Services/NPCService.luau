@@ -683,6 +683,78 @@ local function computePath(record: NPCRecord): boolean
 	return true
 end
 
+-- ===== a player's runnable route (Navigation) ===============================
+
+-- One ComputeAsync from `from` to `to`, as positions after `from`; nil
+-- when the navmesh has no path.
+local function navmeshPath(from: Vector3, to: Vector3): { Vector3 }?
+	local path = PathfindingService:CreatePath({
+		AgentRadius = 2,
+		AgentHeight = 5,
+		AgentCanJump = true,
+	})
+	local ok = pcall(function()
+		path:ComputeAsync(from, to)
+	end)
+	if not ok or path.Status ~= Enum.PathStatus.Success then
+		return nil
+	end
+	local points: { Vector3 } = {}
+	for index, waypoint in path:GetWaypoints() do
+		if index > 1 then
+			table.insert(points, waypoint.Position)
+		end
+	end
+	return points
+end
+
+local function routeLength(from: Vector3, points: { Vector3 }): number
+	local total, previous = 0, from
+	for _, point in points do
+		total += (point - previous).Magnitude
+		previous = point
+	end
+	return total
+end
+
+-- The route a player can actually run from `from` to `to`, for
+-- Navigation's path line (owner, 2026-10-08: "the route they can run").
+-- Two candidates, and the shorter wins:
+--   - straight through the navmesh, which is the shortest when the
+--     navmesh is sound;
+--   - the way a bot goes: the NavNode chain, each hop walked straight
+--     when canWalkStraight vouches for it and pathfound when not. This
+--     is the one that survives a ramp the navmesh dropped (see
+--     canWalkStraight), where the direct path takes a long detour.
+-- Up to one ComputeAsync per hop, so NavigationService asks only when
+-- the target changes or the player strays off the line.
+local function walkableRoute(from: Vector3, to: Vector3): { Vector3 }
+	local direct = navmeshPath(from, to)
+
+	local viaNodes: { Vector3 } = {}
+	local previous = from
+	local hops = routeBetween(from, to)
+	table.insert(hops, to)
+	for _, hop in hops do
+		local leg = if canWalkStraight(previous, hop) then nil else navmeshPath(previous, hop)
+		local legPoints: { Vector3 } = if leg ~= nil then leg else { hop }
+		for _, point in legPoints do
+			table.insert(viaNodes, point)
+		end
+		-- A pathfound leg ends on its own last waypoint, not exactly on
+		-- the hop; make sure the hop itself is in the line.
+		if leg ~= nil and #leg > 0 and (leg[#leg] - hop).Magnitude > 1 then
+			table.insert(viaNodes, hop)
+		end
+		previous = hop
+	end
+
+	if direct ~= nil and #direct > 0 and routeLength(from, direct) <= routeLength(from, viaNodes) then
+		return direct
+	end
+	return viaNodes
+end
+
 -- ===== the race =============================================================
 
 local function beginWorking(record: NPCRecord, stationId: string)
@@ -1043,6 +1115,7 @@ local NPCService: Loader.Service = {
 	setMapDifficultyModifier = setMapDifficultyModifier,
 	debugLoadFromMap = debugLoadFromMap,
 	routeBetween = routeBetween,
+	walkableRoute = walkableRoute,
 
 	markArrivalGraceServed = function()
 		graceAlreadyServed = true
