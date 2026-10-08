@@ -322,6 +322,9 @@ return TaskViewBase.define({
 		return { thermo :: Instance, tank :: Instance, bar :: Instance, button :: Instance }
 	end,
 
+	-- Let the payoff play before COMPLETE covers it.
+	payoffSeconds = 1,
+
 	onProgress = function(ctx, feedback)
 		local handle = handlers[ctx]
 		if handle ~= nil and type(feedback) == "table" then

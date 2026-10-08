@@ -41,6 +41,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local Base = require(script.Parent.Components.Base)
 local Env = require(script.Parent.Components.Env)
 local Focus = require(script.Parent.Focus)
+local Button = require(script.Parent.Components.Button)
 local IconButton = require(script.Parent.Components.IconButton)
 local Icons = require(script.Parent.Components.Icons)
 local InputLock = require(script.Parent.InputLock)
@@ -119,6 +120,9 @@ export type Spec = {
 	-- shell owns success, but a successful result that carries feedback
 	-- reaches here first, so the last step paints before "Done!".
 	onProgress: ((ctx: Context, feedback: any?) -> ())?,
+	-- Seconds the view's success payoff (onProgress's last paint) plays
+	-- before the COMPLETE cover goes over it. Omitted: 0.
+	payoffSeconds: number?,
 }
 
 type Attempt = {
@@ -184,13 +188,28 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 
 	local shown = source(false)
 	local closing = false
-	-- Set on success: the shell stays up for SUCCESS_HOLD, but nothing
-	-- more is submitted and no cue overwrites the tick.
+	-- Set on success: the shell stays up for the view's payoff and then
+	-- SUCCESS_HOLD, but nothing more is submitted and no cue overwrites
+	-- the tick.
 	local finished = false
-	-- Shows the COMPLETE cover over the whole card. Set on success, or as
-	-- soon as the server says the last step landed (`completing`), so a
-	-- view's own loop starting another round underneath is never seen.
+	-- Set on success only. The controller has already let go of the
+	-- attempt by then, so session.close would do nothing: the way out
+	-- is the shell's own close.
+	local succeeded = false
+	-- Shows the COMPLETE cover over the whole card. Set after the payoff
+	-- on success, or as soon as the server says the last step landed
+	-- (`completing`), so a view's own loop starting another round
+	-- underneath is never seen.
 	local complete = source(false)
+	local close: (immediate: boolean) -> ()
+	-- X, B and the cover's Close button all leave through here.
+	local function exit()
+		if succeeded then
+			close(false)
+		else
+			session.close()
+		end
+	end
 	local ctxOut: Context
 	local areaOut: Frame
 	local rootOut: Frame
@@ -272,7 +291,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 
 		local b = UserInputService.InputBegan:Connect(function(input)
 			if input.KeyCode == Enum.KeyCode.ButtonB then
-				session.close()
+				exit()
 			end
 		end)
 		cleanup(function()
@@ -439,7 +458,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			icon = "close-button",
 			iconSize = CLOSE_SIZE,
 			label = "Close task",
-			onActivate = session.close,
+			onActivate = exit,
 			order = 1000, -- last in gamepad order: never the default focus
 			anchorPoint = Vector2.new(0.5, 0.5),
 			position = UDim2.new(1, -CORNER_INSET, 0, CORNER_INSET),
@@ -544,7 +563,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			Parent = holder,
 		}) :: Frame
 
-		create("Frame")({
+		local cover = create("Frame")({
 			Name = "Complete",
 			Size = UDim2.fromScale(1, 1),
 			-- Over the card, under the close button (ZIndex 10), so X
@@ -564,11 +583,11 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
 			(function()
-				-- Half the card's height, square, so it reads at any
-				-- window size.
+				-- 40% of the card's height, square, so it reads at any
+				-- window size and leaves room for Close below.
 				local badge = Icons.view("check-badge", 0, Theme.color.success)
 				badge.LayoutOrder = 0
-				badge.Size = UDim2.fromScale(0.5, 0.5)
+				badge.Size = UDim2.fromScale(0.4, 0.4)
 				local square =
 					create("UIAspectRatioConstraint")({ AspectRatio = 1, DominantAxis = Enum.DominantAxis.Height })
 				square.Parent = badge
@@ -580,8 +599,24 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				Text = "COMPLETE",
 				TextColor3 = Theme.color.success,
 			}),
+			-- A second way out beside the X: a thumb at the bottom of a
+			-- phone reaches this more easily than the top corner.
+			Button({
+				label = "Close",
+				variant = "secondary",
+				onActivate = exit,
+				layoutOrder = 2,
+				order = 1,
+			}),
 			Parent = holder,
 		})
+
+		-- A gamepad's selection lands on Close once the cover is up.
+		vide.effect(function()
+			if complete() and UIScaleController.getInputMode() == Enum.PreferredInput.Gamepad then
+				GuiService.SelectedObject = Focus.firstSelectable(cover)
+			end
+		end)
 
 		local function setStatus(text: string, fb: TaskViewLogic.Feedback?)
 			status(text)
@@ -655,7 +690,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		end
 	end)
 
-	local function close(immediate: boolean)
+	close = function(immediate: boolean)
 		if closing then
 			return
 		end
@@ -692,8 +727,16 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		onSuccess = function()
 			InputLock.release(lockToken)
 			finished = true
-			complete(true)
-			task.delay(SUCCESS_HOLD, close, false)
+			succeeded = true
+			-- The view's payoff (steam, goo) plays out before the cover
+			-- hides it. The player can already walk, so it costs no time.
+			task.delay(spec.payoffSeconds or 0, function()
+				if closing then
+					return
+				end
+				complete(true)
+				task.delay(SUCCESS_HOLD, close, false)
+			end)
 		end,
 	}
 end

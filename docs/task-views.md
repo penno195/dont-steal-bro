@@ -18,7 +18,7 @@ for the handler, config and remote. This page covers only the view.
 1. **Server half first** — config, handler, submission remote, per
    `how-to-add-a-task.md`. Your `TaskDef.verb` picks your adapter.
 2. **Create `src/client/TaskViews/<Name>.luau`** and return
-   `TaskViewBase.define({ taskId, title, explainer, contentSize, build, onProgress? })`.
+   `TaskViewBase.define({ taskId, title, explainer, contentSize, build, onProgress?, payoffSeconds? })`.
    `contentSize` is what `build` lays out at a fit scale of 1, in reference
    px (a function of the challenge if it varies); the card wraps it.
    The card shows no title; `title` and `explainer` (a sentence or two
@@ -51,7 +51,9 @@ for the handler, config and remote. This page covers only the view.
    base does all of it. `onProgress(ctx, feedback)` is for a non-final result
    (default text: "Keep going"), plus the handler's optional per-submission
    feedback; a successful result carrying feedback reaches it first so
-   the last step paints before "Done!". `FuseRewire.luau` uses it.
+   the last step paints before "Done!". `FuseRewire.luau` uses it. If that
+   last paint is a payoff animation (steam, goo), set `payoffSeconds` to
+   its length so the COMPLETE cover waits for it (`VentPurge.luau`).
 8. **Lay out for one thumb:** read-only content at the top of the area,
    interactive content anchored to the bottom (`AnchorPoint (0.5, 1)`).
    Sizes are reference pixels from `Theme` tokens.
