@@ -42,14 +42,14 @@ same way. After changing the art, re-upload and paste the new id.
 | `SprintBoostStock.luau` | Sprint Boost x10 | 249 | Ten Sprint Boosts for your loadout. Also earned free from Studio wins and found on every map. |
 | `StarterLoadoutBundle.luau` | Starter Loadout Bundle | 349 | Five each of Sprint Boost, Slow Field and Push-Trip. Every one of them is also earned free by playing. |
 | `NavigationRound.luau` | Navigation | 99 | A path to your nearest unfinished station, for the rest of this round. *(Added 2026-10-08; sold only from the in-match toggle.)* |
-| `StreakBuyBack1.luau` | Save your streak (1) | 99 | Keep the streak you just lost. *(Added 2026-10-08; offered only after a loss, never in the store grid.)* |
-| `StreakBuyBack2.luau` | Save your streak (2) | 119 | Keep the streak you just lost. *(Added 2026-10-08; offered only after a loss, never in the store grid.)* |
-| `StreakBuyBack3.luau` | Save your streak (3) | 149 | Keep the streak you just lost. *(Added 2026-10-08; offered only after a loss, never in the store grid.)* |
-| `StreakBuyBack4.luau` | Save your streak (4) | 179 | Keep the streak you just lost. *(Added 2026-10-08; offered only after a loss, never in the store grid.)* |
-| `StreakBuyBack5.luau` | Save your streak (5) | 209 | Keep the streak you just lost. *(Added 2026-10-08; offered only after a loss, never in the store grid.)* |
-| `StreakBuyBack6.luau` | Save your streak (6) | 239 | Keep the streak you just lost. *(Added 2026-10-08; offered only after a loss, never in the store grid.)* |
-| `StreakBuyBack7.luau` | Save your streak (7) | 269 | Keep the streak you just lost. *(Added 2026-10-08; offered only after a loss, never in the store grid.)* |
-| `StreakBuyBack8Plus.luau` | Save your streak (8+) | 299 | Keep the streak you just lost. *(Added 2026-10-08; offered only after a loss, never in the store grid.)* |
+| `StreakBuyBack1.luau` | Save Your Streak (1) | 99 | Lost your streak of 1? Buy it back and carry on from 1. *(Added 2026-10-08; offered only after a loss, never in the store grid. Icon: `assets/store/streak-buy-back-1.png`.)* |
+| `StreakBuyBack2.luau` | Save Your Streak (2) | 119 | Lost your streak of 2? Buy it back and carry on from 2. *(Added 2026-10-08; offered only after a loss, never in the store grid. Icon: `assets/store/streak-buy-back-2.png`.)* |
+| `StreakBuyBack3.luau` | Save Your Streak (3) | 149 | Lost your streak of 3? Buy it back and carry on from 3. *(Added 2026-10-08; offered only after a loss, never in the store grid. Icon: `assets/store/streak-buy-back-3.png`.)* |
+| `StreakBuyBack4.luau` | Save Your Streak (4) | 179 | Lost your streak of 4? Buy it back and carry on from 4. *(Added 2026-10-08; offered only after a loss, never in the store grid. Icon: `assets/store/streak-buy-back-4.png`.)* |
+| `StreakBuyBack5.luau` | Save Your Streak (5) | 209 | Lost your streak of 5? Buy it back and carry on from 5. *(Added 2026-10-08; offered only after a loss, never in the store grid. Icon: `assets/store/streak-buy-back-5.png`.)* |
+| `StreakBuyBack6.luau` | Save Your Streak (6) | 239 | Lost your streak of 6? Buy it back and carry on from 6. *(Added 2026-10-08; offered only after a loss, never in the store grid. Icon: `assets/store/streak-buy-back-6.png`.)* |
+| `StreakBuyBack7.luau` | Save Your Streak (7) | 269 | Lost your streak of 7? Buy it back and carry on from 7. *(Added 2026-10-08; offered only after a loss, never in the store grid. Icon: `assets/store/streak-buy-back-7.png`.)* |
+| `StreakBuyBack8Plus.luau` | Save Your Streak (8+) | 299 | Lost a streak of 8 or more? Buy it back and carry on from where you were. *(Added 2026-10-08; offered only after a loss, never in the store grid. Icon: `assets/store/streak-buy-back-8-plus.png`.)* |
 
 ### Pass (Monetization > Passes)
 
@@ -96,7 +96,7 @@ Navigation on sale and no coin round.
 Streak buy-back (design-decisions.md Q7): eight products, one per price
 tier, all `assetId = 0` and disabled until created. Enable all eight
 together: Validate refuses enabled tiers with a gap, so a streak can't be
-left without a price. They have no art yet (`imageAssetId = 0`).
+left without a price. Art: `assets/store/streak-buy-back-*.png` (one per tier, made by make-store-icons.ps1); the in-game image ids are already set. Upload the same file as each product's icon.
 
 ## 4. Test (step 13)
 

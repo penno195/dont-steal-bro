@@ -16,10 +16,10 @@ local StreakBuyBack1: Validate.StoreItemDef = {
 	assetId = 0,
 	enabled = false,
 	displayName = "Save your streak",
-	description = "Keep the streak you just lost.",
+	description = "Lost your streak of 1? Buy it back and carry on from 1.",
 	robuxPrice = 99, -- display only
 	sortOrder = 301,
-	imageAssetId = 0,
+	imageAssetId = 89350914242582, -- assets/store/streak-buy-back-1.png
 	grants = {
 		{ kind = "StreakBuyBack", minStreak = 1, maxStreak = 1 },
 	},

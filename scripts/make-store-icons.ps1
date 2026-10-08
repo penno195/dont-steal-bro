@@ -294,3 +294,57 @@ $c = New-Icon (Rgb 120 230 170) (Rgb 20 80 120); $g = $c[1]
 Draw-Route $g
 Draw-Label $g 'PASS' 430 46 (Rgb 255 220 90)
 Save-Icon $c 'navigation-pass.png'
+
+# ===== streak buy-back: one icon per price tier (Q7 "buying back a streak") =
+# The streak's flame with a rewind arrow curling round it, and the streak
+# the tier saves as a big number. No price: the offer card prints it.
+function Draw-Flame($g, [float]$cx, [float]$cy, [float]$k, $outer, $inner) {
+	# A flame, not a drop: the tip leans right and two licks rise off its
+	# shoulders. Points are in a 200-unit box centred on (cx, cy).
+	$shape = @(
+		@(25, -115), @(40, -70), @(70, -50), @(62, -95), @(95, -40), @(100, 30),
+		@(80, 85), @(0, 105), @(-80, 85), @(-100, 25), @(-85, -35), @(-60, -75),
+		@(-50, -30), @(-25, -60), @(-10, -95)
+	)
+	foreach ($layer in @(@(1.0, $outer, 0), @(0.55, $inner, 30))) {
+		$s = $k * $layer[0]; $dy = $layer[2] * $k
+		$pts = [System.Drawing.PointF[]]($shape | ForEach-Object { Pt ($cx + $_[0] * $s) ($cy + $dy + $_[1] * $s) })
+		$f = New-Object System.Drawing.Drawing2D.GraphicsPath
+		$f.AddClosedCurve($pts, 0.45)
+		if ($layer[0] -eq 1.0) { $g.DrawPath((Pen $ink 12), $f) }
+		$g.FillPath((Brush $layer[1]), $f)
+	}
+}
+
+function Draw-Rewind($g, [float]$cx, [float]$cy, [float]$r) {
+	# An arc most of the way round, anticlockwise, ending in a head: "back".
+	$g.DrawArc((Pen $ink 30), $cx - $r, $cy - $r, $r * 2, $r * 2, -60, -270)
+	$g.DrawArc((Pen $white 16), $cx - $r, $cy - $r, $r * 2, $r * 2, -60, -270)
+	# Head at the arc's end (angle -330 = +30 degrees), pointing along it.
+	$a = 30 * [Math]::PI / 180
+	$ex = $cx + [Math]::Cos($a) * $r; $ey = $cy + [Math]::Sin($a) * $r
+	$tx = [Math]::Sin($a); $ty = -[Math]::Cos($a) # anticlockwise tangent
+	$nx = [Math]::Cos($a); $ny = [Math]::Sin($a)
+	$head = [System.Drawing.PointF[]]@(
+		(Pt ($ex + $tx * 46) ($ey + $ty * 46)),
+		(Pt ($ex + $nx * 34 - $tx * 10) ($ey + $ny * 34 - $ty * 10)),
+		(Pt ($ex - $nx * 34 - $tx * 10) ($ey - $ny * 34 - $ty * 10))
+	)
+	$g.FillPolygon((Brush $ink), $head)
+	$g.DrawPolygon((Pen $ink 10), $head)
+	$inset = [System.Drawing.PointF[]]@(
+		(Pt ($ex + $tx * 30) ($ey + $ty * 30)),
+		(Pt ($ex + $nx * 20 - $tx * 2) ($ey + $ny * 20 - $ty * 2)),
+		(Pt ($ex - $nx * 20 - $tx * 2) ($ey - $ny * 20 - $ty * 2))
+	)
+	$g.FillPolygon((Brush $white), $inset)
+}
+
+foreach ($tier in @('1', '2', '3', '4', '5', '6', '7', '8+')) {
+	$c = New-Icon (Rgb 255 170 60) (Rgb 150 30 60); $g = $c[1]
+	Draw-Rewind $g 256 200 118
+	Draw-Flame $g 256 204 0.66 (Rgb 255 120 30) (Rgb 255 220 80)
+	Draw-Label $g $tier 404 $(if ($tier.Length -gt 1) { 66 } else { 74 }) (Rgb 255 255 255)
+	$name = if ($tier -eq '8+') { 'streak-buy-back-8-plus.png' } else { "streak-buy-back-$tier.png" }
+	Save-Icon $c $name
+}
