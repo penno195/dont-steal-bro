@@ -87,6 +87,14 @@ both together.
 | `Season1Pass.luau` | 2006972979 | on sale on Roblox, disabled in config |
 | `NavigationRound.luau` | 3717313833 | enabled |
 | `NavigationPass.luau` | 2021852267 | enabled |
+| `StreakBuyBack1.luau` | 3717322114 | enabled |
+| `StreakBuyBack2.luau` | 3717322285 | enabled |
+| `StreakBuyBack3.luau` | 3717322388 | enabled |
+| `StreakBuyBack4.luau` | 3717322551 | enabled |
+| `StreakBuyBack5.luau` | 3717322840 | enabled |
+| `StreakBuyBack6.luau` | 3717322985 | enabled |
+| `StreakBuyBack7.luau` | 3717323070 | enabled |
+| `StreakBuyBack8Plus.luau` | 3717323241 | enabled |
 
 Navigation's art is in `assets/store/navigation-round.png` and
 `navigation-pass.png` (the coin offer shares the round's image). Keep
