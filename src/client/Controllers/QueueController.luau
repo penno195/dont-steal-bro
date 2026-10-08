@@ -30,18 +30,30 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local C = require(script.Parent.Parent.UI.Components)
 local Base = require(script.Parent.Parent.UI.Components.Base)
+local Icons = require(script.Parent.Parent.UI.Components.Icons)
 local Layout = require(script.Parent.Parent.UI.Layout)
+local LockerLogic = require(script.Parent.Parent.UI.LockerLogic)
 local QueueLogic = require(script.Parent.Parent.UI.QueueLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local MenuController = require(script.Parent.MenuController)
 local UIScaleController = require(script.Parent.UIScaleController)
 
 local source = vide.source
 local create = vide.create
 local show = vide.show
+local switch = vide.switch
+local indexes = vide.indexes
 
 local CARD_WIDTH = 208 -- reference px
+local STRIP_TILE = 40 -- reference px
+
+local powerUpIds: { string } = {}
+for _, entry in PowerUps do
+	table.insert(powerUpIds, entry.def.id)
+end
 local TICK = 0.5
 local BOARD_TAG = "HubQueueCountdown"
 local BOARD_PIXELS_PER_STUD = 28
@@ -94,6 +106,136 @@ local function anchorFor(usable: Layout.Rect, touch: boolean): UDim2
 	return UDim2.new(0, margin, 1, -margin)
 end
 
+-- THE LOADOUT STRIP, above the status while queued (design-decisions.md
+-- Q8, "the Locker and choosing a loadout"): what goes into the race, or
+-- last round's picks with a one-tap "Same as last round". Nothing is
+-- asked of a player who doesn't care; the loadout never re-arms itself.
+
+local STRIP_CAPTION: { [LockerLogic.StripMode]: string } = {
+	Set = "Taking into the race",
+	Offer = "Last round",
+	None = "No power-ups picked",
+}
+
+local function stripTile(tile: () -> LockerLogic.StripTile, index: number, offer: () -> boolean): Instance
+	local id = function(): string?
+		return tile().powerUpId
+	end
+	local ink = function(): Color3
+		return if offer() then Theme.color.inkMuted else Theme.color.ink
+	end
+	local icons: { [string]: any } = {}
+	for _, powerUpId in powerUpIds do
+		icons[powerUpId] = function()
+			return Icons.view(powerUpId, STRIP_TILE - 12, ink)
+		end
+	end
+	return create("Frame")({
+		Name = "Tile" .. index,
+		LayoutOrder = index,
+		Size = UDim2.fromOffset(STRIP_TILE, STRIP_TILE),
+		BackgroundColor3 = Theme.color.surfaceRaised,
+		Base.corner(Theme.radius.sm),
+		create("UIStroke")({ BorderStrokePosition = Enum.BorderStrokePosition.Inner, Color = Theme.color.line }),
+		create("Frame")({
+			Name = "Icon",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(STRIP_TILE - 12, STRIP_TILE - 12),
+			BackgroundTransparency = 1,
+			switch(id)(icons) :: any,
+		}),
+		-- Owned stock always carries its count. Red 0: last round's
+		-- pick has run out, and "Same as last round" will leave it empty.
+		Base.text("caption", {
+			Name = "Count",
+			AnchorPoint = Vector2.new(1, 1),
+			Position = UDim2.new(1, -2, 1, 0),
+			Size = UDim2.fromOffset(STRIP_TILE, Theme.type.caption.size),
+			Visible = function()
+				return id() ~= nil
+			end,
+			Text = function()
+				return if tile().stock > 0 then "×" .. tile().stock else "0"
+			end,
+			TextColor3 = function()
+				return if tile().stock > 0 then Theme.color.ink else Theme.color.danger
+			end,
+			TextXAlignment = Enum.TextXAlignment.Right,
+		}),
+	})
+end
+
+local function loadoutStrip(): Instance
+	local strip = function(): LockerLogic.Strip?
+		local s = MenuController.storeState()
+		return if s then LockerLogic.strip(s :: any) else nil
+	end
+	local tiles = function(): { LockerLogic.StripTile }
+		local s = strip()
+		return if s then s.tiles else {}
+	end
+	local offer = function(): boolean
+		local s = strip()
+		return s ~= nil and s.mode == "Offer"
+	end
+	local inner = CARD_WIDTH - 2 * Theme.spacing.md
+
+	return C.Panel({
+		name = "Loadout",
+		elevation = 2,
+		size = UDim2.fromScale(1, 0),
+		automaticSize = Enum.AutomaticSize.Y,
+		padding = Theme.spacing.md,
+		gap = Theme.spacing.xs,
+		layoutOrder = 0,
+		children = {
+			Base.text("caption", {
+				Name = "Caption",
+				LayoutOrder = 1,
+				Size = UDim2.new(1, 0, 0, Theme.type.caption.size + Theme.spacing.xxs),
+				Text = function()
+					local s = strip()
+					return if s then STRIP_CAPTION[s.mode] else ""
+				end,
+				TextColor3 = Theme.color.inkMuted,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+			create("Frame")({
+				Name = "Row",
+				LayoutOrder = 2,
+				Size = UDim2.new(1, 0, 0, Theme.touch.iconButton),
+				BackgroundTransparency = 1,
+				create("UIListLayout")({
+					FillDirection = Enum.FillDirection.Horizontal,
+					VerticalAlignment = Enum.VerticalAlignment.Center,
+					Padding = UDim.new(0, Theme.spacing.xs),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+				indexes(tiles, function(tile: () -> LockerLogic.StripTile, index: number)
+					return stripTile(tile, index, offer)
+				end) :: any,
+				C.IconButton({
+					icon = "locker",
+					label = "Locker",
+					variant = "ghost",
+					onActivate = MenuController.openLocker,
+					layoutOrder = 10,
+				}),
+			}),
+			show(offer, function()
+				return C.Button({
+					label = "Same as last round",
+					variant = "secondary",
+					width = inner,
+					onActivate = MenuController.repeatLastLoadout,
+					layoutOrder = 3,
+				}) :: any
+			end) :: any,
+		} :: { Instance },
+	})
+end
+
 local function mountCard()
 	local gui = UIScaleController.createScreen("QueueCard", { displayOrder = Theme.displayOrder.hud })
 	local usable = source(UIScaleController.getUsableRect())
@@ -130,6 +272,9 @@ local function mountCard()
 				Padding = UDim.new(0, Theme.spacing.sm),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
+			show(function()
+				return view().action == "Leave" and MenuController.storeState() ~= nil
+			end, loadoutStrip) :: any,
 			show(hasText, function()
 				return C.Panel({
 					name = "Status",
@@ -253,7 +398,7 @@ end
 
 local QueueController: Loader.Controller = {
 	name = "QueueController",
-	dependencies = { "UIScaleController" },
+	dependencies = { "UIScaleController", "MenuController" },
 }
 
 function QueueController:init()

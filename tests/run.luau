@@ -58,6 +58,7 @@ require("./FeelLogic.spec")
 require("./TaskHandlerTypes.spec")
 require("./DoorLogic.spec")
 require("./QueueLogic.spec")
+require("./LockerLogic.spec")
 require("./TimingLogic.spec")
 require("./TelemetryLogic.spec")
 

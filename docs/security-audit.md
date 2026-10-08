@@ -48,7 +48,8 @@ is dropped after one token-bucket check and, at most, one throttled report.
 | `TitleEquipIntent` | any / any | Equips an **owned** title | dropped | 5 burst, 1/s | None. Ownership is checked against the profile |
 | `StorePurchaseIntent` | any / any | Opens a Roblox purchase prompt for an enabled catalogue key | dropped | 4 burst, 0.5/s | A prompt for themselves. Nothing is granted here |
 | `StoreEquipIntent` | any / any | Equips an owned cosmetic into a slot the category allows | dropped | 6 burst, 1/s | None |
-| `StoreLoadoutIntent` | any / any | Places stocked power-ups into loadout slots. Stock is spent only in `consumeLoadout`, which re-checks it | dropped | 6 burst, 1/s | None |
+| `StoreLoadoutIntent` | any / any | Places stocked power-ups into loadout slots. Stock is spent only in `consumeLoadout`, which re-checks it. Refused once the player is Departing | dropped | 6 burst, 1/s | None |
+| `StoreLoadoutRepeatIntent` | any / any | "Same as last round": re-arms the profile's own `lastLoadout` through `setLoadoutSlot`'s checks. No payload, so the client names nothing. Refused once Departing | dropped | 3 burst, 0.5/s | None |
 | `QueueJoinIntent` / `QueueLeaveIntent` | hub player / any | Matchmaking queue membership (MemoryStore) | dropped | 3 burst, 0.5/s each | Queue churn, bounded to about 1 MemoryStore write per 2s |
 | `MapVoteIntent` | group member with a live ballot / any | Casts a vote through a CAS on the group record | dropped | 4 burst, 1/s | One vote, changeable. See F7 for quota cost |
 | `SettingsIntent` | any / any | Patches their own settings. Bounds come from the schema | dropped | 8 burst, 2/s | Their own settings |

@@ -382,6 +382,30 @@ function StoreLogic.setLoadoutSlot(
 	return updated, nil
 end
 
+-- "Same as last round": last round's loadout, placed again slot by slot
+-- through setLoadoutSlot, so it passes exactly the checks a hand-picked
+-- one does. An entry that no longer passes (no stock left, no longer
+-- eligible) is skipped rather than refusing the rest, and nothing takes
+-- its place (design-decisions.md Q8, "the Locker and choosing a loadout").
+function StoreLogic.repeatLoadout(
+	lastLoadout: { string },
+	stock: { [string]: number },
+	loadoutEligible: { [string]: boolean },
+	slots: number
+): { string }
+	local placed: { string } = {}
+	for _, powerUpId in lastLoadout do
+		if #placed >= slots then
+			break
+		end
+		local updated = StoreLogic.setLoadoutSlot(placed, #placed + 1, powerUpId, stock, loadoutEligible, slots)
+		if updated ~= nil then
+			placed = updated
+		end
+	end
+	return placed
+end
+
 -- What a round should actually consume, given a stored loadout and the
 -- stock behind it. Returns the items granted and the stock left after.
 --

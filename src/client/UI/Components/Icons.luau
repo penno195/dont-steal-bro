@@ -50,6 +50,8 @@ local ICONS: { [string]: Icon } = {
 	settings = { glyph = "⚙", image = "rbxassetid://121595912998780" },
 	shop = { glyph = "🛒", image = "rbxassetid://127041926651820" },
 	trophy = { glyph = "🏆", image = "rbxassetid://75761907635692" },
+	-- The Locker. Drawn by scripts/make-ui-icons.ps1 (assets/ui/locker.png).
+	locker = { glyph = "🎒", image = "rbxassetid://98422090914868" },
 	bolt = { glyph = "⚡", image = "rbxassetid://135765129052417" }, -- power-ups
 	flame = { glyph = "🔥", image = "rbxassetid://105424020512075" }, -- streak
 	shield = { glyph = "⛨", image = "rbxassetid://85964163524838" },

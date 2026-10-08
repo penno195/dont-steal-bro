@@ -610,13 +610,27 @@ end
 -- only make sense as one fact: a loadout entry with no stock backing it
 -- is an item the player will be handed and never paid for. Both callers
 -- (a slot change, and spending the loadout at round start) move both.
-local function setLoadoutAndStock(player: Player, loadout: { string }, stock: { [string]: number })
+-- Spending also passes `lastLoadout`, what was spent, in the same write.
+local function setLoadoutAndStock(
+	player: Player,
+	loadout: { string },
+	stock: { [string]: number },
+	lastLoadout: { string }?
+)
 	local d = writable(player)
 	if d == nil then
 		return
 	end
 	d.starterPowerUps = table.clone(loadout)
 	d.powerUpStock = table.clone(stock)
+	if lastLoadout ~= nil then
+		d.lastLoadout = table.clone(lastLoadout)
+	end
+end
+
+local function getLastLoadout(player: Player): { string }
+	local d = data(player)
+	return if d then table.clone(d.lastLoadout) else {}
 end
 
 -- Refuses a slot this profile doesn't own the item for - the same
@@ -754,6 +768,7 @@ local DataService: Loader.Service = {
 	getPowerUpStock = getPowerUpStock,
 	getLoadout = getLoadout,
 	setLoadoutAndStock = setLoadoutAndStock,
+	getLastLoadout = getLastLoadout,
 	getOwnedCosmetics = getOwnedCosmetics,
 	getEquipped = getEquipped,
 	setEquippedCosmetic = setEquippedCosmetic,

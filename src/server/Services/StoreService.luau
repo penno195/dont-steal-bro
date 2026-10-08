@@ -203,6 +203,14 @@ local function pushState(player: Player)
 		currency = DataService.getCurrency(player),
 		powerUpStock = DataService.getPowerUpStock(player),
 		loadout = DataService.getLoadout(player),
+		lastLoadout = DataService.getLastLoadout(player),
+		-- The Locker's Titles tab. The player's own titles, to them only:
+		-- Q7 condition 1 is about OTHER players seeing them, and this
+		-- remote is targeted. `wornTitle` is what TitleService resolves
+		-- (their pick, else their highest rung).
+		unlockedTitles = DataService.getUnlockedTitles(player),
+		equippedTitle = DataService.getEquippedTitle(player),
+		wornTitle = (Loader.get("TitleService") :: any).getWornTitleId(player.UserId),
 		ownedCosmetics = DataService.getOwnedCosmetics(player),
 		equipped = DataService.getEquipped(player),
 		ownedPasses = ownedPasses,
@@ -851,6 +859,31 @@ local function handleLoadoutIntent(player: Player, slotIndex: number, powerUpId:
 	pushState(player)
 end
 
+-- The loadout can be changed until the teleport begins, the queue
+-- countdown included (design-decisions.md Q8, "the Locker and choosing a
+-- loadout"). Once a player is Departing, the hub is about to release
+-- their profile to the match server, so an edit then is refused rather
+-- than racing that handover. Always false on a match server.
+local function loadoutLocked(player: Player): boolean
+	return (Loader.get("MatchmakingService") :: any).isDeparting(player)
+end
+
+-- "Same as last round" (the queue strip). Replaces the loadout with last
+-- round's picks that still have stock. Selecting spends nothing, as above.
+local function handleLoadoutRepeatIntent(player: Player)
+	local DataService = Loader.get("DataService") :: any
+
+	local stock = DataService.getPowerUpStock(player) :: { [string]: number }
+	local placed = StoreLogic.repeatLoadout(
+		DataService.getLastLoadout(player),
+		stock,
+		loadoutEligible,
+		GameConfig.store.loadoutSlots
+	)
+	DataService.setLoadoutAndStock(player, placed, stock)
+	pushState(player)
+end
+
 -- Spends the player's stored loadout and hands back what they take into
 -- the round. THE ONLY PLACE STOCK IS DECREMENTED.
 --
@@ -870,8 +903,11 @@ local function consumeLoadoutFor(player: Player): { string }
 
 	-- The loadout is cleared as it is spent: these were consumables, and
 	-- leaving the selection in place would re-arm it silently from
-	-- whatever stock is left next round.
-	DataService.setLoadoutAndStock(player, {}, remaining)
+	-- whatever stock is left next round. What was picked is kept as
+	-- lastLoadout, for the queue strip's "Same as last round", which
+	-- re-arms it only when the player taps it.
+	local picked = table.move(loadout, 1, math.min(#loadout, GameConfig.store.loadoutSlots), 1, {})
+	DataService.setLoadoutAndStock(player, {}, remaining, picked)
 
 	print(
 		string.format(
@@ -969,7 +1005,17 @@ function StoreService:init()
 	end)
 
 	NetGuard.on("StoreLoadoutIntent", function(player: Player, payload: any)
+		if loadoutLocked(player) then
+			return
+		end
 		handleLoadoutIntent(player, payload.slotIndex, payload.powerUpId)
+	end)
+
+	NetGuard.on("StoreLoadoutRepeatIntent", function(player: Player)
+		if loadoutLocked(player) then
+			return
+		end
+		handleLoadoutRepeatIntent(player)
 	end)
 
 	-- "This can only be done once by one server-side script" (Roblox's

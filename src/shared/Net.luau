@@ -1044,6 +1044,19 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: "Same as last round." No payload. The server
+	-- re-arms the loadout from the profile's own lastLoadout, re-checking
+	-- each entry against stock (StoreLogic.repeatLoadout). The client
+	-- can't name what goes in, so this is no wider than three
+	-- StoreLoadoutIntents.
+	StoreLoadoutRepeatIntent = {
+		name = "StoreLoadoutRepeatIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: equip a cosmetic into a slot, or unequip with a
 	-- nil itemId. Validated against the player's own owned list
 	-- server-side - a client naming a cosmetic it never bought is

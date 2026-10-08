@@ -323,6 +323,53 @@ TestRunner.describe("StoreLogic.consumeLoadout", function()
 	end)
 end)
 
+TestRunner.describe("StoreLogic.repeatLoadout (the Locker's Same as last round)", function()
+	local eligible = { ["sprint-boost"] = true, ["slow-field"] = true, ["push-trip"] = true }
+
+	TestRunner.it("re-arms last round's picks in order while the stock lasts", function()
+		local placed = StoreLogic.repeatLoadout(
+			{ "slow-field", "sprint-boost" },
+			{ ["sprint-boost"] = 4, ["slow-field"] = 1 },
+			eligible,
+			3
+		)
+		TestRunner.expect(#placed):toBe(2)
+		TestRunner.expect(placed[1]):toBe("slow-field")
+		TestRunner.expect(placed[2]):toBe("sprint-boost")
+	end)
+
+	TestRunner.it("leaves an item with no stock out, and puts nothing in its place", function()
+		local placed = StoreLogic.repeatLoadout({ "slow-field", "sprint-boost" }, { ["sprint-boost"] = 4 }, eligible, 3)
+		TestRunner.expect(#placed):toBe(1)
+		TestRunner.expect(placed[1]):toBe("sprint-boost")
+	end)
+
+	TestRunner.it("never places more copies than the stock holds", function()
+		local placed = StoreLogic.repeatLoadout(
+			{ "sprint-boost", "sprint-boost", "sprint-boost" },
+			{ ["sprint-boost"] = 2 },
+			eligible,
+			3
+		)
+		TestRunner.expect(#placed):toBe(2)
+	end)
+
+	TestRunner.it("skips an item that is no longer loadout-eligible", function()
+		local placed = StoreLogic.repeatLoadout({ "freeze" }, { freeze = 5 }, eligible, 3)
+		TestRunner.expect(#placed):toBe(0)
+	end)
+
+	TestRunner.it("honours the cap even if the stored list is longer", function()
+		local placed = StoreLogic.repeatLoadout(
+			{ "sprint-boost", "slow-field", "push-trip", "sprint-boost" },
+			{ ["sprint-boost"] = 5, ["slow-field"] = 5, ["push-trip"] = 5 },
+			eligible,
+			3
+		)
+		TestRunner.expect(#placed):toBe(3)
+	end)
+end)
+
 TestRunner.describe("StoreLogic.isOwnershipFresh", function()
 	TestRunner.it("a cache miss is never fresh", function()
 		TestRunner.expect(StoreLogic.isOwnershipFresh(nil, true, 100, 3600, 60)):toBe(false)

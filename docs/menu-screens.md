@@ -101,6 +101,12 @@ them touches a remote.
   nothing.
 - **Colour-blind mode consumers.** The source exists. P6-8's accessibility
   pass decides what extra labels each screen shows when it's on.
-- **Loadout editing.** `StoreLoadoutIntent` exists, but no screen sets
-  loadout slots yet. It isn't in P6-6's list; it belongs with the pre-round
-  lobby.
+- **Loadout editing.** Done (2026-10-08): the Locker (`Screens/Locker`,
+  first button on the launcher) sets loadout slots and equips cosmetics,
+  and QueueController's strip shows the loadout while queued, with
+  "Same as last round". Rules: design-decisions.md Q8, "the Locker and
+  choosing a loadout". Its Titles tab reads the player's own
+  `unlockedTitles`/`equippedTitle`/`wornTitle` from StoreState, which
+  TitleService re-pushes after every unlock and equip. The Locker icon is
+  `assets/ui/locker.png` (scripts/make-ui-icons.ps1). Hub practice slots
+  carry a PRACTICE badge (`RaceHUD.mountPowerUps`).

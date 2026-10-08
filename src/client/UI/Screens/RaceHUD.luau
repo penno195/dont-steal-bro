@@ -476,11 +476,43 @@ local function powerUpSlot(
 	store: Store,
 	slot: () -> Slot,
 	cancelling: () -> boolean,
-	press: (index: number, input: InputObject) -> ()
+	press: (index: number, input: InputObject) -> (),
+	practice: boolean
 ): TextButton
 	local empty = derive(function()
 		return slot().id == nil
 	end)
+
+	-- Hub practice: a PRACTICE badge sitting on the slot's top edge (just
+	-- above it, clear of the keyboard number), so a practice pickup never
+	-- reads as something owned. Owned stock shows its count in the Locker
+	-- instead (design-decisions.md Q8, "the Locker and choosing a loadout").
+	local practiceTag = if practice
+		then create("Frame")({
+			Name = "PracticeTag",
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 0, 2),
+			Size = UDim2.fromOffset(SLOT - Theme.spacing.xs, SLOT_LABEL),
+			BackgroundColor3 = Theme.color.background,
+			ZIndex = 3,
+			Visible = function()
+				return not empty()
+			end,
+			Base.corner(Theme.radius.pill),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner,
+				Color = Theme.color.warning,
+			}),
+			Base.text("caption", {
+				Name = "Label",
+				Size = UDim2.fromScale(1, 1),
+				Text = "PRACTICE",
+				TextScaled = true,
+				TextColor3 = Theme.color.warning,
+				ZIndex = 3,
+			}),
+		})
+		else nil
 	local isSelected = derive(function()
 		return store.selected() == slot().index
 	end)
@@ -534,6 +566,7 @@ local function powerUpSlot(
 			end,
 		}),
 		icon,
+		practiceTag,
 		Base.text("caption", {
 			Name = "Name",
 			AnchorPoint = Vector2.new(0.5, 1),
@@ -677,7 +710,7 @@ end
 -- release; dragged back onto its start it cancels (HudLogic.slotGesture).
 -- Dragging a held item also shows the bin; released over it, the item
 -- is discarded instead of fired.
-local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: number): Frame
+local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: number, practice: boolean?): Frame
 	local cancelling = source(false)
 	local binShown = source(false)
 	local overBin = source(false)
@@ -813,7 +846,7 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
 				indexes(store.slots, function(slot: () -> Slot)
-					return powerUpSlot(store, slot, cancelling, press)
+					return powerUpSlot(store, slot, cancelling, press, practice == true)
 				end) :: any,
 			}),
 			bin,
@@ -1229,9 +1262,10 @@ function RaceHUD.mountPowerUps(controller: any, store: Store): () -> ()
 		end))
 
 		local slotCount = #store.slots()
+		-- `true`: every item here is a practice pickup, tagged as such.
 		local power = powerUpPanel(store, function()
 			return primaryAnchor(orientation())
-		end, slotCount)
+		end, slotCount, true)
 		power.Parent = gui
 		cleanup(controller.attachScale(power))
 

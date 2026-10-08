@@ -192,9 +192,16 @@ local function resolveWornTitle(player: Player): string?
 	return if highest ~= nil then highest.id else nil
 end
 
+-- The Locker's Titles tab reads unlocked/equipped/worn from StoreState,
+-- so any change to them re-sends it to their owner.
+local function pushOwnTitles(player: Player)
+	(Loader.get("StoreService") :: any).pushState(player)
+end
+
 local function refreshPlayer(player: Player)
 	refreshUnlocks(player)
 	wornTitleId[player.UserId] = resolveWornTitle(player)
+	pushOwnTitles(player)
 end
 
 -- ===== equip / unequip =====================================================
@@ -217,6 +224,7 @@ local function handleEquipIntent(player: Player, titleId: string?)
 
 	wornTitleId[player.UserId] = resolveWornTitle(player)
 	broadcastTitles()
+	pushOwnTitles(player)
 end
 
 -- ===== NPC titles ==========================================================
@@ -314,6 +322,7 @@ function TitleService:init()
 		seedUnlocks(player)
 		wornTitleId[player.UserId] = resolveWornTitle(player)
 		broadcastTitles()
+		pushOwnTitles(player)
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)

@@ -42,6 +42,12 @@ export type StoreState = {
 	currency: number,
 	powerUpStock: { [string]: number },
 	loadout: { string },
+	lastLoadout: { string }?, -- what the last round spent; the Locker's "Same as last round"
+	-- The Locker's Titles tab: this player's own titles only.
+	unlockedTitles: { string }?,
+	equippedTitle: string?, -- their own pick; nil = wear the highest rung
+	wornTitle: string?, -- what they're shown wearing, resolved server-side
+
 	ownedCosmetics: { string },
 	equipped: { [string]: string },
 	ownedPasses: { string },

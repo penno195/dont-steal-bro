@@ -106,6 +106,14 @@ export type ProfileData = {
 	-- entry appears the first time the player is seen during the season,
 	-- and is kept after it ends (it's the record of what was paid).
 	seasonProgress: { [string]: SeasonProgress },
+
+	-- ===== schema v6, the Locker ========================================
+
+	-- The loadout as it stood when the last round spent it, before stock
+	-- was checked. Spending clears `starterPowerUps`, so this is what the
+	-- queue strip's "Same as last round" re-arms from (design-decisions.md
+	-- Q8, "the Locker and choosing a loadout"). Never spent by itself.
+	lastLoadout: { string },
 }
 
 -- Structurally SeasonLogic.Progress, which computes what this stores.
@@ -121,7 +129,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 5
+local CURRENT_SCHEMA_VERSION = 6
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -145,6 +153,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		lastSeen = 0,
 		lastWinReward = nil,
 		seasonProgress = {},
+		lastLoadout = {},
 	}
 end
 
@@ -238,6 +247,15 @@ migrations[4] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 5
 	next.seasonProgress = (old.seasonProgress :: { [string]: any }?) or {}
+	return next
+end
+
+-- v5 -> v6 (the Locker): an empty lastLoadout. Earlier versions threw the
+-- spent loadout away, so there is nothing to offer again yet.
+migrations[5] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 6
+	next.lastLoadout = (old.lastLoadout :: { string }?) or {}
 	return next
 end
 

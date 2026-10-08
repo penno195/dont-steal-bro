@@ -1,13 +1,14 @@
 --!strict
 --# selene: allow(mixed_table) -- Vide props + children, see UI/Components/Base.luau
--- The menu screens (P6-6): store, leaderboards, results and settings.
+-- The menu screens (P6-6): locker, store, leaderboards, results and
+-- settings.
 -- Owns their data (remotes -> Vide sources), the store's purchase flow,
 -- the launcher that opens them, and which one is up. The screens never
 -- touch a remote.
 --
 -- ONE MENU AT A TIME. Opening one closes whichever was open.
 --
--- THE LAUNCHER: three buttons (store, boards, settings) stacked on the
+-- THE LAUNCHER: four buttons (locker, store, boards, settings) stacked on the
 -- right edge at mid-height, where a right thumb rests in portrait and
 -- clear of Roblox's jump button below. Hidden while a round is in play
 -- (RaceHUD and the Decision Studio own the screen then), and while a
@@ -51,6 +52,7 @@ local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
 local SeasonTrackLogic = require(script.Parent.Parent.UI.SeasonTrackLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local LeaderboardsScreen = require(script.Parent.Parent.UI.Screens.Leaderboards)
+local LockerScreen = require(script.Parent.Parent.UI.Screens.Locker)
 local DropNames = require(script.Parent.Parent.UI.DropNames)
 local ResultsScreen = require(script.Parent.Parent.UI.Screens.Results)
 local SettingsScreen = require(script.Parent.Parent.UI.Screens.Settings)
@@ -92,12 +94,32 @@ for _, entry in Cosmetics do
 	cosmeticDefs[entry.def.id] = entry.def
 end
 local powerUpDefs: { [string]: any } = {}
+local powerUpIds: { string } = {}
 for _, entry in PowerUps do
 	powerUpDefs[entry.def.id] = entry.def
+	table.insert(powerUpIds, entry.def.id)
 end
+
+-- The Locker's Style tab groups cosmetics in this order: what you wear
+-- first, then what shows in the Studio.
+local COSMETIC_CATEGORY_ORDER = {
+	"Skin",
+	"Trail",
+	"Nameplate",
+	"StreakFlair",
+	"Emote",
+	"Projectile",
+	"Podium",
+	"Reveal",
+	"CallingCard",
+}
 local titleNames: { [string]: string } = {}
+local titleColors: { [string]: Color3 } = {}
+local titleLadder: { { id: string, minStreak: number } } = {}
 for _, entry in Titles do
 	titleNames[entry.def.id] = entry.def.displayName
+	titleColors[entry.def.id] = Color3.fromHex(entry.def.colorHex)
+	table.insert(titleLadder, { id = entry.def.id, minStreak = entry.def.minStreak })
 end
 
 local seasonDefs: { [string]: SeasonTrackLogic.SeasonDef } = {}
@@ -155,6 +177,12 @@ local function stepFlow(event: StoreScreenLogic.FlowEvent)
 	end
 end
 
+-- "Same as last round", from the Locker or the queue strip. The server
+-- picks what goes in, from the profile.
+local function repeatLastLoadout()
+	Net.fireServer("StoreLoadoutRepeatIntent", {})
+end
+
 local function setBoard(tab: string, payload: any)
 	if type(payload) ~= "table" or type(payload.entries) ~= "table" then
 		return
@@ -170,7 +198,7 @@ end
 
 -- ===== screens ===============================================================
 
-type Menu = "Store" | "Leaderboards" | "Results" | "Settings"
+type Menu = "Store" | "Locker" | "Leaderboards" | "Results" | "Settings"
 
 local openMenu: Menu? = nil
 local unmountMenu: (() -> ())? = nil
@@ -228,6 +256,47 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?)
 				local def = seasonDefs[seasonId]
 				return if def then def.passKey else nil
 			end,
+		})
+	elseif menu == "Locker" then
+		unmountMenu = LockerScreen.mount(UIScaleController, {
+			state = storeState,
+			powerUpIds = powerUpIds,
+			powerUpName = function(id: string): string
+				local def = powerUpDefs[id]
+				return if def then def.displayName else id
+			end,
+			powerUpRarity = function(id: string): string?
+				local def = powerUpDefs[id]
+				return def and def.rarity
+			end,
+			cosmeticName = cosmeticName,
+			cosmeticCategory = function(id: string): string?
+				local def = cosmeticDefs[id]
+				return def and def.category
+			end,
+			cosmeticRarity = function(id: string): string?
+				local def = cosmeticDefs[id]
+				return def and def.rarity
+			end,
+			categoryOrder = COSMETIC_CATEGORY_ORDER,
+			setSlot = function(slotIndex: number, powerUpId: string?)
+				Net.fireServer("StoreLoadoutIntent", { slotIndex = slotIndex, powerUpId = powerUpId })
+			end,
+			repeatLast = repeatLastLoadout,
+			equip = function(cosmeticId: string, slot: string, wear: boolean)
+				Net.fireServer("StoreEquipIntent", { slot = slot, itemId = if wear then cosmeticId else nil })
+			end,
+			titleLadder = titleLadder,
+			titleName = function(id: string): string
+				return titleNames[id] or id
+			end,
+			titleColor = function(id: string): Color3
+				return titleColors[id] or Theme.color.ink
+			end,
+			equipTitle = function(titleId: string?)
+				Net.fireServer("TitleEquipIntent", { titleId = titleId })
+			end,
+			close = closeMenu,
 		})
 	elseif menu == "Leaderboards" then
 		unmountMenu =
@@ -303,7 +372,7 @@ local function mountLauncher()
 			Name = "Launcher",
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -Theme.spacing.sm, 0.45, 0),
-			Size = UDim2.fromOffset(Theme.touch.iconButton, 3 * Theme.touch.iconButton + 2 * Theme.spacing.md),
+			Size = UDim2.fromOffset(Theme.touch.iconButton, 4 * Theme.touch.iconButton + 3 * Theme.spacing.md),
 			BackgroundTransparency = 1,
 			Visible = visible,
 			create("UIListLayout")({
@@ -312,14 +381,24 @@ local function mountLauncher()
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
 			C.IconButton({
+				icon = "locker",
+				label = "Locker",
+				variant = "secondary",
+				onActivate = function()
+					open("Locker")
+				end,
+				order = 1,
+				layoutOrder = 1,
+			}),
+			C.IconButton({
 				icon = "shop",
 				label = "Store",
 				variant = "secondary",
 				onActivate = function()
 					open("Store")
 				end,
-				order = 1,
-				layoutOrder = 1,
+				order = 2,
+				layoutOrder = 2,
 			}),
 			C.IconButton({
 				icon = "trophy",
@@ -328,8 +407,8 @@ local function mountLauncher()
 				onActivate = function()
 					open("Leaderboards")
 				end,
-				order = 2,
-				layoutOrder = 2,
+				order = 3,
+				layoutOrder = 3,
 			}),
 			C.IconButton({
 				icon = "settings",
@@ -338,8 +417,8 @@ local function mountLauncher()
 				onActivate = function()
 					open("Settings")
 				end,
-				order = 3,
-				layoutOrder = 3,
+				order = 4,
+				layoutOrder = 4,
 			}),
 			Parent = gui,
 		}) :: Frame
@@ -385,6 +464,14 @@ end
 local MenuController: Loader.Controller = {
 	name = "MenuController",
 	dependencies = { "UIScaleController", "SettingsController", "DecisionStudioController" },
+
+	-- For QueueController's loadout strip, which shows the same
+	-- StoreState and opens the Locker.
+	storeState = storeState,
+	openLocker = function()
+		open("Locker")
+	end,
+	repeatLastLoadout = repeatLastLoadout,
 }
 
 function MenuController:init()

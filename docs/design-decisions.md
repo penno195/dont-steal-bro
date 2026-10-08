@@ -472,6 +472,35 @@ attacks it already covers).
 expensive to loosen further — introducing an exclusive paid power-up later
 reopens the exact threat-model question this decision just closed.
 
+### Applied case: the Locker and choosing a loadout (2026-10-08)
+
+Decided by the project owner. The loadout is picked in the hub's Locker
+screen and checked on a strip shown during the queue countdown. A
+fixed-length picker on the match place's loading screen was rejected,
+because it would add a wait to every round for every player, including
+the many who own nothing.
+- **An item with no stock leaves its slot empty.** Nothing substitutes
+  another stocked item for it. The queue strip shows the empty slot with
+  a red "0" badge, so the player notices before the match.
+  (`StoreLogic.consumeLoadout` already drops entries with no stock rather
+  than granting them on credit.)
+- **The Locker says up front that items are spent at race start**,
+  whatever the round's outcome. Losing a round still costs the loadout,
+  and that should never come as a surprise.
+- **The loadout can be edited until the teleport begins.** That includes
+  the queue countdown. `StoreLoadoutIntent` is accepted while queued and
+  closes when `MatchTeleportService` marks the group as departing.
+- **The loadout never repeats on its own, and there is no confirm
+  step.** Spending clears it (`StoreService.consumeLoadoutFor`), so by
+  default nothing is spent. A player who used a loadout last round sees
+  a one-tap **"Same as last round"** button on the queue strip. It
+  re-arms last round's picks, skipping any with no stock left. A
+  per-round confirm button was rejected because it adds a step to every
+  round, and a player who never answers it still needs a default.
+- Practice pickups (`practice-area.md`) never appear in the Locker. In
+  the HUD they're marked as practice and carry no count badge, while
+  owned stock always shows one.
+
 ---
 
 ## 9. Where does a KillZone put a fallen racer?
