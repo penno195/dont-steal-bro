@@ -20,6 +20,8 @@ delivering something specific, says so explicitly.
 | 8 | Robux power-ups | Allowed only for items that are also freely earnable — Robux buys time, never exclusive power. 3-item loadout cap regardless of spend. |
 | 9 | Where does a KillZone put a fallen racer? *(added 2026-10-03, not from GDD §7)* | Back to their last safe (grounded) spot on the map, after a short respawn delay as the penalty. |
 | 10 | Which tasks ship at launch? *(added 2026-10-03, not from GDD §7)* | All eight: the four built plus `alarm-killswitch`, `breaker-sequence`, `reactor-sync` and `airlock-cycle`. |
+| 11 | Which way up is the game played on a phone? *(added 2026-10-04, not from GDD §7)* | Landscape only, in both the Hub and the Match. |
+| 12 | How long do Freeze and Push/Trip last? *(added 2026-10-06, not from GDD §7)* | Freeze 3.5s, Push/Trip 2s (with a ragdoll). Blind stays 4s. |
 
 ---
 
@@ -537,3 +539,23 @@ DecisionStudio, MenuShell, the task views) stay for now. They never run
 on a phone, but still apply to a tall Studio viewport or a tablet
 window. Tasks still need only one thumb. The mobile checklist now
 checks landscape only.
+
+## 12. How long do Freeze and Push/Trip last?
+
+*Added 2026-10-06 (user decision), after the victim looks went in
+(an ice block for Freeze, a ragdoll for Push/Trip).*
+
+**Decision:** Freeze 2.5s → **3.5s**; Push/Trip 1s → **2s**. Blind stays
+at 4s. Set in each item's config (`durationSeconds`); `powerups.md`'s
+table matches.
+
+**Why:** at the old lengths the new looks were over before they read -
+a 1s ragdoll is barely a stumble. The user first asked for 3-4s on
+everything; the agreed numbers keep Push/Trip shorter because it is the
+Common, 7s-cooldown attack, and a long stun on the cheap item is the
+most frustrating thing a phone player can be hit by. It also keeps the
+two hard-control items feeling different.
+
+**Unchanged:** the anti-frustration layer (`powerups.md`) - the 3s
+post-effect immunity, diminishing returns and the 15s rolling cap still
+bound the worst case, now reached in fewer hits.

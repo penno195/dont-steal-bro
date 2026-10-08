@@ -100,11 +100,11 @@ coexist (`store-receipts.md` §5).
 | `task-insight` | Buff | Utility | Self | next attempt (≤15s) | -1 difficulty tier on current task's rolled challenge | 12s | Uncommon |
 | `phase-step` | Buff | Defence | Self | 3s | Untargetable by targeted effects; passes through hazards & players | 15s | Rare |
 | `overclock` | Buff | Utility | Self | 10s | -50% cooldown on own other power-ups | 20s | Rare |
-| `freeze` | Debuff | Attack | Aimed | 2.5s | Full immobilize, can't interact with tasks | 12s | Uncommon |
+| `freeze` | Debuff | Attack | Aimed | 3.5s | Full immobilize, can't interact with tasks | 12s | Uncommon |
 | `slow-field` | Debuff | Attack | Area | 5s zone | -40% move speed while inside | 15s | Common |
 | `blind` | Debuff | Attack | Aimed | 4s | Obscures screen, no movement lock | 12s | Uncommon |
 | `task-scramble` | Debuff | Attack | Aimed | instant | Forces current task's challenge to re-roll (~4s added) | 10s | Common |
-| `push-trip` | Debuff | Attack | Aimed | 1s stagger | Knockback + brief stun | 7s | Common |
+| `push-trip` | Debuff | Attack | Aimed | 2s stagger (ragdoll) | Knockback + brief stun | 7s | Common |
 
 **Role** is the colour family on the HUD slot and pickup orb: Attack red
 (exactly the Debuffs, enforced by `Validate.checkPowerUp`), Defence blue,
@@ -197,7 +197,7 @@ Overclock is active; this is intentional (see anti-frustration note below)
 ### 6. Freeze (Debuff, Aimed)
 
 **Counter-play:** Second Wind cleanses it; Phase Step blocks it if timed
-before the cast lands; failing either, the fixed 2.5s duration plus the
+before the cast lands; failing either, the fixed 3.5s duration plus the
 post-effect hard-control immunity window (below) bounds the worst case.
 **Stacking:** does not extend past its own duration if reapplied — see the
 anti-frustration layer for cross-effect stacking rules.
@@ -259,7 +259,7 @@ Bots have no task view, so it does nothing to them.
 ### 10. Push/Trip (Debuff, Aimed)
 
 **Counter-play:** Phase Step blocks it; Second Wind cleanses the stagger;
-its 1s duration means even a fully unmitigated hit rarely costs real race
+its 2s duration means even a fully unmitigated hit rarely costs real race
 position. **Stacking:** classified as hard control (see below) despite its
 short duration — it shares the same post-effect immunity window and
 rolling disable-time cap as Freeze, not Slow Field's softer treatment.
