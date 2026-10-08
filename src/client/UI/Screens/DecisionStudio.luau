@@ -447,7 +447,7 @@ end
 
 -- One card at a time in the middle of the screen, in this screen's own
 -- order (DecisionLogic.revealOrder): it comes up face down under the
--- finalist's name, holds for TIMING.suspense, then turns. After the
+-- finalist's name, holds for DecisionLogic.suspenseFor, then turns. After the
 -- last card the outcome line takes its place until the result panel.
 -- Both faces are built up front, as everywhere else here, so nothing
 -- outcome-specific is created at the dramatic moment.

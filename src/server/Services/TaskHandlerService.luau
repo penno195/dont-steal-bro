@@ -308,7 +308,7 @@ local function handleSubmission(player: Player, stationId: string, submission: a
 	Net.fireClient(
 		"TaskResult",
 		player,
-		{ stationId = stationId, success = false, attempt = session.attempt, feedback = feedback }
+		{ stationId = stationId, success = false, completing = true, attempt = session.attempt, feedback = feedback }
 	)
 	task.delay(wait, function()
 		if activeSessions[player] == session and mayWork(player, stationId) then

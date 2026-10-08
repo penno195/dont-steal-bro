@@ -13,6 +13,8 @@
 --   burst    one pooled ParticleEmitter per colour on the character's
 --            root, fired with :Emit - never left emitting.
 --   flash    reduced motion's stand-in: an opacity-only full-screen tint.
+--   glow     the reveal heartbeat: a red pulse round the screen's edges
+--            on each beat (DecisionLogic.heartbeats, FeelLogic.heartbeatGlow).
 --
 -- Reduced motion is read when the moment fires (FeelLogic.spec picks the
 -- variant), so flipping the setting mid-round takes effect on the next
@@ -34,6 +36,14 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local UIScaleController = require(script.Parent.UIScaleController)
 
 local LATE_TOLERANCE = 0.25
+-- The heartbeat glow's bands. Rotation points each gradient from the
+-- screen edge (opaque) toward the middle (clear).
+local GLOW_SIDES = {
+	{ name = "Top", anchor = Vector2.new(0, 0), size = UDim2.fromScale(1, 0.18), rotation = 90 },
+	{ name = "Bottom", anchor = Vector2.new(0, 1), size = UDim2.fromScale(1, 0.18), rotation = 270 },
+	{ name = "Left", anchor = Vector2.new(0, 0), size = UDim2.fromScale(0.12, 1), rotation = 0 },
+	{ name = "Right", anchor = Vector2.new(1, 0), size = UDim2.fromScale(0.12, 1), rotation = 180 },
+}
 -- The reveal's audio cues that are also feel moments.
 local REVEAL_MOMENTS: { [string]: FeelLogic.Moment } = {
 	RevealCard = "RevealCard",
@@ -52,6 +62,9 @@ local flash: Timed<FeelLogic.Flash>? = nil
 local appliedOffset = Vector3.zero
 
 local flashFrame: Frame? = nil
+-- The heartbeat glow's four edge bands, and the beat they're showing.
+local glowBands: { Frame } = {}
+local glow: Timed<number>? = nil -- value = the beat's intensity
 local emitters: { [string]: ParticleEmitter } = {}
 local frozenUntil = 0
 local roundToken = 0
@@ -202,6 +215,16 @@ local function onHeartbeat()
 			flash = nil
 		end
 	end
+
+	if glow ~= nil then
+		local tr = FeelLogic.heartbeatGlow(glow.value, now - glow.startedAt, Env.reducedMotion())
+		for _, band in glowBands do
+			band.BackgroundTransparency = tr
+		end
+		if now - glow.startedAt >= FeelLogic.GLOW_RISE + FeelLogic.GLOW_FADE then
+			glow = nil
+		end
+	end
 end
 
 local function onReveal(payload: any)
@@ -214,7 +237,17 @@ local function onReveal(payload: any)
 		seats += 1
 	end
 	local token = roundToken
-	local schedule = AudioLogic.revealSchedule(seats, DecisionLogic.TIMING)
+	for _, beat in DecisionLogic.heartbeats(seats) do
+		local delay = reveal.revealAt + beat.at - Clock.now()
+		if delay >= -LATE_TOLERANCE then
+			task.delay(math.max(0, delay), function()
+				if token == roundToken then
+					glow = { value = beat.intensity, startedAt = os.clock() }
+				end
+			end)
+		end
+	end
+	local schedule = AudioLogic.revealSchedule(DecisionLogic.cardTurns(seats), DecisionLogic.TIMING)
 	for _, entry in schedule do
 		local moment: FeelLogic.Moment? = REVEAL_MOMENTS[entry.cue]
 		local delay = reveal.revealAt + entry.at - Clock.now()
@@ -280,6 +313,36 @@ function FeelController:start()
 	frame.Active = false
 	frame.Parent = gui
 	flashFrame = frame
+
+	-- The glow's bands: a fraction of the screen deep on each side,
+	-- fading inward, so the middle (the cards) stays clear.
+	local glowRoot = Instance.new("Frame")
+	glowRoot.Name = "HeartbeatGlow"
+	glowRoot.Size = UDim2.fromScale(1, 1)
+	glowRoot.BackgroundTransparency = 1
+	glowRoot.Active = false
+	glowRoot.Parent = gui
+	local fade = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	for _, side in GLOW_SIDES do
+		local band = Instance.new("Frame")
+		band.Name = side.name
+		band.AnchorPoint = side.anchor
+		band.Position = UDim2.fromScale(side.anchor.X, side.anchor.Y)
+		band.Size = side.size
+		band.BackgroundColor3 = Theme.color.danger
+		band.BackgroundTransparency = 1
+		band.BorderSizePixel = 0
+		band.Active = false
+		local gradient = Instance.new("UIGradient")
+		gradient.Transparency = fade
+		gradient.Rotation = side.rotation
+		gradient.Parent = band
+		band.Parent = glowRoot
+		table.insert(glowBands, band)
+	end
 
 	RunService.Heartbeat:Connect(onHeartbeat)
 end

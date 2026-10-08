@@ -162,7 +162,9 @@ end
 -- `assetId` swaps in a different sound for this one play (a Reveal
 -- cosmetic's own sound for a RevealCard), keeping the cue's volume,
 -- SoundGroup, priority and ducking - so it still obeys the SFX slider.
-local function play(cueId: string, at: BasePart?, assetId: string?)
+-- `volumeScale` multiplies the cue's volume for this one play (the
+-- reveal heartbeat growing card by card).
+local function play(cueId: string, at: BasePart?, assetId: string?, volumeScale: number?)
 	local def = CUES[cueId]
 	if def == nil or def.looped then
 		return
@@ -186,6 +188,7 @@ local function play(cueId: string, at: BasePart?, assetId: string?)
 	lastPlayed[cueId] = now
 
 	local sound = acquire(cueId, def, assetId)
+	sound.Volume = def.volume * (volumeScale or 1)
 	if def.spatial and at ~= nil then
 		sound.Parent = at
 	end
@@ -347,7 +350,7 @@ local function onReveal(payload: any)
 		seats += 1
 	end
 	local token = roundToken
-	local schedule, resultAt = AudioLogic.revealSchedule(seats, DecisionLogic.TIMING)
+	local schedule, resultAt = AudioLogic.revealSchedule(DecisionLogic.cardTurns(seats), DecisionLogic.TIMING)
 	table.insert(ducks, {
 		duck = AudioLogic.revealDuck(DecisionLogic.revealLength(seats)),
 		startedAt = reveal.revealAt,
@@ -372,6 +375,16 @@ local function onReveal(payload: any)
 		local assetId = if override ~= nil then string.format("rbxassetid://%d", override) else nil
 		at(entry.at, function()
 			play(entry.cue, nil, assetId)
+		end)
+	end
+	-- The heartbeat under each face-down card: lub, then a softer dub.
+	for _, beat in DecisionLogic.heartbeats(seats) do
+		local volume = AudioLogic.heartbeatVolume(beat.intensity)
+		at(beat.at, function()
+			play("RevealHeartbeat", nil, nil, volume)
+		end)
+		at(beat.at + AudioLogic.HEARTBEAT_DUB, function()
+			play("RevealHeartbeat", nil, nil, volume * AudioLogic.HEARTBEAT_DUB_VOLUME)
 		end)
 	end
 	-- Read at resultAt, not now: DecisionPersonalResult may land after
@@ -419,7 +432,10 @@ function AudioController:init()
 	end)
 	Net.onClientEvent("TaskResult", function(payload: any)
 		if type(payload) == "table" then
-			play(if payload.success == true then "TaskSuccess" else "TaskFail")
+			local cue = AudioLogic.taskResultCue(payload.success == true, payload.feedback)
+			if cue ~= nil then
+				play(cue)
+			end
 		end
 	end)
 

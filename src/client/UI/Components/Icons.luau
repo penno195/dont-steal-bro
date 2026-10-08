@@ -85,6 +85,7 @@ local ICONS: { [string]: Icon } = {
 	["info-button"] = { glyph = "i", image = "rbxassetid://91647157562980", fullColor = true },
 	["check-badge"] = { glyph = "✓", image = "rbxassetid://115035144784851", fullColor = true },
 	["cross-badge"] = { glyph = "✕", image = "rbxassetid://82032145962986", fullColor = true },
+	restart = { glyph = "🔄" }, -- start the task over (no art yet)
 }
 
 local Icons = {}

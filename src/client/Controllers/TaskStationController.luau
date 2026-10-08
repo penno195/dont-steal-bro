@@ -241,7 +241,7 @@ local function onResult(payload: any)
 		return
 	end
 
-	activeView.onResult(payload.stationId, payload.success, payload.feedback)
+	activeView.onResult(payload.stationId, payload.success, payload.feedback, payload.completing == true)
 
 	if payload.success then
 		activeView = nil

@@ -36,7 +36,7 @@ that arc:
 | RaceTension | stem over RaceBed, 0 → 1 between 60 s and 20 s left | Music | — | — |
 | TimerTick | once a second in the last 10 s | SFX | 60 | — |
 | TaskStart | `TaskChallenge` | SFX | 50 | — |
-| TaskSuccess / TaskFail | `TaskResult.success` | SFX | 85 / 70 | 0.6 / — |
+| TaskSuccess / TaskStep / TaskFail | `TaskResult`: success, a step that landed, a step that missed (`AudioLogic.taskResultCue` reads the feedback; no feedback = silence) | SFX | 85 / 40 / 70 | 0.6 / — / — |
 | PowerUpPickup | inventory count grows | SFX | 60 | — |
 | PowerUpUsedByYou | `PowerUpUseResult.success` | SFX | 75 | — |
 | PowerUpHitYou | a new debuff in `StatusEffectsChanged` | SFX | 90 | 0.55 |
@@ -44,6 +44,7 @@ that arc:
 | StudioBed | `DecisionStudio` | Music bed | — | — |
 | LockIn / OtherLockIn | `DecisionLockedIn` (you / someone else) | SFX | 95 / 60 | 0.5 / — |
 | RevealRiser, RevealCard ×n, RevealOutcome | `DecisionReveal`, timed on `DecisionLogic.revealStep` | SFX | 100 | 0.3 / 0.2 / 0.1 |
+| RevealHeartbeat | lub + softer dub on each `DecisionLogic.heartbeats` beat under a face-down card; quiet → full card by card (`heartbeatVolume`), with a red edge glow per beat (FeelController) | SFX | 100 | — (the reveal's blanket duck) |
 | Win / Loss | at the reveal's result time, for finalists only | SFX | 100 | 0.15 |
 
 Race intensity has three layers. The tension stem fades in, the bed and
@@ -197,7 +198,7 @@ swap one, change its `assetId` in `AudioLogic.CUES`.
 
 | Cue | Pick | Alternates |
 |---|---|---|
-| HubAmbience | 1844644501 APM "Ballroom Fox" (170 s): the lobby is a 1940s hotel | 1845880323 APM "Sly Sophie" (123 s); 15675069601 Roblox_UI_Loop_Calm_Music |
+| HubAmbience | 80257380636383 APM "Game Lobby" (182 s), owner's pick, volume 0.25 | 1844644501 APM "Ballroom Fox"; 1845880323 APM "Sly Sophie" (123 s); 15675069601 Roblox_UI_Loop_Calm_Music |
 | RaceBed | 1837768143 APM "Big League (c)" (122 s) | maps can each set their own `musicTrackId` (all are still placeholders) |
 | RaceTension | 9043365842 APM "HEARTBEAT 02 96BPM": no key, so it sits on any bed | 9043366464 APM "TICK TOCK 06 120BPM" (would compete with TimerTick) |
 | StudioBed | 1843943906 APM "Tension Repeat Drones 40" | 9112795463 PSE "Hollow Rumble 1" (drone loop) |
@@ -205,6 +206,7 @@ swap one, change its `assetId` in `AudioLogic.CUES`.
 | TimerTick | 9114212929 PSE "Dvd Player Button 13" (hard click) | 15675032796 Roblox_UI_Small_Click |
 | TaskStart | 15675059323 Roblox_UI_Bright_Click | — |
 | TaskSuccess | 9048770070 APM "Seven Leaf Clover - Hit3" (mallets) | 15675016548 Roblox_UI_Piano_Hello |
+| TaskStep | 9114380768 PSE "Fat Beeps Bubble Like Bursts 1" (unauditioned) | 15675032796 Roblox_UI_Small_Click |
 | TaskFail | 9113085665 PSE "Alarm Buzzer 3" | 15675075163 Roblox_UI_Delete |
 | PowerUpPickup | 15675055424 Roblox_UI_Cute_Pop | — |
 | PowerUpUsedByYou | 9120733055 PSE "Whoosh Rising Swish Airy 1" | 9120733724 (same set, other pitch) |
@@ -213,15 +215,16 @@ swap one, change its `assetId` in `AudioLogic.CUES`.
 | NotQualified | 9125449274 PSE conch-shell honk (weak, deflating) | 9047060880 APM "Slow Fuse Sting" |
 | LockIn | 9119727134 PSE "Switch Impact On Flip Up Large Metal 2" | 9120371230 PSE "Vehicle Door Bump Slamming Metal Door 9" |
 | OtherLockIn | 9114214262 PSE "Dvd Player Button 4" | — |
-| RevealRiser | 9043343295 APM "REVERSE NOISE HARD END 09", `startAt` 2.1 s | 1837834352 APM "REVERSE HARD STOP-Metal Build 02" (4.0 s: use `startAt` 2.0) |
+| RevealRiser | 9043343295 APM "REVERSE NOISE HARD END 09", `startAt` 1.1 s | 1837834352 APM "REVERSE HARD STOP-Metal Build 02" (4.0 s: use `startAt` 1.0) |
+| RevealHeartbeat | 9114457494 PSE "Fist Hit Sofa 1": a muffled thud, played twice per beat (unauditioned) | 9114036353 PSE "Deep Impacts 3"; 9113041746 PSE "Acoustic Whomps 2" |
 | RevealCard | 9038652624 APM "Big Hair Rock - Hit 3" | 9116710746 PSE "Metal Impacts Hard Clanking Hits 5" |
 | RevealOutcome | 1835333323 APM "Angry Heavy Hitter Hit" | 1839696994 APM "Fatal Impact" |
 | Win | 9038758612 APM "Tomorrow Begins Today - Stinger" (13 s, bright) | 9047296345 APM "Welcome Home Sting" |
 | Loss | 110140058364323 APM "Pathos and Persistence - Sting 2" (5 s, low) | 9048284985 APM "Dirty Secrets - Sting 1" |
 
 **`startAt`** (`CueDef`) starts a one-shot partway into its asset. The
-riser's hard stop is 4.1 s in, and the first card turns 2.0 s after the
-riser starts (`DecisionLogic` `lead`), so the riser starts at 2.1 s. If
+riser's hard stop is 4.1 s in, and the first card turns 3.0 s after the
+riser starts (`DecisionLogic` `lead`), so the riser starts at 1.1 s. If
 `lead` changes, change `startAt` with it.
 
 **Finding more:** the Creator Store's v2 search API

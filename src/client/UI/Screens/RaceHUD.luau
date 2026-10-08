@@ -10,12 +10,13 @@
 --     effect chips (and, in portrait, the task progress bar).
 --   - Top-left, landscape only: the task list. Portrait has no room
 --     beside the info bar, so it gets the bar alone.
---   - The first Primary zone: the power-up slots (powerups.md
---     "Inventory and aiming"), above and left of Roblox's jump button.
+--   - The bottom of the first Primary zone, left of Roblox's jump
+--     button (the screen's bottom-right corner without touch): the
+--     power-up slots (powerups.md "Inventory and aiming").
 --     Tap or click a slot to select it (the glow outline); tap the
 --     selected one to quick-fire; press and drag out of a slot to aim,
 --     release to fire, drag back onto it to cancel. Dragging a held
---     item also brings up a bin above the slots: release on it to
+--     item also brings up a bin left of the slots: release on it to
 --     throw the item away. With a keyboard, 1-N select, Q fires, X
 --     discards, and holding left-click aims in first person (let go to
 --     fire; right-click still turns the camera); a gamepad uses L1/R1,
@@ -157,8 +158,9 @@ local SLOT_LABEL = 14
 -- a cancel (roughly back over the slot it started on).
 local DRAG_DEADZONE = 12
 local CANCEL_RADIUS = SLOT / 2
--- The discard bin, over the left end of the slot row while a held item
--- is dragged.
+-- The discard bin, left of the slot row while a held item is dragged.
+-- Not above it: aiming drags up the screen, and a bin up there caught
+-- aims that overshot.
 local BIN = SLOT
 -- The refused-use shake: degrees per step, SHAKE_STEP seconds apart.
 local SHAKE = { -7, 7, -5, 5, -2, 0 }
@@ -592,8 +594,8 @@ end
 local function discardBin(shown: () -> boolean, over: () -> boolean): Frame
 	return create("Frame")({
 		Name = "Bin",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromOffset(0, -GAP),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(0, -GAP, 0.5, 0),
 		Size = function()
 			local edge = if over() then BIN + 8 else BIN
 			return UDim2.fromOffset(edge, edge)
@@ -620,8 +622,7 @@ local function discardBin(shown: () -> boolean, over: () -> boolean): Frame
 end
 
 -- The latest SlotNote, floating above the slots' right end. The bin
--- floats above the left end and only shows mid-drag, so the two don't
--- meet.
+-- sits left of the slots, so the two never meet.
 local function slotNote(store: Store): Frame
 	local color = function(): Color3
 		local r = store.note()
@@ -776,7 +777,7 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 	local width = slotCount * SLOT + (slotCount - 1) * GAP
 	return create("Frame")({
 		Name = "PowerUps",
-		AnchorPoint = Vector2.new(1, 0.5),
+		AnchorPoint = Vector2.new(1, 1),
 		Position = position,
 		Size = UDim2.fromOffset(width, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
@@ -787,14 +788,13 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 			Padding = UDim.new(0, Theme.spacing.xxs),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
-		-- No height of its own, so the bin floats above the slots
+		-- No height of its own, so the note floats above the slots
 		-- without pushing them down when it appears.
 		create("Frame")({
-			Name = "BinAnchor",
+			Name = "NoteAnchor",
 			LayoutOrder = 0,
 			Size = UDim2.fromOffset(width, 0),
 			BackgroundTransparency = 1,
-			bin,
 			slotNote(store),
 		}),
 		create("Frame")({
@@ -802,14 +802,21 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 			LayoutOrder = 1,
 			Size = UDim2.fromOffset(width, SLOT),
 			BackgroundTransparency = 1,
-			create("UIListLayout")({
-				FillDirection = Enum.FillDirection.Horizontal,
-				Padding = UDim.new(0, GAP),
-				SortOrder = Enum.SortOrder.LayoutOrder,
+			-- Its own frame, so the row's layout leaves the bin alone.
+			create("Frame")({
+				Name = "Row",
+				Size = UDim2.fromScale(1, 1),
+				BackgroundTransparency = 1,
+				create("UIListLayout")({
+					FillDirection = Enum.FillDirection.Horizontal,
+					Padding = UDim.new(0, GAP),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+				indexes(store.slots, function(slot: () -> Slot)
+					return powerUpSlot(store, slot, cancelling, press)
+				end) :: any,
 			}),
-			indexes(store.slots, function(slot: () -> Slot)
-				return powerUpSlot(store, slot, cancelling, press)
-			end) :: any,
+			bin,
 		}),
 		Base.text("caption", {
 			Name = "Keys",
@@ -833,17 +840,21 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 	}) :: Frame
 end
 
--- The right edge of this orientation's first Primary zone, vertically
--- centred in it. The slots hang left from there, so they stay clear of
--- the jump button in landscape and of the screen edge in portrait.
+-- Where the panel's bottom-right corner goes. Without touch there's no
+-- jump button, so it takes the screen's own bottom-right corner. On
+-- touch it takes the bottom-right of this orientation's first Primary
+-- zone, which keeps it clear of the jump button in landscape.
 local function primaryAnchor(orientation: string): UDim2
-	for _, zone in Layout.THUMB_ZONES[orientation :: Layout.Orientation] do
-		if zone.kind == "Primary" then
-			local r = zone.rect
-			return UDim2.new(r.x + r.width, -Theme.spacing.sm, r.y + r.height / 2, 0)
+	local margin = Theme.spacing.sm
+	if Env.inputMode() == Enum.PreferredInput.Touch then
+		for _, zone in Layout.THUMB_ZONES[orientation :: Layout.Orientation] do
+			if zone.kind == "Primary" then
+				local r = zone.rect
+				return UDim2.new(r.x + r.width, -margin, r.y + r.height, -margin)
+			end
 		end
 	end
-	return UDim2.new(1, -Theme.spacing.sm, 0.75, 0)
+	return UDim2.new(1, -margin, 1, -margin)
 end
 
 -- EDGES ----------------------------------------------------------------

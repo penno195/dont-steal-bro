@@ -70,9 +70,9 @@ AudioLogic.CUES = table.freeze({
 	-- Beds (Music, looped). RaceBed's asset is only the fallback: the map's
 	-- own MapDef.musicTrackId wins when it's set (resolveRaceBed).
 	HubAmbience = cue({
-		assetId = "rbxassetid://1844644501", -- APM "Ballroom Fox" (170 s)
+		assetId = "rbxassetid://80257380636383", -- APM "Game Lobby" (182 s), owner's pick
 		category = "Music",
-		volume = 0.5,
+		volume = 0.25, -- halved 2026-10-08: the owner found 0.5 overpowering
 		looped = true,
 		spatial = false,
 		priority = 100,
@@ -149,6 +149,18 @@ AudioLogic.CUES = table.freeze({
 		priority = 85,
 		cooldown = 0.3,
 		duck = { level = 0.6, attack = 0.03, hold = 0.3, release = 0.5 },
+	}),
+	-- A step of a multi-step task landed (a right digit, a fuse seated, a
+	-- hit): small and warm, so a run of them reads as "keep going". The
+	-- buzzer is only for a step that went wrong (taskResultCue).
+	TaskStep = cue({
+		assetId = "rbxassetid://9114380768", -- PSE "Fat Beeps Bubble Like Bursts 1"
+		category = "SFX",
+		volume = 0.5,
+		looped = false,
+		spatial = false,
+		priority = 40,
+		cooldown = 0.06,
 	}),
 	TaskFail = cue({
 		assetId = "rbxassetid://9113085665", -- PSE "Alarm Buzzer 3"
@@ -245,9 +257,22 @@ AudioLogic.CUES = table.freeze({
 		priority = 100,
 		cooldown = 0,
 		duck = { level = 0.3, attack = 0.2, hold = 0.8, release = 0.2 },
-		-- Its hard stop is at 4.1 s; starting 2.1 s in lands it on the
-		-- first card's turn (DecisionLogic's lead, 2.0 s).
-		startAt = 2.1,
+		-- Its hard stop is at 4.1 s; starting 1.1 s in lands it on the
+		-- first card's turn (DecisionLogic's lead, 3.0 s).
+		startAt = 1.1,
+	}),
+	-- One thump of the heartbeat under each face-down card. Played twice
+	-- per beat (lub, then a softer dub: HEARTBEAT_DUB), at a volume that
+	-- grows card by card (heartbeatVolume). No duck of its own: the
+	-- reveal's blanket duck already holds the bed down.
+	RevealHeartbeat = cue({
+		assetId = "rbxassetid://9114457494", -- PSE "Fist Hit Sofa 1": a muffled, low thud
+		category = "SFX",
+		volume = 1,
+		looped = false,
+		spatial = false,
+		priority = 100,
+		cooldown = 0,
 	}),
 	RevealCard = cue({
 		assetId = "rbxassetid://9038652624", -- APM "Big Hair Rock - Hit 3"
@@ -463,7 +488,7 @@ end
 
 -- REVEAL TIMELINE ----------------------------------------------------
 
-export type RevealTiming = { lead: number, cardGap: number, outcomeAfter: number, resultAfter: number }
+export type RevealTiming = { outcomeAfter: number, resultAfter: number }
 -- `card` is set on each RevealCard cue: its position in the screen's
 -- reveal order (1 = first to turn), so a finalist's Reveal cosmetic sound
 -- can stand in for that one card's cue.
@@ -471,16 +496,57 @@ export type ScheduledCue = { at: number, cue: string, card: number? }
 
 -- Seconds after revealAt for each reveal sound, lined up with
 -- DecisionLogic.revealStep so a card's sound lands on the frame it turns.
+-- `turns` is DecisionLogic.cardTurns: each card's turn, in reveal order.
 -- Win/Loss are NOT here: they depend on who you are, so the controller
--- plays resolutionCue's answer at `resultAt`.
-function AudioLogic.revealSchedule(seats: number, timing: RevealTiming): ({ ScheduledCue }, number)
+-- plays resolutionCue's answer at `resultAt`. The heartbeat isn't here
+-- either: it has its own volume per beat (heartbeatVolume).
+function AudioLogic.revealSchedule(turns: { number }, timing: RevealTiming): ({ ScheduledCue }, number)
 	local out: { ScheduledCue } = { { at = 0, cue = "RevealRiser" } }
-	for i = 0, math.max(0, seats - 1) do
-		table.insert(out, { at = timing.lead + i * timing.cardGap, cue = "RevealCard", card = i + 1 })
+	for i, at in turns do
+		table.insert(out, { at = at, cue = "RevealCard", card = i })
 	end
-	local outcomeAt = timing.lead + math.max(0, seats - 1) * timing.cardGap + timing.outcomeAfter
+	local outcomeAt = (turns[#turns] or 0) + timing.outcomeAfter
 	table.insert(out, { at = outcomeAt, cue = "RevealOutcome" })
 	return out, outcomeAt + timing.resultAfter
+end
+
+-- The heartbeat's two thumps: the dub lands HEARTBEAT_DUB seconds after
+-- the lub, at HEARTBEAT_DUB_VOLUME of it.
+AudioLogic.HEARTBEAT_DUB = 0.22
+AudioLogic.HEARTBEAT_DUB_VOLUME = 0.6
+
+-- A beat's volume multiplier from its DecisionLogic.Heartbeat intensity
+-- (0 = the first card, 1 = the last): quiet to full.
+function AudioLogic.heartbeatVolume(intensity: number): number
+	return 0.35 + 0.65 * clamp01(intensity)
+end
+
+-- TASK FEEDBACK ------------------------------------------------------
+
+-- Which cue a TaskResult plays. Every step of a multi-step task arrives
+-- as a TaskResult with success = false until the last one, so success
+-- alone can't tell a right step from a wrong one: the handler's feedback
+-- does (Types.TaskFeedback). A step is a MISS when any of its usual
+-- markers says so - accepted/hit/sealed false, or early/reset true -
+-- and otherwise progress. No feedback at all means the server ignored
+-- the submission (too fast, no time left): silence.
+function AudioLogic.taskResultCue(success: boolean, feedback: any): string?
+	if success then
+		return "TaskSuccess"
+	end
+	if type(feedback) ~= "table" then
+		return nil
+	end
+	if
+		feedback.accepted == false
+		or feedback.hit == false
+		or feedback.sealed == false
+		or feedback.early == true
+		or feedback.reset == true
+	then
+		return "TaskFail"
+	end
+	return "TaskStep"
 end
 
 -- The resolution for this client: Win or Loss for a finalist, nothing for

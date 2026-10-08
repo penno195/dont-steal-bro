@@ -121,10 +121,15 @@ opposite if anyone did, then the rest. That keeps the result open until
 the last card wherever it can be: a stealer who saw a second steal next
 would already know it was over. A spectator gets seat order. The turns
 keep one shared server clock, so all three cards land on the same beats
-on every screen even though the faces differ. Timing: first turn at
-2.0 s, then every 2.6 s, outcome 1.6 s after the last, result 2.4 s
-later, about 11 s in all. `roundTimers.resultsSeconds` went from 8 to 16
-so Cleanup's teleport home doesn't cut it off.
+on every screen even though the faces differ. Timing (slowed again
+2026-10-08): first turn at 3.0 s, the next 3.4 s later, and the LAST
+card 5.0 s after that; outcome 1.6 s after the last, result 2.4 s later,
+about 15 s for three seats. Each card sits face down 2.0 s (the last
+3.6 s) under a heartbeat (`DecisionLogic.heartbeats`): a thump and a
+red pulse round the screen's edges, quickening and growing card by card,
+so the last card's wait is the longest, fastest and loudest. The glow
+stays under 3 pulses a second. `roundTimers.resultsSeconds` went from 8
+to 16, then 20, so Cleanup's teleport home doesn't cut it off.
 
 **Held on the podium.** Anchoring a finalist mid-stride left the run
 animation playing all finale: an anchored root stops the Humanoid

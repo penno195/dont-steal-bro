@@ -63,9 +63,9 @@ local STATUS_HEIGHT = Theme.touch.iconButton
 -- corner (the card's rounded corner), so half of it hangs off.
 local CLOSE_SIZE = 52
 local CORNER_INSET = 6
--- How long the success tick stays up before the sheet leaves. Not
--- motion (nothing moves), so reduced motion keeps it.
-local SUCCESS_HOLD = 0.6
+-- How long COMPLETE stays up before the sheet leaves. Not motion
+-- (nothing moves), so reduced motion keeps it.
+local SUCCESS_HOLD = 1.2
 local FLASH_SECONDS = 0.4
 local FEEDBACKS: { TaskViewLogic.Feedback } = { "Neutral", "Active", "Good", "Bad" }
 
@@ -112,6 +112,9 @@ type Attempt = {
 	stationId: string,
 	ctx: Context,
 	close: (immediate: boolean) -> (),
+	-- The last step landed but the server is holding the completion
+	-- (TaskResult's `completing`): show COMPLETE, take no more input.
+	onComplete: () -> (),
 	onSuccess: () -> (),
 }
 
@@ -171,6 +174,10 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 	-- Set on success: the shell stays up for SUCCESS_HOLD, but nothing
 	-- more is submitted and no cue overwrites the tick.
 	local finished = false
+	-- Shows the COMPLETE cover over the whole card. Set on success, or as
+	-- soon as the server says the last step landed (`completing`), so a
+	-- view's own loop starting another round underneath is never seen.
+	local complete = source(false)
 	local ctxOut: Context
 	local areaOut: Frame
 	local rootOut: Frame
@@ -248,6 +255,23 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		cleanup(function()
 			b:Disconnect()
 		end)
+
+		-- Restart: a fresh challenge at the same station. It's the same
+		-- TaskInteract a walk-up sends, so the server ends this attempt
+		-- and starts a new one - nothing a player couldn't already do by
+		-- walking off and back, so it needs no new rule server-side.
+		local restartButton = IconButton({
+			icon = "restart",
+			iconSize = HEADER_HEIGHT,
+			label = "Restart",
+			onActivate = function()
+				if not closing and not finished then
+					Net.fireServer("TaskInteract", { stationId = stationId })
+				end
+			end,
+			anchorPoint = Vector2.new(0, 0.5),
+			position = UDim2.new(0, HEADER_HEIGHT + Theme.spacing.sm, 0.5, 0),
+		})
 
 		create("Frame")({
 			Name = "Scrim",
@@ -445,6 +469,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1, 0, 0, HEADER_HEIGHT),
 				infoButton :: any,
+				restartButton :: any,
 				Base.text("label", {
 					Name = "Timer",
 					AnchorPoint = Vector2.new(1, 0),
@@ -495,6 +520,39 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			}),
 			Parent = holder,
 		}) :: Frame
+
+		create("Frame")({
+			Name = "Complete",
+			Size = UDim2.fromScale(1, 1),
+			ZIndex = 20,
+			Visible = complete,
+			Active = true, -- swallows taps meant for the task underneath
+			BackgroundColor3 = Theme.elevation[3].surface,
+			create("UICorner")({
+				CornerRadius = function()
+					return if isSheet() then UDim.new(0, 0) else Theme.radius.lg
+				end,
+			}),
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Vertical,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			(function()
+				local badge = Icons.view("check-badge", 72, Theme.color.success)
+				badge.LayoutOrder = 0
+				return badge
+			end)(),
+			Base.text("display", {
+				Name = "Text",
+				LayoutOrder = 1,
+				Text = "COMPLETE",
+				TextColor3 = Theme.color.success,
+			}),
+			Parent = holder,
+		})
 
 		local function setStatus(text: string, fb: TaskViewLogic.Feedback?)
 			status(text)
@@ -598,10 +656,14 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		stationId = stationId,
 		ctx = ctxOut,
 		close = close,
+		onComplete = function()
+			finished = true
+			complete(true)
+		end,
 		onSuccess = function()
 			InputLock.release(lockToken)
-			ctxOut.setStatus("Done!", "Good")
 			finished = true
+			complete(true)
 			task.delay(SUCCESS_HOLD, close, false)
 		end,
 	}
@@ -629,7 +691,7 @@ function TaskViewBase.define(spec: Spec): TaskViewTypes.TaskView
 			end
 			current = open(spec, stationId, challenge, session)
 		end,
-		onResult = function(stationId: string, success: boolean, feedback: any?)
+		onResult = function(stationId: string, success: boolean, feedback: any?, completing: boolean?)
 			local a = current
 			if a == nil or a.stationId ~= stationId then
 				return
@@ -644,6 +706,9 @@ function TaskViewBase.define(spec: Spec): TaskViewTypes.TaskView
 				spec.onProgress(a.ctx, feedback)
 			else
 				a.ctx.setStatus("Keep going", "Active")
+			end
+			if not success and completing then
+				a.onComplete()
 			end
 		end,
 		hide = hide,

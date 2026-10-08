@@ -6,7 +6,7 @@ for the handler, config and remote. This page covers only the view.
 
 | File | What it owns |
 |---|---|
-| `src/client/UI/TaskViewBase.luau` | The shell: sheet/window, transitions, header ((i) explainer, timer), the corner close button, status line, play area, input lock, submit |
+| `src/client/UI/TaskViewBase.luau` | The shell: sheet/window, transitions, header ((i) explainer, restart, timer), the corner close button, status line, the COMPLETE cover, play area, input lock, submit |
 | `src/client/UI/InputAdapters.luau` | One adapter per verb: Tap, Hold, Drag, Sequence, Timing, Aim |
 | `src/client/UI/InputLock.luau` | Freezes camera + character input; restores exactly, reference-counted |
 | `src/client/UI/TaskViewLogic.luau` | The pure maths behind all of the above (tested headlessly) |

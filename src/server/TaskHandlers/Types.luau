@@ -78,7 +78,10 @@ export type TaskContext = {
 -- submission (Fuse Rewire: "fuse-2 into slot-3 was accepted") - which
 -- the player just chose, so it reveals nothing - but never the answer
 -- to one they haven't made. Its shape is the task's own; the view that
--- renders it is the only reader.
+-- renders it is the only reader. One part of it IS shared: the sound.
+-- A step that went wrong should carry accepted = false, hit = false,
+-- sealed = false, early = true or reset = true, and any other feedback
+-- plays as progress (AudioLogic.taskResultCue). No feedback = silence.
 export type TaskFeedback = { [string]: any }
 
 export type TaskHandler<Challenge, State, Submission> = {

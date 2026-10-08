@@ -227,6 +227,8 @@ describe("DecisionLogic.revealStep", function()
 		expect(DecisionLogic.revealStep(t.lead - 0.01, 3).cardsShown):toBe(0)
 		expect(DecisionLogic.revealStep(t.lead, 3).cardsShown):toBe(1)
 		expect(DecisionLogic.revealStep(t.lead + t.cardGap, 3).cardsShown):toBe(2)
+		expect(DecisionLogic.revealStep(t.lead + t.cardGap + t.finalGap - 0.01, 3).cardsShown):toBe(2)
+		expect(DecisionLogic.revealStep(t.lead + t.cardGap + t.finalGap, 3).cardsShown):toBe(3)
 		expect(DecisionLogic.revealStep(t.lead + 10 * t.cardGap, 3).cardsShown):toBe(3)
 	end)
 
@@ -289,10 +291,53 @@ describe("DecisionLogic.revealOrder", function()
 	end)
 end)
 
+describe("DecisionLogic.heartbeats", function()
+	local beats = DecisionLogic.heartbeats(3)
+
+	local function under(card: number)
+		local out = {}
+		for _, beat in beats do
+			if beat.card == card then
+				table.insert(out, beat)
+			end
+		end
+		return out
+	end
+
+	it("beats only while a card is face down", function()
+		for _, beat in beats do
+			local step = DecisionLogic.revealStep(beat.at, 3)
+			expect(step.current):toBe(beat.card)
+			expect(step.faceUp):toBe(false)
+		end
+	end)
+
+	it("quickens and grows card by card, the last fastest and strongest", function()
+		local first, last = under(1), under(3)
+		expect(first[2].at - first[1].at > last[2].at - last[1].at):toBe(true)
+		expect(first[1].intensity < under(2)[1].intensity):toBe(true)
+		expect(last[1].intensity):toBe(1)
+		expect(#last > #first):toBe(true)
+	end)
+
+	it("waits longest before the last card", function()
+		local gap2 = DecisionLogic.cardTurnAt(2, 3) - DecisionLogic.cardTurnAt(1, 3)
+		local gap3 = DecisionLogic.cardTurnAt(3, 3) - DecisionLogic.cardTurnAt(2, 3)
+		expect(gap3 > gap2):toBe(true)
+	end)
+
+	it("treats a lone card as the last", function()
+		local solo = DecisionLogic.heartbeats(1)
+		expect(#solo > 0):toBe(true)
+		expect(solo[1].intensity):toBe(1)
+		expect(solo[1].at >= 0):toBe(true)
+	end)
+end)
+
 describe("DecisionLogic.cardTurnAt", function()
 	it("lands on the beat revealStep turns each card", function()
 		for index = 1, 3 do
-			local at = DecisionLogic.cardTurnAt(index)
+			local at = DecisionLogic.cardTurnAt(index, 3)
 			expect(DecisionLogic.revealStep(at, 3).cardsShown):toBe(index)
 			expect(DecisionLogic.revealStep(at - 0.01, 3).cardsShown):toBe(index - 1)
 		end
