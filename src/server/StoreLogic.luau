@@ -39,7 +39,7 @@ local StoreLogic = {}
 -- can't resolve under Lune. Luau's structural typing means a real
 -- `Validate.StoreGrant` value satisfies these with no cast at the call
 -- site, so the duplication costs nothing.
-export type GrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title"
+export type GrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title" | "NavigationRound"
 
 export type Grant = {
 	kind: GrantKind,
@@ -57,6 +57,10 @@ export type GrantState = {
 	powerUpStock: { [string]: number },
 	ownedCosmetics: { string },
 	unlockedTitles: { string },
+	-- Paid Navigation rounds held (ProfileLogic schema v7). Optional so a
+	-- caller that never sells one (season tracks, leaderboard payouts)
+	-- can leave it out; a NavigationRound grant reads nil as 0.
+	navigationRounds: number?,
 }
 
 -- ===== receipts ===========================================================
@@ -207,6 +211,7 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 		powerUpStock = table.clone(state.powerUpStock),
 		ownedCosmetics = table.clone(state.ownedCosmetics),
 		unlockedTitles = table.clone(state.unlockedTitles),
+		navigationRounds = state.navigationRounds,
 	}
 	local lines: { string } = {}
 
@@ -257,12 +262,33 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 				table.insert(updated.unlockedTitles, titleId)
 				table.insert(lines, string.format("title %s unlocked", titleId))
 			end
+		elseif grant.kind == "NavigationRound" then
+			local amount = grant.amount
+			if amount == nil or amount <= 0 then
+				table.insert(lines, "SKIPPED NavigationRound grant with no positive amount")
+				continue
+			end
+			local held = (updated.navigationRounds or 0) + amount
+			updated.navigationRounds = held
+			table.insert(lines, string.format("navigation rounds +%d (now %d)", amount, held))
 		else
 			table.insert(lines, string.format("SKIPPED unrecognised grant kind %q", tostring(grant.kind)))
 		end
 	end
 
 	return updated, lines
+end
+
+-- Whether a product sells a Navigation round. Those are sold only from
+-- the in-match toggle (design-decisions.md Q8, "Navigation"), so the
+-- purchase intent checks this before opening any prompt.
+function StoreLogic.grantsNavigationRound(grants: { Grant }): boolean
+	for _, grant in grants do
+		if grant.kind == "NavigationRound" then
+			return true
+		end
+	end
+	return false
 end
 
 -- ===== coin offers (rewards-roadmap.md step 6) ==============================
@@ -291,6 +317,7 @@ function StoreLogic.buyWithCoins(
 		powerUpStock = state.powerUpStock,
 		ownedCosmetics = state.ownedCosmetics,
 		unlockedTitles = state.unlockedTitles,
+		navigationRounds = state.navigationRounds,
 	}
 	local after, lines = StoreLogic.applyGrants(paid, grants)
 	table.insert(lines, 1, string.format("Currency -%d (coin price)", price))

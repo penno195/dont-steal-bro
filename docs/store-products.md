@@ -41,12 +41,14 @@ same way. After changing the art, re-upload and paste the new id.
 | `CurrencyLarge.luau` | Large Coin Chest | 249 | 250 coins. The same coins you earn from playing - these just arrive sooner. |
 | `SprintBoostStock.luau` | Sprint Boost x10 | 249 | Ten Sprint Boosts for your loadout. Also earned free from Studio wins and found on every map. |
 | `StarterLoadoutBundle.luau` | Starter Loadout Bundle | 349 | Five each of Sprint Boost, Slow Field and Push-Trip. Every one of them is also earned free by playing. |
+| `NavigationRound.luau` | Navigation | 99 | A path to your nearest unfinished station, for the rest of this round. *(Added 2026-10-08; sold only from the in-match toggle.)* |
 
 ### Pass (Monetization > Passes)
 
 | Config file | Name | Price (R$) | Description |
 |---|---|---|---|
 | `Season1Pass.luau` | Season 1 Pass | 199 | Unlock Season 1's premium track: founder cosmetics, coins and power-ups as you win. Only wins until the season ends count. |
+| `NavigationPass.luau` | Unlimited Navigation | 899 | Switch on Navigation in every round, for good. Shows a path to your nearest unfinished station. *(Added 2026-10-08.)* |
 
 Create the pass and put it **on sale** (a pass with no price can't be
 bought). It stays `enabled = false` in config, and Season 1 stays
@@ -75,6 +77,8 @@ both together.
 | `SprintBoostStock.luau` | 3716319307 | enabled |
 | `StarterLoadoutBundle.luau` | 3716319616 | enabled |
 | `Season1Pass.luau` | 2006972979 | on sale on Roblox, disabled in config |
+| `NavigationRound.luau` | not created yet | disabled |
+| `NavigationPass.luau` | not created yet | disabled |
 
 ## 4. Test (step 13)
 

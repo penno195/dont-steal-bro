@@ -1557,6 +1557,92 @@ TestRunner.describe("Validate.run - store cross-registry checks (P4-5)", functio
 	end)
 end)
 
+-- ===== Navigation (design-decisions.md Q8, "Navigation") ===================
+
+local function navRound(key: string, kind: Validate.StoreProductKind): Validate.StoreItemDef
+	local def = validProduct(key)
+	def.kind = kind
+	def.grants = { { kind = "NavigationRound", amount = 1 } }
+	if kind == "CoinOffer" then
+		def.assetId = 0
+		def.robuxPrice = 0
+		def.coinPrice = 100
+	end
+	return def
+end
+
+local function navPass(key: string): Validate.StoreItemDef
+	local def = validProduct(key)
+	def.kind = "GamePass"
+	def.grants = {}
+	def.perk = "UnlimitedNavigation"
+	def.assetId = 900000 + string.byte(key) -- distinct from validProduct's id
+	return def
+end
+
+TestRunner.describe("Validate - Navigation rounds and the unlimited pass", function()
+	TestRunner.it("accepts the full set: Robux round, coin round, perk pass", function()
+		local issues = runWithStore({
+			{ fileName = "R.luau", def = navRound("r", "DeveloperProduct") },
+			{ fileName = "C.luau", def = navRound("c", "CoinOffer") },
+			{ fileName = "P.luau", def = navPass("p") },
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("lets a CoinOffer grant a NavigationRound, the named exception", function()
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = navRound("c", "CoinOffer") } })):toBe(0)
+	end)
+
+	TestRunner.it("still refuses a CoinOffer granting anything else", function()
+		local def = navRound("c", "CoinOffer")
+		def.grants = { { kind = "Currency", amount = 10 } }
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a NavigationRound grant with no positive amount", function()
+		local def = navRound("c", "CoinOffer")
+		def.grants = { { kind = "NavigationRound" } }
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses Robux Navigation with no enabled coin path (Q8)", function()
+		local coins = navRound("c", "CoinOffer")
+		coins.enabled = false
+		local issues = runWithStore({
+			{ fileName = "P.luau", def = navPass("p") },
+			{ fileName = "C.luau", def = coins },
+		})
+		TestRunner.expect(#issues):toBe(1)
+		TestRunner.expect(issues[1].fileName):toBe("P.luau")
+	end)
+
+	TestRunner.it("refuses a perk on anything but a GamePass", function()
+		local def = navRound("c", "CoinOffer")
+		def.perk = "UnlimitedNavigation"
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an unknown perk", function()
+		local def = navPass("p")
+		def.perk = "Teleport" :: any
+		local issues = runWithStore({
+			{ fileName = "P.luau", def = def },
+			{ fileName = "C.luau", def = navRound("c", "CoinOffer") },
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses two passes unlocking the same perk", function()
+		local issues = runWithStore({
+			{ fileName = "P.luau", def = navPass("p") },
+			{ fileName = "Q.luau", def = navPass("q") },
+			{ fileName = "C.luau", def = navRound("c", "CoinOffer") },
+		})
+		TestRunner.expect(#issues):toBe(1)
+	end)
+end)
+
 -- ===== P4-6's cosmetics catalogue =========================================
 
 local function runWithCosmetics(cosmetics: { { fileName: string, def: Validate.CosmeticDef } }): { Validate.Issue }

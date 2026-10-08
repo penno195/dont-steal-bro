@@ -247,6 +247,26 @@ local function nearestNodeId(position: Vector3): string?
 	return bestId
 end
 
+-- The coarse route between two points as NavNode positions, ends
+-- trimmed the way a bot's are, and without the two points themselves.
+-- Empty on a map with no nodes or a disconnected graph. NavigationService
+-- draws a player's path line through these: the graph is server-only
+-- (MapStreaming), and walking it costs no ComputeAsync.
+local function routeBetween(from: Vector3, to: Vector3): { Vector3 }
+	local fromNode = nearestNodeId(from)
+	local toNode = nearestNodeId(to)
+	if fromNode == nil or toNode == nil then
+		return {}
+	end
+	local route = NPCLogic.findNodePath(navGraph(), fromNode, toNode) or {}
+	local trimmed = NPCLogic.trimRoute(route, navPoints(), toPoint(from), toPoint(to))
+	local positions: { Vector3 } = {}
+	for _, nodeId in trimmed do
+		table.insert(positions, navNodes[nodeId].position)
+	end
+	return positions
+end
+
 -- ===== rigs =================================================================
 
 -- A rig template hand-built in Studio is preferred, for the same reason
@@ -1022,6 +1042,7 @@ local NPCService: Loader.Service = {
 	setSpawnPoints = setSpawnPoints,
 	setMapDifficultyModifier = setMapDifficultyModifier,
 	debugLoadFromMap = debugLoadFromMap,
+	routeBetween = routeBetween,
 
 	markArrivalGraceServed = function()
 		graceAlreadyServed = true

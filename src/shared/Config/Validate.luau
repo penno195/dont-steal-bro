@@ -404,12 +404,18 @@ export type CosmeticDef = {
 -- exactly the stance MapDef.enabled takes against ServerStorage.Maps.
 -- CoinOffer (rewards step 6): bought with earned coins, not Robux. No
 -- Roblox asset (assetId and robuxPrice are 0), priced by `coinPrice`, and
--- it may only grant power-up stock (user decision, 2026-10-02).
+-- it may only grant power-up stock (user decision, 2026-10-02), with one
+-- named exception: a paid Navigation round (design-decisions.md Q8,
+-- "Navigation"), so every free player can switch it on in any round.
 export type StoreProductKind = "GamePass" | "DeveloperProduct" | "CoinOffer"
-export type StoreGrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title"
+export type StoreGrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title" | "NavigationRound"
+-- What a perk pass unlocks for good. Only a GamePass carries one.
+export type StorePerk = "UnlimitedNavigation"
 
 local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct", "CoinOffer" }
-local STORE_GRANT_KINDS: { StoreGrantKind } = { "Currency", "PowerUpStock", "Cosmetic", "Title" }
+local STORE_GRANT_KINDS: { StoreGrantKind } = { "Currency", "PowerUpStock", "Cosmetic", "Title", "NavigationRound" }
+-- Plain strings: a one-member list of literals won't widen for inSet.
+local STORE_PERKS: { string } = { "UnlimitedNavigation" }
 
 -- A single thing a purchase hands over. One flat type with optional
 -- fields rather than a tagged union, because Luau doesn't narrow a union
@@ -418,7 +424,7 @@ local STORE_GRANT_KINDS: { StoreGrantKind } = { "Currency", "PowerUpStock", "Cos
 -- StoreLogic.applyGrants reads only the field its own branch needs.
 export type StoreGrant = {
 	kind: StoreGrantKind,
-	amount: number?, -- Currency: how much. PowerUpStock: how many.
+	amount: number?, -- Currency: how much. PowerUpStock, NavigationRound: how many.
 	powerUpId: string?, -- PowerUpStock: which power-up, cross-checked against the PowerUps registry
 	cosmeticId: string?, -- Cosmetic: which item, cross-checked against the Cosmetics registry (P4-6)
 	titleId: string?, -- Title: which title, cross-checked against the Titles registry
@@ -443,9 +449,15 @@ export type StoreItemDef = {
 	-- `grants`, so a tab can never disagree with what the item contains.
 	imageAssetId: number,
 	-- A DeveloperProduct grants at least one thing. A GamePass grants
-	-- nothing here: every pass is a season pass, and what it unlocks is
-	-- that season's premium track (SeasonDef below).
+	-- nothing here: it is either a season pass, unlocking that season's
+	-- premium track (SeasonDef below), or a perk pass (`perk`).
 	grants: { StoreGrant },
+	-- A GamePass only: what owning it unlocks for good, instead of a
+	-- season's track. Read live from pass ownership, never stored, so
+	-- it can't be granted by anything but a real purchase. A perk pass
+	-- is Robux-only, so a CoinOffer must sell the same thing per round
+	-- (Q8; Validate.run checks it).
+	perk: StorePerk?,
 }
 
 -- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
@@ -1652,14 +1664,35 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		issue(issues, "Store", fileName, "coinPrice", "only a CoinOffer has a coinPrice")
 	end
 
+	if def.perk ~= nil then
+		if not inSet(def.perk, STORE_PERKS) then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"perk",
+				string.format("expected one of %s, got %s", table.concat(STORE_PERKS, "/"), tostring(def.perk))
+			)
+		end
+		if def.kind ~= "GamePass" then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"perk",
+				"only a GamePass unlocks a perk - a product or coin offer is spent"
+			)
+		end
+	end
+
 	if type(def.grants) ~= "table" then
 		issue(issues, "Store", fileName, "grants", "grants must be a list")
 		return
 	end
 
-	-- Every pass is a season pass (rewards-roadmap.md step 5): it grants
-	-- nothing itself, and its season's premium track holds what it
-	-- unlocks. A grant here would be owned forever, outside any window.
+	-- A pass grants nothing itself. A season pass (rewards-roadmap.md
+	-- step 5) unlocks its season's premium track, and a perk pass unlocks
+	-- its `perk`. A grant here would be owned forever, outside any window.
 	if def.kind == "GamePass" then
 		if #def.grants > 0 then
 			issue(
@@ -1667,7 +1700,7 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 				"Store",
 				fileName,
 				"grants",
-				"a GamePass grants nothing itself - put its items on a season's premium track (Config/Seasons/)"
+				"a GamePass grants nothing itself - put its items on a season's premium track (Config/Seasons/), or give it a `perk`"
 			)
 		end
 		return
@@ -1682,9 +1715,10 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		local field = string.format("grants[%d]", index)
 
 		-- Coins buy power-up stock only (user decision, 2026-10-02): no
-		-- cosmetics, titles or currency, and never anything random.
-		if def.kind == "CoinOffer" and grant.kind ~= "PowerUpStock" then
-			issue(issues, "Store", fileName, field, "a CoinOffer may only grant PowerUpStock")
+		-- cosmetics, titles or currency, and never anything random. The
+		-- one named exception is a Navigation round (Q8, "Navigation").
+		if def.kind == "CoinOffer" and grant.kind ~= "PowerUpStock" and grant.kind ~= "NavigationRound" then
+			issue(issues, "Store", fileName, field, "a CoinOffer may only grant PowerUpStock or NavigationRound")
 		end
 
 		if not inSet(grant.kind, STORE_GRANT_KINDS) then
@@ -1716,6 +1750,10 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		elseif grant.kind == "Title" then
 			if not isNonEmptyString(grant.titleId) then
 				issue(issues, "Store", fileName, field, "a Title grant needs a `titleId`")
+			end
+		elseif grant.kind == "NavigationRound" then
+			if type(grant.amount) ~= "number" or (grant.amount :: number) <= 0 or (grant.amount :: number) % 1 ~= 0 then
+				issue(issues, "Store", fileName, field, "a NavigationRound grant needs a positive integer `amount`")
 			end
 		end
 	end
@@ -3659,6 +3697,56 @@ function Validate.run(input: RegistryInput): { Issue }
 		end
 	end
 
+	-- ===== Navigation (design-decisions.md Q8, "Navigation") ============
+	-- Robux may only buy the convenience of never paying again. So while
+	-- anything sells Navigation for Robux (a round, or the unlimited
+	-- pass), an enabled CoinOffer must sell a round too. And a perk is
+	-- unlocked by one pass at most, so ownership has one answer.
+	if store ~= nil then
+		local soldForRobux: string? = nil
+		local soldForCoins = false
+		local passForPerk: { [string]: string } = {}
+		for _, entry in store do
+			local def = entry.def
+			local sellsRound = false
+			if type(def.grants) == "table" then
+				for _, grant in def.grants do
+					if type(grant) == "table" and grant.kind == "NavigationRound" then
+						sellsRound = true
+					end
+				end
+			end
+			if def.enabled and def.kind == "CoinOffer" and sellsRound then
+				soldForCoins = true
+			elseif def.enabled and (sellsRound or def.perk == "UnlimitedNavigation") then
+				soldForRobux = soldForRobux or entry.fileName
+			end
+			if def.kind == "GamePass" and type(def.perk) == "string" then
+				local existing = passForPerk[def.perk]
+				if existing ~= nil then
+					issue(
+						issues,
+						"Store",
+						entry.fileName,
+						"perk",
+						string.format("%s already unlocks %q - one pass per perk", existing, def.perk)
+					)
+				else
+					passForPerk[def.perk] = entry.fileName
+				end
+			end
+		end
+		if soldForRobux ~= nil and not soldForCoins then
+			issue(
+				issues,
+				"Store",
+				soldForRobux,
+				"enabled",
+				"sells Navigation for Robux, but no enabled CoinOffer sells a NavigationRound - Q8 needs a coin path"
+			)
+		end
+	end
+
 	-- ===== rewards step 5's season cross-checks =========================
 	local seasons = input.seasons
 	if seasons ~= nil then
@@ -3700,7 +3788,8 @@ function Validate.run(input: RegistryInput): { Issue }
 		if store ~= nil then
 			local passByKey: { [string]: StoreItemDef } = {}
 			for _, entry in store do
-				if entry.def.kind == "GamePass" then
+				-- A perk pass is never a season's pass: it unlocks its perk.
+				if entry.def.kind == "GamePass" and entry.def.perk == nil then
 					passByKey[entry.def.key] = entry.def
 				end
 			end
@@ -3716,7 +3805,7 @@ function Validate.run(input: RegistryInput): { Issue }
 						"Season",
 						entry.fileName,
 						"passKey",
-						string.format("%q is not a GamePass in Config/Store/", key)
+						string.format("%q is not a season GamePass in Config/Store/ (a perk pass can't be one)", key)
 					)
 				elseif seasonForPass[key] ~= nil then
 					issue(
@@ -3735,7 +3824,7 @@ function Validate.run(input: RegistryInput): { Issue }
 				end
 			end
 			for _, entry in store do
-				if entry.def.kind == "GamePass" and seasonForPass[entry.def.key] == nil then
+				if entry.def.kind == "GamePass" and entry.def.perk == nil and seasonForPass[entry.def.key] == nil then
 					issue(
 						issues,
 						"Store",

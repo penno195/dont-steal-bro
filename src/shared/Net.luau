@@ -1107,6 +1107,41 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: switch Navigation on or off (design-decisions.md
+	-- Q8, "Navigation"). The client never says whether it has paid: the
+	-- server checks the pass, the round already charged and the rounds
+	-- held, and spends one if it has to (NavigationLogic.switchOn).
+	NavigationToggle = {
+		name = "NavigationToggle",
+		direction = "ServerIntent",
+		schema = Net.struct({ on = Net.boolean() }),
+		rateLimit = { capacity = 4, refillPerSecond = 1 },
+		states = { "Race" },
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the owner only): the toggle's state,
+	-- and on "NeedsPurchase" what the sheet offers. Never broadcast:
+	-- nobody else may see that a player is using it.
+	NavigationState = {
+		name = "NavigationState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the owner only): the path to draw,
+	-- as waypoints from the player's position to the target station.
+	-- Resent only when the target or the waypoints change; an empty list
+	-- clears the line.
+	NavigationPath = {
+		name = "NavigationPath",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- P3-3's typing-indicator remotes. No remote exists for "speaking" -
 	-- that's read directly off AudioDeviceInput.Active, a replicated
 	-- property, with no server relay needed at all (see StudioChat.luau's

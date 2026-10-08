@@ -534,16 +534,28 @@ the many who own nothing.
 - **What it does:** a toggle next to the direction HUD in a match. While
   it's on, a path line leads to the nearest station the player hasn't
   finished yet, until the round ends.
-- **For one round:** 99 R$, or a coin price (still PLACEHOLDER, set
-  at roughly Robux parity when it's built). **Unlimited:** a 899 R$
-  pass, sold for Robux only.
+- **For one round:** 99 R$, or **100 coins**. **Unlimited:** a 899 R$
+  pass, sold for Robux only. (Coin price set by the owner on 2026-10-08.
+  Robux parity is about 85 coins, so the Robux round is slightly better
+  value.)
 - **Why Q8 still holds:** every free player can turn it on in any round
   by paying coins. Robux only buys the convenience of never paying again,
   not anything a free player can't have. This is the first coin offer
-  that isn't power-up stock, so `CoinOffer` validation will need to allow
-  it as a named exception.
+  that isn't power-up stock, so `CoinOffer` validation allows it as a
+  named exception. Validate also refuses to boot when Navigation is sold
+  for Robux but no enabled coin offer sells a round.
 - The path line is drawn only on the owner's client. Nobody else can see
   that a player is using it.
+- **Where a round is bought** (owner, 2026-10-08): only from the toggle,
+  during a race. Tapping it with nothing to spend opens a small sheet
+  offering 99 R$ or 100 coins. Rounds are never sold in the Hub grid, and
+  the server refuses a round purchase outside a race. The pass is sold
+  in the Hub store.
+- **When a round is spent** (owner, 2026-10-08): on the first switch-on
+  of a race. Switching off and on again in that race is free. A round
+  bought from the sheet switches Navigation on by itself. If a receipt
+  lands after its race has ended, the round is kept for the next race.
+  A pass owner never spends a held round.
 
 ---
 

@@ -653,6 +653,26 @@ local function setEquippedCosmetic(player: Player, slot: string, itemId: string?
 	return true
 end
 
+-- Paid Navigation rounds held but not yet spent (design-decisions.md Q8,
+-- "Navigation"). StoreService grants them through the receipt handle;
+-- NavigationService spends one on a race's first switch-on.
+local function getNavigationRounds(player: Player): number
+	local d = data(player)
+	return if d then d.navigationRounds else 0
+end
+
+-- Spends one held round, or refuses when none is held. Not forced to
+-- save: a crash before the next autosave hands the round back, which
+-- costs the player nothing.
+local function spendNavigationRound(player: Player): boolean
+	local d = writable(player)
+	if d == nil or d.navigationRounds <= 0 then
+		return false
+	end
+	d.navigationRounds -= 1
+	return true
+end
+
 local function getCurrency(player: Player): number
 	local d = data(player)
 	return if d then d.currency else 0
@@ -773,6 +793,8 @@ local DataService: Loader.Service = {
 	getEquipped = getEquipped,
 	setEquippedCosmetic = setEquippedCosmetic,
 	getCurrency = getCurrency,
+	getNavigationRounds = getNavigationRounds,
+	spendNavigationRound = spendNavigationRound,
 	getSeasonProgress = getSeasonProgress,
 	addCurrency = addCurrency,
 	getStats = getStats,

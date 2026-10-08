@@ -114,6 +114,14 @@ export type ProfileData = {
 	-- queue strip's "Same as last round" re-arms from (design-decisions.md
 	-- Q8, "the Locker and choosing a loadout"). Never spent by itself.
 	lastLoadout: { string },
+
+	-- ===== schema v7, Navigation ========================================
+
+	-- Paid Navigation rounds not yet spent (design-decisions.md Q8,
+	-- "Navigation"). A round is bought from the in-match toggle and spent
+	-- on its first switch-on, so this is normally 0; it holds one only
+	-- when a receipt lands after the race it was bought in has ended.
+	navigationRounds: number,
 }
 
 -- Structurally SeasonLogic.Progress, which computes what this stores.
@@ -129,7 +137,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 6
+local CURRENT_SCHEMA_VERSION = 7
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -154,6 +162,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		lastWinReward = nil,
 		seasonProgress = {},
 		lastLoadout = {},
+		navigationRounds = 0,
 	}
 end
 
@@ -256,6 +265,14 @@ migrations[5] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 6
 	next.lastLoadout = (old.lastLoadout :: { string }?) or {}
+	return next
+end
+
+-- v6 -> v7 (Navigation): no paid rounds held. Nothing earlier sold one.
+migrations[6] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 7
+	next.navigationRounds = (old.navigationRounds :: number?) or 0
 	return next
 end
 

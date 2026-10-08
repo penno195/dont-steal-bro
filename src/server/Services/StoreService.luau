@@ -78,6 +78,7 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 local CosmeticLogic = require(ServerScriptService.Server.CosmeticLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
+local Signal = require(ReplicatedStorage.Packages.Signal)
 
 type StoreItemDef = Validate.StoreItemDef
 
@@ -137,6 +138,11 @@ export type GrantRecord = {
 }
 local grantLog: { GrantRecord } = {}
 local GRANT_LOG_LIMIT = 200
+
+-- Fires (player, def) once a purchase has landed: a receipt confirmed
+-- saved, a coin offer paid, or a pass newly seen owned. NavigationService
+-- listens, so a round bought from the toggle switches on by itself.
+local purchaseLanded = Signal.new()
 
 local function now(): number
 	return os.clock()
@@ -214,6 +220,7 @@ local function pushState(player: Player)
 		ownedCosmetics = DataService.getOwnedCosmetics(player),
 		equipped = DataService.getEquipped(player),
 		ownedPasses = ownedPasses,
+		navigationRounds = DataService.getNavigationRounds(player),
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
 	})
@@ -249,6 +256,7 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 		powerUpStock = data.powerUpStock,
 		ownedCosmetics = data.ownedCosmetics,
 		unlockedTitles = data.unlockedTitles,
+		navigationRounds = data.navigationRounds,
 	}
 
 	local after, changes = StoreLogic.applyGrants(before, def.grants :: any)
@@ -257,6 +265,7 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 	data.powerUpStock = after.powerUpStock
 	data.ownedCosmetics = after.ownedCosmetics
 	data.unlockedTitles = after.unlockedTitles
+	data.navigationRounds = after.navigationRounds or data.navigationRounds
 
 	if purchaseId ~= nil then
 		-- The line that makes the whole thing safe. Written next to the
@@ -511,6 +520,7 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 
 	recordGrant(player, product, purchaseKey, changes)
 	pushState(player)
+	purchaseLanded:Fire(player, product)
 	-- What Roblox actually charged, from the receipt, not the config's
 	-- display price.
 	local spent = receiptInfo.CurrencySpent
@@ -636,11 +646,13 @@ local function syncPasses(player: Player)
 			powerUpStock = data.powerUpStock,
 			ownedCosmetics = data.ownedCosmetics,
 			unlockedTitles = data.unlockedTitles,
+			navigationRounds = data.navigationRounds,
 		}, grants :: any)
 		data.currency = granted.currency
 		data.powerUpStock = granted.powerUpStock
 		data.ownedCosmetics = granted.ownedCosmetics
 		data.unlockedTitles = granted.unlockedTitles
+		data.navigationRounds = granted.navigationRounds or data.navigationRounds
 		data.seasonProgress[season.id] = after
 		anyChange = true
 	end
@@ -687,6 +699,7 @@ local function buyWithCoins(player: Player, def: StoreItemDef)
 		powerUpStock = data.powerUpStock,
 		ownedCosmetics = data.ownedCosmetics,
 		unlockedTitles = data.unlockedTitles,
+		navigationRounds = data.navigationRounds,
 	}, def.coinPrice or 0, def.grants :: any)
 	if after == nil then
 		local message = if reason == "not enough coins"
@@ -700,10 +713,12 @@ local function buyWithCoins(player: Player, def: StoreItemDef)
 	data.powerUpStock = after.powerUpStock
 	data.ownedCosmetics = after.ownedCosmetics
 	data.unlockedTitles = after.unlockedTitles
+	data.navigationRounds = after.navigationRounds or data.navigationRounds
 	handle.save()
 	recordGrant(player, def, nil, changes)
 	sendPurchaseResult(player, def.key, "Granted", "")
 	pushState(player)
+	purchaseLanded:Fire(player, def)
 	Loader.get("Telemetry").purchaseCompleted(player, def.key, def.kind, nil)
 end
 
@@ -733,6 +748,15 @@ local function handlePurchaseIntent(player: Player, key: string)
 		return
 	end
 
+	-- A Navigation round is sold only from the in-match toggle (Q8,
+	-- "Navigation", 2026-10-08), so only to a racer mid-race.
+	if
+		StoreLogic.grantsNavigationRound(def.grants :: any) and not Loader.get("NavigationService").canBuyRound(player)
+	then
+		sendPurchaseResult(player, key, "Unavailable", "Navigation is bought from its button during a race.")
+		return
+	end
+
 	if def.kind == "CoinOffer" then
 		buyWithCoins(player, def)
 		return
@@ -743,7 +767,8 @@ local function handlePurchaseIntent(player: Player, key: string)
 		return
 	end
 
-	if def.kind == "GamePass" and liveSeasonForPass(def.key) == nil then
+	-- A perk pass isn't tied to a season, so it sells all year.
+	if def.kind == "GamePass" and def.perk == nil and liveSeasonForPass(def.key) == nil then
 		sendPurchaseResult(player, key, "Unavailable", "This season isn't running right now.")
 		return
 	end
@@ -978,6 +1003,23 @@ local StoreService: Loader.Service = {
 	ownsPass = ownsPass,
 	consumeLoadoutFor = consumeLoadoutFor,
 
+	-- Whether this player owns the enabled pass that unlocks `perk`.
+	-- Live (cached) ownership, never a profile field, so nothing but a
+	-- real purchase can make it true.
+	ownsPerk = function(player: Player, perk: Validate.StorePerk): boolean
+		for _, entry in StoreCatalogue do
+			local def = entry.def :: StoreItemDef
+			if def.kind == "GamePass" and def.perk == perk and def.enabled then
+				return ownsPass(player, def.assetId)
+			end
+		end
+		return false
+	end,
+
+	onGranted = function(callback: (player: Player, def: StoreItemDef) -> ())
+		return purchaseLanded:Connect(callback)
+	end,
+
 	-- Studio only, and no remote reaches it - see its own comment.
 	debugSimulateReceipt = debugSimulateReceipt,
 	pushState = pushState,
@@ -1078,6 +1120,7 @@ function StoreService:init()
 						-- A pass has no receipt, so its value is the
 						-- configured price.
 						Loader.get("Telemetry").purchaseCompleted(player, def.key, def.kind, def.robuxPrice)
+						purchaseLanded:Fire(player, def)
 					end
 				end
 			end)
