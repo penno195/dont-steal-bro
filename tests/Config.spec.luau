@@ -508,6 +508,27 @@ TestRunner.describe("Validate.checkPowerUp impact", function()
 	end)
 end)
 
+TestRunner.describe("Validate.checkPowerUp victimLook", function()
+	local function lookIssues(kind: Validate.PowerUpKind, look: any): number
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.kind = kind
+		powerUp.role = if kind == "Debuff" then "Attack" else "Utility"
+		powerUp.victimLook = look
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		return #issues
+	end
+
+	TestRunner.it("accepts a known look on a Debuff", function()
+		TestRunner.expect(lookIssues("Debuff", "Frozen")):toBe(0)
+	end)
+
+	TestRunner.it("rejects a look on a Buff, and an unknown look", function()
+		TestRunner.expect(lookIssues("Buff", "Frozen")):toBe(1)
+		TestRunner.expect(lookIssues("Debuff", "OnFire")):toBe(1)
+	end)
+end)
+
 TestRunner.describe("Validate.checkPowerUp (design-decisions.md Q8)", function()
 	TestRunner.it("rejects a Robux price with no free acquisition path", function()
 		local issues = {}

@@ -298,4 +298,26 @@ function PowerUpLogic.isInsideZone(floor: Vec3, radiusStuds: number, position: V
 	return dx * dx + dz * dz <= radiusStuds * radiusStuds
 end
 
+-- ===== victim looks =======================================================
+
+-- Pure: the one look a racer shows, from the ids of the effects on them
+-- (a status effect's id is its power-up's id). `lookById` maps an id to
+-- its PowerUpDef.victimLook; `order` is Validate.POWERUP_VICTIM_LOOKS,
+-- strongest first. nil = no look (the racer gets the word instead).
+function PowerUpLogic.lookFor(effectIds: { string }, lookById: { [string]: string }, order: { string }): string?
+	local has: { [string]: boolean } = {}
+	for _, id in effectIds do
+		local look = lookById[id]
+		if look ~= nil then
+			has[look] = true
+		end
+	end
+	for _, look in order do
+		if has[look] then
+			return look
+		end
+	end
+	return nil
+end
+
 return PowerUpLogic

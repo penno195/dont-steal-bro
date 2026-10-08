@@ -161,6 +161,17 @@ export type PowerUpImpact = {
 
 local POWERUP_IMPACT_STYLES: { PowerUpImpactStyle } = { "Frost", "Flash", "Shockwave", "Glitch" }
 
+-- How a debuffed racer looks while it lasts, to everyone (themselves
+-- included), in place of a word over the head. "Ragdoll" is the one
+-- with physics: the server swaps the rig's joints (server/Ragdoll.luau)
+-- so every client sees the same flop. Listed strongest first - a racer
+-- under two shows the earlier one.
+export type PowerUpVictimLook = "Frozen" | "Ragdoll" | "Blinded"
+
+-- Plain strings: StatusEffects passes it to PowerUpLogic.lookFor.
+local POWERUP_VICTIM_LOOKS: { string } = { "Frozen", "Ragdoll", "Blinded" }
+Validate.POWERUP_VICTIM_LOOKS = POWERUP_VICTIM_LOOKS
+
 -- Two acquisition paths per powerups.md's intro. `robuxPrice` is only
 -- ever a convenience purchase, never exclusive - design-decisions.md Q8:
 -- "every purchasable item is also earnable for free through normal
@@ -211,6 +222,9 @@ export type PowerUpDef = {
 	-- A thrown item's own landing effect and colour. nil = the plain
 	-- role-coloured blast. Only on thrown items.
 	impact: PowerUpImpact?,
+	-- How the victim looks while this debuff is on them. nil = just the
+	-- word over their head. Only on Debuffs.
+	victimLook: PowerUpVictimLook?,
 	acquisition: PowerUpAcquisition,
 }
 
@@ -1331,6 +1345,25 @@ function Validate.checkPowerUp(fileName: string, def: PowerUpDef, issues: { Issu
 			issue(issues, "PowerUp", fileName, "shuntScale", "only a thrown (Aimed/Nearest) item has a shunt")
 		elseif shuntScale < 0 or shuntScale > 5 then
 			issue(issues, "PowerUp", fileName, "shuntScale", "must be between 0 and 5")
+		end
+	end
+	local victimLook = def.victimLook
+	if victimLook ~= nil then
+		if def.kind ~= "Debuff" then
+			issue(issues, "PowerUp", fileName, "victimLook", "only a Debuff has a victim look")
+		end
+		if not inSet(victimLook, POWERUP_VICTIM_LOOKS) then
+			issue(
+				issues,
+				"PowerUp",
+				fileName,
+				"victimLook",
+				string.format(
+					"expected one of [%s], got %s",
+					table.concat(POWERUP_VICTIM_LOOKS, ", "),
+					tostring(victimLook)
+				)
+			)
 		end
 	end
 	local impact = def.impact

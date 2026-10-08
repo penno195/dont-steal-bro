@@ -46,6 +46,17 @@ local StatusEffectResolver = require(ReplicatedStorage.Shared.StatusEffectResolv
 local StatusEffectDefs = require(ServerScriptService.Server.Services.StatusEffectDefs)
 local Participants = require(ServerScriptService.Server.Participants)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
+local Ragdoll = require(ServerScriptService.Server.Ragdoll)
+local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
+
+-- Effect id -> its power-up's victim look (an effect's id is its
+-- power-up's id). Read once: config is static.
+local lookById: { [string]: string } = {}
+for _, entry in PowerUps do
+	if entry.def.victimLook ~= nil then
+		lookById[entry.def.id] = entry.def.victimLook
+	end
+end
 
 -- Roblox defaults - PLACEHOLDER, same stance every unverified number in
 -- this repo takes (see GameConfig.luau): no locked baseline movement
@@ -170,6 +181,7 @@ local function replicate(racerId: number, state: RacerState)
 	-- Movement alone can't tell a Slow Field from a Sprint Boost, and
 	-- EffectLabelController labels only the slow. Still no durations.
 	local slowed = false
+	local effectIds = {}
 	for _, effect in state.activeEffects do
 		if not seenCategories[effect.def.category] then
 			seenCategories[effect.def.category] = true
@@ -178,8 +190,19 @@ local function replicate(racerId: number, state: RacerState)
 		if effect.def.category == "Movement" and effect.def.kind == "Debuff" then
 			slowed = true
 		end
+		table.insert(effectIds, effect.def.id)
 	end
-	Net.fireAllClients("StatusEffectsVisual", { playerId = racerId, categories = categories, slowed = slowed })
+	-- The victim look (PowerUpDef.victimLook): drawn by every client, and
+	-- for a Ragdoll also done to the rig here, so all of them see it.
+	local look = PowerUpLogic.lookFor(effectIds, lookById, Validate.POWERUP_VICTIM_LOOKS)
+	local character = if participant ~= nil then participant.character else nil
+	if character ~= nil then
+		Ragdoll.set(character, look == "Ragdoll")
+	end
+	Net.fireAllClients(
+		"StatusEffectsVisual",
+		{ playerId = racerId, categories = categories, slowed = slowed, look = look }
+	)
 end
 
 -- The one place `recomputeAndApply` is ever skipped is a racer with no

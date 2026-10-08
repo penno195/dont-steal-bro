@@ -22,6 +22,7 @@ local Freeze: Validate.PowerUpDef = {
 	rarity = "Uncommon",
 	hardControl = true,
 	impact = { style = "Frost", rgb = { 150, 215, 255 } }, -- icy shards and frost mist
+	victimLook = "Frozen", -- encased in an ice block
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 
