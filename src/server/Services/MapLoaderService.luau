@@ -109,6 +109,21 @@ local ON_MAP: { [string]: boolean } = {
 	Qualified = true,
 }
 
+-- Feet on the pad's floor, not SPAWN_HEIGHT above it. A held root is
+-- anchored, so it never falls the gap: its Humanoid sat in Freefall,
+-- playing the falling animation, for the whole countdown. Pads are thin
+-- non-colliding markers laid on the floor, so the floor is their bottom.
+local function standingCFrame(point: BasePart, character: Model, root: BasePart): CFrame
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil then
+		return point.CFrame + SPAWN_HEIGHT
+	end
+	local floorY = point.Position.Y - point.Size.Y / 2
+	local standY = floorY + humanoid.HipHeight + root.Size.Y / 2
+	local at = Vector3.new(point.Position.X, standY, point.Position.Z)
+	return CFrame.new(at) * point.CFrame.Rotation
+end
+
 -- Yields on the stream, so callers run it in its own thread.
 local function putOnSeat(player: Player, point: BasePart)
 	MapStreaming.streamAround(player, point.Position)
@@ -117,14 +132,30 @@ local function putOnSeat(player: Player, point: BasePart)
 	if character == nil or root == nil then
 		return
 	end
-	if not raceStarted then
-		root.Anchored = true
-		table.insert(held, root)
-	end
 	-- A mid-Race respawn is a server teleport MovementWatch would
 	-- otherwise read as speed.
 	(Loader.get("MovementWatch") :: any).suppressNextSample(player)
-	character:PivotTo(point.CFrame + SPAWN_HEIGHT)
+	if raceStarted then
+		character:PivotTo(point.CFrame + SPAWN_HEIGHT)
+		return
+	end
+	root.Anchored = true
+	table.insert(held, root)
+	character:PivotTo(standingCFrame(point, character, root))
+	-- The avatar's appearance can load after this and rescale the legs;
+	-- re-stand on the new HipHeight so a held racer neither floats nor
+	-- sinks into the floor.
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid ~= nil then
+		local connection: RBXScriptConnection
+		connection = humanoid:GetPropertyChangedSignal("HipHeight"):Connect(function()
+			if raceStarted or not root.Anchored or root.Parent == nil then
+				connection:Disconnect()
+				return
+			end
+			character:PivotTo(standingCFrame(point, character, root))
+		end)
+	end
 end
 
 local function placeHumans()
@@ -144,11 +175,25 @@ local function placeHumans()
 	end
 end
 
+-- Unanchoring puts the rig back on automatic network ownership, which
+-- can hand it to whichever client is nearest - with six pads 6 studs
+-- apart, often someone else's. That client ignores the owner's input
+-- and doesn't run their Humanoid, so the rig slumps until its torso
+-- (R15 legs don't collide) rests on the floor: stuck half under the
+-- map. Give it straight back to its own player.
+local function release(root: BasePart)
+	root.Anchored = false
+	local player = Players:GetPlayerFromCharacter(root.Parent)
+	if player ~= nil then
+		root:SetNetworkOwner(player)
+	end
+end
+
 local function releaseHumans()
 	raceStarted = true
 	for _, root in held do
 		if root.Parent ~= nil then
-			root.Anchored = false
+			release(root)
 		end
 	end
 	table.clear(held)
