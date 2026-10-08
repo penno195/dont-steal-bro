@@ -80,6 +80,12 @@ both together.
 | `NavigationRound.luau` | not created yet | disabled |
 | `NavigationPass.luau` | not created yet | disabled |
 
+Navigation's art is drawn (`assets/store/navigation-round.png` and
+`navigation-pass.png`; the coin offer shares the round's image). Enable
+`NavigationRoundCoins.luau` first: Validate refuses to boot with Robux
+Navigation on sale and no coin round. The in-match toggle appears once
+any of the three is enabled.
+
 ## 4. Test (step 13)
 
 Studio's purchase prompts are test purchases and grant nothing real.

@@ -105,6 +105,11 @@ export type Store = {
 	note: () -> SlotNote?, -- the latest slot note, nil once it has faded
 	effects: () -> { HudLogic.Effect },
 	objective: () -> Objective?,
+	-- Navigation (design-decisions.md Q8): the toggle beside the compass.
+	-- "Off" | "On" | "Waiting" (asked, no answer yet); nil hides it, as
+	-- does leaving both out (the preview, the practice tray).
+	navigation: (() -> string?)?,
+	pressNavigation: (() -> ())?,
 	select: (index: number) -> (),
 	fire: () -> (), -- the selected slot, at whatever is locked on
 	-- screenPoint: where a mouse aim was clicked (InputObject.Position),
@@ -147,6 +152,7 @@ local PILL = 72
 local GAP = Theme.spacing.sm
 local TOP_WIDTH = 2 * PILL + RING + 2 * GAP
 local TOP_MARGIN = 4 -- px from the top bar (or the screen top, when lifted into the bar)
+local NAV = Theme.touch.minTargetPoints -- the Navigation toggle; a spacer of the same width balances it
 local CHIP = 36
 local TASK_WIDTH = 150
 local TASK_ROW = 18
@@ -1101,6 +1107,56 @@ local RaceHUD = {}
 
 -- `controller` is UIScaleController (passed in, as the debug screens
 -- do). Returns unmount.
+-- The Navigation toggle, right of the compass (design-decisions.md Q8,
+-- "Navigation"). Lit green while the path line is up; dimmed while the
+-- server hasn't answered. Whether a tap spends a round or opens the buy
+-- sheet is the server's call, not this button's.
+local function navigationToggle(state: () -> string?, press: () -> ()): TextButton
+	local lit = function(): boolean
+		return state() == "On"
+	end
+	local button = create("TextButton")({
+		Name = "Navigation",
+		LayoutOrder = 4,
+		Size = UDim2.fromOffset(NAV, RING),
+		Text = "",
+		AutoButtonColor = false,
+		Selectable = false,
+		Visible = function()
+			return state() ~= nil
+		end,
+		BackgroundColor3 = function(): Color3
+			return if lit() then Theme.color.surface:Lerp(Theme.color.success, 0.35) else Theme.color.surface
+		end,
+		BackgroundTransparency = function()
+			return if state() == "Waiting" then 0.5 else 0.15
+		end,
+		Base.corner(Theme.radius.md),
+		create("UIStroke")({
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = function(): Color3
+				return if lit() then Theme.color.success else Theme.color.line
+			end,
+			Transparency = function()
+				return if lit() then 0 else 0.6
+			end,
+			Thickness = function()
+				return if lit() then 2 else 1
+			end,
+		}),
+		Base.text("label", {
+			Name = "Label",
+			Size = UDim2.fromScale(1, 1),
+			Text = "NAV",
+			TextColor3 = function(): Color3
+				return if lit() then Theme.color.success else Theme.color.ink
+			end,
+		}),
+		Activated = press,
+	}) :: TextButton
+	return button
+end
+
 function RaceHUD.mount(controller: any, store: Store): () -> ()
 	-- Under the HUD's own layer, and full-bleed so the bands reach the
 	-- physical edges, notch and all. Nothing on it is interactive.
@@ -1166,11 +1222,19 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 		-- just under the bar. This gui lays out below the bar, so lifting
 		-- is a negative offset of the bar's height. The Position isn't
 		-- under the stack's UIScale, so it's in real pixels.
+		local navState: () -> string? = store.navigation or function(): string?
+			return nil
+		end
+		local navShown = derive(function()
+			return navState() ~= nil
+		end)
 		local topY = source(TOP_MARGIN)
 		local function placeTop()
 			local camera = Workspace.CurrentCamera
 			local inset = GuiService.TopbarInset
-			local half = TOP_WIDTH * controller.getScale() / 2
+			-- The Navigation toggle and its spacer stick out either side.
+			local width = if navShown() then TOP_WIDTH + 2 * (NAV + GAP) else TOP_WIDTH
+			local half = width * controller.getScale() / 2
 			local centre = if camera ~= nil then camera.ViewportSize.X / 2 else 0
 			local fits = inset.Height > 0 and centre - half >= inset.Min.X and centre + half <= inset.Max.X
 			topY(if fits then TOP_MARGIN - inset.Height else TOP_MARGIN)
@@ -1204,7 +1268,16 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			row(1, RING, {
 				placementCard(standing),
 				C.CountdownRing({ secondsLeft = secondsLeft, total = store.raceSeconds, size = RING, layoutOrder = 2 }),
+				-- Balances the toggle, so the countdown stays centred.
+				create("Frame")({
+					Name = "NavigationSpacer",
+					LayoutOrder = 0,
+					Size = UDim2.fromOffset(NAV, RING),
+					BackgroundTransparency = 1,
+					Visible = navShown,
+				}),
 				objectiveCard(store.objective, allDone),
+				navigationToggle(navState, store.pressNavigation or function() end),
 			}),
 			compactTasks,
 			row(3, CHIP, {

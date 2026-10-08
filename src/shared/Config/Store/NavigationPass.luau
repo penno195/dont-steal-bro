@@ -16,7 +16,7 @@ local NavigationPass: Validate.StoreItemDef = {
 	description = "Switch on Navigation in every round, for good. Shows a path to your nearest unfinished station.",
 	robuxPrice = 899, -- display only
 	sortOrder = 20,
-	imageAssetId = 0, -- assets/store/navigation-pass.png, not drawn yet
+	imageAssetId = 0, -- assets/store/navigation-pass.png: drawn, upload it and paste the id
 	grants = {},
 	perk = "UnlimitedNavigation",
 }

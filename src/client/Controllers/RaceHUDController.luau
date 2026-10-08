@@ -41,6 +41,7 @@ local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
 local ComponentLogic = require(script.Parent.Parent.UI.Components.ComponentLogic)
 local Toast = require(script.Parent.Parent.UI.Components.Toast)
 local HudLogic = require(script.Parent.Parent.UI.HudLogic)
+local NavigationController = require(script.Parent.NavigationController)
 local RaceHUD = require(script.Parent.Parent.UI.Screens.RaceHUD)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local UIScaleController = require(script.Parent.UIScaleController)
@@ -637,6 +638,8 @@ local store: RaceHUD.Store = {
 	note = note,
 	effects = effects,
 	objective = objective,
+	navigation = NavigationController.toggle,
+	pressNavigation = NavigationController.press,
 	select = selectSlot,
 	fire = fire,
 	startAim = startAim,
@@ -828,7 +831,7 @@ end
 
 local RaceHUDController: Loader.Controller = {
 	name = "RaceHUDController",
-	dependencies = { "UIScaleController", "NPCBubbleController" }, -- NPC rigs, for lock-on
+	dependencies = { "UIScaleController", "NPCBubbleController", "NavigationController" }, -- NPC rigs, for lock-on
 }
 
 local unmount: (() -> ())? = nil

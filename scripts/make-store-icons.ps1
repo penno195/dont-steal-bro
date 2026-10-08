@@ -265,3 +265,32 @@ $g.FillPath((Brush $white), $eye); $g.DrawPath((Pen $ink 12), $eye)
 $g.FillEllipse((Brush $ink), 222, 202, 68, 68)
 $g.DrawLine((Pen (Rgb 230 60 60) 22), 170, 150, 342, 322)
 Finish-CoinOffer $c 'blind-coins.png'
+
+# ===== navigation: one round, and the Unlimited pass (Q8 "Navigation") =====
+# A dotted path winding up to a map pin. The round's art serves its Robux
+# product and its coin offer alike; the pass adds the PASS label.
+function Draw-Route($g) {
+	# Drawn at full size, shrunk about the centre to stay inside the crop.
+	$g.TranslateTransform(256, 236); $g.ScaleTransform(0.74, 0.74); $g.TranslateTransform(-256, -246)
+	$dots = @(@(118, 404), @(166, 396), @(210, 378), @(244, 350), @(262, 314), @(288, 286), @(322, 270))
+	foreach ($d in $dots) {
+		$g.FillEllipse((Brush $ink), $d[0] - 19, $d[1] - 19, 38, 38)
+		$g.FillEllipse((Brush $white), $d[0] - 13, $d[1] - 13, 26, 26)
+	}
+	$pin = New-Object System.Drawing.Drawing2D.GraphicsPath
+	$pin.AddArc(290, 84, 132, 132, 150, 240)
+	$pin.AddLine(413, 183, 356, 262)
+	$pin.CloseFigure()
+	$g.FillPath((Brush (Rgb 255 90 90)), $pin); $g.DrawPath((Pen $ink 12), $pin)
+	$g.FillEllipse((Brush $white), 330, 124, 52, 52)
+	$g.ResetTransform()
+}
+
+$c = New-Icon (Rgb 120 230 170) (Rgb 20 110 90); $g = $c[1]
+Draw-Route $g
+Save-Icon $c 'navigation-round.png'
+
+$c = New-Icon (Rgb 120 230 170) (Rgb 20 80 120); $g = $c[1]
+Draw-Route $g
+Draw-Label $g 'PASS' 430 46 (Rgb 255 220 90)
+Save-Icon $c 'navigation-pass.png'

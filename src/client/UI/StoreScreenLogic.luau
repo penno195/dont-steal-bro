@@ -35,6 +35,7 @@ export type Item = {
 	sortOrder: number,
 	imageAssetId: number, -- 0 = no art yet (disabled items only, Validate enforces it)
 	grants: { Grant },
+	perk: string?, -- a perk pass (Unlimited Navigation), not a season pass
 }
 
 -- The StoreState payload (StoreService.pushState), as the client gets it.
@@ -74,11 +75,11 @@ local KIND_CATEGORY: { [string]: Category } = {
 -- Derived from what the item GRANTS rather than a new config field, so
 -- adding a product stays one file (Ground Rule 2) and a product can't be
 -- filed under a tab that disagrees with its contents. A game pass is
--- always Season (every pass is a season pass, rewards step 5); anything
--- granting two different kinds is a bundle.
+-- Season (rewards step 5) unless it's a perk pass, which grants nothing
+-- and sits in Bundles; anything granting two different kinds is a bundle.
 function StoreScreenLogic.categoryOf(item: Item): Category
 	if item.kind == "GamePass" then
-		return "Season"
+		return if item.perk ~= nil then "Bundles" else "Season"
 	end
 	local found: Category? = nil
 	for _, grant in item.grants do
@@ -208,10 +209,25 @@ end
 -- `livePassKey` is the running season's pass: the Season tab offers only
 -- that one, since an old season's pass would unlock nothing (and the
 -- server refuses to sell it). nil = no season running, nothing to offer.
+-- A Navigation round is never in the grid: it's sold only from the
+-- in-match toggle (design-decisions.md Q8, "Navigation").
+local function inGrid(item: Item): boolean
+	for _, grant in item.grants do
+		if grant.kind == "NavigationRound" then
+			return false
+		end
+	end
+	return true
+end
+
 function StoreScreenLogic.itemsIn(items: { Item }, category: Category, livePassKey: string?): { Item }
 	local out = {}
 	for _, item in items do
-		if StoreScreenLogic.categoryOf(item) == category and (category ~= "Season" or item.key == livePassKey) then
+		if
+			inGrid(item)
+			and StoreScreenLogic.categoryOf(item) == category
+			and (category ~= "Season" or item.key == livePassKey)
+		then
 			table.insert(out, item)
 		end
 	end
