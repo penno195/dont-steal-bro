@@ -2639,3 +2639,69 @@ TestRunner.describe("Validate.checkStoreItem (CoinOffer, rewards step 6)", funct
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 end)
+
+-- ===== streak buy-back (design-decisions.md Q7) ============================
+
+local function buyBackTier(min: number, max: number?): Validate.StoreItemDef
+	local def = validProduct("save-" .. tostring(min))
+	def.assetId = 700000 + min
+	def.grants = { { kind = "StreakBuyBack", minStreak = min, maxStreak = max } }
+	return def
+end
+
+local function tiers(...: Validate.StoreItemDef): { { fileName: string, def: Validate.StoreItemDef } }
+	local list = {}
+	for index, def in { ... } do
+		table.insert(list, { fileName = string.format("Save%d.luau", index), def = def })
+	end
+	return list
+end
+
+TestRunner.describe("Validate - streak buy-back tiers", function()
+	TestRunner.it("accepts tiers running on from 1 to an open top", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, 1), buyBackTier(2, 7), buyBackTier(8, nil)))):toBe(0)
+	end)
+
+	TestRunner.it("refuses a gap between tiers", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, 1), buyBackTier(3, nil))) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses tiers that don't start at 1", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(2, nil))) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a capped top tier, leaving long streaks unpriced", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, 7))) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an open tier below the top", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, nil), buyBackTier(2, nil))) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("ignores disabled tiers when checking coverage", function()
+		local hole = buyBackTier(2, 7)
+		hole.enabled = false
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, 1), hole)) > 0):toBeTruthy()
+		local all = { buyBackTier(1, 1), hole, buyBackTier(8, nil) }
+		for _, def in all do
+			def.enabled = false
+		end
+		TestRunner.expect(#runWithStore(tiers(table.unpack(all)))):toBe(0)
+	end)
+
+	TestRunner.it("refuses a buy-back sold for coins or bundled with another grant", function()
+		local coins = buyBackTier(1, nil)
+		coins.kind = "CoinOffer"
+		coins.assetId = 0
+		coins.robuxPrice = 0
+		coins.coinPrice = 100
+		TestRunner.expect(#runWithStore(tiers(coins)) > 0):toBeTruthy()
+		local bundle = buyBackTier(1, nil)
+		table.insert(bundle.grants, { kind = "Currency", amount = 10 })
+		TestRunner.expect(#runWithStore(tiers(bundle)) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a maxStreak below minStreak", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(3, 2))) > 0):toBeTruthy()
+	end)
+end)

@@ -129,6 +129,21 @@ function ProgressionLogic.applyResult(before: StreakState, reason: ReasonCode): 
 	}
 end
 
+-- The buy-back offer a result leaves open (design-decisions.md Q7,
+-- "buying back a streak"): any loss of a streak of 1 or more, priced by
+-- that streak. Nil otherwise, and the writer stores the nil too, so a
+-- win or a loss from 0 never leaves an older offer behind.
+function ProgressionLogic.buyBackOffer(
+	roundId: string,
+	before: StreakState,
+	reason: ReasonCode
+): { roundId: string, streak: number }?
+	if ProgressionLogic.isWin(reason) or before.currentStreak < 1 then
+		return nil
+	end
+	return { roundId = roundId, streak = before.currentStreak }
+end
+
 -- Which stat a reason bumps. Split out rather than inlined so the
 -- win/loss stat can never disagree with the streak change that
 -- accompanies it - both read `isWin`.

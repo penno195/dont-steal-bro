@@ -310,6 +310,7 @@ export type SeasonStep = (
 export type ProgressionWriter = (
 	player: Player,
 	state: ProfileLogic.ProgressionState,
+	buyBackOffer: ProfileLogic.BuyBackOffer?,
 	reward: WinRewardWrite?,
 	seasonStep: SeasonStep?
 ) -> { string }
@@ -333,6 +334,7 @@ end
 local function writeProgressionState(
 	player: Player,
 	state: ProfileLogic.ProgressionState,
+	buyBackOffer: ProfileLogic.BuyBackOffer?,
 	reward: WinRewardWrite?,
 	seasonStep: SeasonStep?
 ): { string }
@@ -342,6 +344,9 @@ local function writeProgressionState(
 	end
 	d.currentStreak = state.currentStreak
 	d.bestStreak = state.bestStreak
+	-- Written even when nil: a result that opens no offer closes any
+	-- older one (ProgressionLogic.buyBackOffer).
+	d.buyBackOffer = buyBackOffer
 
 	local changes: { string } = {}
 	if reward ~= nil then
@@ -673,6 +678,27 @@ local function spendNavigationRound(player: Player): boolean
 	return true
 end
 
+-- The streak this player may buy back (design-decisions.md Q7, "buying
+-- back a streak"), or nil. The progression writer opens it, a buy-back
+-- receipt closes it, and expireBuyBackOffer closes it at a race start.
+local function getBuyBackOffer(player: Player): ProfileLogic.BuyBackOffer?
+	local d = data(player)
+	return if d and d.buyBackOffer then table.clone(d.buyBackOffer) else nil
+end
+
+-- The offer lasts until the player's next race starts (the 2026-10-08
+-- applied case). Returns whether one was open. Not forced to save: the
+-- race's own result rewrites the field anyway, and a server that dies
+-- before both just leaves the offer as the loss made it.
+local function expireBuyBackOffer(player: Player): boolean
+	local d = writable(player)
+	if d == nil or d.buyBackOffer == nil then
+		return false
+	end
+	d.buyBackOffer = nil
+	return true
+end
+
 local function getCurrency(player: Player): number
 	local d = data(player)
 	return if d then d.currency else 0
@@ -795,6 +821,8 @@ local DataService: Loader.Service = {
 	getCurrency = getCurrency,
 	getNavigationRounds = getNavigationRounds,
 	spendNavigationRound = spendNavigationRound,
+	getBuyBackOffer = getBuyBackOffer,
+	expireBuyBackOffer = expireBuyBackOffer,
 	getSeasonProgress = getSeasonProgress,
 	addCurrency = addCurrency,
 	getStats = getStats,

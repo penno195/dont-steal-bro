@@ -39,7 +39,7 @@ local StoreLogic = {}
 -- can't resolve under Lune. Luau's structural typing means a real
 -- `Validate.StoreGrant` value satisfies these with no cast at the call
 -- site, so the duplication costs nothing.
-export type GrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title" | "NavigationRound"
+export type GrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title" | "NavigationRound" | "StreakBuyBack"
 
 export type Grant = {
 	kind: GrantKind,
@@ -47,6 +47,14 @@ export type Grant = {
 	powerUpId: string?,
 	cosmeticId: string?,
 	titleId: string?,
+	minStreak: number?,
+	maxStreak: number?,
+}
+
+-- Structurally ProfileLogic.BuyBackOffer.
+export type BuyBackOffer = {
+	roundId: string,
+	streak: number,
 }
 
 -- The slice of a profile a grant can touch. Passed in and returned as a
@@ -61,6 +69,11 @@ export type GrantState = {
 	-- caller that never sells one (season tracks, leaderboard payouts)
 	-- can leave it out; a NavigationRound grant reads nil as 0.
 	navigationRounds: number?,
+	-- The streak and its open buy-back offer (ProfileLogic schema v8).
+	-- Optional for the same reason: only a receipt can carry a
+	-- StreakBuyBack grant, and only StoreService passes these.
+	currentStreak: number?,
+	buyBackOffer: BuyBackOffer?,
 }
 
 -- ===== receipts ===========================================================
@@ -212,6 +225,8 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 		ownedCosmetics = table.clone(state.ownedCosmetics),
 		unlockedTitles = table.clone(state.unlockedTitles),
 		navigationRounds = state.navigationRounds,
+		currentStreak = state.currentStreak,
+		buyBackOffer = state.buyBackOffer,
 	}
 	local lines: { string } = {}
 
@@ -271,6 +286,39 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 			local held = (updated.navigationRounds or 0) + amount
 			updated.navigationRounds = held
 			table.insert(lines, string.format("navigation rounds +%d (now %d)", amount, held))
+		elseif grant.kind == "StreakBuyBack" then
+			-- Cancels the reset the offer records (design-decisions.md Q7,
+			-- "buying back a streak"): the streak goes back to what it was,
+			-- no higher. No offer, or one priced in another tier, is a
+			-- receipt only a tampered prompt can produce, and it buys
+			-- nothing (the 2026-10-08 applied case).
+			local offer = updated.buyBackOffer
+			if offer == nil then
+				table.insert(lines, "NOTHING to buy back: no streak buy-back offer is open")
+				continue
+			end
+			if not StoreLogic.buyBackCovers(grant, offer.streak) then
+				table.insert(
+					lines,
+					string.format(
+						"NOTHING bought back: this tier does not price a streak of %d (round %s)",
+						offer.streak,
+						offer.roundId
+					)
+				)
+				continue
+			end
+			table.insert(
+				lines,
+				string.format(
+					"streak bought back %d -> %d (round %s)",
+					updated.currentStreak or 0,
+					offer.streak,
+					offer.roundId
+				)
+			)
+			updated.currentStreak = offer.streak
+			updated.buyBackOffer = nil
 		else
 			table.insert(lines, string.format("SKIPPED unrecognised grant kind %q", tostring(grant.kind)))
 		end
@@ -289,6 +337,42 @@ function StoreLogic.grantsNavigationRound(grants: { Grant }): boolean
 		end
 	end
 	return false
+end
+
+-- ===== streak buy-back (design-decisions.md Q7) ============================
+
+-- Whether a StreakBuyBack grant's tier prices a lost streak of `streak`.
+-- `maxStreak` nil is the top tier: that many or more.
+function StoreLogic.buyBackCovers(grant: Grant, streak: number): boolean
+	local min = grant.minStreak
+	if grant.kind ~= "StreakBuyBack" or min == nil or streak < min then
+		return false
+	end
+	local max = grant.maxStreak
+	return max == nil or streak <= max
+end
+
+-- Whether a product sells a streak buy-back. Those are never sold from
+-- the store grid, only against an open offer.
+function StoreLogic.grantsStreakBuyBack(grants: { Grant }): boolean
+	for _, grant in grants do
+		if grant.kind == "StreakBuyBack" then
+			return true
+		end
+	end
+	return false
+end
+
+-- Whether a buy-back offer may be shown or bought right now. An offer
+-- from THIS server's current round waits for Results, or the end screen
+-- would tell a finalist they'd lost before the reveal did. One from an
+-- earlier round only tells its owner what they already know. A Hub's
+-- round id never matches an offer, so the Hub always shows it.
+function StoreLogic.mayShowBuyBack(offer: BuyBackOffer?, currentRoundId: string, roundState: string): boolean
+	if offer == nil then
+		return false
+	end
+	return offer.roundId ~= currentRoundId or roundState == "Results" or roundState == "Cleanup"
 end
 
 -- ===== coin offers (rewards-roadmap.md step 6) ==============================

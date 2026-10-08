@@ -210,10 +210,11 @@ end
 -- that one, since an old season's pass would unlock nothing (and the
 -- server refuses to sell it). nil = no season running, nothing to offer.
 -- A Navigation round is never in the grid: it's sold only from the
--- in-match toggle (design-decisions.md Q8, "Navigation").
+-- in-match toggle (design-decisions.md Q8, "Navigation"). Nor is a
+-- streak buy-back: it's offered only to a player who just lost one (Q7).
 local function inGrid(item: Item): boolean
 	for _, grant in item.grants do
-		if grant.kind == "NavigationRound" then
+		if grant.kind == "NavigationRound" or grant.kind == "StreakBuyBack" then
 			return false
 		end
 	end

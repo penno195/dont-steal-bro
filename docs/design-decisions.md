@@ -475,6 +475,18 @@ hidden through the intro, Negotiate and Choose.
   money, which works against Q7's "everyone but the winner resets".
   The owner accepted this. P0-7's paid-vs-free tripwire should also
   track how many saves are bought on top-100 streaks.
+- **How long the offer lasts (2026-10-08, user decision):** until that
+  player's next race starts. Results is only 24 s, and a Studio loser
+  sees about 7 s of it after the reveal, so the offer is shown on the
+  end screen and again in the Hub after the teleport. It is stored in
+  the profile, so a purchase that completes mid-teleport still lands.
+  A new loss replaces it, and the start of any race expires it.
+- **A receipt with nothing to save (2026-10-08, user decision):** if a
+  buy-back receipt arrives when the offer has already expired, or for
+  the wrong price tier, it is confirmed and grants nothing, with a loud
+  log line. The normal flow can't get there: the server chooses the
+  product and refuses the prompt once the offer is gone. Only a
+  tampered client calling the prompt directly can.
 
 ## 8. Are starting power-ups sold for Robux?
 

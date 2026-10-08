@@ -122,6 +122,22 @@ export type ProfileData = {
 	-- on its first switch-on, so this is normally 0; it holds one only
 	-- when a receipt lands after the race it was bought in has ended.
 	navigationRounds: number,
+
+	-- ===== schema v8, streak buy-back ===================================
+
+	-- The streak this player may buy back (design-decisions.md Q7, "buying
+	-- back a streak"), or nil. Set by the progression write that took the
+	-- loss, replaced by the next loss, cleared by a buy-back or by the
+	-- start of their next race. Only ever shown to its owner.
+	buyBackOffer: BuyBackOffer?,
+}
+
+-- A lost streak still open to buying back: which round lost it, and how
+-- long it was. `roundId` is what keeps it off the end screen before that
+-- round's reveal (StoreLogic.mayShowBuyBack).
+export type BuyBackOffer = {
+	roundId: string,
+	streak: number,
 }
 
 -- Structurally SeasonLogic.Progress, which computes what this stores.
@@ -137,7 +153,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 7
+local CURRENT_SCHEMA_VERSION = 8
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -163,6 +179,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		seasonProgress = {},
 		lastLoadout = {},
 		navigationRounds = 0,
+		buyBackOffer = nil,
 	}
 end
 
@@ -273,6 +290,15 @@ migrations[6] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 7
 	next.navigationRounds = (old.navigationRounds :: number?) or 0
+	return next
+end
+
+-- v7 -> v8 (streak buy-back): no offer open. A streak lost before this
+-- version had nothing to buy it back with.
+migrations[7] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 8
+	next.buyBackOffer = nil
 	return next
 end
 

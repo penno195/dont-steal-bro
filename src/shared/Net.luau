@@ -1080,6 +1080,9 @@ Net.Remotes = {
 	-- inventory: what someone else bought is nobody's business, and
 	-- broadcasting it would also hand a modified client a free census
 	-- of who is worth something.
+	-- Also the open streak buy-back offer (`buyBack`: key, streak,
+	-- robuxPrice), which names your own streak - so StoreService holds
+	-- it back on a match server until your round's Results (Q7).
 	StoreState = {
 		name = "StoreState",
 		direction = "ServerBroadcast",

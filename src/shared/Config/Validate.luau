@@ -408,12 +408,13 @@ export type CosmeticDef = {
 -- named exception: a paid Navigation round (design-decisions.md Q8,
 -- "Navigation"), so every free player can switch it on in any round.
 export type StoreProductKind = "GamePass" | "DeveloperProduct" | "CoinOffer"
-export type StoreGrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title" | "NavigationRound"
+export type StoreGrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title" | "NavigationRound" | "StreakBuyBack"
 -- What a perk pass unlocks for good. Only a GamePass carries one.
 export type StorePerk = "UnlimitedNavigation"
 
 local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct", "CoinOffer" }
-local STORE_GRANT_KINDS: { StoreGrantKind } = { "Currency", "PowerUpStock", "Cosmetic", "Title", "NavigationRound" }
+local STORE_GRANT_KINDS: { StoreGrantKind } =
+	{ "Currency", "PowerUpStock", "Cosmetic", "Title", "NavigationRound", "StreakBuyBack" }
 -- Plain strings: a one-member list of literals won't widen for inSet.
 local STORE_PERKS: { string } = { "UnlimitedNavigation" }
 
@@ -428,6 +429,12 @@ export type StoreGrant = {
 	powerUpId: string?, -- PowerUpStock: which power-up, cross-checked against the PowerUps registry
 	cosmeticId: string?, -- Cosmetic: which item, cross-checked against the Cosmetics registry (P4-6)
 	titleId: string?, -- Title: which title, cross-checked against the Titles registry
+	-- StreakBuyBack: the range of lost streaks this price tier saves
+	-- (design-decisions.md Q7, "buying back a streak"). `maxStreak` nil
+	-- is the top tier, "this many or more". Validate.run checks that the
+	-- enabled tiers cover every streak from 1 up with no gap or overlap.
+	minStreak: number?,
+	maxStreak: number?,
 }
 
 export type StoreItemDef = {
@@ -1754,6 +1761,31 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		elseif grant.kind == "NavigationRound" then
 			if type(grant.amount) ~= "number" or (grant.amount :: number) <= 0 or (grant.amount :: number) % 1 ~= 0 then
 				issue(issues, "Store", fileName, field, "a NavigationRound grant needs a positive integer `amount`")
+			end
+		elseif grant.kind == "StreakBuyBack" then
+			-- Robux only, and alone: a buy-back can come to nothing (Q7,
+			-- "buying back a streak"), and a product that also paid out
+			-- something else would make that half-refund a design choice.
+			if def.kind ~= "DeveloperProduct" or #def.grants ~= 1 then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					field,
+					"a StreakBuyBack grant must be the only grant of a DeveloperProduct"
+				)
+			end
+			local min, max = grant.minStreak, grant.maxStreak
+			if type(min) ~= "number" or min < 1 or min % 1 ~= 0 then
+				issue(issues, "Store", fileName, field, "a StreakBuyBack grant needs a positive integer `minStreak`")
+			elseif max ~= nil and (type(max) ~= "number" or max < min or max % 1 ~= 0) then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					field,
+					"`maxStreak` must be an integer no lower than `minStreak`, or nil for the top tier"
+				)
 			end
 		end
 	end
@@ -3744,6 +3776,63 @@ function Validate.run(input: RegistryInput): { Issue }
 				"enabled",
 				"sells Navigation for Robux, but no enabled CoinOffer sells a NavigationRound - Q8 needs a coin path"
 			)
+		end
+	end
+
+	-- ===== streak buy-back (design-decisions.md Q7) =====================
+	-- Every lost streak has exactly one price. So the enabled tiers,
+	-- sorted, run from 1 with no gap or overlap and end open-ended. None
+	-- enabled is fine: the offer simply never appears.
+	if store ~= nil then
+		local tiers: { { min: number, max: number?, fileName: string } } = {}
+		for _, entry in store do
+			local def = entry.def
+			if not def.enabled or type(def.grants) ~= "table" then
+				continue
+			end
+			for _, grant in def.grants do
+				if type(grant) == "table" and grant.kind == "StreakBuyBack" and type(grant.minStreak) == "number" then
+					table.insert(tiers, { min = grant.minStreak, max = grant.maxStreak, fileName = entry.fileName })
+				end
+			end
+		end
+		table.sort(tiers, function(a, b)
+			return a.min < b.min
+		end)
+		local nextMin = 1
+		for index, tier in tiers do
+			if tier.min ~= nextMin then
+				issue(
+					issues,
+					"Store",
+					tier.fileName,
+					"grants",
+					string.format(
+						"streak buy-back tiers must run on from %d with no gap or overlap, but this one starts at %d",
+						nextMin,
+						tier.min
+					)
+				)
+			end
+			local isLast = index == #tiers
+			if tier.max == nil and not isLast then
+				issue(
+					issues,
+					"Store",
+					tier.fileName,
+					"grants",
+					"only the highest buy-back tier may leave `maxStreak` open"
+				)
+			elseif tier.max ~= nil and isLast then
+				issue(
+					issues,
+					"Store",
+					tier.fileName,
+					"grants",
+					"the highest buy-back tier needs `maxStreak = nil`, or longer streaks have no price"
+				)
+			end
+			nextMin = (tier.max or tier.min) + 1
 		end
 	end
 

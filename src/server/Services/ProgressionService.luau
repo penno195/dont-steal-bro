@@ -4,6 +4,9 @@
 -- convention, but because DataService no longer publishes a way to
 -- change one and hands its single atomic writer to exactly one claimant
 -- (see DataService's own "progression write gate" section).
+-- The one exception is paid and narrow: a streak buy-back receipt
+-- (design-decisions.md Q7) restores the streak this writer recorded
+-- losing, through StoreService's receipt path and its audit line.
 --
 -- The rules themselves - what a win does, what a loss does, which
 -- reason code an outcome maps to, what counts as a duplicate - are pure
@@ -204,7 +207,13 @@ local ledger: { [string]: LedgerEntry } = {}
 
 -- DataService.ProgressionWriter's shape: the reward is its WinRewardWrite
 -- and the step its SeasonStep.
-local writeProgressionState: ((player: Player, state: ProfileLogic.ProgressionState, reward: any, seasonStep: any) -> { string })? =
+local writeProgressionState: ((
+	player: Player,
+	state: ProfileLogic.ProgressionState,
+	buyBackOffer: ProfileLogic.BuyBackOffer?,
+	reward: any,
+	seasonStep: any
+) -> { string })? =
 	nil
 
 local function ledgerKey(roundId: string, userId: number): string
@@ -317,7 +326,8 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	end
 	local rewardWrite = if rewardRecord ~= nil then { record = rewardRecord, grants = rewardGrants } else nil
 	local seasonStep = if ProgressionLogic.isWin(result.reason) then seasonStepFor(player, result.roundId) else nil
-	local rewardChanges = write(player, after, rewardWrite, seasonStep)
+	local buyBackOffer = ProgressionLogic.buyBackOffer(result.roundId, before, result.reason)
+	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep)
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
 	if ProgressionLogic.isWin(result.reason) then
@@ -524,6 +534,20 @@ function ProgressionService:init()
 	RoundService.onEnter("Results", function()
 		sweepNonQualifiers()
 		sendRecaps()
+	end)
+
+	-- A streak buy-back offer lasts until its owner's next race starts
+	-- (design-decisions.md Q7, the 2026-10-08 applied case). Every human
+	-- racing is past the point of buying back an earlier loss.
+	RoundService.onEnter("Race", function()
+		for _, participant in Participants.humans() do
+			local player = participant.player
+			if player ~= nil and player.Parent ~= nil and DataService.expireBuyBackOffer(player) then
+				print(
+					string.format("ProgressionService: %s's streak buy-back offer expired at race start", player.Name)
+				)
+			end
+		end
 	end)
 
 	-- The ledger is per-round state, not per-server: clearing it on

@@ -184,6 +184,27 @@ local function seasonState(player: Player, DataService: any): { [string]: any }?
 	}
 end
 
+-- The product that buys back this player's open streak offer, if it may
+-- be shown now and an enabled tier prices it (design-decisions.md Q7,
+-- "buying back a streak"). The server always picks the tier: the
+-- client only ever asks to buy the key this hands it.
+local function buyBackFor(player: Player): (StoreItemDef?, number?)
+	local offer = (Loader.get("DataService") :: any).getBuyBackOffer(player)
+	local RoundService = Loader.get("RoundService") :: any
+	if not StoreLogic.mayShowBuyBack(offer, RoundService.getRoundId(), RoundService.getState()) then
+		return nil, nil
+	end
+	local streak = offer.streak :: number
+	for _, def in byAssetId do
+		for _, grant in def.grants do
+			if StoreLogic.buyBackCovers(grant :: any, streak) then
+				return def, streak
+			end
+		end
+	end
+	return nil, nil
+end
+
 -- A player's own store state, to that player only. Never
 -- fireAllClients: this is a private inventory (see Net.luau's own note
 -- on StoreState).
@@ -205,7 +226,14 @@ local function pushState(player: Player)
 		end
 	end
 
+	local buyBackDef, buyBackStreak = buyBackFor(player)
+
 	Net.fireClient("StoreState", player, {
+		-- The open streak buy-back offer, or nil. Your own streak, to you
+		-- only, and never before your round's reveal (buyBackFor).
+		buyBack = if buyBackDef ~= nil
+			then { key = buyBackDef.key, streak = buyBackStreak, robuxPrice = buyBackDef.robuxPrice }
+			else nil,
 		currency = DataService.getCurrency(player),
 		powerUpStock = DataService.getPowerUpStock(player),
 		loadout = DataService.getLoadout(player),
@@ -257,6 +285,8 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 		ownedCosmetics = data.ownedCosmetics,
 		unlockedTitles = data.unlockedTitles,
 		navigationRounds = data.navigationRounds,
+		currentStreak = data.currentStreak,
+		buyBackOffer = data.buyBackOffer,
 	}
 
 	local after, changes = StoreLogic.applyGrants(before, def.grants :: any)
@@ -266,6 +296,12 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 	data.ownedCosmetics = after.ownedCosmetics
 	data.unlockedTitles = after.unlockedTitles
 	data.navigationRounds = after.navigationRounds or data.navigationRounds
+	-- A streak buy-back (design-decisions.md Q7). The one streak change
+	-- outside ProgressionService's writer: it restores a streak the
+	-- writer already recorded losing, and only through a paid receipt,
+	-- audited by recordGrant's line like every other grant.
+	data.currentStreak = after.currentStreak or data.currentStreak
+	data.buyBackOffer = after.buyBackOffer
 
 	if purchaseId ~= nil then
 		-- The line that makes the whole thing safe. Written next to the
@@ -520,6 +556,11 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 
 	recordGrant(player, product, purchaseKey, changes)
 	pushState(player)
+	-- A bought-back streak shows on the Hub's counter straight away.
+	-- A no-op on a match server.
+	if StoreLogic.grantsStreakBuyBack(product.grants :: any) then
+		(Loader.get("StreakTagService") :: any).broadcast()
+	end
 	purchaseLanded:Fire(player, product)
 	-- What Roblox actually charged, from the receipt, not the config's
 	-- display price.
@@ -754,6 +795,14 @@ local function handlePurchaseIntent(player: Player, key: string)
 		StoreLogic.grantsNavigationRound(def.grants :: any) and not Loader.get("NavigationService").canBuyRound(player)
 	then
 		sendPurchaseResult(player, key, "Unavailable", "Navigation is bought from its button during a race.")
+		return
+	end
+
+	-- A streak buy-back is sold only against the player's own open
+	-- offer, and only in the tier that prices it (Q7, "buying back a
+	-- streak"). A receipt that gets past this anyway buys nothing.
+	if StoreLogic.grantsStreakBuyBack(def.grants :: any) and buyBackFor(player) ~= def then
+		sendPurchaseResult(player, key, "Unavailable", "There's no streak to save right now.")
 		return
 	end
 
