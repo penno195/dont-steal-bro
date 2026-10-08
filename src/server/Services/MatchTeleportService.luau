@@ -120,6 +120,59 @@ local function pickMap(): string?
 	return ids[roll(#ids)]
 end
 
+-- design-decisions.md Q7, the practice-match case. A player's own
+-- private server can't be teleported back into, so a practice group
+-- goes home to a reserved hub server instead: its practice lobby. A
+-- lobby is itself a practice hub, and finds its own code in
+-- practiceLobbyMapName so its next group comes back to it too. Nil
+-- (the group goes home to a public hub) if neither the lookup nor a
+-- fresh reservation works.
+local lobbyCode: string? = nil
+
+local function practiceLobbyCode(): string?
+	local lobbyMap = MemoryStoreService:GetHashMap(matchmakingConfig.practiceLobbyMapName)
+	local isLobby = game.PrivateServerId ~= "" and game.PrivateServerOwnerId == 0
+	if lobbyCode == nil and isLobby then
+		local ok, raw = pcall(function(): any
+			return lobbyMap:GetAsync(game.PrivateServerId)
+		end)
+		if ok and type(raw) == "string" and raw ~= "" then
+			lobbyCode = raw
+		end
+	end
+	if lobbyCode ~= nil then
+		if isLobby then
+			-- Keep this lobby findable while its group keeps playing.
+			local code = lobbyCode :: string
+			task.spawn(function()
+				pcall(function()
+					lobbyMap:SetAsync(game.PrivateServerId, code, matchmakingConfig.practiceLobbyTtlSeconds)
+				end)
+			end)
+		end
+		return lobbyCode
+	end
+
+	-- VERIFY (docs/teleport.md): same return-order assumption as below.
+	local ok, accessCode, privateServerId = pcall(function(): (any, any)
+		return (TeleportService :: any):ReserveServerAsync(matchmakingConfig.hubPlaceId)
+	end)
+	if not ok or type(accessCode) ~= "string" or type(privateServerId) ~= "string" or privateServerId == "" then
+		warn("MatchTeleportService: couldn't reserve a practice lobby - the group will go home to a public hub")
+		return nil
+	end
+	local stored = pcall(function()
+		lobbyMap:SetAsync(privateServerId, accessCode, matchmakingConfig.practiceLobbyTtlSeconds)
+	end)
+	if not stored then
+		-- The group still gets there. The lobby just can't find its own
+		-- code, so its next group reserves another one.
+		warn("MatchTeleportService: couldn't record the practice lobby's code")
+	end
+	lobbyCode = accessCode
+	return lobbyCode
+end
+
 -- The former's destination provider. Yields on the reservation.
 local function reserveDestination(): MatchmakingLogic.Destination?
 	-- VERIFY (docs/teleport.md): ReserveServerAsync is typed `...any` in
@@ -132,7 +185,12 @@ local function reserveDestination(): MatchmakingLogic.Destination?
 		warn("MatchTeleportService: ReserveServerAsync failed: " .. tostring(if ok then "bad return" else accessCode))
 		return nil
 	end
-	return { groupId = privateServerId, accessCode = accessCode, mapId = pickMap() }
+	local destination: MatchmakingLogic.Destination =
+		{ groupId = privateServerId, accessCode = accessCode, mapId = pickMap() }
+	if matchmaking().isPracticeHub() then
+		destination.returnAccessCode = practiceLobbyCode()
+	end
+	return destination
 end
 
 local function giveUp(player: Player, message: string)
@@ -231,7 +289,7 @@ local function onGroupDeparted(players: { Player }, group: GroupRecord)
 	local options = Instance.new("TeleportOptions")
 	options.ReservedServerAccessCode = group.accessCode :: string
 	-- A cosmetic hint, never trusted on arrival - see TeleportLogic's header.
-	options:SetTeleportData(TeleportLogic.buildHint(group.groupId, mapId, group.npcSlots) :: any)
+	options:SetTeleportData(TeleportLogic.buildHint(group.groupId, mapId, group.npcSlots, group.practice) :: any)
 
 	local Telemetry = Loader.get("Telemetry") :: any
 	local going: { Player } = {}
@@ -297,7 +355,11 @@ local gateClosed = false
 local admitted: { [Player]: boolean } = {}
 local pending: { Player } = {}
 local firstHint: any = nil
+local admittedHints: { any } = {}
 local chosenMapId: string? = nil
+-- design-decisions.md Q7, the practice-match case. Set when the arrival
+-- gate closes (startRound); false until then and on every hub.
+local practiceMatch = false
 
 local function sendHome(player: Player, reason: "Late" | "Stray")
 	local message = TeleportLogic.returnMessage({ returnReason = reason }) or "Please rejoin."
@@ -342,9 +404,24 @@ local function sendEveryoneHome()
 	local message = TeleportLogic.returnMessage({ returnReason = "RoundOver" }) or "Round over."
 	local options = Instance.new("TeleportOptions")
 	options:SetTeleportData({ returnReason = "RoundOver" } :: any)
-	local ok = pcall(function()
-		TeleportService:TeleportAsync(matchmakingConfig.hubPlaceId, players, options)
-	end)
+	-- A practice group goes back to its own lobby (design-decisions.md Q7,
+	-- the practice-match case), so it can keep playing together. If the
+	-- lobby can't be reached, a public hub beats being kicked.
+	local returnCode = if manifest ~= nil and practiceMatch then manifest.returnAccessCode else nil
+	local ok = false
+	if returnCode ~= nil then
+		local lobbyOptions = Instance.new("TeleportOptions")
+		lobbyOptions.ReservedServerAccessCode = returnCode
+		lobbyOptions:SetTeleportData({ returnReason = "RoundOver" } :: any)
+		ok = pcall(function()
+			TeleportService:TeleportAsync(matchmakingConfig.hubPlaceId, players, lobbyOptions)
+		end)
+	end
+	if not ok then
+		ok = pcall(function()
+			TeleportService:TeleportAsync(matchmakingConfig.hubPlaceId, players, options)
+		end)
+	end
 	if not ok then
 		for _, player in players do
 			player:Kick(message)
@@ -366,6 +443,8 @@ local function readManifest()
 					members = record.members,
 					npcSlots = record.npcSlots,
 					mapId = record.mapId,
+					practice = record.practice,
+					returnAccessCode = record.returnAccessCode,
 				}
 			else
 				warn("MatchTeleportService: no group record for this server - running without a manifest")
@@ -398,6 +477,9 @@ local function adjudicate(player: Player)
 		if firstHint == nil then
 			firstHint = hint
 		end
+		-- `false` stands in for a missing hint, so it still votes "ranked"
+		-- in TeleportLogic.isPractice instead of leaving a hole in the list.
+		table.insert(admittedHints, if hint == nil then false else hint)
 	else
 		sendHome(player, if verdict == "Late" then "Late" else "Stray")
 	end
@@ -419,14 +501,17 @@ end
 
 local function startRound(present: number)
 	gateClosed = true
+	-- Settled once, here, with everyone admitted: it can't flip mid-round.
+	practiceMatch = TeleportLogic.isPractice(manifest, admittedHints)
 	local source: TeleportLogic.MapSource
 	chosenMapId, source = TeleportLogic.resolveMapId(manifest, firstHint, enabledMapIds(), roll)
 	print(
 		string.format(
-			"MatchTeleportService: starting with %d human(s), map %s (%s)",
+			"MatchTeleportService: starting with %d human(s), map %s (%s)%s",
 			present,
 			tostring(chosenMapId),
-			source
+			source,
+			if practiceMatch then ", PRACTICE (nothing at stake)" else ""
 		)
 	)
 
@@ -547,6 +632,17 @@ local MatchTeleportService: Loader.Service = {
 	-- The map this match is playing, once the arrival gate has closed.
 	getMapId = function(): string?
 		return chosenMapId
+	end,
+
+	-- design-decisions.md Q7, the practice-match case: nothing this round
+	-- does may touch a streak, a reward, a stat or a leaderboard.
+	-- ProgressionService is the gate. In Studio, where no match is ever
+	-- reserved, the workspace attribute DebugPracticeMatch stands in.
+	isPracticeMatch = function(): boolean
+		if RunService:IsStudio() then
+			return workspace:GetAttribute("DebugPracticeMatch") == true
+		end
+		return practiceMatch
 	end,
 }
 

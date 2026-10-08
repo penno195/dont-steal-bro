@@ -68,7 +68,9 @@ local state = source(QueueLogic.new())
 -- A plain function, not derive(): Vide only allows derive inside a
 -- root, and this is read from two (the card and the board).
 local function view(): QueueLogic.View
-	return QueueLogic.view(state())
+	-- Set by MatchmakingService on a private hub server. Never changes
+	-- while the server runs, so a plain read is enough.
+	return QueueLogic.view(state(), workspace:GetAttribute("PracticeServer") == true)
 end
 local roundState = source(nil :: string?)
 

@@ -335,13 +335,16 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			won = won,
 			reward = ProgressionService.rewardFor(roundId, player.UserId),
 		}
-		-- Defaulted choices included: the streak they were risking is
-		-- the one they brought into the Studio.
-		Loader.get("Telemetry")
-			.stealShareChoice(player, finalist.choice, streakBefore, bots, ProgressionService.rungAtStake(streakBefore))
+		-- Practice matches keep no stats or choice telemetry
+		-- (design-decisions.md Q7). Defaulted choices included: the streak
+		-- they were risking is the one they brought into the Studio.
+		if not ProgressionService.isPracticeMatch() then
+			Loader.get("Telemetry")
+				.stealShareChoice(player, finalist.choice, streakBefore, bots, ProgressionService.rungAtStake(streakBefore))
 
-		DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
-		DataService.recordRoundStat(player, "qualifications")
+			DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
+			DataService.recordRoundStat(player, "qualifications")
+		end
 
 		-- Their real result is now written - the Q4 forfeit fallback
 		-- must never fire for someone who made it through normally.
@@ -873,7 +876,7 @@ local function beginDecisionStudio()
 	local ProgressionService = Loader.get("ProgressionService") :: any
 	for _, id in qualifierIds do
 		local player = Players:GetPlayerByUserId(id)
-		if player ~= nil then
+		if player ~= nil and not ProgressionService.isPracticeMatch() then
 			Net.fireClient("DecisionStakes", player, ProgressionService.stakesFor(player))
 		end
 	end

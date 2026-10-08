@@ -32,6 +32,9 @@ export type Recap = {
 	bestStreakBefore: number,
 	bestStreakAfter: number,
 	reward: RecapReward?, -- what this win paid; nil on a loss
+	-- A practice match on a private server (design-decisions.md Q7):
+	-- nothing was at stake, so the streak never moved.
+	practice: boolean?,
 }
 
 export type RaceTally = {
@@ -80,6 +83,7 @@ export type StreakKind =
 	"Up" -- a win: every win adds to the streak (design-decisions.md Q5)
 	| "Died" -- a loss that ended a streak worth naming
 	| "None" -- a loss from zero: nothing was lost
+	| "Practice" -- a practice match: nothing was at stake, win or lose
 
 export type StreakChange = {
 	kind: StreakKind,
@@ -90,7 +94,9 @@ export type StreakChange = {
 
 function ResultsLogic.streakChange(recap: Recap): StreakChange
 	local kind: StreakKind
-	if recap.streakAfter > recap.streakBefore then
+	if recap.practice == true then
+		kind = "Practice"
+	elseif recap.streakAfter > recap.streakBefore then
 		kind = "Up"
 	elseif recap.streakBefore > 0 then
 		kind = "Died"
@@ -115,6 +121,10 @@ function ResultsLogic.streakHeadline(change: StreakChange): string
 			else string.format("Streak %d", change.after)
 	elseif change.kind == "Died" then
 		return string.format("Your %d-win streak ends here", change.before)
+	elseif change.kind == "Practice" then
+		return if change.before > 0
+			then string.format("Practice match - your %d-win streak is safe", change.before)
+			else "Practice match - nothing at stake"
 	end
 	return "No streak on the line this time"
 end

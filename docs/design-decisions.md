@@ -505,6 +505,50 @@ hidden through the intro, Negotiate and Choose.
   its own and could make a longer streak cheaper to save than a
   shorter one. Whether to do that is the owner's call.
 
+### Applied case: practice matches and parties (2026-10-08, user decision)
+
+Condition 2's "private servers don't count toward streak" is made real
+as a **practice mode** for playing with friends.
+
+- **Where (revised the same day, user decision):** a **Practice**
+  button on every Hub, next to Play. Every match on a private server
+  is practice too, and private servers are **free** (an experience
+  setting in Creator Hub, not code). The first version was
+  private-server-only, which the owner rejected as pointless if a
+  group can't get back to its own server. The accepted cost: some
+  players will sit in practice rather than ranked at launch, and bots
+  absorb that.
+- **Parties, practice only:** a player invites someone on the same
+  Hub server, and the invitee accepts. Parties hold up to 6. The leader
+  queues the party for Practice, and the whole party lands in the same
+  match. **Ranked stays solo and fully random**, which condition 2
+  needs: parties are safe in practice only because no streak is at
+  stake there. A party shows names only, never a streak or title (Q7
+  condition 1).
+- **Nothing is at stake:** the streak doesn't move (win or lose), and
+  there are no coins, drops, season-pass progress, leaderboard entries,
+  round stats or buy-back offers. Nothing can be farmed by friends who
+  always Share, which is why the answer isn't "small XP only".
+- **Who you play with:** players queued for practice on **the same Hub
+  server**, plus bots. The practice queue is local to each server and
+  never joins the global pool. Parties are kept whole. A group forms
+  when six seats are filled, when everyone on the server who could
+  join has queued, or after the normal partial-group wait. NPCs fill
+  the empty seats. The rematch cooldown doesn't apply.
+- **Coming back:** from a public Hub, the group goes home to a public
+  Hub together (one teleport for the whole match), where friends can
+  join them normally. A private server can't be reached by teleport,
+  so its groups go to a reserved **practice lobby** instead (owner
+  kept this, 2026-10-08). The lobby is a Hub server only that group
+  can reach, and it keeps playing practice matches from there.
+- **Trust:** the practice flag rides in the server-written group record
+  (the match manifest), never in TeleportData, so a client can't turn
+  a practice match into a ranked one. If the manifest can't be read (a
+  MemoryStore outage), practice needs every player's hint to agree.
+- **Buy-back:** the 2026-10-08 buy-back case says the start of *any*
+  race expires the offer, and a practice race is a race. That text is
+  followed as written. Revisit if players lose offers by warming up.
+
 ## 8. Are starting power-ups sold for Robux?
 
 **Decision:** Power-ups may be purchased with Robux, provided **every**

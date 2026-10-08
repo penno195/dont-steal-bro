@@ -592,6 +592,12 @@ export type MatchmakingConfig = {
 	summaryShardCount: number, -- copies of the lease holder's queue summary
 	summaryStaleSeconds: number, -- past this, servers read the page themselves
 	summaryTtlSeconds: number,
+	-- design-decisions.md Q7, the practice-match case: lobby id -> its
+	-- access code, so a reserved practice lobby can send its next group
+	-- home to itself.
+	practiceLobbyMapName: string,
+	practiceLobbyTtlSeconds: number,
+	partyInviteTtlSeconds: number, -- PartyLogic: how long an invite waits
 }
 
 -- ===== TeleportConfig: P5-2 ==============================================
@@ -2575,7 +2581,7 @@ local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number
 		return
 	end
 
-	for _, field in { "queueMapName", "groupMapName", "recentMapName", "metaMapName" } do
+	for _, field in { "queueMapName", "groupMapName", "recentMapName", "metaMapName", "practiceLobbyMapName" } do
 		if not isNonEmptyString((mm :: any)[field]) then
 			bad(field, "must be a non-empty string")
 		end
@@ -2664,6 +2670,14 @@ local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number
 	end
 	if mm.summaryTtlSeconds < mm.summaryStaleSeconds then
 		bad("summaryTtlSeconds", "must not be below summaryStaleSeconds")
+	end
+	-- A lobby lives as long as its group keeps playing; under an hour
+	-- would strand a group that takes a long break between matches.
+	if type(mm.practiceLobbyTtlSeconds) ~= "number" or mm.practiceLobbyTtlSeconds < 3600 then
+		bad("practiceLobbyTtlSeconds", "must be at least 3600")
+	end
+	if type(mm.partyInviteTtlSeconds) ~= "number" or mm.partyInviteTtlSeconds < 5 or mm.partyInviteTtlSeconds > 300 then
+		bad("partyInviteTtlSeconds", "must be from 5 to 300 seconds")
 	end
 end
 

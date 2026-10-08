@@ -184,7 +184,9 @@ local function lineText(state: State): string?
 	return if #parts > 0 then table.concat(parts, "  ·  ") else nil
 end
 
-function QueueLogic.view(state: State): View
+-- `practice`: this is a private server (design-decisions.md Q7, the
+-- practice-match case), so the queue is the friends here, not the world.
+function QueueLogic.view(state: State, practice: boolean?): View
 	local action: Intent? = QueueLogic.actionFor(state)
 	local view: View = {
 		headline = nil,
@@ -216,6 +218,15 @@ function QueueLogic.view(state: State): View
 		view.headline = if state.queued then "Still in line" else "Can't join right now"
 		view.tone = "warning"
 		view.board = if state.queued then "Still in line..." else "Queue unavailable"
+	end
+	if practice == true then
+		if status == "Idle" then
+			view.detail = state.message or "Practice server: no streak, coins or stats at stake."
+			view.board = "Tap PLAY for a practice match"
+		elseif status == "Waiting" then
+			view.headline = "Waiting for your friends..."
+			view.board = "Waiting for friends..."
+		end
 	end
 	-- Idle with a message: a failed teleport sent them back (P5-2).
 	return view

@@ -96,6 +96,19 @@ export type GroupRecord = {
 	ballot: { string },
 	votes: { VoteRecord },
 	result: VoteResult?,
+	-- design-decisions.md Q7, the practice-match case: formed on a
+	-- private hub server, so nothing is at stake. Trusted because only
+	-- servers write this record; the match server reads it from here,
+	-- never from TeleportData. Nil on every ranked group.
+	practice: boolean?,
+	-- Where a practice group goes home to: its reserved practice lobby.
+	-- Server-only, like accessCode.
+	returnAccessCode: string?,
+}
+
+-- What a private hub adds to its group record.
+export type PracticeInfo = {
+	returnAccessCode: string?,
 }
 
 -- P5-2's reserved destination, handed to the former by
@@ -104,6 +117,8 @@ export type Destination = {
 	groupId: string,
 	accessCode: string,
 	mapId: string?,
+	-- A practice hub's group goes home to this lobby. Nil for a ranked group.
+	returnAccessCode: string?,
 }
 
 -- P5-3: the ballot the former draws for a group (VoteService.drawBallot),
@@ -258,6 +273,8 @@ function MatchmakingLogic.decodeGroup(raw: any): GroupRecord?
 		ballot = MatchmakingLogic.decodeStrings(raw.ballot),
 		votes = decodeVotes(raw.votes),
 		result = decodeResult(raw.result),
+		practice = if raw.practice == true then true else nil,
+		returnAccessCode = if type(raw.returnAccessCode) == "string" then raw.returnAccessCode else nil,
 	}
 end
 
@@ -298,7 +315,8 @@ function MatchmakingLogic.newGroupRecord(
 	formedAt: number,
 	formedBy: string,
 	destination: Destination?,
-	ballot: Ballot?
+	ballot: Ballot?,
+	practice: PracticeInfo?
 ): GroupRecord
 	local ids: { number } = {}
 	for _, entry in members do
@@ -319,6 +337,8 @@ function MatchmakingLogic.newGroupRecord(
 		ballot = if ballot then table.clone(ballot.maps) else {},
 		votes = {},
 		result = nil,
+		practice = if practice then true else nil,
+		returnAccessCode = if practice then practice.returnAccessCode else nil,
 	}
 end
 
@@ -575,6 +595,64 @@ function MatchmakingLogic.selectGroups(entries: { Entry }, now: number, config: 
 	end
 
 	return groups
+end
+
+-- A hub's practice queue (design-decisions.md Q7, the practice-match
+-- case): every queue on a private hub, and the Practice button's on a
+-- public one. Local to one server and never mixed with the global pool,
+-- so there is nothing to coordinate and no rematch cooldown: nothing
+-- is at stake. At most one group per call, from the oldest waiting. It forms when the seats are full, when
+-- everyone on the server has queued (nobody else is coming), or when
+-- the oldest has waited out the normal partial-group timer. NPCs fill
+-- the rest.
+function MatchmakingLogic.selectPracticeGroup(
+	entries: { Entry },
+	now: number,
+	playersOnServer: number,
+	config: Config,
+	unitOf: ((userId: number) -> string)?
+): FormedGroup?
+	local waiting = MatchmakingLogic.waitingInOrder(entries)
+	if #waiting == 0 or #waiting < config.partialGroupMinPlayers then
+		return nil
+	end
+
+	-- Parties travel whole (`unitOf` names each player's party, or nil
+	-- for everyone solo). Units are taken in queue order of their first
+	-- member; one that doesn't fit the seats left is skipped for a later,
+	-- smaller one rather than split.
+	local units: { { Entry } } = {}
+	local unitIndex: { [string]: number } = {}
+	for _, entry in waiting do
+		local key = if unitOf then unitOf(entry.userId) else tostring(entry.userId)
+		local index = unitIndex[key]
+		if index == nil then
+			table.insert(units, { entry })
+			unitIndex[key] = #units
+		else
+			table.insert(units[index], entry)
+		end
+	end
+
+	local size = config.groupSize
+	local members: { Entry } = {}
+	for _, unit in units do
+		if #members + #unit <= size then
+			for _, entry in unit do
+				table.insert(members, entry)
+			end
+		end
+	end
+	if #members == 0 then
+		return nil
+	end
+	local full = #members == size
+	local everyoneQueued = #waiting >= playersOnServer
+	local waitedOut = now - waiting[1].enqueuedAt >= config.partialGroupTimeoutSeconds
+	if not (full or everyoneQueued or waitedOut) then
+		return nil
+	end
+	return { members = members, npcSlots = size - #members, partial = not full }
 end
 
 -- ===== the UI's view of the queue ==========================================

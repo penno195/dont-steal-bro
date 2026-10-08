@@ -83,6 +83,8 @@ type LedgerEntry = {
 	-- the screens show what was granted rather than recomputing it from
 	-- a config LiveConfig can retune between roll and screen.
 	dropAmount: number?,
+	-- A practice match's result: recorded, never written (applyRoundResult).
+	practice: boolean?,
 }
 
 -- ===== season tracks (rewards-roadmap.md step 5) ===========================
@@ -225,6 +227,10 @@ local function currentRoundId(): string
 	return RoundService.getRoundId() :: string
 end
 
+local function isPracticeMatch(): boolean
+	return (Loader.get("MatchTeleportService") :: any).isPracticeMatch() == true
+end
+
 -- ===== the one function ====================================================
 
 -- Applies a round's result to one player's progression, exactly once.
@@ -274,6 +280,24 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		currentStreak = DataService.getStreak(player),
 		bestStreak = DataService.getBestStreak(player),
 	}
+
+	-- design-decisions.md Q7, the practice-match case: nothing is at
+	-- stake. The result is still recorded in the ledger, so a
+	-- contradiction still asserts and the recap still goes out, but the
+	-- streak stays where it was and nothing is written: no reward, stat,
+	-- telemetry, title, leaderboard or buy-back offer.
+	if isPracticeMatch() then
+		ledger[key] = { reason = result.reason, after = before, before = before, reward = nil, practice = true }
+		print(
+			string.format(
+				"Progression: %s round=%s reason=%s PRACTICE - nothing at stake, nothing written",
+				player.Name,
+				result.roundId,
+				result.reason
+			)
+		)
+		return before
+	end
 
 	-- A real player's result always counts, however many seats were
 	-- bots (design-decisions.md Q5's 2026-10-02 applied case).
@@ -495,6 +519,7 @@ local function sendRecaps()
 			bestStreakBefore = entry.before.bestStreak,
 			bestStreakAfter = entry.after.bestStreak,
 			reward = rewardPayload(entry),
+			practice = entry.practice,
 		})
 		-- The win's coins, drop and season progress, now that Results is
 		-- on screen. Not from the write itself, for the reason RoundRecap
@@ -513,6 +538,7 @@ local ProgressionService: Loader.Service = {
 	applyRoundResult = applyRoundResult,
 	hasResultFor = hasResultFor,
 	rewardFor = rewardFor,
+	isPracticeMatch = isPracticeMatch,
 
 	-- The rung a win from `streak` would pay at (the after-win rung, as
 	-- rollReward uses). Analytics splits the finale by it.

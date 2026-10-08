@@ -235,3 +235,33 @@ TestRunner.describe("TeleportLogic.returnMessage", function()
 		TestRunner.expect(TeleportLogic.returnMessage(nil)):toBe(nil)
 	end)
 end)
+
+TestRunner.describe("TeleportLogic practice matches", function()
+	local practiceHint = TeleportLogic.buildHint(PSID, nil, 3, true)
+	local rankedHint = TeleportLogic.buildHint(PSID, nil, 3)
+
+	TestRunner.it("the manifest decides, whatever the hints say", function()
+		local ranked = manifest(nil)
+		local practice = manifest(nil)
+		practice.practice = true
+		TestRunner.expect(TeleportLogic.isPractice(ranked, { practiceHint, practiceHint })):toBe(false)
+		TestRunner.expect(TeleportLogic.isPractice(practice, { rankedHint })):toBe(true)
+	end)
+
+	TestRunner.it("with no manifest, every hint must say practice", function()
+		TestRunner.expect(TeleportLogic.isPractice(nil, { practiceHint, practiceHint })):toBe(true)
+		TestRunner.expect(TeleportLogic.isPractice(nil, { practiceHint, rankedHint })):toBe(false)
+		TestRunner.expect(TeleportLogic.isPractice(nil, { practiceHint, { practice = "true" } })):toBe(false)
+		TestRunner.expect(TeleportLogic.isPractice(nil, {})):toBe(false)
+	end)
+
+	TestRunner.it("a ranked hint carries no practice field", function()
+		TestRunner.expect(rankedHint.practice):toBe(nil)
+		TestRunner.expect(practiceHint.practice):toBe(true)
+	end)
+
+	TestRunner.it("any non-public hub is a practice hub", function()
+		TestRunner.expect(TeleportLogic.isPracticeHub("")):toBe(false)
+		TestRunner.expect(TeleportLogic.isPracticeHub("abc-123")):toBe(true)
+	end)
+end)

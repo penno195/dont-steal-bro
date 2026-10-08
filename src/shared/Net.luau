@@ -1193,10 +1193,15 @@ Net.Remotes = {
 	-- the server's own profile and MemoryStore, never the client. No
 	-- `states` gate, because the hub has no round state.
 	-- MatchmakingService refuses both outside the hub place instead.
+	-- `mode`: the Practice button sends "Practice" (design-decisions.md
+	-- Q7, the practice-match case). Absent means ranked. On a private hub
+	-- every queue is practice, whatever this says.
 	QueueJoinIntent = {
 		name = "QueueJoinIntent",
 		direction = "ServerIntent",
-		schema = Net.struct({}),
+		schema = Net.struct({
+			mode = Net.optional(Net.stringEnum({ "Ranked", "Practice" })),
+		}),
 		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
 		states = nil,
 	} :: RemoteDef,
@@ -1215,6 +1220,48 @@ Net.Remotes = {
 	-- is queued or anyone's streak (design-decisions.md Q7).
 	QueueState = {
 		name = "QueueState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Practice parties (design-decisions.md Q7, the "practice matches and
+	-- parties" case; PartyService). The client names a player on this
+	-- server and nothing else: the server checks they're here, and
+	-- PartyLogic decides the rest. Hub only, like the queue remotes.
+	PartyInviteIntent = {
+		name = "PartyInviteIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ targetId = Net.number({ integer = true }) }),
+		rateLimit = { capacity = 4, refillPerSecond = 0.25 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- An answer to this player's own pending invite. Which invite is the
+	-- server's to know; the client only says yes or no.
+	PartyRespondIntent = {
+		name = "PartyRespondIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ accept = Net.boolean() }),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	PartyLeaveIntent = {
+		name = "PartyLeaveIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client, to that player only: their party (leaderId,
+	-- memberIds), any invite waiting on them (inviteFromId), and an
+	-- optional one-line notice. User ids only - never a streak or title
+	-- (Q7 condition 1).
+	PartyState = {
+		name = "PartyState",
 		direction = "ServerBroadcast",
 		schema = nil,
 		rateLimit = nil,

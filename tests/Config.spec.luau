@@ -175,6 +175,9 @@ local function validGameConfig(): Validate.GameConfig
 			summaryShardCount = 4,
 			summaryStaleSeconds = 10,
 			summaryTtlSeconds = 60,
+			practiceLobbyMapName = "PracticeLobbies_v1",
+			practiceLobbyTtlSeconds = 21600,
+			partyInviteTtlSeconds = 30,
 		},
 		teleport = {
 			matchPlaceId = 0,

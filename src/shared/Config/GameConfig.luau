@@ -445,6 +445,16 @@ local GameConfig: Validate.GameConfig = {
 		summaryShardCount = 4,
 		summaryStaleSeconds = 10, -- older than this, a server reads the page itself
 		summaryTtlSeconds = 60,
+
+		-- design-decisions.md Q7, practice matches on private servers: each
+		-- reserved practice lobby's access code, keyed by its PrivateServerId.
+		-- Refreshed every time the lobby sends a group, so it only lapses
+		-- after this long with no match.
+		practiceLobbyMapName = "PracticeLobbies_v1",
+		practiceLobbyTtlSeconds = 21600,
+		-- Practice parties (PartyLogic): how long an invite waits for an answer.
+		-- A party holds one match, groupSize.
+		partyInviteTtlSeconds = 30,
 	},
 
 	-- P5-2: hub-to-match teleport. docs/teleport.md explains each number.

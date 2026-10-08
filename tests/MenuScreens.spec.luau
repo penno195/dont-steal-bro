@@ -642,3 +642,29 @@ describe("BoardLogic.wall", function()
 		expect((BoardLogic.wall("Daily", payload(2, "Stale"), 1) :: BoardLogic.Wall).stale):toBe(true)
 	end)
 end)
+
+describe("ResultsLogic practice recaps", function()
+	local function practiceRecap(reason: string, streak: number): ResultsLogic.Recap
+		return {
+			roundId = "r",
+			reason = reason,
+			streakBefore = streak,
+			streakAfter = streak,
+			bestStreakBefore = streak,
+			bestStreakAfter = streak,
+			reward = nil,
+			practice = true,
+		}
+	end
+
+	it("calls a practice loss safe rather than dead", function()
+		local change = ResultsLogic.streakChange(practiceRecap("StudioLoss", 4))
+		expect(change.kind):toBe("Practice")
+		expect(ResultsLogic.streakHeadline(change)):toBe("Practice match - your 4-win streak is safe")
+	end)
+
+	it("says nothing was at stake from a zero streak", function()
+		local change = ResultsLogic.streakChange(practiceRecap("QualifiedWin", 0))
+		expect(ResultsLogic.streakHeadline(change)):toBe("Practice match - nothing at stake")
+	end)
+end)

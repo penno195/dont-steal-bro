@@ -60,6 +60,7 @@ local STREAK_STYLE: { [string]: CardStyle } = {
 	Up = { icon = "flame", color = "success" },
 	Died = { icon = "down", color = "danger" },
 	None = { icon = "info", color = "inkMuted" },
+	Practice = { icon = "shield", color = "inkMuted" },
 }
 
 local LABELS: { [string]: string } = {
@@ -167,6 +168,7 @@ local function streakCard(store: Store, timedOut: () -> boolean, shown: () -> bo
 			return if c.newBest
 				then "Your best ever."
 				elseif c.kind == "Died" then "Back to zero. Next round starts a new one."
+				elseif c.kind == "Practice" then "Private server: no streak, coins or stats change here."
 				else ""
 		end
 		return if timedOut() then "It's saved on the server. It'll show next time you open your profile." else ""
