@@ -193,6 +193,15 @@ Supersedes "pays automatically" wherever it appears above.
   instead of a full-width Close button at the bottom: the pass needs the
   height.
 
+*Applied (2026-10-09, user decision):* **wearable cosmetics.**
+- **Two slots, Hat and Back Item**, so a player can wear one of each.
+  Each is a cosmetic category of its own (`Hat`, `BackItem`).
+- **Ours replaces theirs.** While one is worn, the player's own avatar
+  accessories at the same spot (same accessory type, or welded to the
+  same attachment) are hidden; unequipping puts them back. Hair and
+  other spots are left alone. Same idea as a skin replacing their
+  shirt and pants.
+
 *Applied (2026-10-02, user decision):* **what coins buy.**
 - **Power-up stock only**: one of each freely earnable power-up, at a
   fixed coin price (25 each, see "pricing" below). Not

@@ -33,7 +33,9 @@ export type CosmeticDef = {
 		| "Projectile"
 		| "StreakFlair"
 		| "Nameplate"
-		| "CallingCard",
+		| "CallingCard"
+		| "Hat"
+		| "BackItem",
 	displayName: string,
 	description: string,
 	rarity: "Common" | "Uncommon" | "Rare",
@@ -56,6 +58,11 @@ export type CosmeticDef = {
 	nameplateFrameAssetId: number?,
 	nameplateColorHex: string?,
 	cardImageAssetId: number?,
+	wearMeshAssetId: number?,
+	wearTextureAssetId: number?,
+	wearScale: number?,
+	wearOffset: { number }?,
+	wearRotation: { number }?,
 	previewIconAssetId: number?,
 }
 
@@ -72,7 +79,35 @@ local SLOT_FOR_CATEGORY: { [string]: string } = {
 	StreakFlair = "streakFlair",
 	Nameplate = "nameplate",
 	CallingCard = "callingCard",
+	Hat = "hat",
+	BackItem = "backItem",
 }
+
+-- Where each wearable sits: the character attachment its Accessory
+-- welds to (on both R6 and R15 rigs), and the Roblox AccessoryType of
+-- the player's own items it hides while worn.
+local WEAR_SPOT: { [string]: { attachment: string, accessoryType: string } } = {
+	Hat = { attachment = "HatAttachment", accessoryType = "Hat" },
+	BackItem = { attachment = "BodyBackAttachment", accessoryType = "Back" },
+}
+
+function CosmeticLogic.wearAttachmentFor(category: string): string?
+	local spot = WEAR_SPOT[category]
+	return if spot ~= nil then spot.attachment else nil
+end
+
+-- Whether one of the player's own accessories clashes with a worn
+-- `category` item and should be hidden: same AccessoryType, or (older
+-- items left as "Unknown") welded at the same attachment. Takes the
+-- Enum item's Name and the Handle's Attachment names as plain strings,
+-- so it stays testable without Roblox.
+function CosmeticLogic.clashesWith(category: string, accessoryType: string, attachmentNames: { string }): boolean
+	local spot = WEAR_SPOT[category]
+	if spot == nil then
+		return false
+	end
+	return accessoryType == spot.accessoryType or table.find(attachmentNames, spot.attachment) ~= nil
+end
 
 function CosmeticLogic.slotFor(category: string): string?
 	return SLOT_FOR_CATEGORY[category]

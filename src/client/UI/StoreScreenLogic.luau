@@ -215,6 +215,8 @@ local SLOT_FOR_CATEGORY: { [string]: string } = {
 	StreakFlair = "streakFlair",
 	Nameplate = "nameplate",
 	CallingCard = "callingCard",
+	Hat = "hat",
+	BackItem = "backItem",
 }
 
 function StoreScreenLogic.slotFor(category: string): string?

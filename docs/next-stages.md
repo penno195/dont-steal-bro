@@ -22,10 +22,31 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     Season 1 game pass (2006972979) off sale.
   - [ ] Pass screen: tiers left to right, paid row on top (locked until
     bought), free row below, as in the owner's reference image.
-  - [ ] Wearable cosmetic type (hats, back items) with its renderer.
+  - [x] Wearable cosmetic type (hats, back items) with its renderer.
+    *Done 2026-10-09: categories `Hat` and `BackItem` (two slots),
+    mesh + texture + scale/offset/rotation in the cosmetic file,
+    rendered by CosmeticService as an Accessory that hides the avatar's
+    own at the same spot. Not yet seen in Studio: needs a first item.*
   - [ ] Items and pass images for the first month's tiers. Models made
     with AI mesh tools (Studio, Meshy via `MESHY_API_KEY`), to be redone in
     Blender later.
+- [ ] **1b. iPhone playtest fixes** (owner's screenshots, 2026-10-09),
+  one per session:
+  - [ ] Hub UI under Roblox's top bar: on iPhone the queue card's
+    status line ("Finding players...", "Round over? Press Play...")
+    sits behind the Roblox menu/chat/mic buttons. Keep HUD and menus
+    inside the safe area (ScreenGui `ScreenInsets`, `GuiService`
+    top-bar inset) on every screen, not just the Hub; check the race
+    HUD's top row and the bottom power-up slots against the notch and
+    the jump button too.
+  - [ ] Laboratory lighting is still wrong. Find what an earlier fix
+    missed (its `LightingPresets` entry vs what's in the map) and check
+    it in Studio Play, not just Edit.
+  - [ ] Task views too small on a phone: the cards feel small and
+    fiddly. Size them from the screen (bigger share of the height in
+    landscape), and grow touch targets to a thumb's size.
+  - [ ] Text cut off in task art: Pressure Valve's pump button shows
+    "PU" for "PUMP". Check every TaskArt button label at phone size.
 - [x] **2. Studio pass on features never checked in Studio.** Season tab
   (enable a season with placeholder items), buying with coins, Slow
   Field zone, discard bin, left-click aim, and a two-player test of the

@@ -310,6 +310,8 @@ local COSMETIC_CATEGORIES = {
 	"StreakFlair",
 	"Nameplate",
 	"CallingCard",
+	"Hat",
+	"BackItem",
 }
 
 local function validCosmetic(id: string, category: Validate.CosmeticCategory): Validate.CosmeticDef
@@ -347,6 +349,10 @@ local function validCosmetic(id: string, category: Validate.CosmeticCategory): V
 		def.nameplateColorHex = "#c0c0c0"
 	elseif category == "CallingCard" then
 		def.cardImageAssetId = 121
+	elseif category == "Hat" or category == "BackItem" then
+		def.wearMeshAssetId = 122
+		def.wearTextureAssetId = 123
+		def.wearScale = 1
 	end
 	return def
 end
@@ -1734,6 +1740,18 @@ TestRunner.describe("Validate.checkCosmeticItem (P4-6)", function()
 	TestRunner.it("refuses a trail with no lifetime", function()
 		local def = validCosmetic("t", "Trail")
 		def.trailLifetime = nil
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a hat with no scale", function()
+		local def = validCosmetic("t", "Hat")
+		def.wearScale = nil
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a back item whose offset isn't three numbers", function()
+		local def = validCosmetic("t", "BackItem")
+		def.wearOffset = { 0, 1 }
 		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 

@@ -296,6 +296,8 @@ export type CosmeticCategory =
 	| "StreakFlair"
 	| "Nameplate"
 	| "CallingCard"
+	| "Hat"
+	| "BackItem"
 
 local COSMETIC_CATEGORIES: { CosmeticCategory } = {
 	"Skin",
@@ -307,6 +309,8 @@ local COSMETIC_CATEGORIES: { CosmeticCategory } = {
 	"StreakFlair",
 	"Nameplate",
 	"CallingCard",
+	"Hat",
+	"BackItem",
 }
 
 export type CosmeticDef = {
@@ -375,6 +379,21 @@ export type CosmeticDef = {
 	-- Category "CallingCard": the small card a victim sees for a moment
 	-- when your sabotage lands on them.
 	cardImageAssetId: number?,
+
+	-- Categories "Hat" and "BackItem": a mesh worn on the head or back,
+	-- two separate slots so a player can wear one of each. While worn it
+	-- hides the player's own avatar accessories at the same spot, and
+	-- unequipping puts them back (design-decisions.md, "wearable
+	-- cosmetics", 2026-10-09). `wearScale` multiplies the mesh's own
+	-- size; `wearOffset` (studs) and `wearRotation` (degrees) are
+	-- {x, y, z} from the attachment point, nil = {0, 0, 0}. Plain number
+	-- arrays, not CFrame/Vector3, for the same Lune-purity reason the
+	-- colour fields are strings.
+	wearMeshAssetId: number?,
+	wearTextureAssetId: number?,
+	wearScale: number?,
+	wearOffset: { number }?,
+	wearRotation: { number }?,
 
 	-- Store UI thumbnail (P6-6's item grid). Optional: falls back to
 	-- whatever the category's own primary asset id would render as.
@@ -1576,6 +1595,27 @@ function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: 
 		checkColorHex(issues, fileName, "nameplateColorHex", def.nameplateColorHex)
 	elseif def.category == "CallingCard" then
 		checkAssetId(issues, fileName, "cardImageAssetId", def.cardImageAssetId, def.enabled)
+	elseif def.category == "Hat" or def.category == "BackItem" then
+		checkAssetId(issues, fileName, "wearMeshAssetId", def.wearMeshAssetId, def.enabled)
+		checkAssetId(issues, fileName, "wearTextureAssetId", def.wearTextureAssetId, def.enabled)
+		if type(def.wearScale) ~= "number" or def.wearScale <= 0 then
+			issue(issues, "Cosmetic", fileName, "wearScale", "must be a positive number")
+		end
+		for _, field in { "wearOffset", "wearRotation" } do
+			local value = (def :: any)[field]
+			if value == nil then
+				continue
+			end
+			local ok = type(value) == "table" and #value == 3
+			if ok then
+				for _, n in value do
+					ok = ok and type(n) == "number"
+				end
+			end
+			if not ok then
+				issue(issues, "Cosmetic", fileName, field, "expected {x, y, z} numbers, or nil for {0, 0, 0}")
+			end
+		end
 	end
 end
 

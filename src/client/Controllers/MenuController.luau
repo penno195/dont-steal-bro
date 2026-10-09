@@ -105,6 +105,8 @@ end
 -- first, then what shows in the Studio.
 local COSMETIC_CATEGORY_ORDER = {
 	"Skin",
+	"Hat",
+	"BackItem",
 	"Trail",
 	"Nameplate",
 	"StreakFlair",

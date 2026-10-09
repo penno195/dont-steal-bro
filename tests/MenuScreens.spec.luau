@@ -189,6 +189,8 @@ describe("StoreScreenLogic catalogue", function()
 				"StreakFlair",
 				"Nameplate",
 				"CallingCard",
+				"Hat",
+				"BackItem",
 				"NotACategory",
 			}
 		do
