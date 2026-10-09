@@ -66,6 +66,7 @@ export type Category = "Season" | "Bundles" | "PowerUps" | "Cosmetics" | "Curren
 StoreScreenLogic.CATEGORIES = table.freeze({ "Season", "Bundles", "PowerUps", "Cosmetics", "Currency" } :: { Category })
 
 local KIND_CATEGORY: { [string]: Category } = {
+	SeasonPass = "Season",
 	PowerUpStock = "PowerUps",
 	Cosmetic = "Cosmetics",
 	Currency = "Currency",
@@ -143,8 +144,19 @@ local function isEquipped(state: StoreState, cosmeticId: string): boolean
 	return false
 end
 
+-- The monthly season pass: a developer product whose grant is SeasonPass.
+function StoreScreenLogic.isSeasonPass(item: Item): boolean
+	for _, grant in item.grants do
+		if grant.kind == "SeasonPass" then
+			return true
+		end
+	end
+	return false
+end
+
 -- A developer product is never "Owned": it's a consumable, and buying a
--- second currency pack is the point. Only passes can be owned outright.
+-- second currency pack is the point. Only passes can be owned outright,
+-- and the season pass for the season running now.
 -- `state` nil means StoreState hasn't arrived - the screen is loading,
 -- and no item gets a Buy button it might have to take back.
 function StoreScreenLogic.itemState(item: Item, state: StoreState?): ItemState?
@@ -156,6 +168,11 @@ function StoreScreenLogic.itemState(item: Item, state: StoreState?): ItemState?
 	end
 	if item.kind == "CoinOffer" then
 		return if state.currency >= (item.coinPrice or 0) then "Buyable" else "TooFewCoins"
+	end
+	-- The season pass is bought again each month, so it's "owned" only
+	-- for the season running now.
+	if StoreScreenLogic.isSeasonPass(item) then
+		return if state.season ~= nil and state.season.passSeen == true then "Owned" else "Buyable"
 	end
 	if item.kind ~= "GamePass" or table.find(state.ownedPasses, item.key) == nil then
 		return "Buyable"
@@ -312,6 +329,10 @@ local function landed(key: string, before: StoreState?, after: StoreState): bool
 	end
 	if before == nil then
 		return false
+	end
+	local hadPass = before.season ~= nil and before.season.passSeen == true
+	if after.season ~= nil and after.season.passSeen == true and not hadPass then
+		return true
 	end
 	if after.currency > before.currency or #after.ownedCosmetics > #before.ownedCosmetics then
 		return true

@@ -162,6 +162,22 @@ local function liveSeason(nowUtc: number): SeasonLogic.Season?
 	return nil
 end
 
+-- Why the season pass can't be bought now, or nil when it can: there's
+-- a live season and this profile doesn't hold its pass yet. Checked
+-- before the prompt and again on the receipt. A blocked receipt is
+-- declined, never consumed, so a double purchase stays with Roblox and
+-- unlocks next month's season when it's re-offered then.
+local function seasonPassBlocked(seasonProgress: { [string]: any }): ("NoSeason" | "AlreadyOwned")?
+	local season = liveSeason(os.time())
+	if season == nil then
+		return "NoSeason"
+	end
+	if SeasonLogic.hasPass(seasonProgress[season.id]) then
+		return "AlreadyOwned"
+	end
+	return nil
+end
+
 -- The store's Season tab (rewards-roadmap.md step 5b): the live season
 -- and this player's own progress on it. The tab reads the track items
 -- from config by `id`. Time left is sent as a duration, so a client
@@ -176,7 +192,7 @@ local function seasonState(player: Player, DataService: any): { [string]: any }?
 	return {
 		id = season.id,
 		secondsLeft = season.endsAt - nowUtc,
-		passSeen = progress ~= nil and progress.passSeenAt ~= nil,
+		passSeen = SeasonLogic.hasPass(progress),
 		freeWins = if progress then progress.freeWins else 0,
 		premiumWins = if progress then progress.premiumWins else 0,
 		freePaid = if progress then progress.freePaid else 0,
@@ -289,7 +305,31 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 		buyBackOffer = data.buyBackOffer,
 	}
 
-	local after, changes = StoreLogic.applyGrants(before, def.grants :: any)
+	-- The season pass unlocks the live season's premium track and pays
+	-- every premium item its wins already reached, in this same mutation.
+	-- The receipt handler has already checked a pass can be bought
+	-- (seasonPassBlocked), so `bought` is false only on a bug.
+	local grants = table.clone(def.grants) :: { any }
+	local seasonLines: { string } = {}
+	if StoreLogic.grantsSeasonPass(def.grants :: any) then
+		local nowUtc = os.time()
+		local season = liveSeason(nowUtc)
+		if season ~= nil then
+			local progress, paid, bought = SeasonLogic.buyPass(data.seasonProgress[season.id], season, nowUtc)
+			if bought then
+				data.seasonProgress[season.id] = progress
+				table.insert(seasonLines, string.format("season pass for %s", season.id))
+				for _, item in paid do
+					table.insert(grants, item.grant)
+					table.insert(seasonLines, SeasonLogic.describePaid(season.id, item))
+				end
+			end
+		end
+	end
+
+	local after, changes = StoreLogic.applyGrants(before, grants)
+	table.move(changes, 1, #changes, #seasonLines + 1, seasonLines)
+	changes = seasonLines
 
 	data.currency = after.currency
 	data.powerUpStock = after.powerUpStock
@@ -535,6 +575,21 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 	end
 
 	local product = def :: StoreItemDef
+	if StoreLogic.grantsSeasonPass(product.grants :: any) then
+		local blocked = seasonPassBlocked(data.seasonProgress)
+		if blocked ~= nil then
+			warn(
+				string.format(
+					"StoreService: season pass receipt %s for %s (%d) can't apply now (%s) - declining so Roblox re-offers it",
+					purchaseKey,
+					player.Name,
+					userId,
+					blocked
+				)
+			)
+			return notYet
+		end
+	end
 	local changes = applyProductTo(data, product, purchaseKey)
 
 	if not waitForSave(handle, purchaseKey) then
@@ -632,14 +687,14 @@ local function ownsPass(player: Player, gamePassId: number): boolean
 	return owned == true
 end
 
--- Every pass is a season pass (rewards-roadmap.md step 5) and grants
--- nothing itself. On join and on a pass purchase, each season is synced
--- (SeasonLogic.sync): a live season starts being tracked, its pass's
--- first sighting is recorded (the premium track counts wins from then),
--- and any track item now due is paid - a 0-win item, say. Paying is
--- idempotent through the progress entry's `*Paid` counts, which are
--- written in the same mutation as the grants. A win's own track items
--- are paid by the progression writer instead (ProgressionService).
+-- On join and on a pass purchase, each season is synced
+-- (SeasonLogic.sync): a live season starts being tracked and any track
+-- item now due is paid - one a config edit moved below the player's
+-- count, say. Buying the season pass is a receipt (applyProductTo), not
+-- a pass sighting, since 2026-10-09. Paying is idempotent through the
+-- progress entry's `*Paid` counts, which are written in the same
+-- mutation as the grants. A win's own track items are paid by the
+-- progression writer instead (ProgressionService).
 local function syncPasses(player: Player)
 	local getHandle = receiptHandleFor
 	if getHandle == nil then
@@ -662,11 +717,8 @@ local function syncPasses(player: Player)
 		if season == nil then
 			continue
 		end
-		local pass = byKey[(entry.def :: any).passKey]
-		local owns = pass ~= nil and pass.enabled and ownsPass(player, pass.assetId)
-
 		local before = data.seasonProgress[season.id]
-		local after, paid = SeasonLogic.sync(before, season, nowUtc, owns)
+		local after, paid = SeasonLogic.sync(before, season, nowUtc)
 		if after == nil or after == before then
 			continue
 		end
@@ -701,22 +753,6 @@ local function syncPasses(player: Player)
 	if anyChange then
 		handle.save()
 	end
-end
-
--- The live season a pass unlocks, or nil. A pass is only sold during
--- its season: bought after the end it would unlock nothing, and seasons
--- replace each other, so there's no pre-sale either.
-local function liveSeasonForPass(key: string): SeasonLogic.Season?
-	for _, entry in Seasons do
-		if (entry.def :: any).passKey ~= key then
-			continue
-		end
-		local season = SeasonLogic.fromDef(entry.def :: any)
-		if season ~= nil and SeasonLogic.isLive(season, os.time()) then
-			return season
-		end
-	end
-	return nil
 end
 
 -- ===== coin offers (rewards-roadmap.md step 6) ============================
@@ -816,10 +852,20 @@ local function handlePurchaseIntent(player: Player, key: string)
 		return
 	end
 
-	-- A perk pass isn't tied to a season, so it sells all year.
-	if def.kind == "GamePass" and def.perk == nil and liveSeasonForPass(def.key) == nil then
-		sendPurchaseResult(player, key, "Unavailable", "This season isn't running right now.")
-		return
+	-- The season pass sells only while a season runs, once per season.
+	if StoreLogic.grantsSeasonPass(def.grants :: any) then
+		local DataService = Loader.get("DataService") :: any
+		local season = liveSeason(os.time())
+		local blocked = seasonPassBlocked(
+			if season ~= nil then { [season.id] = DataService.getSeasonProgress(player, season.id) } else {}
+		)
+		if blocked == "NoSeason" then
+			sendPurchaseResult(player, key, "Unavailable", "No season is running right now.")
+			return
+		elseif blocked == "AlreadyOwned" then
+			sendPurchaseResult(player, key, "AlreadyOwned", "You already have this month's pass.")
+			return
+		end
 	end
 
 	-- Everything past this point is Roblox's. The prompt is opened; the

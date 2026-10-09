@@ -12,6 +12,20 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   in `rewards-roadmap.md`; Q8's "Robux buys time, never power" depends
   on these numbers. *Deferred by the owner (2026-10-03): do it just
   before publishing, not now.*
+- [ ] **1a. Monthly season pass** (design-decisions.md, 2026-10-09), one
+  part per session:
+  - [x] Rules: calendar-month seasons, both tracks count every season
+    win (buying mid-month unlocks paid tiers already reached), one
+    reusable `season-pass` developer product. *Done 2026-10-09.*
+  - [ ] Owner: create the "Season Pass" developer product in Creator
+    Hub, paste its id into `Store/SeasonPass.luau`, and take the old
+    Season 1 game pass (2006972979) off sale.
+  - [ ] Pass screen: tiers left to right, paid row on top (locked until
+    bought), free row below, as in the owner's reference image.
+  - [ ] Wearable cosmetic type (hats, back items) with its renderer.
+  - [ ] Items and pass images for the first month's tiers. Models made
+    with AI mesh tools (Studio, Meshy via `MESHY_API_KEY`), to be redone in
+    Blender later.
 - [x] **2. Studio pass on features never checked in Studio.** Season tab
   (enable a season with placeholder items), buying with coins, Slow
   Field zone, discard bin, left-click aim, and a two-player test of the
@@ -340,7 +354,8 @@ then enable its config.
 Ask before the steps that depend on them; record answers in
 `design-decisions.md`.
 
-- **Season mismatch.** Live-ops plans 6-week seasons ranked by a season
+- **Season mismatch.** Pass seasons are now calendar months (2026-10-09);
+  whether the live-ops leaderboard season follows them is still open. Live-ops plans 6-week seasons ranked by a season
   score; rewards step 5 built fixed-date pass seasons. Same thing, or two?
 - **Season score.** Peak live streak (recommended) or a season-only counter?
 - ~~**Launch tasks.** The four built plus the four in step 5?~~ Yes, all

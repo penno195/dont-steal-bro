@@ -1455,11 +1455,11 @@ TestRunner.describe("Validate.checkStoreItem (P4-5)", function()
 		end
 	end)
 
-	TestRunner.it("accepts a game pass that grants nothing", function()
+	TestRunner.it("refuses a game pass with no perk (a season pass is a product now)", function()
 		local def = validProduct("t")
 		def.kind = "GamePass"
 		def.grants = {}
-		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(0)
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(1)
 	end)
 
 	TestRunner.it("refuses a grant missing the field its own kind requires", function()
@@ -2442,10 +2442,9 @@ end
 
 local function seasonPass(key: string): Validate.StoreItemDef
 	local def = validProduct(key)
-	def.kind = "GamePass"
 	def.assetId = 0
 	def.enabled = false
-	def.grants = {}
+	def.grants = { { kind = "SeasonPass" } }
 	return def
 end
 
@@ -2476,76 +2475,88 @@ end
 TestRunner.describe("Validate.checkSeason and season cross-checks (rewards step 5)", function()
 	TestRunner.it("accepts a well-formed season with its pass", function()
 		local issues = runSeasons({
-			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass") } },
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass") } },
 		})
 		TestRunner.expect(#issues):toBe(0)
 	end)
 
-	TestRunner.it("refuses bad dates and a window that ends before it starts", function()
+	TestRunner.it("refuses bad dates, and a window that isn't one calendar month", function()
 		for _, dates in
-			{ { "2026-02-30", "2027-01-01" }, { "2026/10/01", "2027-01-01" }, { "2027-01-01", "2026-10-01" } }
+			{
+				{ "2026-02-30", "2026-03-01" },
+				{ "2026/10/01", "2026-11-01" },
+				{ "2026-11-01", "2026-10-01" },
+				{ "2026-10-02", "2026-11-02" },
+				{ "2026-10-01", "2026-12-01" },
+			}
 		do
 			local issues = runSeasons({
 				seasons = { { fileName = "S1.luau", def = validSeason("s1", dates[1], dates[2], "s1-pass") } },
 			})
 			TestRunner.expect(#issues > 0):toBeTruthy()
 		end
+		local december = validSeason("s1", "2026-12-01", "2027-01-01", "s1-pass")
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = december } } })):toBe(0)
 	end)
 
 	TestRunner.it("refuses a track listed out of win order", function()
-		local def = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		local def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
 		def.free = { def.free[2], def.free[1] }
 		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
 	end)
 
 	TestRunner.it("refuses a Title on a track", function()
-		local def = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		local def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
 		table.insert(def.free, { wins = 20, grant = { kind = "Title", titleId = "got-one" } })
 		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
 	end)
 
 	TestRunner.it("refuses a power-up on a track that isn't freely earnable (Q8)", function()
-		local def = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		local def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
 		def.premium[2] = { wins = 5, grant = { kind = "PowerUpStock", powerUpId = "paid-only", amount = 1 } }
 		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
 	end)
 
-	TestRunner.it("refuses overlapping seasons, and two seasons sharing one pass", function()
-		local store = {
-			{ fileName = "S1Pass.luau", def = seasonPass("s1-pass") },
-			{ fileName = "S2Pass.luau", def = seasonPass("s2-pass") },
-		}
-		local s1 = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
-		local overlapping = validSeason("s2", "2026-12-01", "2027-03-01", "s2-pass")
+	TestRunner.it("refuses overlapping seasons, but lets every month share one pass", function()
+		local s1 = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
+		local overlapping = validSeason("s2", "2026-10-01", "2026-11-01", "s1-pass")
 		overlapping.premium = {}
 		TestRunner.expect(#runSeasons({
-			store = store,
 			seasons = { { fileName = "S1.luau", def = s1 }, { fileName = "S2.luau", def = overlapping } },
 		}) > 0):toBeTruthy()
 
-		local sharing = validSeason("s2", "2027-01-01", "2027-03-01", "s1-pass")
-		sharing.premium = {}
-		TestRunner.expect(#runSeasons({
-			seasons = { { fileName = "S1.luau", def = s1 }, { fileName = "S2.luau", def = sharing } },
-		}) > 0):toBeTruthy()
-
-		local next = validSeason("s2", "2027-01-01", "2027-03-01", "s2-pass")
+		local next = validSeason("s2", "2026-11-01", "2026-12-01", "s1-pass")
 		next.premium = {}
 		TestRunner.expect(#runSeasons({
-			store = store,
 			seasons = { { fileName = "S1.luau", def = s1 }, { fileName = "S2.luau", def = next } },
 		})):toBe(0)
 	end)
 
-	TestRunner.it("refuses an unknown pass, and a pass no season names", function()
+	TestRunner.it("refuses a pass that isn't a SeasonPass product, and a GamePass with no perk", function()
 		TestRunner.expect(#runSeasons({
-			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2027-01-01", "nope") } },
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2026-11-01", "nope") } },
 		}) > 0):toBeTruthy()
-		TestRunner.expect(#runSeasons({ seasons = {} }) > 0):toBeTruthy()
+
+		local oldStyle = validProduct("s1-pass")
+		oldStyle.kind = "GamePass"
+		oldStyle.assetId = 0
+		oldStyle.enabled = false
+		oldStyle.grants = {}
+		TestRunner.expect(#runSeasons({
+			store = { { fileName = "S1Pass.luau", def = oldStyle } },
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass") } },
+		}) > 0):toBeTruthy()
+
+		local bundled = seasonPass("s1-pass")
+		table.insert(bundled.grants, { kind = "Currency", amount = 10 })
+		TestRunner.expect(#runSeasons({
+			store = { { fileName = "S1Pass.luau", def = bundled } },
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass") } },
+		}) > 0):toBeTruthy()
 	end)
 
 	TestRunner.it("keeps a track cosmetic track-only: not a win drop, not sold, not on two tracks", function()
-		local season = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		local season = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
 
 		local dropping = validCosmetic("trail-s1", "Trail")
 		dropping.winDrop = true
@@ -2564,7 +2575,7 @@ TestRunner.describe("Validate.checkSeason and season cross-checks (rewards step 
 			},
 		}) > 0):toBeTruthy()
 
-		local twice = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		local twice = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
 		table.insert(twice.free, { wins = 20, grant = { kind = "Cosmetic", cosmeticId = "trail-s1" } })
 		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = twice } } }) > 0):toBeTruthy()
 	end)
@@ -2574,7 +2585,7 @@ TestRunner.describe("Validate.checkSeason and season cross-checks (rewards step 
 		cosmetic.enabled = false
 		cosmetic.trailTextureAssetId = 0
 		local cosmetics = { { fileName = "TrailS1.luau", def = cosmetic } }
-		local season = validSeason("s1", "2026-10-01", "2027-01-01", "s1-pass")
+		local season = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
 		TestRunner.expect(
 			#runSeasons({ seasons = { { fileName = "S1.luau", def = season } }, cosmetics = cosmetics }) > 0
 		)

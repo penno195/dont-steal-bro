@@ -450,8 +450,8 @@ end)
 -- ===== the store's Season tab (rewards step 5b) =============================
 
 describe("StoreScreenLogic.itemsIn (Season tab)", function()
-	local s1 = item("s1-pass", "GamePass", {})
-	local s2 = item("s2-pass", "GamePass", {})
+	local s1 = item("s1-pass", "DeveloperProduct", { { kind = "SeasonPass" } })
+	local s2 = item("s2-pass", "DeveloperProduct", { { kind = "SeasonPass" } })
 
 	it("offers only the live season's pass", function()
 		local here = StoreScreenLogic.itemsIn({ s1, s2 }, "Season", "s2-pass")
@@ -461,6 +461,12 @@ describe("StoreScreenLogic.itemsIn (Season tab)", function()
 
 	it("offers no pass when no season is running", function()
 		expect(#StoreScreenLogic.itemsIn({ s1, s2 }, "Season", nil)):toBe(0)
+	end)
+
+	it("shows the pass owned only for the season it was bought in", function()
+		expect(StoreScreenLogic.itemState(s1, state({ season = { passSeen = false } }))):toBe("Buyable")
+		expect(StoreScreenLogic.itemState(s1, state({ season = { passSeen = true } }))):toBe("Owned")
+		expect(StoreScreenLogic.itemState(s1, state({ season = nil }))):toBe("Buyable")
 	end)
 end)
 

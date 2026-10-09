@@ -135,7 +135,7 @@ $g.DrawLine($arrow, 368, 204, 396, 230); $g.DrawLine($arrow, 368, 256, 396, 230)
 Draw-Label $g 'x5 EACH' 410 52 (Rgb 255 255 255)
 Save-Icon $c 'bundle-starter-loadout.png'
 
-# ===== season-1-pass: Season 1 Pass ========================================
+# ===== season-pass: Season Pass ==========================================
 $c = New-Icon (Rgb 60 50 120) (Rgb 15 10 40); $g = $c[1]
 # A ticket: rounded card with notches bitten out of both sides.
 $ticket = New-Object System.Drawing.Drawing2D.GraphicsPath
@@ -161,7 +161,7 @@ foreach ($p in @(@(150, 110, 22), @(372, 104, 16), @(256, 92, 12), @(400, 400, 1
 	$g.FillPolygon((Brush (Rgb 255 235 150)), [System.Drawing.PointF[]]$pts)
 }
 Draw-Label $g 'PASS' 430 46 (Rgb 255 220 90)
-Save-Icon $c 'season-1-pass.png'
+Save-Icon $c 'season-pass.png'
 
 # ===== coin offers: one power-up each, bought with coins (next-stages 14d) ==
 # One big badge in the power-up's colour with its glyph, and a gold coin

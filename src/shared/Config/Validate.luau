@@ -408,13 +408,20 @@ export type CosmeticDef = {
 -- named exception: a paid Navigation round (design-decisions.md Q8,
 -- "Navigation"), so every free player can switch it on in any round.
 export type StoreProductKind = "GamePass" | "DeveloperProduct" | "CoinOffer"
-export type StoreGrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title" | "NavigationRound" | "StreakBuyBack"
+export type StoreGrantKind =
+	"Currency"
+	| "PowerUpStock"
+	| "Cosmetic"
+	| "Title"
+	| "NavigationRound"
+	| "StreakBuyBack"
+	| "SeasonPass"
 -- What a perk pass unlocks for good. Only a GamePass carries one.
 export type StorePerk = "UnlimitedNavigation"
 
 local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct", "CoinOffer" }
 local STORE_GRANT_KINDS: { StoreGrantKind } =
-	{ "Currency", "PowerUpStock", "Cosmetic", "Title", "NavigationRound", "StreakBuyBack" }
+	{ "Currency", "PowerUpStock", "Cosmetic", "Title", "NavigationRound", "StreakBuyBack", "SeasonPass" }
 -- Plain strings: a one-member list of literals won't widen for inSet.
 local STORE_PERKS: { string } = { "UnlimitedNavigation" }
 
@@ -469,13 +476,14 @@ export type StoreItemDef = {
 
 -- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
 -- One file per season in src/shared/Config/Seasons/ (design-decisions.md
--- Q1's 2026-09-30 revision, applied 2026-10-02). A season runs between
--- two fixed UTC dates, and seasons replace each other, so no two windows
--- may overlap. It has two tracks of items unlocked at win counts:
---   * `free` counts every win in the window, for everyone (a retention
---     tool, so it's the less generous of the two);
---   * `premium` is unlocked by `passKey`, a Store GamePass, and counts
---     only wins after the pass was first seen owned.
+-- Q1's 2026-09-30 revision, applied 2026-10-02). A season is one calendar
+-- month, UTC (user decision, 2026-10-09), and seasons replace each other,
+-- so no two windows may overlap. It has two tracks of items unlocked at
+-- win counts, both counting every win in the window:
+--   * `free` pays everyone (a retention tool, so it's the less generous
+--     of the two);
+--   * `premium` pays once `passKey` is bought for this season, and then
+--     pays everything already reached at once.
 -- Track items are track-only forever: a cosmetic on a track never drops,
 -- is never sold, and appears on no other track or leaderboard band.
 -- A power-up on a track must be freelyEarnable (Q8).
@@ -492,9 +500,9 @@ export type SeasonDef = {
 	id: string,
 	enabled: boolean,
 	displayName: string,
-	startsOn: string, -- "YYYY-MM-DD", 00:00 UTC, inclusive
-	endsOn: string, -- "YYYY-MM-DD", 00:00 UTC, exclusive
-	passKey: string, -- the Store GamePass that unlocks `premium`
+	startsOn: string, -- "YYYY-MM-01", 00:00 UTC, inclusive
+	endsOn: string, -- the 1st of the next month, 00:00 UTC, exclusive
+	passKey: string, -- the Store DeveloperProduct (a SeasonPass grant) that unlocks `premium`
 	free: { SeasonTrackItem }, -- ascending `wins`
 	premium: { SeasonTrackItem }, -- ascending `wins`
 }
@@ -1703,17 +1711,18 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		return
 	end
 
-	-- A pass grants nothing itself. A season pass (rewards-roadmap.md
-	-- step 5) unlocks its season's premium track, and a perk pass unlocks
-	-- its `perk`. A grant here would be owned forever, outside any window.
+	-- A Roblox game pass is owned forever, so the only kind left is a
+	-- perk pass, which unlocks its `perk`. A season's pass is a
+	-- DeveloperProduct with a SeasonPass grant, bought again each month
+	-- (user decision, 2026-10-09).
 	if def.kind == "GamePass" then
-		if #def.grants > 0 then
+		if #def.grants > 0 or def.perk == nil then
 			issue(
 				issues,
 				"Store",
 				fileName,
 				"grants",
-				"a GamePass grants nothing itself - put its items on a season's premium track (Config/Seasons/), or give it a `perk`"
+				"a GamePass grants nothing and needs a `perk` - a season pass is a DeveloperProduct with a SeasonPass grant"
 			)
 		end
 		return
@@ -1791,6 +1800,19 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 					fileName,
 					field,
 					"`maxStreak` must be an integer no lower than `minStreak`, or nil for the top tier"
+				)
+			end
+		elseif grant.kind == "SeasonPass" then
+			-- Robux only, and alone: it unlocks whichever season is live
+			-- when the receipt lands, so it can't be priced in coins or
+			-- bundled with things that would pay out regardless.
+			if def.kind ~= "DeveloperProduct" or #def.grants ~= 1 then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					field,
+					"a SeasonPass grant must be the only grant of a DeveloperProduct"
 				)
 			end
 		end
@@ -1878,7 +1900,7 @@ function Validate.checkSeason(fileName: string, def: SeasonDef, issues: { Issue 
 		issue(issues, "Season", fileName, "enabled", "enabled must be a boolean")
 	end
 	if not isNonEmptyString(def.passKey) then
-		issue(issues, "Season", fileName, "passKey", "passKey must name a Store GamePass")
+		issue(issues, "Season", fileName, "passKey", "passKey must name a Store DeveloperProduct")
 	end
 
 	local startsOk = isCalendarDate(def.startsOn)
@@ -1889,8 +1911,25 @@ function Validate.checkSeason(fileName: string, def: SeasonDef, issues: { Issue 
 	if not endsOk then
 		issue(issues, "Season", fileName, "endsOn", 'expected a real date as "YYYY-MM-DD" (UTC)')
 	end
-	if startsOk and endsOk and def.endsOn <= def.startsOn then
-		issue(issues, "Season", fileName, "endsOn", "a season must end after it starts")
+	-- One calendar month (user decision, 2026-10-09): the 1st to the 1st
+	-- of the next month.
+	if startsOk and endsOk then
+		local y, m, d = string.match(def.startsOn, "^(%d+)%-(%d+)%-(%d+)$")
+		local year, month = tonumber(y) :: number, tonumber(m) :: number
+		local expected = if month == 12
+			then string.format("%04d-01-01", year + 1)
+			else string.format("%04d-%02d-01", year, month + 1)
+		if d ~= "01" then
+			issue(issues, "Season", fileName, "startsOn", "a season starts on the 1st of a month")
+		elseif def.endsOn ~= expected then
+			issue(
+				issues,
+				"Season",
+				fileName,
+				"endsOn",
+				string.format("a season is one calendar month, so it ends on %s", expected)
+			)
+		end
 	end
 
 	checkSeasonTrack(fileName, "free", def.free, issues)
@@ -3885,55 +3924,31 @@ function Validate.run(input: RegistryInput): { Issue }
 			end
 		end
 
-		-- Each season's pass is a real GamePass, no two seasons share
-		-- one, and no GamePass is left without a season (it would sell
-		-- nothing, since a pass grants nothing itself).
+		-- Each season's pass is a DeveloperProduct whose one grant is
+		-- SeasonPass. One product may serve every season: it's bought
+		-- again each month, and the purchase unlocks whichever season is
+		-- live (user decision, 2026-10-09).
 		if store ~= nil then
-			local passByKey: { [string]: StoreItemDef } = {}
+			local seasonPassByKey: { [string]: StoreItemDef } = {}
 			for _, entry in store do
-				-- A perk pass is never a season's pass: it unlocks its perk.
-				if entry.def.kind == "GamePass" and entry.def.perk == nil then
-					passByKey[entry.def.key] = entry.def
+				local grants = entry.def.grants
+				if entry.def.kind == "DeveloperProduct" and type(grants) == "table" then
+					for _, grant in grants do
+						if grant.kind == "SeasonPass" then
+							seasonPassByKey[entry.def.key] = entry.def
+						end
+					end
 				end
 			end
-			local seasonForPass: { [string]: string } = {}
 			for _, entry in seasons do
 				local key = entry.def.passKey
-				if type(key) ~= "string" then
-					continue
-				end
-				if passByKey[key] == nil then
+				if type(key) == "string" and seasonPassByKey[key] == nil then
 					issue(
 						issues,
 						"Season",
 						entry.fileName,
 						"passKey",
-						string.format("%q is not a season GamePass in Config/Store/ (a perk pass can't be one)", key)
-					)
-				elseif seasonForPass[key] ~= nil then
-					issue(
-						issues,
-						"Season",
-						entry.fileName,
-						"passKey",
-						string.format(
-							"%q already unlocks %s - a new season needs a new pass, because a pass is owned forever",
-							key,
-							seasonForPass[key]
-						)
-					)
-				else
-					seasonForPass[key] = entry.fileName
-				end
-			end
-			for _, entry in store do
-				if entry.def.kind == "GamePass" and entry.def.perk == nil and seasonForPass[entry.def.key] == nil then
-					issue(
-						issues,
-						"Store",
-						entry.fileName,
-						"key",
-						"no season names this pass as its passKey, so it would unlock nothing"
+						string.format("%q is not a SeasonPass DeveloperProduct in Config/Store/", key)
 					)
 				end
 			end

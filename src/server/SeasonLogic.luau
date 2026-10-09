@@ -1,15 +1,13 @@
 --!strict
 -- Season reward tracks (design-decisions.md Q1's 2026-09-30 revision,
--- applied 2026-10-02; rewards-roadmap.md step 5).
+-- applied 2026-10-02; monthly passes, user decision 2026-10-09).
 --
--- A season runs between two fixed UTC dates and has two tracks, each a
--- list of items unlocked at win counts:
---   * the FREE track counts every win inside the window, for everyone;
---   * the PREMIUM track counts only wins after the season's pass was
---     first seen owned, and only inside the window.
--- A Roblox pass is owned forever, so the window is ours to enforce: the
--- profile records when ownership was first seen, and a new season needs
--- a new pass.
+-- A season is one calendar month (UTC) and has two tracks, each a list
+-- of items unlocked at win counts. Both count every win inside the
+-- window; the PREMIUM track only pays once the season's pass is bought,
+-- and then pays everything already reached at once.
+-- The pass is one reusable developer product, bought again each month:
+-- the profile records which season a purchase was for (`passSeenAt`).
 --
 -- Pure: no Roblox API, so tests/SeasonLogic.spec.luau runs it headlessly.
 -- Self-contained on purpose - no requires of sibling files - for the
@@ -49,8 +47,12 @@ export type Season = {
 -- granted. Items are paid strictly in list order, so one number is
 -- enough to make settling idempotent: a currency item can't be paid
 -- twice, however many times a join or a win re-settles.
+--
+-- `premiumWins` is kept equal to `freeWins` (every season win counts for
+-- both since 2026-10-09); it stays a field so stored profiles need no
+-- migration.
 export type Progress = {
-	passSeenAt: number?, -- os.time() the pass was first seen owned inside the window; nil = never
+	passSeenAt: number?, -- os.time() the season's pass was bought (or, before 2026-10-09, first seen owned); nil = not bought
 	freeWins: number,
 	premiumWins: number,
 	freePaid: number,
@@ -165,42 +167,60 @@ local function settleTrack(
 	return index - 1
 end
 
+-- Premium counts every season win, so it settles against the same count.
+-- `math.max` keeps a pre-2026-10-09 profile, whose premium count could
+-- only be lower, from ever going backwards.
 local function settle(progress: Progress, season: Season, out: { Paid })
+	progress.premiumWins = math.max(progress.premiumWins, progress.freeWins)
 	progress.freePaid = settleTrack(season.free, progress.freeWins, progress.freePaid, "Free", out)
 	if progress.passSeenAt ~= nil then
 		progress.premiumPaid = settleTrack(season.premium, progress.premiumWins, progress.premiumPaid, "Premium", out)
 	end
 end
 
--- On join and on a pass purchase. Starts tracking a live season, records
--- the first sighting of its pass, and pays anything now due - a track's
--- 0-win item, or an item a config edit moved below the player's count.
+-- On join. Starts tracking a live season and pays anything now due - a
+-- free 0-win item, or an item a config edit moved below the player's
+-- count.
 --
 -- Returns nil when there is nothing to store: a season that hasn't
 -- started, or one that ended before this player ever took part. An ended
 -- season the player did take part in still settles, so nothing they
--- reached in the window is lost, but no new pass sighting is recorded.
-function SeasonLogic.sync(progress: Progress?, season: Season, now: number, ownsPass: boolean): (Progress?, { Paid })
+-- reached in the window is lost.
+function SeasonLogic.sync(progress: Progress?, season: Season, now: number): (Progress?, { Paid })
 	local paid: { Paid } = {}
 	if now < season.startsAt then
 		return progress, paid
 	end
-	local live = now < season.endsAt
-	if progress == nil and not live then
+	if progress == nil and not SeasonLogic.isLive(season, now) then
 		return nil, paid
 	end
-
 	local after = if progress ~= nil then copy(progress) else SeasonLogic.newProgress()
-	if live and ownsPass and after.passSeenAt == nil then
-		after.passSeenAt = now
-	end
 	settle(after, season, paid)
 	return after, paid
 end
 
--- On a win. Counts it on the free track, and on the premium track if the
--- pass was seen first, then pays anything now due. A win outside the
--- window changes nothing.
+-- A pass purchase for this season. Unlocks the premium track and pays
+-- every premium item the season's wins have already reached. `bought` is
+-- false (and nothing changes) outside the window or when this season's
+-- pass is already held; StoreService refuses those before prompting, so
+-- reaching it means a receipt raced the check.
+function SeasonLogic.buyPass(progress: Progress?, season: Season, now: number): (Progress?, { Paid }, boolean)
+	local paid: { Paid } = {}
+	if not SeasonLogic.isLive(season, now) or (progress ~= nil and progress.passSeenAt ~= nil) then
+		return progress, paid, false
+	end
+	local after = if progress ~= nil then copy(progress) else SeasonLogic.newProgress()
+	after.passSeenAt = now
+	settle(after, season, paid)
+	return after, paid, true
+end
+
+function SeasonLogic.hasPass(progress: Progress?): boolean
+	return progress ~= nil and progress.passSeenAt ~= nil
+end
+
+-- On a win. Counts it on both tracks, then pays anything now due. A win
+-- outside the window changes nothing.
 function SeasonLogic.recordWin(progress: Progress?, season: Season, now: number): (Progress?, { Paid })
 	local paid: { Paid } = {}
 	if not SeasonLogic.isLive(season, now) then
@@ -209,14 +229,9 @@ function SeasonLogic.recordWin(progress: Progress?, season: Season, now: number)
 
 	local after = if progress ~= nil then copy(progress) else SeasonLogic.newProgress()
 	after.freeWins += 1
-	local seenAt = after.passSeenAt
-	if seenAt ~= nil and seenAt <= now then
-		after.premiumWins += 1
-	end
 	settle(after, season, paid)
 	return after, paid
 end
-
 -- "Season season-1 Free @3 wins: Currency 100" - one audit line per item.
 function SeasonLogic.describePaid(seasonId: string, item: Paid): string
 	local grant = item.grant

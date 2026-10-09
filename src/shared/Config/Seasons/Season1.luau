@@ -1,13 +1,15 @@
 --!strict
--- Season 1 (design-decisions.md Q1, applied 2026-10-02). The free track
--- counts every win in the window and is the retention tool, so it's the
--- less generous one. The premium track needs season-1-pass and counts
--- wins from when the pass is first seen owned. Every item here is
+-- Season 1, the first monthly season (design-decisions.md Q1; monthly
+-- passes, user decision 2026-10-09). Both tracks count every win this
+-- month. The free track is the retention tool, so it's the less generous
+-- one; the premium track pays once the Season Pass (Store/SeasonPass) is
+-- bought, including everything already reached. Every item here is
 -- track-only forever, and Validate enforces that.
 --
--- Every date, count and amount is PLACEHOLDER (rewards-roadmap.md step 7).
--- Ships disabled: its cosmetics have no Roblox assets yet, and an
--- enabled season may not grant a disabled cosmetic.
+-- Every count and amount is PLACEHOLDER (rewards-roadmap.md step 7), and
+-- the tiers are refilled in the season-pass items step. Ships disabled:
+-- its cosmetics have no Roblox assets yet, and an enabled season may not
+-- grant a disabled cosmetic.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
@@ -16,9 +18,9 @@ local Season1: Validate.SeasonDef = {
 	id = "season-1",
 	enabled = false,
 	displayName = "Season 1",
-	startsOn = "2026-10-01",
-	endsOn = "2027-01-01",
-	passKey = "season-1-pass",
+	startsOn = "2026-11-01",
+	endsOn = "2026-12-01",
+	passKey = "season-pass",
 	free = {
 		{ wins = 3, grant = { kind = "Currency", amount = 50 } },
 		{ wins = 10, grant = { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 3 } },

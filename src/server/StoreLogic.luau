@@ -39,7 +39,14 @@ local StoreLogic = {}
 -- can't resolve under Lune. Luau's structural typing means a real
 -- `Validate.StoreGrant` value satisfies these with no cast at the call
 -- site, so the duplication costs nothing.
-export type GrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title" | "NavigationRound" | "StreakBuyBack"
+export type GrantKind =
+	"Currency"
+	| "PowerUpStock"
+	| "Cosmetic"
+	| "Title"
+	| "NavigationRound"
+	| "StreakBuyBack"
+	| "SeasonPass"
 
 export type Grant = {
 	kind: GrantKind,
@@ -319,12 +326,28 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 			)
 			updated.currentStreak = offer.streak
 			updated.buyBackOffer = nil
+		elseif grant.kind == "SeasonPass" then
+			-- Nothing in GrantState: the caller unlocks the live season
+			-- (grantsSeasonPass) and logs what that paid.
+			continue
 		else
 			table.insert(lines, string.format("SKIPPED unrecognised grant kind %q", tostring(grant.kind)))
 		end
 	end
 
 	return updated, lines
+end
+
+-- Whether a product is the season pass. Its one grant touches season
+-- progress, not GrantState, so StoreService applies it through
+-- SeasonLogic.buyPass instead of applyGrants.
+function StoreLogic.grantsSeasonPass(grants: { Grant }): boolean
+	for _, grant in grants do
+		if grant.kind == "SeasonPass" then
+			return true
+		end
+	end
+	return false
 end
 
 -- Whether a product sells a Navigation round. Those are sold only from

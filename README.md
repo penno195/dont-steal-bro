@@ -271,11 +271,16 @@ Playtesting has driven the work since the tracker finished:
   still needs a real-asset art pass. The other seven stay
   `enabled = false` until their geometry is built.
 - **Store products and places.** The four Robux developer products are
-  live; the Season 1 Pass exists on Roblox but stays disabled with its
-  season (`docs/store-products.md`). The Hub and Match places are
-  published, but `GameConfig.matchmaking.hubPlaceId` and
-  `GameConfig.teleport.matchPlaceId` stay `0` until step 12 tests
-  teleporting, so matchmaking runs in Studio only for now.
+  live, and the Hub and Match places are published with their place ids
+  set, so matchmaking and teleporting run live. The monthly Season Pass
+  is a developer product still to be created in Creator Hub
+  (`Store/SeasonPass.luau`, `assetId = 0`); the old Season 1 game pass
+  is retired.
+- **Monthly season pass** (design-decisions.md, 2026-10-09). The rules
+  are built: calendar-month seasons, both tracks counting every season
+  win, and one reusable pass product. Still to do, one per session: the
+  two-row tier screen, a wearable (hat/back) cosmetic type, and the
+  items and their pass images. See `docs/next-stages.md` step 1a.
 - **Win rewards: price tuning only.** Q1's 2026-09-30 revision is built
   (`docs/rewards-roadmap.md` steps 1–7a): a win pays coins plus a chance
   at a drop, shown in the Decision Studio and Results; daily and weekly

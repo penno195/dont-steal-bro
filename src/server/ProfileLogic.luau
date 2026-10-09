@@ -141,9 +141,9 @@ export type BuyBackOffer = {
 }
 
 -- Structurally SeasonLogic.Progress, which computes what this stores.
--- `passSeenAt` is when the season's pass was first seen owned inside the
--- window (os.time()); the premium track counts only wins after it. The
--- `*Paid` fields count items paid from the front of each track, which is
+-- `passSeenAt` is when this season's pass was bought (os.time()); nil =
+-- premium locked. Both tracks count every season win (2026-10-09), so
+-- `premiumWins` mirrors `freeWins`. The `*Paid` fields count items paid from the front of each track, which is
 -- what stops a join or a retry paying an item twice.
 export type SeasonProgress = {
 	passSeenAt: number?,

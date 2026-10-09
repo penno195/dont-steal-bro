@@ -160,6 +160,25 @@ cosmetic opts in, or doesn't, in its own file.
   Missing a season means missing its items.
 - A pass is only sold while its season is running.
 
+*Applied (2026-10-09, user decision):* **monthly season passes.**
+Supersedes parts of "seasons and their tracks" above.
+- **A season is one calendar month**, the 1st to the 1st (UTC). Validate
+  refuses any other window.
+- **Both tracks count every win in the season.** The premium track no
+  longer counts only wins after the purchase: buying mid-month unlocks
+  every paid tier already reached at once, as in a Fortnite-style pass.
+  Wins, not streaks, are the progress.
+- **The pass is one reusable developer product** (`Store/SeasonPass`),
+  bought again each month, not a new game pass per season. The profile
+  records which season it was bought for. It sells only while a season
+  runs and once per season; a receipt that can't apply (bought twice)
+  is declined, so Roblox re-offers it and it unlocks the next month.
+- **Layout:** the pass screen shows tiers left to right, paid items in
+  the top row (locked until bought), free items underneath.
+- **Items:** more wearable cosmetics (hats, back items) are added for
+  the tracks. Models are made with AI mesh tools (Studio, Meshy) for
+  now, to be redone in Blender later.
+
 *Applied (2026-10-02, user decision):* **what coins buy.**
 - **Power-up stock only**: one of each freely earnable power-up, at a
   fixed coin price (25 each, see "pricing" below). Not
