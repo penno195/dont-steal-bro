@@ -32,3 +32,6 @@ desktop.ini
 # Logs and scratch
 *.log
 /scratch/
+
+# Raw Meshy downloads (~70MB); regenerate with assets/seasonpass/make-models.js
+assets/seasonpass/models/
