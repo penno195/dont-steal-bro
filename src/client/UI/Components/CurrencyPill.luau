@@ -30,7 +30,10 @@ export type Props = {
 }
 
 local HEIGHT = Theme.spacing.xxl -- 32 visual; hit area pads to 44pt
-local WIDTH = Theme.spacing.xxxl * 2 + Theme.spacing.sm -- 104
+local WIDTH = Theme.spacing.xxxl * 2 + Theme.spacing.lg -- 112
+-- Icon and "+" sit this far in, clear of the pill's round ends
+-- (playtest, 2026-10-09: at 2-4px both touched the rim).
+local INSET = Theme.spacing.sm
 
 -- Icon tints: gold coins, blue gems (the mockup's two pills).
 local ICON_COLOR: { [string]: string } = { gem = "above" }
@@ -69,7 +72,7 @@ local function contents(props: Props, state: Base.Source<ComponentLogic.State>?)
 			create("Frame")({
 				Name = "IconSlot",
 				AnchorPoint = Vector2.new(0, 0.5),
-				Position = UDim2.new(0, Theme.spacing.xxs, 0.5, 0),
+				Position = UDim2.new(0, INSET, 0.5, 0),
 				Size = UDim2.fromOffset(iconSize, iconSize),
 				BackgroundTransparency = 1,
 				ZIndex = 3,
@@ -77,10 +80,15 @@ local function contents(props: Props, state: Base.Source<ComponentLogic.State>?)
 			}),
 			Base.text("button", {
 				Name = "Amount",
-				Position = UDim2.fromOffset(iconSize + Theme.spacing.xs, 0),
+				Position = UDim2.fromOffset(INSET + iconSize + Theme.spacing.xs, 0),
 				Size = UDim2.new(
 					1,
-					-(iconSize + Theme.spacing.xs + (if hasPlus then plusSize + Theme.spacing.sm else Theme.spacing.md)),
+					-(
+							INSET
+							+ iconSize
+							+ Theme.spacing.xs
+							+ (if hasPlus then INSET + plusSize + Theme.spacing.sm else Theme.spacing.md)
+						),
 					1,
 					0
 				),
@@ -95,7 +103,7 @@ local function contents(props: Props, state: Base.Source<ComponentLogic.State>?)
 						then create("Frame")({
 							Name = "Plus",
 							AnchorPoint = Vector2.new(1, 0.5),
-							Position = UDim2.new(1, -Theme.spacing.xs, 0.5, 0),
+							Position = UDim2.new(1, -INSET, 0.5, 0),
 							Size = UDim2.fromOffset(plusSize, plusSize),
 							BackgroundColor3 = Color3.new(1, 1, 1),
 							ZIndex = 3,
