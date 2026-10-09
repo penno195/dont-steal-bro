@@ -273,7 +273,8 @@ return TaskViewBase.define({
 							Text = "PUMP",
 							TextColor3 = Color3.fromHex("#FFF4F2"),
 							create("UIStroke")({ Color = Color3.fromHex("#5A0606"), Thickness = 2.5 }),
-						}),
+							-- Its own red-brown stroke, not the display face's.
+						}, false),
 					}),
 				}
 			end,

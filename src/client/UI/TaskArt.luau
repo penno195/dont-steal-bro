@@ -217,7 +217,10 @@ function TaskArt.button(
 						Thickness = if outlined then 2.5 else 0,
 						Enabled = outlined,
 					}),
-				}),
+					-- No Base.text outline too: this stroke is the art's own.
+					-- With the display face's outline on top, dark ink on a
+					-- grey key (Code Playback's digits) blurred into it.
+				}, false),
 			}),
 		}
 	end
