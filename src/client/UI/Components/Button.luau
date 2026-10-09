@@ -11,7 +11,6 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Base)
 local ComponentLogic = require(script.Parent.ComponentLogic)
-local Env = require(script.Parent.Env)
 local Icons = require(script.Parent.Icons)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -45,11 +44,13 @@ local function Button(props: Props): TextButton
 	local compact = props.compact == true
 	local size =
 		Vector2.new(props.width or DEFAULT_WIDTH, if compact then Theme.touch.iconButton else Theme.touch.primaryHeight)
+	local ghost = variant == "ghost"
+	local lip = if compact then Theme.lip.small else Theme.lip.button
 
 	return Base.interactive({
 		name = "Button",
 		size = size,
-		radius = Theme.radius.md,
+		radius = Theme.radius.lg,
 		disabled = props.disabled,
 		loading = loading,
 		onActivate = props.onActivate,
@@ -64,31 +65,29 @@ local function Button(props: Props): TextButton
 			local ink = function(): Color3
 				return Theme.color[style().ink]
 			end
-			local fill = Env.animate(function(): Color3
-				return Theme.color[style().fill]
-			end, Theme.motion.fast)
+			-- The gradient fill for the variant; disabled (and the
+			-- surfaceless ghost) fall back to a flat fill of the same shape.
+			local fill = derive(function(): Theme.Fill
+				return Theme.fill[ComponentLogic.fillName(variant, state())]
+			end)
+			-- Dark ink (gold, red) can't take the dark display outline.
+			local restInk = Theme.fill[variant].ink
+			local outlined = restInk.R * 0.299 + restInk.G * 0.587 + restInk.B * 0.114 > 0.5
 
-			return {
-				create("Frame")({
-					Name = "Surface",
-					Size = UDim2.fromScale(1, 1),
-					BackgroundColor3 = fill,
-					BackgroundTransparency = function()
-						return style().fillTransparency
-					end,
-					Base.corner(Theme.radius.md),
-					create("UIStroke")({
-						BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-						Color = function()
-							return Theme.color[style().stroke]
-						end,
-						Transparency = function()
-							return style().strokeTransparency
-						end,
-						Thickness = 1,
-					}),
-					-- Hover/press brighten through a white overlay.
+			return Base.raised({
+				fill = fill,
+				-- The ghost has no surface at rest, so nothing to sink onto.
+				lip = if ghost then 0 else lip,
+				transparency = function()
+					return style().fillTransparency
+				end,
+				radius = Theme.radius.lg,
+				gloss = not ghost,
+				sunk = function()
+					return state() == "pressed"
+				end,
+				children = {
+					-- Hover brightens through a white overlay.
 					create("Frame")({
 						Name = "Overlay",
 						Size = UDim2.fromScale(1, 1),
@@ -97,7 +96,7 @@ local function Button(props: Props): TextButton
 							return style().overlayTransparency
 						end,
 						ZIndex = 2,
-						Base.corner(Theme.radius.md),
+						Base.corner(Theme.radius.lg),
 					}),
 					create("Frame")({
 						Name = "Content",
@@ -123,12 +122,12 @@ local function Button(props: Props): TextButton
 							SortOrder = Enum.SortOrder.LayoutOrder,
 						}),
 						(if props.icon then Icons.view(props.icon, Theme.spacing.xl, ink) else nil) :: any,
-						Base.text("label", {
+						Base.text("button", {
 							LayoutOrder = 2,
 							Size = UDim2.new(1, if props.icon then -(Theme.spacing.xl + Theme.spacing.sm) else 0, 1, 0),
 							Text = props.label,
 							TextColor3 = ink,
-						}),
+						}, outlined),
 					}),
 					-- Only built while loading, so no spinner ticks otherwise.
 					show(loading, function()
@@ -136,8 +135,8 @@ local function Button(props: Props): TextButton
 						spinner.ZIndex = 3
 						return spinner
 					end) :: any,
-				}),
-			}
+				},
+			})
 		end,
 	})
 end

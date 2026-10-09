@@ -103,6 +103,31 @@ describe("Tokens: text contrast", function()
 		end
 	end)
 
+	it("meets WCAG AA for each fill's ink on both gradient stops", function()
+		-- The label sits on every colour between the stops; a linear blend
+		-- can't dip below the worse of its two ends by much, so both ends
+		-- clearing AA is the check.
+		for name, fill in Tokens.fill do
+			for _, stop in { "top", "bottom" } do
+				local ratio = ColorVision.contrast(hex(fill.ink), ColorVision.fromHex((fill :: any)[stop]))
+				assert(ratio >= Tokens.contrast.textMin, string.format("fill.%s %s ink is %.2f", name, stop, ratio))
+			end
+		end
+	end)
+
+	it("keeps the Steal/Share fills on their decision colours", function()
+		-- The owner chose these hexes (design-decisions); the gradient may
+		-- only add a top stop, never move the colour itself.
+		expect(Tokens.fill.steal.bottom):toBe(Tokens.color.steal)
+		expect(Tokens.fill.share.bottom):toBe(Tokens.color.share)
+	end)
+
+	it("has a fill for every button variant and the disabled look", function()
+		for _, name in { "primary", "secondary", "danger", "ghost", "muted" } do
+			expect((Tokens.fill :: any)[name] ~= nil):toBeTruthy()
+		end
+	end)
+
 	it("has every elevation surface defined as a colour", function()
 		for _, level in Tokens.elevation do
 			expect((Tokens.color :: any)[level.surface] ~= nil):toBeTruthy()

@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UI Art Pass Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&family=Denk+One&family=Oswald:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/*
+  UI art pass: visual direction mockup. Every effect here maps to a Roblox
+  primitive so the look survives the port:
+    linear-gradient      -> UIGradient (linear only, no radial)
+    border               -> UIStroke (Border mode)
+    text outline         -> UIStroke (Contextual) on the TextLabel
+    hard 0 Npx shadow    -> a darker "lip" Frame offset under the surface
+    soft shadow          -> 9-slice ImageLabel (one shared asset)
+    font                 -> Enum.Font of the same name
+  No blur, no backdrop-filter, no radial gradients.
+*/
+:root {
+  --page: #0d0f14; --page-ink: #e9ecf3; --page-muted: #9aa3b5;
+}
+body { margin: 0; background: var(--page); color: var(--page-ink);
+  font: 15px/1.45 system-ui, sans-serif; padding: 24px 16px 64px; }
+.wrap { max-width: 1640px; margin: 0 auto; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.lede { color: var(--page-muted); margin: 0 0 18px; max-width: 900px; }
+.switch { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.switch button { font: 600 14px system-ui; padding: 10px 16px; border-radius: 10px;
+  border: 1px solid #343b4a; background: #1a1e27; color: var(--page-ink); cursor: pointer; }
+.switch button[aria-pressed="true"] { background: #e9ecf3; color: #0d0f14; }
+.blurb { color: var(--page-muted); min-height: 3em; margin: 0 0 18px; max-width: 980px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 780px), 1fr)); gap: 20px; }
+.cap { color: var(--page-muted); font-size: 13px; margin: 6px 2px 0; }
+
+/* ---------- the "phone": 780 x 360 reference landscape ---------- */
+.phone { position: relative; width: 100%; aspect-ratio: 780 / 360; container-type: inline-size;
+  border-radius: 18px; overflow: hidden; border: 6px solid #000; box-sizing: border-box; }
+.screen { position: absolute; inset: 0; width: 780px; height: 360px;
+  transform-origin: 0 0; transform: scale(calc(100cqw / 780px)); }
+@supports not (transform: scale(calc(100cqw / 780px))) { .screen { transform: none; } }
+.map { position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg, transparent 58%, rgba(0,0,0,.25) 58%, rgba(0,0,0,.35) 100%),
+    linear-gradient(90deg, #8fb7d9 0 18%, #c9a77b 18% 30%, #9fc6e6 30% 64%, #b88f63 64% 72%, #a7cde8 72%),
+    #9fc6e6; }
+.map::after { content: ""; position: absolute; left: 0; right: 0; top: 58%; bottom: 0;
+  background: repeating-linear-gradient(90deg, #6f8a5a 0 60px, #66804f 60px 120px); opacity: .9; }
+.map.studio { background: linear-gradient(180deg, #1a0f2e, #2a1440 60%, #120a1f); }
+.map.studio::after { background: linear-gradient(90deg, #3b1e57, #5a2d78, #3b1e57); top: 70%; opacity: 1; }
+
+/* ---------- theme tokens (one block per direction) ---------- */
+.t-show {
+  --font-display: "Luckiest Guy", cursive; --font-body: "Nunito", sans-serif; --display-case: uppercase;
+  --display-stroke: #1b0b33; --display-stroke-w: 4px; --display-ls: .02em;
+  --panel-a: #2b1858; --panel-b: #170b33; --panel-stroke: #ffd23f; --panel-stroke-w: 3px; --panel-radius: 18px;
+  --panel-lip: #0b0420; --ink: #fff; --muted: #c9bdf0;
+  --pri-a: #ffe066; --pri-b: #ffb703; --pri-lip: #b86b00; --pri-ink: #2a1100; --pri-stroke: #fff3b0;
+  --sec-a: #7b5cff; --sec-b: #5a35e8; --sec-lip: #2e1490; --sec-ink: #fff; --sec-stroke: #b9a6ff;
+  --dan-a: #ff6b6b; --dan-b: #e03131; --dan-lip: #8a1111; --dan-ink: #fff;
+  --btn-radius: 14px; --btn-lip: 5px;
+  --pill-a: #2b1858; --pill-b: #170b33; --pill-stroke: #ffd23f;
+  --accent: #ffd23f; --accent-2: #ff4fa3; --track: #120728; --fill-a: #ffe066; --fill-b: #ff4fa3;
+  --tab-active-a: #ffe066; --tab-active-b: #ffb703; --tab-active-ink: #2a1100;
+}
+.t-candy {
+  --font-display: "Fredoka", sans-serif; --font-body: "Fredoka", sans-serif; --display-case: none;
+  --display-stroke: #1d1d35; --display-stroke-w: 5px; --display-ls: 0;
+  --panel-a: #ffffff; --panel-b: #e8eefc; --panel-stroke: #1d1d35; --panel-stroke-w: 4px; --panel-radius: 22px;
+  --panel-lip: #1d1d35; --ink: #1d1d35; --muted: #55607a;
+  --pri-a: #5df08a; --pri-b: #1fc95a; --pri-lip: #0f7a35; --pri-ink: #fff; --pri-stroke: #1d1d35;
+  --sec-a: #5ac8ff; --sec-b: #1f9ef2; --sec-lip: #0b5c99; --sec-ink: #fff; --sec-stroke: #1d1d35;
+  --dan-a: #ff7a7a; --dan-b: #f03e3e; --dan-lip: #8f1515; --dan-ink: #fff;
+  --btn-radius: 18px; --btn-lip: 6px;
+  --pill-a: #ffffff; --pill-b: #e8eefc; --pill-stroke: #1d1d35;
+  --accent: #ffcf33; --accent-2: #ff5fb0; --track: #c9d3ea; --fill-a: #ffd84d; --fill-b: #ff9f1c;
+  --tab-active-a: #ffd84d; --tab-active-b: #ffb000; --tab-active-ink: #1d1d35;
+}
+.t-heist {
+  --font-display: "Denk One", sans-serif; --font-body: "Oswald", sans-serif; --display-case: uppercase;
+  --display-stroke: #000; --display-stroke-w: 0px; --display-ls: .04em;
+  --panel-a: rgba(20,26,38,.92); --panel-b: rgba(10,13,20,.92); --panel-stroke: #2ee6c8; --panel-stroke-w: 2px; --panel-radius: 10px;
+  --panel-lip: rgba(46,230,200,.25); --ink: #eafffb; --muted: #8fb4ad;
+  --pri-a: #2ee6c8; --pri-b: #13b89c; --pri-lip: #0a6b5b; --pri-ink: #04211c; --pri-stroke: #9ffff0;
+  --sec-a: #232b3b; --sec-b: #161b26; --sec-lip: #07090d; --sec-ink: #eafffb; --sec-stroke: #2ee6c8;
+  --dan-a: #ff4d6d; --dan-b: #d61f45; --dan-lip: #6e0a1f; --dan-ink: #fff;
+  --btn-radius: 8px; --btn-lip: 3px;
+  --pill-a: rgba(20,26,38,.92); --pill-b: rgba(10,13,20,.92); --pill-stroke: #2ee6c8;
+  --accent: #2ee6c8; --accent-2: #ff3df0; --track: #0a0d14; --fill-a: #2ee6c8; --fill-b: #ff3df0;
+  --tab-active-a: #2ee6c8; --tab-active-b: #13b89c; --tab-active-ink: #04211c;
+}
+
+/* ---------- components ---------- */
+.screen { font-family: var(--font-body); color: var(--ink); }
+.abs { position: absolute; }
+.display { font-family: var(--font-display); text-transform: var(--display-case); letter-spacing: var(--display-ls);
+  -webkit-text-stroke: var(--display-stroke-w) var(--display-stroke); paint-order: stroke fill; line-height: 1; }
+.t-candy .panel .display { -webkit-text-stroke: 0; }
+.t-candy .panel .display.accent { -webkit-text-stroke: 5px #1d1d35; }
+
+.panel { background: linear-gradient(180deg, var(--panel-a), var(--panel-b));
+  border: var(--panel-stroke-w) solid var(--panel-stroke); border-radius: var(--panel-radius);
+  box-shadow: 0 5px 0 var(--panel-lip); box-sizing: border-box; }
+.t-heist .panel { box-shadow: 0 0 0 1px var(--panel-lip) inset; }
+.t-heist .panel::before { content: ""; position: absolute; left: 10px; top: -2px; width: 40px; height: 2px; background: var(--accent-2); }
+
+.btn { position: relative; display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 56px; box-sizing: border-box; border-radius: var(--btn-radius);
+  font-family: var(--font-display); text-transform: var(--display-case); letter-spacing: var(--display-ls);
+  font-size: 22px; cursor: pointer; user-select: none; transition: transform .08s, box-shadow .08s;
+  background: linear-gradient(180deg, var(--pri-a), var(--pri-b)); color: var(--pri-ink);
+  border: 3px solid var(--pri-stroke); box-shadow: 0 var(--btn-lip) 0 var(--pri-lip); }
+/* glossy top half: a second UIGradient'd Frame, transparency 0.75 -> 1 */
+.btn::before { content: ""; position: absolute; left: 6px; right: 6px; top: 4px; height: 40%;
+  border-radius: calc(var(--btn-radius) - 6px); background: linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0)); pointer-events: none; }
+.t-heist .btn::before { display: none; }
+.btn.sec { background: linear-gradient(180deg, var(--sec-a), var(--sec-b)); color: var(--sec-ink);
+  border-color: var(--sec-stroke); box-shadow: 0 var(--btn-lip) 0 var(--sec-lip); }
+.btn.dan { background: linear-gradient(180deg, var(--dan-a), var(--dan-b)); color: var(--dan-ink);
+  border-color: var(--display-stroke); box-shadow: 0 var(--btn-lip) 0 var(--dan-lip); }
+.t-show .btn.dan, .t-heist .btn.dan { border-color: #ffb3b3; }
+.btn.compact { height: 44px; font-size: 17px; }
+.btn.hover { filter: brightness(1.08); }
+.btn:active, .btn.pressed { transform: translateY(var(--btn-lip)); box-shadow: 0 0 0 transparent; }
+.btn.disabled { filter: saturate(.15) brightness(.75); opacity: .7; cursor: default; }
+.t-candy .btn:not(.dis) span.lbl { -webkit-text-stroke: 4px #1d1d35; paint-order: stroke fill; }
+.t-candy .btn.sec span.lbl, .t-candy .btn.dan span.lbl { -webkit-text-stroke: 4px #1d1d35; paint-order: stroke fill; }
+.t-show .btn.sec span.lbl, .t-show .btn.dan span.lbl { -webkit-text-stroke: 3px #1b0b33; paint-order: stroke fill; }
+.ico { font-size: 22px; line-height: 1; font-family: system-ui, "Segoe UI Emoji", sans-serif; -webkit-text-stroke: 0; }
+
+.pill { display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px 0 4px; border-radius: 999px;
+  background: linear-gradient(180deg, var(--pill-a), var(--pill-b)); border: 3px solid var(--pill-stroke);
+  box-sizing: border-box; font-family: var(--font-display); font-size: 18px; box-shadow: 0 3px 0 var(--panel-lip); }
+.t-heist .pill { border-width: 2px; border-radius: 6px; box-shadow: none; }
+.pill .coin { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 15px;
+  background: linear-gradient(180deg, #ffe680, #f5a700); border: 2px solid #8a5200; color: #6b3b00; font-family: var(--font-display); }
+.pill .gem { background: linear-gradient(180deg, #9ef0ff, #3fa9ff); border-color: #10508a; color: #08315a; }
+.pill .plus { margin-left: 4px; width: 22px; height: 22px; border-radius: 7px; display: grid; place-items: center;
+  background: linear-gradient(180deg, var(--pri-a), var(--pri-b)); color: var(--pri-ink); font-size: 16px; border: 2px solid var(--pri-lip); }
+
+.iconbtn { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; font-size: 22px; box-sizing: border-box;
+  background: linear-gradient(180deg, var(--sec-a), var(--sec-b)); border: 3px solid var(--sec-stroke); box-shadow: 0 4px 0 var(--sec-lip); }
+.t-heist .iconbtn { border-radius: 8px; border-width: 2px; box-shadow: none; }
+
+.bar { height: 20px; border-radius: 999px; background: var(--track); border: 3px solid var(--panel-stroke); overflow: hidden; box-sizing: border-box; position: relative; }
+.bar > i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--fill-a), var(--fill-b)); border-radius: 999px; }
+.bar > i::after { content: ""; position: absolute; left: 4px; right: 4px; top: 2px; height: 35%; border-radius: 99px; background: rgba(255,255,255,.45); }
+.t-heist .bar { border-radius: 3px; border-width: 1px; } .t-heist .bar > i { border-radius: 0; } .t-heist .bar > i::after { display: none; }
+
+.ring { width: 78px; height: 78px; border-radius: 50%; display: grid; place-items: center; box-sizing: border-box;
+  background: conic-gradient(var(--accent) 0 72%, var(--track) 72% 100%); padding: 7px; box-shadow: 0 4px 0 var(--panel-lip); }
+.ring > div { width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center;
+  background: linear-gradient(180deg, var(--panel-a), var(--panel-b)); font-family: var(--font-display); font-size: 22px; }
+
+.tabs { display: flex; gap: 6px; padding: 6px; }
+.tab { width: 86px; height: 52px; border-radius: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-size: 13px; text-transform: var(--display-case); color: var(--muted); gap: 2px; }
+.tab .ico { font-size: 20px; }
+.tab.on { background: linear-gradient(180deg, var(--tab-active-a), var(--tab-active-b)); color: var(--tab-active-ink); box-shadow: 0 4px 0 var(--pri-lip); }
+.t-heist .tab { border-radius: 6px; } .t-heist .tab.on { box-shadow: none; }
+
+.chip { display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px 0 3px; border-radius: 999px; font-weight: 800; font-size: 13px;
+  background: linear-gradient(180deg, var(--panel-a), var(--panel-b)); border: 2px solid var(--panel-stroke); box-sizing: border-box; }
+.chip .av { width: 24px; height: 24px; border-radius: 50%; background: #8aa; border: 2px solid var(--display-stroke); box-sizing: border-box; }
+.chip .n { font-family: var(--font-display); color: var(--accent); }
+.t-candy .chip .n { color: #e07b00; }
+.t-heist .chip { border-radius: 4px; border-width: 1px; }
+
+.toast { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; }
+.toast .badge { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 20px;
+  background: linear-gradient(180deg, var(--dan-a), var(--dan-b)); border: 2px solid var(--dan-lip); }
+
+.tag { display: inline-block; padding: 3px 10px; border-radius: 999px; font-family: var(--font-display); font-size: 13px;
+  background: var(--accent-2); color: #fff; text-transform: var(--display-case); letter-spacing: .03em; }
+.t-heist .tag { border-radius: 3px; color: #12000f; }
+
+/* Decision pair: hexes stay the owner's #C62828 / #4ADE80, gradient around them */
+.decide { width: 250px; height: 92px; border-radius: 999px; font-size: 34px; gap: 12px; }
+.decide .ico { font-size: 34px; }
+.decide.steal { background: linear-gradient(180deg, #e04646, #C62828 55%, #a71f1f); color: #fff; border: 4px solid #ffb3b3; box-shadow: 0 7px 0 #5e0d0d; }
+.decide.share { background: linear-gradient(180deg, #8af0ad, #4ADE80 55%, #2fbf63); color: #12151C; border: 4px solid #e2ffe9; box-shadow: 0 7px 0 #146b36; }
+.decide.steal .lbl { -webkit-text-stroke: 5px #5e0d0d; paint-order: stroke fill; }
+.decide.share .lbl { -webkit-text-stroke: 0; }
+.t-heist .decide { border-radius: 10px; }
+.hold { position: absolute; left: 14px; right: 14px; bottom: -14px; height: 8px; border-radius: 8px; background: rgba(0,0,0,.5); overflow: hidden; }
+.hold > i { display: block; height: 100%; width: 40%; background: #fff; }
+.stake { font-family: var(--font-display); font-size: 16px; color: var(--muted); text-align: center; margin-top: 22px; }
+.stake b { color: var(--accent); font-weight: normal; }
+.t-candy .stake b { color: #e07b00; }
+
+.notes { margin-top: 28px; display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.note { background: #161a22; border: 1px solid #2a3040; border-radius: 12px; padding: 14px 16px; color: #c5ccda; font-size: 14px; }
+.note h3 { margin: 0 0 6px; font-size: 15px; color: #fff; }
+.note ul { margin: 0; padding-left: 18px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Don't Steal Bro! UI art pass: pick a direction</h1>
+  <p class="lede">Same four screens in three styles. The screens are drawn at the 780×360 reference phone (landscape, the 360 short axis Tokens.luau is authored at). Every effect maps to a Roblox primitive: UIGradient, UIStroke, an offset "lip" frame, Enum.Font. Icons are emoji stand-ins for the icon atlas.</p>
+
+  <div class="switch" role="group" aria-label="Direction">
+    <button data-t="t-show" aria-pressed="true">A · Game Show</button>
+    <button data-t="t-candy" aria-pressed="false">B · Candy Arcade</button>
+    <button data-t="t-heist" aria-pressed="false">C · Neon Heist</button>
+  </div>
+  <p class="blurb" id="blurb"></p>
+
+  <div class="grid" id="root">
+    <!-- 1. HUB -->
+    <div>
+      <div class="phone"><div class="screen t-show">
+        <div class="map"></div>
+        <div class="abs" style="left:16px;top:12px;display:flex;gap:8px">
+          <div class="pill"><span class="coin">$</span>12,480<span class="plus">+</span></div>
+          <div class="pill"><span class="coin gem">◆</span>95<span class="plus">+</span></div>
+        </div>
+        <div class="abs" style="right:16px;top:10px;display:flex;gap:8px">
+          <div class="iconbtn"><span class="ico">🏆</span></div>
+          <div class="iconbtn"><span class="ico">⚙️</span></div>
+        </div>
+        <div class="panel abs" style="left:24px;top:64px;width:300px;height:212px;padding:14px 16px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="display" style="font-size:26px">Ranked race</div>
+            <span class="tag">Solo</span>
+          </div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin:8px 0 12px">
+            <div class="display accent" style="font-size:44px;color:var(--accent)">7</div>
+            <div style="font-weight:800;color:var(--muted);font-size:14px">win streak · best 11</div>
+          </div>
+          <div class="btn" style="width:100%"><span class="ico">▶</span><span class="lbl">Play</span></div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <div class="btn sec compact" style="flex:1"><span class="lbl">Practice</span></div>
+            <div class="btn sec compact" style="flex:1"><span class="ico">👥</span><span class="lbl">Party</span></div>
+          </div>
+        </div>
+        <div class="panel abs tabs" style="left:50%;transform:translateX(-50%);bottom:10px">
+          <div class="tab on"><span class="ico">🎮</span>Play</div>
+          <div class="tab"><span class="ico">🎒</span>Locker</div>
+          <div class="tab"><span class="ico">🛒</span>Store</div>
+          <div class="tab"><span class="ico">📈</span>Ranks</div>
+        </div>
+      </div></div>
+      <p class="cap">Hub: currency pills, queue card (Play / Practice / Party), tab bar. Streak shows here; the Hub is allowed to show it (Q7).</p>
+    </div>
+
+    <!-- 2. RACE HUD -->
+    <div>
+      <div class="phone"><div class="screen t-show">
+        <div class="map"></div>
+        <div class="abs" style="left:50%;top:8px;transform:translateX(-50%);display:flex;align-items:center;gap:12px">
+          <div class="panel" style="width:180px;padding:8px 12px">
+            <div style="display:flex;justify-content:space-between;font-weight:900;font-size:13px;margin-bottom:4px"><span>TASKS</span><span>3 / 5</span></div>
+            <div class="bar"><i style="width:60%"></i></div>
+          </div>
+          <div class="ring"><div>1:24</div></div>
+          <div class="panel" style="width:180px;padding:8px 12px">
+            <div style="display:flex;justify-content:space-between;font-weight:900;font-size:13px;margin-bottom:4px"><span>PLACE</span><span>2nd</span></div>
+            <div class="bar"><i style="width:80%"></i></div>
+          </div>
+        </div>
+        <div class="abs" style="left:12px;top:12px;display:flex;flex-direction:column;gap:6px">
+          <div class="chip"><span class="av" style="background:#f6a"></span><span class="n">1</span>MaxyBoi</div>
+          <div class="chip"><span class="av" style="background:#6cf"></span><span class="n">2</span>You</div>
+          <div class="chip"><span class="av" style="background:#fc6"></span><span class="n">3</span>Zed_77</div>
+          <div class="chip"><span class="av" style="background:#9e9"></span><span class="n">4</span>lunaa</div>
+        </div>
+        <div class="panel toast abs" style="left:50%;top:104px;transform:translateX(-50%)">
+          <div class="badge">🧊</div>
+          <div><div class="display" style="font-size:18px">Frozen!</div><div style="font-size:13px;color:var(--muted);font-weight:800">MaxyBoi hit you with Freeze</div></div>
+        </div>
+        <div class="panel abs" style="left:16px;bottom:16px;width:230px;padding:10px 12px;display:flex;gap:10px;align-items:center">
+          <div class="iconbtn" style="width:44px;height:44px;flex:none"><span class="ico">🔌</span></div>
+          <div><div class="display" style="font-size:17px">Wire the fuse box</div><div style="font-size:12px;color:var(--muted);font-weight:800">Next station · 24 studs ↑</div></div>
+        </div>
+        <div class="abs" style="right:20px;bottom:16px;display:flex;align-items:flex-end;gap:12px">
+          <div class="btn sec" style="width:110px"><span class="lbl">Jump</span></div>
+          <div class="btn dan" style="width:96px;height:96px;border-radius:50%;flex-direction:column;gap:0;font-size:16px">
+            <span class="ico" style="font-size:34px">⚡</span><span class="lbl">Use</span></div>
+        </div>
+      </div></div>
+      <p class="cap">Race HUD: progress + timer up top, placings (no streaks or titles: Q7), objective card bottom-left, thumb actions bottom-right.</p>
+    </div>
+
+    <!-- 3. DECISION STUDIO -->
+    <div>
+      <div class="phone"><div class="screen t-show">
+        <div class="map studio"></div>
+        <div class="abs" style="left:0;right:0;top:20px;text-align:center">
+          <div class="display" style="font-size:40px;color:var(--accent)">The Decision</div>
+          <div style="font-weight:800;color:#e8defc;margin-top:6px;font-size:14px">Hold to lock in. Nobody sees your choice until all three are in.</div>
+        </div>
+        <div class="abs" style="left:50%;top:132px;transform:translateX(-50%);display:flex;gap:40px">
+          <div>
+            <div class="btn decide steal"><span class="ico">✊</span><span class="lbl">Steal</span><div class="hold"><i></i></div></div>
+            <div class="stake">Sole steal: <b>250</b></div>
+          </div>
+          <div>
+            <div class="btn decide share"><span class="ico">🤝</span><span class="lbl">Share</span><div class="hold"><i style="width:0"></i></div></div>
+            <div class="stake">All share: <b>everyone wins</b></div>
+          </div>
+        </div>
+        <div class="abs ring" style="left:50%;bottom:16px;transform:translateX(-50%);width:62px;height:62px;padding:6px"><div style="font-size:20px">8</div></div>
+      </div></div>
+      <p class="cap">Decision Studio: the Steal/Share hexes are unchanged (#C62828 / #4ADE80, owner's call); only gradient, lip and stroke are added.</p>
+    </div>
+
+    <!-- 4. BUTTON STATES -->
+    <div>
+      <div class="phone"><div class="screen t-show">
+        <div class="map" style="filter:saturate(.5) brightness(.6)"></div>
+        <div class="panel abs" style="inset:18px;padding:16px 20px">
+          <div class="display" style="font-size:24px;margin-bottom:14px">Button states</div>
+          <div style="display:grid;grid-template-columns:repeat(4,160px);gap:22px 14px;font-size:12px;font-weight:800;color:var(--muted)">
+            <div>IDLE<div class="btn" style="margin-top:6px"><span class="lbl">Play</span></div></div>
+            <div>HOVER<div class="btn hover" style="margin-top:6px"><span class="lbl">Play</span></div></div>
+            <div>PRESSED<div class="btn pressed" style="margin-top:6px"><span class="lbl">Play</span></div></div>
+            <div>DISABLED<div class="btn disabled" style="margin-top:6px"><span class="lbl">Play</span></div></div>
+            <div>SECONDARY<div class="btn sec" style="margin-top:6px"><span class="lbl">Practice</span></div></div>
+            <div>DANGER<div class="btn dan" style="margin-top:6px"><span class="lbl">Leave</span></div></div>
+            <div>COMPACT<div class="btn sec compact" style="margin-top:6px"><span class="lbl">Invite</span></div></div>
+            <div>PILL<div class="pill" style="margin-top:6px;width:max-content"><span class="coin">$</span>480</div></div>
+          </div>
+        </div>
+      </div></div>
+      <p class="cap">States: press drops the surface onto its lip (a 5px translate, no tween needed). Click any button to feel it.</p>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div class="note"><h3>What changes in the Luau</h3><ul>
+      <li>Tokens.luau gains gradient pairs (<code>primaryTop/primaryBottom</code>), a lip colour per fill, stroke widths and a display font.</li>
+      <li>Base.luau gets two helpers: <code>lipSurface</code> (surface + offset lip frame) and <code>gloss</code> (white UIGradient overlay).</li>
+      <li>Button, IconButton, Panel, Modal, TabBar, CurrencyPill, ProgressBar, Toast, PlayerRow pick these up. Screens barely change.</li>
+    </ul></div>
+    <div class="note"><h3>Constraints kept</h3><ul>
+      <li>Steal/Share hexes, labels, icons and sides unchanged.</li>
+      <li>Theme.spec contrast checks still apply: each ink is checked against both gradient stops.</li>
+      <li>No streaks, titles or flair in the race HUD (Q7).</li>
+      <li>Touch sizes unchanged: 56 primary, 44 compact/icon.</li>
+    </ul></div>
+    <div class="note"><h3>Cost on a cheap phone</h3><ul>
+      <li>Gradients and strokes are cheap. Each lip adds one Frame per button, so roughly +20 instances on the busiest screen.</li>
+      <li>A soft drop shadow would need a 9-slice image. All three directions skip it and use hard lips instead.</li>
+    </ul></div>
+  </div>
+</div>
+<script>
+const blurbs = {
+  "t-show": "A · Game Show: a TV game-show stage, which fits the Decision Studio and the Crystal Maze roots. Deep purple panels with gold rims, chunky gold Play buttons and Luckiest Guy headlines with a dark outline. Loud but readable over any map.",
+  "t-candy": "B · Candy Arcade: the classic front-page Roblox simulator look. White panels with thick dark outlines, candy-coloured glossy buttons and rounded Fredoka type with outlined labels. Friendliest for young players. It drops the dark-UI rule, so the outline does the legibility work.",
+  "t-heist": "C · Neon Heist: leans on the 'steal' theme. Dark glass panels, a teal neon rim with a magenta tick, flatter and squarer buttons, Denk One headings and Oswald body. Most 'premium' and least cartoony; the closest to today's UI, but with personality."
+};
+const screens = () => document.querySelectorAll(".screen");
+function setTheme(t) {
+  screens().forEach(s => { s.classList.remove("t-show","t-candy","t-heist"); s.classList.add(t); });
+  document.querySelectorAll(".switch button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t === t));
+  document.getElementById("blurb").textContent = blurbs[t];
+  try { localStorage.setItem("uiArtDir", t); } catch (e) {}
+}
+document.querySelectorAll(".switch button").forEach(b => b.addEventListener("click", () => setTheme(b.dataset.t)));
+let start = "t-show"; try { start = localStorage.getItem("uiArtDir") || start; } catch (e) {}
+setTheme(blurbs[start] ? start : "t-show");
+</script>
+</body>
+</html>

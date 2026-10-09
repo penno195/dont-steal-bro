@@ -73,38 +73,60 @@ Tokens.radius = table.freeze({
 -- and `min` its MinTextSize - the floor below which the label would
 -- stop being readable on the reference phone. A roughly 1.25 ratio
 -- (major third), rounded to whole pixels.
+-- `family`: "body" is Builder Sans (Roblox's UI face, four weights);
+-- "display" is Luckiest Guy, the game-show headline face from the UI art
+-- pass (docs/ui-art-pass/mockup.html, direction A). It has one weight,
+-- so `weight` is ignored for it, and Base.text gives it a dark outline
+-- (`Tokens.outline`) so it reads over any map. Both ship with the
+-- client: no font asset to load on a slow phone.
 Tokens.type = table.freeze({
-	caption = table.freeze({ size = 12, min = 10, weight = "Medium" }),
-	body = table.freeze({ size = 16, min = 12, weight = "Regular" }),
-	label = table.freeze({ size = 18, min = 14, weight = "Bold" }),
-	title = table.freeze({ size = 24, min = 18, weight = "Bold" }),
-	headline = table.freeze({ size = 32, min = 22, weight = "ExtraBold" }),
-	display = table.freeze({ size = 48, min = 28, weight = "ExtraBold" }),
+	caption = table.freeze({ size = 12, min = 10, weight = "Medium", family = "body" }),
+	body = table.freeze({ size = 16, min = 12, weight = "Regular", family = "body" }),
+	label = table.freeze({ size = 18, min = 14, weight = "Bold", family = "body" }),
+	-- Button and tab labels: the display face at label size.
+	button = table.freeze({ size = 20, min = 14, weight = "Regular", family = "display" }),
+	title = table.freeze({ size = 24, min = 18, weight = "Regular", family = "display" }),
+	headline = table.freeze({ size = 32, min = 22, weight = "Regular", family = "display" }),
+	display = table.freeze({ size = 48, min = 28, weight = "Regular", family = "display" }),
+})
+
+-- The outline every display-face label carries (a Contextual UIStroke
+-- on the TextLabel), in reference pixels. Dark purple, not black: it
+-- sits on the purple surfaces without a hard seam.
+Tokens.outline = table.freeze({
+	color = "outline",
+	thickness = 2,
 })
 
 -- Colour. Dark UI on purpose: it sits over a bright 3D map, and a dark
 -- surface keeps white text legible whatever the map behind it looks
--- like. Every text/surface pairing below is checked for WCAG AA (4.5:1)
--- in tests/Theme.spec.luau, so retuning a hex here can't quietly break
--- legibility.
+-- like. Since the UI art pass (direction A, "Game Show") the darks are
+-- a deep stage purple, panels are rimmed in gold, and gold is the
+-- primary action. Every text/surface pairing below is checked for WCAG
+-- AA (4.5:1) in tests/Theme.spec.luau, so retuning a hex here can't
+-- quietly break legibility.
 Tokens.color = table.freeze({
-	background = "#12151C",
-	surface = "#1C2029",
-	surfaceRaised = "#262B37",
-	line = "#3A4150",
-	ink = "#F4F6FA",
-	inkMuted = "#A9B1C2",
-	inkOnLight = "#12151C",
-	brand = "#8B5CF6",
-	-- Button fills (P6-2). `brand` can't carry a label: it measures 4.23:1
-	-- with white and 4.31:1 with dark ink, under AA either way. `primary`
-	-- is brand darkened just enough to clear AA with white (5.10:1).
-	-- Danger takes dark ink for the same reason (white on it is 3.49:1).
-	primary = "#7C4DEB",
-	onPrimary = "#FFFFFF",
-	onDanger = "#12151C",
-	danger = "#F0524F",
-	warning = "#FFC53D",
+	background = "#120728",
+	surface = "#21114A",
+	surfaceRaised = "#321C66",
+	line = "#5A3FA0",
+	-- The gold rim on panels, modals and pills.
+	rim = "#FFD23F",
+	outline = "#1B0B33",
+	ink = "#FFFFFF",
+	inkMuted = "#C9BDF0",
+	inkOnLight = "#1B0B33",
+	-- Accent: "this one is you", highlights, the tab indicator. Hot pink
+	-- so it never reads as the gold primary action.
+	brand = "#FF4FA3",
+	-- Button fills (P6-2). Each is the BOTTOM stop of its gradient
+	-- (`Tokens.fill`), the flat colour used where there's no gradient.
+	-- Gold and danger-red both take dark ink: white on either fails AA.
+	primary = "#FFB703",
+	onPrimary = "#2A1100",
+	onDanger = "#1B0B33",
+	danger = "#F03E3E",
+	warning = "#FF9F1C",
 	success = "#3CCB7F",
 	focus = "#FFFFFF",
 	-- The objective compass: a station a floor up or down. Blue against
@@ -131,6 +153,31 @@ Tokens.color = table.freeze({
 	onSteal = "#FFFFFF",
 	share = "#4ADE80",
 	onShare = "#12151C", -- dark ink: the light green is too light for white text
+})
+
+-- Gradient fills (UI art pass). Roblox has no box-shadow, so a raised
+-- surface is three layers: a `lip` Frame offset `Tokens.lip` px below,
+-- the surface on top with a vertical UIGradient from `top` to `bottom`,
+-- and a `rim` UIStroke. A press drops the surface onto its lip. `ink`
+-- is a Tokens.color key; the spec checks it against BOTH stops.
+Tokens.fill = table.freeze({
+	primary = table.freeze({ top = "#FFE066", bottom = "#FFB703", lip = "#B86B00", rim = "#FFF3B0", ink = "onPrimary" }),
+	secondary = table.freeze({ top = "#6C47F5", bottom = "#4F2BD6", lip = "#2E1490", rim = "#B9A6FF", ink = "ink" }),
+	danger = table.freeze({ top = "#FF6B6B", bottom = "#F03E3E", lip = "#8A1111", rim = "#FFB3B3", ink = "onDanger" }),
+	-- Flat (top == bottom): every disabled control, and the ghost
+	-- variant's fill once touched.
+	muted = table.freeze({ top = "#21114A", bottom = "#21114A", lip = "#0B0420", rim = "#5A3FA0", ink = "inkMuted" }),
+	ghost = table.freeze({ top = "#321C66", bottom = "#321C66", lip = "#321C66", rim = "#5A3FA0", ink = "ink" }),
+	panel = table.freeze({ top = "#2B1858", bottom = "#170B33", lip = "#0B0420", rim = "#FFD23F", ink = "ink" }),
+	steal = table.freeze({ top = "#D63A3A", bottom = "#C62828", lip = "#5E0D0D", rim = "#FFB3B3", ink = "onSteal" }),
+	share = table.freeze({ top = "#8AF0AD", bottom = "#4ADE80", lip = "#146B36", rim = "#E2FFE9", ink = "onShare" }),
+})
+
+-- Lip depth in reference pixels: how far a button sinks when pressed.
+Tokens.lip = table.freeze({
+	button = 5,
+	panel = 5,
+	small = 3,
 })
 
 -- Minimum colour distances the spec enforces. Kept here so a designer
@@ -163,8 +210,10 @@ Tokens.decision = table.freeze({
 -- modal, which is always over the HUD. Levels, low to high.
 Tokens.elevation = table.freeze({
 	table.freeze({ surface = "background", strokeTransparency = 1 }), -- 1: flat, page
-	table.freeze({ surface = "surface", strokeTransparency = 0.6 }), -- 2: card, HUD panel
-	table.freeze({ surface = "surfaceRaised", strokeTransparency = 0.3 }), -- 3: modal, popover
+	-- 2 and 3 draw the gold rim fully opaque (UI art pass); Panel makes
+	-- 3's rim thicker rather than more opaque.
+	table.freeze({ surface = "surface", strokeTransparency = 0 }), -- 2: card, HUD panel
+	table.freeze({ surface = "surfaceRaised", strokeTransparency = 0 }), -- 3: modal, popover
 })
 
 -- ScreenGui DisplayOrder bands. Gaps of 10 leave room to slot a layer

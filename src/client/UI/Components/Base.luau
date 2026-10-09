@@ -55,7 +55,9 @@ end
 -- A themed label. TextScaled bounded by a UITextSizeConstraint
 -- (architecture.md §5.6): it fits its box, but never shrinks below the
 -- style's `min` or grows past its `size`. Box size comes from `props`.
-function Base.text(styleName: string, props: { [any]: any }): TextLabel
+-- `outline` false drops the display face's outline: dark ink on a light
+-- fill (a gold button) would blur into a dark outline.
+function Base.text(styleName: string, props: { [any]: any }, outline: boolean?): TextLabel
 	local style = Theme.type[styleName]
 	assert(style ~= nil, string.format("Base.text: no type style %q", styleName))
 	local merged: { [any]: any } = {
@@ -65,6 +67,15 @@ function Base.text(styleName: string, props: { [any]: any }): TextLabel
 		TextColor3 = Theme.color.ink,
 		TextWrapped = true,
 		create("UITextSizeConstraint")({ MaxTextSize = style.size, MinTextSize = style.min }),
+		-- Display-face labels carry a dark outline (Tokens.outline).
+		if style.outline and outline ~= false
+			then create("UIStroke")({
+				Name = "Outline",
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+				Color = Theme.outline.color,
+				Thickness = Theme.outline.thickness,
+			})
+			else nil,
 	}
 	for k, v in props do
 		if type(k) == "number" then
@@ -277,6 +288,95 @@ function Base.interactive(props: InteractiveProps): TextButton
 			props.visual(state, focused),
 		}),
 	}) :: TextButton
+end
+
+export type RaisedProps = {
+	fill: Source<Theme.Fill>,
+	-- Lip depth (Theme.lip). The surface is that much shorter than the
+	-- box, so lip and surface together never spill past it.
+	lip: number,
+	radius: UDim,
+	-- True drops the surface onto its lip: the press.
+	sunk: Source<boolean>?,
+	rimThickness: number?,
+	-- A white sheen over the top 40% (the mockup's glossy buttons).
+	gloss: boolean?,
+	-- Fades lip, surface and rim together (the ghost variant at rest).
+	transparency: Source<number>?,
+	-- Children of the surface (content, overlays).
+	children: { any }?,
+}
+
+-- The UI art pass's raised surface (Tokens.fill): a darker lip Frame
+-- under a gradient surface with a rim stroke. Roblox has no box-shadow;
+-- this is the shadow. Returns the two Frames for the caller to parent.
+function Base.raised(props: RaisedProps): { Instance }
+	local lip = props.lip
+	local transparency: Source<number> = props.transparency or function()
+		return 0
+	end
+	local sunk: Source<boolean> = props.sunk or function()
+		return false
+	end
+	local surface: { [any]: any } = {
+		Name = "Surface",
+		Size = UDim2.new(1, 0, 1, -lip),
+		Position = Env.animate(function(): UDim2
+			return UDim2.fromOffset(0, if sunk() then lip else 0)
+		end, Theme.motion.fast),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = transparency,
+		ZIndex = 2,
+		Base.corner(props.radius),
+		create("UIGradient")({
+			Rotation = 90,
+			Color = function()
+				return props.fill().gradient
+			end,
+		}),
+		create("UIStroke")({
+			Name = "Rim",
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = function()
+				return props.fill().rim
+			end,
+			Thickness = props.rimThickness or 2,
+			Transparency = transparency,
+		}),
+		if props.gloss
+			then create("Frame")({
+				Name = "Gloss",
+				AnchorPoint = Vector2.new(0.5, 0),
+				Position = UDim2.new(0.5, 0, 0, Theme.spacing.xs),
+				Size = UDim2.new(1, -Theme.spacing.md, 0.4, 0),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				ZIndex = 2,
+				Base.corner(props.radius),
+				create("UIGradient")({
+					Rotation = 90,
+					Transparency = NumberSequence.new(0.55, 1),
+				}),
+			})
+			else nil,
+	}
+	local children: { any } = props.children or {}
+	for _, child in children do
+		table.insert(surface, child)
+	end
+	return {
+		create("Frame")({
+			Name = "Lip",
+			Size = UDim2.new(1, 0, 1, -lip),
+			Position = UDim2.fromOffset(0, lip),
+			BackgroundColor3 = function()
+				return props.fill().lip
+			end,
+			BackgroundTransparency = transparency,
+			Base.corner(props.radius),
+		}),
+		create("Frame")(surface),
+	}
 end
 
 return Base

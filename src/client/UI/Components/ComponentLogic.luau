@@ -111,6 +111,16 @@ function ComponentLogic.variantStyle(variant: Variant, state: State): Style
 	}
 end
 
+-- The Tokens.fill a variant paints in a state (the UI art pass's
+-- gradient-and-lip surface). Disabled is one flat muted fill for every
+-- variant, matching variantStyle's DISABLED.
+function ComponentLogic.fillName(variant: Variant, state: State): string
+	if state == "disabled" then
+		return "muted"
+	end
+	return variant
+end
+
 -- Multiplier on the visual (not the hit area): pressed shrinks it a
 -- touch, so a thumb that covers the label still feels the press land.
 -- Shared by every interactive component, whatever its variant.
