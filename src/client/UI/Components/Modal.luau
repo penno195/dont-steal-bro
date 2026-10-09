@@ -111,18 +111,22 @@ function Modal.card(props: Props): Frame
 		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(CARD_WIDTH, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = Theme.elevation[3].surface,
+		-- The UI art pass's stage panel at elevation 3 (see Panel): the
+		-- UIGradient tints white, in a thick gold rim.
+		BackgroundColor3 = Color3.new(1, 1, 1),
 		SelectionGroup = true,
 		SelectionBehaviorUp = Enum.SelectionBehavior.Stop,
 		SelectionBehaviorDown = Enum.SelectionBehavior.Stop,
 		SelectionBehaviorLeft = Enum.SelectionBehavior.Stop,
 		SelectionBehaviorRight = Enum.SelectionBehavior.Stop,
 		Base.corner(Theme.radius.lg),
+		create("UIGradient")({ Rotation = 90, Color = Theme.fill.panel.gradient }),
 		create("UIStroke")({
 			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Color = Theme.color.line,
+			Color = Theme.fill.panel.rim,
 			Transparency = Theme.elevation[3].strokeTransparency,
+			Thickness = 3,
 		}),
 		Base.padding(Theme.spacing.lg),
 		create("UIListLayout")({

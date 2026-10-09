@@ -71,8 +71,7 @@ local function Button(props: Props): TextButton
 				return Theme.fill[ComponentLogic.fillName(variant, state())]
 			end)
 			-- Dark ink (gold, red) can't take the dark display outline.
-			local restInk = Theme.fill[variant].ink
-			local outlined = restInk.R * 0.299 + restInk.G * 0.587 + restInk.B * 0.114 > 0.5
+			local outlined = Theme.takesOutline(Theme.fill[variant].ink)
 
 			return Base.raised({
 				fill = fill,

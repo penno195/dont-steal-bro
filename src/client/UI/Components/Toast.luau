@@ -22,7 +22,9 @@
 -- grows - the race HUD's top stack (RaceHUD.mount), so toasts never
 -- cover the timer. Toast.follow(nil) returns it to the top.
 -- Toasts never take focus or input - they can't steal a tap mid-race.
--- Kind is shown by an icon AND a stripe colour, never colour alone.
+-- Kind is shown by an icon AND a badge colour, never colour alone. The
+-- UI art pass puts the toast on the stage panel in a gold rim, the icon
+-- dark on a square badge of the kind's colour.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -59,6 +61,7 @@ local WIDTH = 360 - 2 * Theme.spacing.lg -- the widest a card gets
 local HEIGHT = Theme.spacing.xxl + Theme.spacing.xs -- 36
 local ICON = Theme.spacing.lg
 local IMAGE = HEIGHT - 2 * Theme.spacing.xs -- 28, inset like the text
+local BADGE = IMAGE
 
 local Toast = {}
 
@@ -70,21 +73,26 @@ function Toast.card(props: Props): Frame
 	local accent = Theme.color[kind.color]
 	local imageId = props.imageAssetId
 	local hasImage = imageId ~= nil and imageId > 0
-	local textMax = WIDTH - ICON - 4 * Theme.spacing.sm - (if hasImage then IMAGE else 0)
+	local textMax = WIDTH - BADGE - 3 * Theme.spacing.sm - Theme.spacing.xs - (if hasImage then IMAGE else 0)
 	return create("Frame")({
 		Name = "Toast",
 		Size = UDim2.fromOffset(0, HEIGHT),
 		AutomaticSize = Enum.AutomaticSize.X,
 		LayoutOrder = props.layoutOrder or 0,
-		BackgroundColor3 = Theme.elevation[3].surface,
+		-- The UIGradient tints white into the stage panel (Panel).
+		BackgroundColor3 = Color3.new(1, 1, 1),
 		Base.corner(Theme.radius.md),
+		create("UIGradient")({ Rotation = 90, Color = Theme.fill.panel.gradient }),
 		create("UIStroke")({
 			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Color = Theme.color.line,
-			Transparency = Theme.elevation[3].strokeTransparency,
+			Color = Theme.fill.panel.rim,
+			Thickness = 2,
 		}),
-		create("UIPadding")({ PaddingRight = UDim.new(0, Theme.spacing.sm) }),
+		create("UIPadding")({
+			PaddingLeft = UDim.new(0, Theme.spacing.xs),
+			PaddingRight = UDim.new(0, Theme.spacing.sm),
+		}),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
@@ -92,18 +100,26 @@ function Toast.card(props: Props): Frame
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
 		create("Frame")({
-			Name = "Stripe",
+			Name = "Badge",
 			LayoutOrder = 1,
-			Size = UDim2.new(0, Theme.spacing.xs, 1, 0),
+			Size = UDim2.fromOffset(BADGE, BADGE),
 			BackgroundColor3 = accent,
-			Base.corner(Theme.radius.sm),
-		}),
-		create("Frame")({
-			Name = "IconSlot",
-			LayoutOrder = 2,
-			Size = UDim2.fromOffset(ICON, ICON),
-			BackgroundTransparency = 1,
-			Icons.view(kind.icon, ICON, accent),
+			Base.corner(Theme.radius.md),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = accent:Lerp(Theme.color.outline, 0.6),
+				Thickness = 2,
+			}),
+			-- Every kind colour is light enough for the dark outline ink.
+			create("Frame")({
+				Name = "IconSlot",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				Size = UDim2.fromOffset(ICON, ICON),
+				BackgroundTransparency = 1,
+				Icons.view(kind.icon, ICON, Theme.color.outline),
+			}),
 		}),
 		Base.text("body", {
 			Name = "Message",

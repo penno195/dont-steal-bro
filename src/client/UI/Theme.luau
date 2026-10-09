@@ -82,6 +82,13 @@ Theme.outline = table.freeze({
 	thickness = Tokens.outline.thickness,
 })
 
+-- Whether display text in `ink` should carry the dark outline: light
+-- ink does; dark ink (on a gold or light-green fill) would blur into it.
+-- Pass the result as Base.text's `outline` argument.
+function Theme.takesOutline(ink: Color3): boolean
+	return ink.R * 0.299 + ink.G * 0.587 + ink.B * 0.114 > 0.5
+end
+
 -- Gradient fills, converted. `gradient` is the vertical top -> bottom
 -- ColorSequence a UIGradient takes (Rotation 90).
 export type Fill = { top: Color3, bottom: Color3, lip: Color3, rim: Color3, ink: Color3, gradient: ColorSequence }

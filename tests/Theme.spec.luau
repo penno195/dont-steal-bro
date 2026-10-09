@@ -122,6 +122,16 @@ describe("Tokens: text contrast", function()
 		expect(Tokens.fill.share.bottom):toBe(Tokens.color.share)
 	end)
 
+	it("keeps the toast badge's dark icon visible on every kind colour", function()
+		-- Toast.luau draws each kind's icon in `outline` on a badge of the
+		-- kind's colour (brand, success, warning, danger): an icon is a UI
+		-- shape, so WCAG 1.4.11's 3:1.
+		for _, kind in { "brand", "success", "warning", "danger" } do
+			local ratio = ColorVision.contrast(hex("outline"), hex(kind))
+			assert(ratio >= Tokens.contrast.nonTextMin, string.format("outline on %s is %.2f", kind, ratio))
+		end
+	end)
+
 	it("has a fill for every button variant and the disabled look", function()
 		for _, name in { "primary", "secondary", "danger", "ghost", "muted" } do
 			expect((Tokens.fill :: any)[name] ~= nil):toBeTruthy()

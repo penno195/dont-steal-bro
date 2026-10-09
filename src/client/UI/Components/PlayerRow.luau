@@ -5,6 +5,10 @@
 -- rank on the left and a trailing value (streak, bounty) on the right.
 -- The local player's row is outlined in brand so they find themselves
 -- in a list of six at a glance.
+--
+-- UI art pass: the row is the stage-panel gradient (a step lighter at
+-- the top than the panel it sits in), the avatar sits in a gold ring,
+-- and rank and trailing value are gold in the display face.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -63,23 +67,29 @@ local function PlayerRow(props: Props): Frame
 		Name = "PlayerRow",
 		Size = UDim2.fromOffset(props.width or DEFAULT_WIDTH, HEIGHT),
 		LayoutOrder = props.layoutOrder or 0,
-		BackgroundColor3 = Theme.elevation[2].surface,
+		-- The UIGradient tints white: secondary's purple fading into the
+		-- panel's dark, so a row reads as a slot on the panel behind it.
+		BackgroundColor3 = Color3.new(1, 1, 1),
 		Base.corner(Theme.radius.md),
+		create("UIGradient")({
+			Rotation = 90,
+			Color = ColorSequence.new(Theme.color.surfaceRaised, Theme.fill.panel.bottom),
+		}),
 		create("UIStroke")({
 			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = if props.isLocalPlayer then Theme.color.brand else Theme.color.line,
-			Thickness = if props.isLocalPlayer then 2 else 1,
+			Thickness = if props.isLocalPlayer then 3 else 1,
 			Transparency = if props.isLocalPlayer then 0 else Theme.elevation[2].strokeTransparency,
 		}),
 		(if hasRank
-			then Base.text("label", {
+			then Base.text("button", {
 				Name = "Rank",
 				AnchorPoint = Vector2.new(0, 0.5),
 				Position = UDim2.new(0, Theme.spacing.md, 0.5, 0),
 				Size = UDim2.fromOffset(RANK, RANK),
 				Text = tostring(props.rank),
-				TextColor3 = Theme.color.inkMuted,
+				TextColor3 = Theme.color.rim,
 			})
 			else nil) :: any,
 		create("ImageLabel")({
@@ -90,6 +100,12 @@ local function PlayerRow(props: Props): Frame
 			BackgroundColor3 = Theme.color.surfaceRaised,
 			Image = headshot(props.userId),
 			Base.corner(Theme.radius.pill),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.color.rim,
+				Thickness = 2,
+			}),
 		}),
 		Base.text("label", {
 			Name = "DisplayName",
@@ -137,12 +153,13 @@ local function PlayerRow(props: Props): Frame
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
 				(if props.trailingIcon
-					then Icons.view(props.trailingIcon, Theme.spacing.lg + Theme.spacing.xs, Theme.color.warning)
+					then Icons.view(props.trailingIcon, Theme.spacing.lg + Theme.spacing.xs, Theme.color.rim)
 					else nil) :: any,
-				Base.text("label", {
+				Base.text("button", {
 					LayoutOrder = 2,
 					Size = UDim2.new(1, -(Theme.spacing.lg + Theme.spacing.sm), 1, 0),
 					Text = props.trailing,
+					TextColor3 = Theme.color.rim,
 					TextXAlignment = Enum.TextXAlignment.Right,
 				}),
 			})

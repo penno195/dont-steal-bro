@@ -238,10 +238,20 @@ local function face(choice: Choice, size: Vector2, textStyle: string): Frame
 	local style = decisionStyle(choice)
 	local badge = math.min(size.X, size.Y) * 0.42
 	local diamond = style.shape == "Diamond"
+	local raisedFill = if choice == "Steal" then Theme.fill.steal else Theme.fill.share
+	local ink = Theme.color[style.on]
 	return create("Frame")({
 		Name = "Face" .. choice,
 		Size = UDim2.fromOffset(size.X, size.Y),
-		BackgroundColor3 = Theme.color[style.color],
+		-- The UIGradient tints white: the hold buttons' gradient and rim.
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		create("UIGradient")({ Rotation = 90, Color = raisedFill.gradient }),
+		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = raisedFill.rim,
+			Thickness = 2,
+		}),
 		-- A pill reads as a chip when small; the big reveal card would be an
 		-- oval, so large faces get a rounded rectangle.
 		Base.corner(if diamond then Theme.radius.sm elseif size.Y >= 100 then Theme.radius.lg else Theme.radius.pill),
@@ -279,8 +289,8 @@ local function face(choice: Choice, size: Vector2, textStyle: string): Frame
 			LayoutOrder = 2,
 			Size = UDim2.new(1, -Theme.spacing.sm, 0, Theme.type[textStyle].size + Theme.spacing.xxs),
 			Text = style.label,
-			TextColor3 = Theme.color[style.on],
-		}),
+			TextColor3 = ink,
+		}, Theme.takesOutline(ink)),
 	}) :: Frame
 end
 
@@ -633,7 +643,8 @@ local function stakesLine(
 	textStyle: string,
 	ink: Color3,
 	text: () -> string,
-	shown: () -> boolean
+	shown: () -> boolean,
+	outlined: boolean
 ): Frame
 	local icon = Icons.view(iconKey, height - Theme.spacing.xxs, ink)
 	icon.LayoutOrder = 1
@@ -661,7 +672,7 @@ local function stakesLine(
 			Size = UDim2.fromOffset(0, height),
 			Text = text,
 			TextColor3 = ink,
-		}),
+		}, outlined),
 	}) :: Frame
 end
 
@@ -670,9 +681,17 @@ end
 -- arrive, the icon gives way to them: what this choice pays you in
 -- large type, when it pays, and your item-drop chance (design-decisions
 -- Q1's 2026-10-08 case). Both buttons show the drop: either win rolls it.
+-- UI art pass: a raised gradient surface on a lip (Theme.fill.steal /
+-- share, built around the owner's two hexes) that sinks while held.
 local function holdFace(choice: Choice, store: Store): Frame
 	local style = decisionStyle(choice)
 	local fill, ink = Theme.color[style.color], Theme.color[style.on]
+	local raisedFill = if choice == "Steal" then Theme.fill.steal else Theme.fill.share
+	local outlined = Theme.takesOutline(ink)
+	local held = derive(function()
+		local c = store.confirm()
+		return c.state == "Holding" and c.choice == choice
+	end)
 	local stakesSource = store.stakes
 	local stakes = derive(function(): PayoutLogic.Stakes?
 		return if stakesSource then stakesSource() else nil
@@ -689,11 +708,11 @@ local function holdFace(choice: Choice, store: Store): Frame
 	effect(function()
 		icon.Visible = not hasStakes()
 	end)
-	return create("Frame")({
-		Name = "Face" .. choice,
+	local content = create("Frame")({
+		Name = "Content",
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = fill,
-		Base.corner(Theme.radius.lg),
+		BackgroundTransparency = 1,
+		ZIndex = 3,
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -710,11 +729,11 @@ local function holdFace(choice: Choice, store: Store): Frame
 			Size = UDim2.new(1, -Theme.spacing.sm, 0, Theme.type.title.size + Theme.spacing.xxs),
 			Text = style.label,
 			TextColor3 = ink,
-		}),
+		}, outlined),
 		stakesLine("Coins", 3, "coin", STAKES_COINS_H, "headline", ink, function()
 			local c = copy()
 			return if c then c.amount else ""
-		end, hasStakes),
+		end, hasStakes, outlined),
 		Base.text("caption", {
 			Name = "When",
 			LayoutOrder = 4,
@@ -729,7 +748,7 @@ local function holdFace(choice: Choice, store: Store): Frame
 		stakesLine("Drop", 5, "gift", STAKES_LINE_H, "caption", ink, function()
 			local s = stakes()
 			return if s then PayoutLogic.dropChanceLine(s) else ""
-		end, hasStakes),
+		end, hasStakes, outlined),
 		create("Frame")({
 			Name = "HoldChip",
 			LayoutOrder = 6,
@@ -752,6 +771,28 @@ local function holdFace(choice: Choice, store: Store): Frame
 			}),
 		}),
 	}) :: Frame
+
+	local holder = create("Frame")({
+		Name = "Face" .. choice,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+	}) :: Frame
+	for _, part in
+		Base.raised({
+			fill = function()
+				return raisedFill
+			end,
+			lip = Theme.lip.button,
+			radius = Theme.radius.lg,
+			rimThickness = 3,
+			gloss = true,
+			sunk = held,
+			children = { content },
+		})
+	do
+		part.Parent = holder
+	end
+	return holder
 end
 
 local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, order: number): Frame
@@ -786,12 +827,15 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 		faceFrame,
 		-- The fill rises from the bottom while held: progress you can see
 		-- without reading, and a second cue that this is a hold, not a tap.
+		-- Held, the face has sunk onto its lip (holdFace), so the surface
+		-- is the bottom CHOICE_H - lip: the fill rises over that.
 		create("Frame")({
 			Name = "Fill",
 			AnchorPoint = Vector2.new(0, 1),
 			Position = UDim2.fromScale(0, 1),
 			Size = function()
-				return UDim2.fromScale(1, fraction())
+				local f = fraction()
+				return UDim2.new(1, 0, f, -Theme.lip.button * f)
 			end,
 			BackgroundColor3 = Theme.color.focus,
 			BackgroundTransparency = 0.6,

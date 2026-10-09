@@ -4,6 +4,10 @@
 -- is, and how far along. Status is spelled out and iconned as well as
 -- coloured. Tappable (e.g. "show me the way") only when `onActivate` is
 -- given and the task isn't locked.
+--
+-- UI art pass: the stage-panel gradient, the title in the display face,
+-- and the active task picked out by a thick gold rim (status text and
+-- icon still say it too).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -63,13 +67,18 @@ local function contents(
 		create("Frame")({
 			Name = "Surface",
 			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Theme.elevation[2].surface,
+			-- The UIGradient tints white into the stage panel (Panel).
+			BackgroundColor3 = Color3.new(1, 1, 1),
 			Base.corner(Theme.radius.md),
+			create("UIGradient")({ Rotation = 90, Color = Theme.fill.panel.gradient }),
 			create("UIStroke")({
 				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 				Color = function()
-					return if status() == "active" then Theme.color.warning else Theme.color.line
+					return if status() == "active" then Theme.fill.panel.rim else Theme.color.line
+				end,
+				Thickness = function()
+					return if status() == "active" then 3 else 1
 				end,
 				Transparency = function()
 					return if status() == "active" then 0 else Theme.elevation[2].strokeTransparency
@@ -93,7 +102,7 @@ local function contents(
 				-- Rebuilt when status changes: the glyph itself differs.
 				vide.switch(status)(iconCases) :: any,
 			}),
-			Base.text("label", {
+			Base.text("button", {
 				Name = "Title",
 				Position = UDim2.fromOffset(textLeft, Theme.spacing.sm),
 				Size = UDim2.new(0.62, -textLeft, 0, Theme.type.label.size + Theme.spacing.xxs),
