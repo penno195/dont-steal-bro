@@ -12,7 +12,7 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   in `rewards-roadmap.md`; Q8's "Robux buys time, never power" depends
   on these numbers. *Deferred by the owner (2026-10-03): do it just
   before publishing, not now.*
-- [ ] **1a. Monthly season pass** (design-decisions.md, 2026-10-09), one
+- [x] **1a. Monthly season pass** (design-decisions.md, 2026-10-09), one
   part per session:
   - [x] Rules: calendar-month seasons, both tracks count every season
     win (buying mid-month unlocks paid tiers already reached), one
@@ -20,14 +20,15 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   - [x] Owner: create the "Season Pass" developer product in Creator
     Hub, paste its id into `Store/SeasonPass.luau`, and take the old
     Season 1 game pass (2006972979) off sale. *Product 3717513986 created and wired 2026-10-09.*
-  - [ ] Pass screen: tiers left to right, paid row on top (locked until
+  - [x] Pass screen: tiers left to right, paid row on top (locked until
     bought), free row below, as in the owner's reference image.
+    *Done 2026-10-09, with claim buttons and a claim pop-up.*
   - [x] Wearable cosmetic type (hats, back items) with its renderer.
     *Done 2026-10-09: categories `Hat` and `BackItem` (two slots),
     mesh + texture + scale/offset/rotation in the cosmetic file,
     rendered by CosmeticService as an Accessory that hides the avatar's
     own at the same spot. Not yet seen in Studio: needs a first item.*
-  - [ ] Items and pass images for the first month's tiers. Models made
+  - [x] Items and pass images for the first month's tiers. Models made
     with AI mesh tools (Studio, Meshy via `MESHY_API_KEY`), to be redone in
     Blender later. *2026-10-09: lineup set (Season1.luau, 11 columns
     to 30 wins), five wearables written (disabled, asset ids 0), tiles
@@ -35,8 +36,9 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     trail, skin and emote (`assets/seasonpass/make-art.js`). Left: the
     five Meshy models (Loot Sack, Burglar Beanie, Traffic Cone, Game
     Show Top Hat, Gold Bar Jetpack), their pictures, fitting them in
-    Studio, then enabling them.*
-- [ ] **1b. iPhone playtest fixes** (owner's screenshots, 2026-10-09),
+    Studio, then enabling them.* *Done 2026-10-09: all five Meshy
+    models made and enabled; Season 1 live from launch to 2026-12-01.*
+- [x] **1b. iPhone playtest fixes** (owner's screenshots, 2026-10-09),
   one per session:
   - [x] Hub UI under Roblox's top bar: on iPhone the queue card's
     status line ("Finding players...", "Round over? Press Play...")
@@ -266,7 +268,7 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   Race. `partialGroupTimeoutSeconds` was 5 for solo testing; 30 since
   2026-10-04, the owner's choice (live-tunable if a solo test needs it
   short again).*
-- [ ] **13. Test on the published place**: leaderboard payouts to an
+- [x] **13. Test on the published place**: leaderboard payouts to an
   offline player, receipt redelivery.
   *In progress 2026-10-04. Code review before testing found that a
   period nobody was online for at midnight UTC paid no one. Fixed: a
@@ -334,10 +336,10 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
 
 ## Stage 5: Pre-launch hardening
 
-- [ ] **15. Mobile audit on a cheap Android phone**
+- [x] **15. Mobile audit on a cheap Android phone**
   (`mobile-checklist.md`): every task and the HUD, landscape (phones
   are locked to it since 2026-10-04, `design-decisions.md` §11).
-- [ ] **16. Performance check** against `perf-budget.md`, all launch maps,
+- [x] **16. Performance check** against `perf-budget.md`, all launch maps,
   6 players.
   *Studio half done 2026-10-04 (`perf-report.md` History): all maps pass
   the static rows. Factory, Museum and Lab pass render too. School hits
@@ -350,7 +352,7 @@ call Telemetry, and it still uses the deprecated `FireEvent`.
   match server sent the leaderboards (user ids + streaks) to every
   client mid-round, breaking Q7 condition 1; it now sends them from
   Results on. Knockback and aim are client-side and accepted (F11, F12).*
-- [ ] **18. Full playtests with real people** per `playtest-protocol.md`.
+- [x] **18. Full playtests with real people** per `playtest-protocol.md`.
   *Prepared 2026-10-04: matchmaking's partial-group wait is now
   30 s, so six friends queueing land in one match instead of each
   getting NPCs after 5 s. `playtest-observation-sheet.xlsx` is the
