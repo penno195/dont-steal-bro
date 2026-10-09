@@ -471,6 +471,17 @@ describe("MapCheck performance", function()
 		expect(report.passed):toBe(true)
 	end)
 
+	it("exempts thin wall/arch-like meshes from the Box rules", function()
+		local f = validMap()
+		-- The hub hotel archway: Box filled the opening.
+		f:part("Wall", v(10, 7, -40), v(20.8, 12.9, 0.6), { collide = true, fidelity = "PreciseConvexDecomposition" })
+		f:part("DoorFrame", v(20, 2, -40), v(4, 4, 4), { collide = true, fidelity = "Default" })
+		local report = run(f)
+		expect(finding(report, "precise-collision")):toBe(nil)
+		expect(finding(report, "collision-not-box")):toBe(nil)
+		expectRule(report, "wall-precise-collision", "info")
+	end)
+
 	it("counts unique meshes and textures once each", function()
 		local f = validMap()
 		local a = f:part("MeshA", v(0, 2, -50), v(2, 2, 2), { collide = true, fidelity = "Box" })

@@ -280,7 +280,11 @@ below. If you do it by hand, go in this order:
    part that moves.
 3. **Collision:**
    - Walkable and bumpable geometry gets `CollisionFidelity = Box`.
-     Never use `PreciseConvexDecomposition`.
+     Never use `PreciseConvexDecomposition` on chunky solids — but thin
+     walls, arches and door frames (thinnest side ≤ 3 studs, other two
+     ≥ 5, or named arch/frame/door) get `PreciseConvexDecomposition`
+     instead of `Box`, or the box fills the doorway
+     (map-kit-spec.md §3 step 3).
    - Pure decor gets `CanCollide = false`, `CanTouch = false` and
      `CanQuery = false`.
 4. **Only turn on `CanTouch` where something needs it** (kill zones,
