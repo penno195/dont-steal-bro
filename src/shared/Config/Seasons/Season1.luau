@@ -9,17 +9,17 @@
 -- The lineup is the owner's (2026-10-09): eleven columns from 0 to 30
 -- wins, a paid item at every column and a free one at every other, with
 -- five new wearables. Amounts are still PLACEHOLDER (rewards-roadmap.md
--- step 7b). Ships disabled: the new wearables have no Roblox assets yet,
--- and an enabled season may not grant a disabled cosmetic.
+-- step 7b). Runs long, from launch to the end of November (owner,
+-- 2026-10-09), since the first weeks will be quiet; monthly after that.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 
 local Season1: Validate.SeasonDef = {
 	id = "season-1",
-	enabled = false,
+	enabled = true,
 	displayName = "Season 1",
-	startsOn = "2026-11-01",
+	startsOn = "2026-10-09",
 	endsOn = "2026-12-01",
 	passKey = "season-pass",
 	free = {

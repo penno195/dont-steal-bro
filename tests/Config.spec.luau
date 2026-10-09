@@ -2498,14 +2498,15 @@ TestRunner.describe("Validate.checkSeason and season cross-checks (rewards step 
 		TestRunner.expect(#issues):toBe(0)
 	end)
 
-	TestRunner.it("refuses bad dates, and a window that isn't one calendar month", function()
+	TestRunner.it("refuses bad dates, and a window that doesn't end on the 1st after it starts", function()
 		for _, dates in
 			{
 				{ "2026-02-30", "2026-03-01" },
 				{ "2026/10/01", "2026-11-01" },
 				{ "2026-11-01", "2026-10-01" },
+				{ "2026-11-01", "2026-11-01" },
 				{ "2026-10-02", "2026-11-02" },
-				{ "2026-10-01", "2026-12-01" },
+				{ "2026-10-01", "2026-11-15" },
 			}
 		do
 			local issues = runSeasons({
@@ -2515,6 +2516,9 @@ TestRunner.describe("Validate.checkSeason and season cross-checks (rewards step 
 		end
 		local december = validSeason("s1", "2026-12-01", "2027-01-01", "s1-pass")
 		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = december } } })):toBe(0)
+		-- Season 1's long launch window (user decision, 2026-10-09)
+		local launch = validSeason("s1", "2026-10-09", "2026-12-01", "s1-pass")
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = launch } } })):toBe(0)
 	end)
 
 	TestRunner.it("refuses a track listed out of win order", function()

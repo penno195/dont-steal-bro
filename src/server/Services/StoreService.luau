@@ -896,7 +896,7 @@ local function handlePurchaseIntent(player: Player, key: string)
 			sendPurchaseResult(player, key, "Unavailable", "No season is running right now.")
 			return
 		elseif blocked == "AlreadyOwned" then
-			sendPurchaseResult(player, key, "AlreadyOwned", "You already have this month's pass.")
+			sendPurchaseResult(player, key, "AlreadyOwned", "You already have this season's pass.")
 			return
 		end
 	end

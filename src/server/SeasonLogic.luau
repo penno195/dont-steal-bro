@@ -2,7 +2,8 @@
 -- Season reward tracks (design-decisions.md Q1's 2026-09-30 revision,
 -- applied 2026-10-02; monthly passes, user decision 2026-10-09).
 --
--- A season is one calendar month (UTC) and has two tracks, each a list
+-- A season is a UTC date window (normally one calendar month; Season 1
+-- runs from launch to the end of November) and has two tracks, each a list
 -- of items unlocked at win counts. Both count every win inside the
 -- window; the PREMIUM track only unlocks once the season's pass is
 -- bought, and then everything already reached on it is claimable.

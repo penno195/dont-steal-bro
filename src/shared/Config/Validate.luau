@@ -496,7 +496,8 @@ export type StoreItemDef = {
 -- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
 -- One file per season in src/shared/Config/Seasons/ (design-decisions.md
 -- Q1's 2026-09-30 revision, applied 2026-10-02). A season is one calendar
--- month, UTC (user decision, 2026-10-09), and seasons replace each other,
+-- month, UTC (user decision, 2026-10-09; Season 1 alone runs from launch
+-- to the end of November), and seasons replace each other,
 -- so no two windows may overlap. It has two tracks of items unlocked at
 -- win counts, both counting every win in the window:
 --   * `free` pays everyone (a retention tool, so it's the less generous
@@ -519,8 +520,8 @@ export type SeasonDef = {
 	id: string,
 	enabled: boolean,
 	displayName: string,
-	startsOn: string, -- "YYYY-MM-01", 00:00 UTC, inclusive
-	endsOn: string, -- the 1st of the next month, 00:00 UTC, exclusive
+	startsOn: string, -- "YYYY-MM-DD", 00:00 UTC, inclusive; normally the 1st
+	endsOn: string, -- the 1st of a later month, 00:00 UTC, exclusive
 	passKey: string, -- the Store DeveloperProduct (a SeasonPass grant) that unlocks `premium`
 	free: { SeasonTrackItem }, -- ascending `wins`
 	premium: { SeasonTrackItem }, -- ascending `wins`
@@ -1951,24 +1952,15 @@ function Validate.checkSeason(fileName: string, def: SeasonDef, issues: { Issue 
 	if not endsOk then
 		issue(issues, "Season", fileName, "endsOn", 'expected a real date as "YYYY-MM-DD" (UTC)')
 	end
-	-- One calendar month (user decision, 2026-10-09): the 1st to the 1st
-	-- of the next month.
+	-- Seasons are calendar months (user decision, 2026-10-09), but Season 1
+	-- runs long, from launch to the end of November (user decision, same
+	-- day). So the rule is only: a season ends on the 1st of a month, after
+	-- it starts. A normal season is then the 1st to the next 1st.
 	if startsOk and endsOk then
-		local y, m, d = string.match(def.startsOn, "^(%d+)%-(%d+)%-(%d+)$")
-		local year, month = tonumber(y) :: number, tonumber(m) :: number
-		local expected = if month == 12
-			then string.format("%04d-01-01", year + 1)
-			else string.format("%04d-%02d-01", year, month + 1)
-		if d ~= "01" then
-			issue(issues, "Season", fileName, "startsOn", "a season starts on the 1st of a month")
-		elseif def.endsOn ~= expected then
-			issue(
-				issues,
-				"Season",
-				fileName,
-				"endsOn",
-				string.format("a season is one calendar month, so it ends on %s", expected)
-			)
+		if string.sub(def.endsOn, 9, 10) ~= "01" then
+			issue(issues, "Season", fileName, "endsOn", "a season ends on the 1st of a month")
+		elseif def.endsOn <= def.startsOn then
+			issue(issues, "Season", fileName, "endsOn", "a season ends after it starts")
 		end
 	end
 

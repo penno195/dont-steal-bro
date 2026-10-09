@@ -162,8 +162,12 @@ cosmetic opts in, or doesn't, in its own file.
 
 *Applied (2026-10-09, user decision):* **monthly season passes.**
 Supersedes parts of "seasons and their tracks" above.
-- **A season is one calendar month**, the 1st to the 1st (UTC). Validate
-  refuses any other window.
+- **A season is one calendar month**, the 1st to the 1st (UTC), **except
+  Season 1**, which runs long from launch, 2026-10-09 to 2026-12-01
+  (user decision, 2026-10-09: the first weeks will be quiet, so a longer
+  first pass gives players time to reach its tiers). Validate now only
+  requires that a season end on the 1st of a month, after it starts;
+  keeping later seasons to one month is up to whoever writes the file.
 - **Both tracks count every win in the season.** The premium track no
   longer counts only wins after the purchase: buying mid-month unlocks
   every paid tier already reached at once, as in a Fortnite-style pass.
