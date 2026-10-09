@@ -1,5 +1,5 @@
 --!strict
--- Covers ProgressionLogic.luau (P4-1): the streak and bounty rules.
+-- Covers ProgressionLogic.luau (P4-1): the streak rules.
 -- ProgressionService.luau itself isn't required here - it touches
 -- Players, the loader and ProfileStore at call time, so it's exercised
 -- in Studio instead, the same split every other spec in this suite
@@ -15,11 +15,7 @@
 local TestRunner = require("./TestRunner")
 local ProgressionLogic = require("../src/server/ProgressionLogic")
 
-local FRESH: ProgressionLogic.StreakState = { currentStreak = 0, bestStreak = 0, pendingBounty = nil }
-
-local function bounty(tier: number): ProgressionLogic.PendingBounty
-	return { streakTier = tier, outcomeTag = "AllShare", grantedAt = 1000 }
-end
+local FRESH: ProgressionLogic.StreakState = { currentStreak = 0, bestStreak = 0 }
 
 local ALL_REASONS: { ProgressionLogic.ReasonCode } = {
 	"QualifiedWin",
@@ -50,36 +46,28 @@ TestRunner.describe("ProgressionLogic.applyResult - a five-round win chain", fun
 	TestRunner.it("increments the streak once per win, and tracks bestStreak with it", function()
 		local state = FRESH
 		for round = 1, 5 do
-			state = ProgressionLogic.applyResult(state, "StudioWinAllShare", bounty(round))
+			state = ProgressionLogic.applyResult(state, "StudioWinAllShare")
 			TestRunner.expect(state.currentStreak):toBe(round)
 			TestRunner.expect(state.bestStreak):toBe(round)
 		end
 	end)
 
-	TestRunner.it("carries the bounty from the most recent win only", function()
-		local state = FRESH
-		for round = 1, 5 do
-			state = ProgressionLogic.applyResult(state, "StudioWinAllShare", bounty(round))
-		end
-		TestRunner.expect((state.pendingBounty :: any).streakTier):toBe(5)
-	end)
-
 	TestRunner.it("never mutates the state handed in", function()
 		-- The caller logs both sides of the change, which only works if
 		-- `before` is still the before.
-		local before: ProgressionLogic.StreakState = { currentStreak = 3, bestStreak = 7, pendingBounty = nil }
-		ProgressionLogic.applyResult(before, "StudioWinAllShare", bounty(1))
+		local before: ProgressionLogic.StreakState = { currentStreak = 3, bestStreak = 7 }
+		ProgressionLogic.applyResult(before, "StudioWinAllShare")
 		TestRunner.expect(before.currentStreak):toBe(3)
 		TestRunner.expect(before.bestStreak):toBe(7)
 	end)
 
 	TestRunner.it("mixes win reasons across a chain without breaking it", function()
 		local state = FRESH
-		state = ProgressionLogic.applyResult(state, "StudioWinSoleStealer", nil)
-		state = ProgressionLogic.applyResult(state, "StudioWinLoneSharer", nil)
-		state = ProgressionLogic.applyResult(state, "StudioWinAllShare", nil)
-		state = ProgressionLogic.applyResult(state, "QualifiedWin", nil)
-		state = ProgressionLogic.applyResult(state, "StudioWinAllShare", nil)
+		state = ProgressionLogic.applyResult(state, "StudioWinSoleStealer")
+		state = ProgressionLogic.applyResult(state, "StudioWinLoneSharer")
+		state = ProgressionLogic.applyResult(state, "StudioWinAllShare")
+		state = ProgressionLogic.applyResult(state, "QualifiedWin")
+		state = ProgressionLogic.applyResult(state, "StudioWinAllShare")
 		TestRunner.expect(state.currentStreak):toBe(5)
 	end)
 end)
@@ -93,11 +81,11 @@ TestRunner.describe("ProgressionLogic.applyResult - a loss at each possible poin
 		for winsFirst = 0, 4 do
 			local state = FRESH
 			for _ = 1, winsFirst do
-				state = ProgressionLogic.applyResult(state, "StudioWinAllShare", bounty(1))
+				state = ProgressionLogic.applyResult(state, "StudioWinAllShare")
 			end
 			TestRunner.expect(state.currentStreak):toBe(winsFirst)
 
-			local after = ProgressionLogic.applyResult(state, "StudioLoss", nil)
+			local after = ProgressionLogic.applyResult(state, "StudioLoss")
 			TestRunner.expect(after.currentStreak):toBe(0)
 			TestRunner.expect(after.bestStreak):toBe(winsFirst) -- preserved
 		end
@@ -105,67 +93,27 @@ TestRunner.describe("ProgressionLogic.applyResult - a loss at each possible poin
 
 	TestRunner.it("resets identically for every losing reason", function()
 		for _, reason in { "StudioLoss", "FailedToQualify", "ForfeitDisconnect" } do
-			local state: ProgressionLogic.StreakState =
-				{ currentStreak = 9, bestStreak = 12, pendingBounty = bounty(4) }
-			local after = ProgressionLogic.applyResult(state, reason :: any, nil)
+			local state: ProgressionLogic.StreakState = { currentStreak = 9, bestStreak = 12 }
+			local after = ProgressionLogic.applyResult(state, reason :: any)
 			TestRunner.expect(after.currentStreak):toBe(0)
 			TestRunner.expect(after.bestStreak):toBe(12)
-			TestRunner.expect(after.pendingBounty):toBe(nil)
 		end
-	end)
-
-	TestRunner.it("clears a pending bounty on a loss", function()
-		local state: ProgressionLogic.StreakState = { currentStreak = 2, bestStreak = 2, pendingBounty = bounty(1) }
-		TestRunner.expect(ProgressionLogic.applyResult(state, "StudioLoss", nil).pendingBounty):toBe(nil)
-	end)
-
-	TestRunner.it("ignores a bounty passed alongside a loss", function()
-		-- Defensive: a caller that computed a bounty and then discovered
-		-- the player lost must not accidentally grant it.
-		local state: ProgressionLogic.StreakState = { currentStreak = 2, bestStreak = 2, pendingBounty = nil }
-		TestRunner.expect(ProgressionLogic.applyResult(state, "StudioLoss", bounty(3)).pendingBounty):toBe(nil)
 	end)
 
 	TestRunner.it("never lowers bestStreak, for any reason at all", function()
 		-- The property P4-2's permanent titles depend on.
 		for _, reason in ALL_REASONS do
-			local state: ProgressionLogic.StreakState = { currentStreak = 4, bestStreak = 20, pendingBounty = nil }
-			local after = ProgressionLogic.applyResult(state, reason, nil)
+			local state: ProgressionLogic.StreakState = { currentStreak = 4, bestStreak = 20 }
+			local after = ProgressionLogic.applyResult(state, reason)
 			assert(after.bestStreak >= 20, string.format("%s lowered bestStreak to %d", reason, after.bestStreak))
 		end
 	end)
 
 	TestRunner.it("rebuilds from zero after a loss without disturbing bestStreak", function()
-		local state: ProgressionLogic.StreakState = { currentStreak = 0, bestStreak = 8, pendingBounty = nil }
-		state = ProgressionLogic.applyResult(state, "StudioWinAllShare", nil)
+		local state: ProgressionLogic.StreakState = { currentStreak = 0, bestStreak = 8 }
+		state = ProgressionLogic.applyResult(state, "StudioWinAllShare")
 		TestRunner.expect(state.currentStreak):toBe(1)
 		TestRunner.expect(state.bestStreak):toBe(8) -- not raised: 1 < 8
-	end)
-end)
-
-TestRunner.describe("ProgressionLogic.applyResult - NPC-heavy rounds earn no streak credit", function()
-	TestRunner.it("leaves a win's streak untouched but still grants the bounty", function()
-		-- threat-model.md §8's required launch mitigation.
-		local state: ProgressionLogic.StreakState = { currentStreak = 3, bestStreak = 5, pendingBounty = nil }
-		local after = ProgressionLogic.applyResult(state, "StudioWinAllShare", bounty(2), false)
-		TestRunner.expect(after.currentStreak):toBe(3)
-		TestRunner.expect(after.bestStreak):toBe(5)
-		TestRunner.expect((after.pendingBounty :: any).streakTier):toBe(2)
-	end)
-
-	TestRunner.it("leaves a LOSS's streak untouched too", function()
-		-- Deliberate, and beyond what the threat model literally asks
-		-- for: crediting no wins while still applying losses would mean
-		-- an honest off-hours player can only ever go backwards.
-		local state: ProgressionLogic.StreakState = { currentStreak = 6, bestStreak = 9, pendingBounty = nil }
-		local after = ProgressionLogic.applyResult(state, "StudioLoss", nil, false)
-		TestRunner.expect(after.currentStreak):toBe(6)
-		TestRunner.expect(after.bestStreak):toBe(9)
-	end)
-
-	TestRunner.it("credits normally when the flag is omitted entirely", function()
-		local after = ProgressionLogic.applyResult(FRESH, "StudioWinAllShare", nil)
-		TestRunner.expect(after.currentStreak):toBe(1)
 	end)
 end)
 
@@ -223,7 +171,7 @@ TestRunner.describe("ProgressionLogic.classifyDuplicate - the duplicate event", 
 		-- service returns the recorded state on a retry rather than
 		-- re-applying, so a duplicated event cannot advance a streak by
 		-- two.
-		local once = ProgressionLogic.applyResult(FRESH, "StudioWinAllShare", nil)
+		local once = ProgressionLogic.applyResult(FRESH, "StudioWinAllShare")
 		TestRunner.expect(ProgressionLogic.classifyDuplicate("StudioWinAllShare", "StudioWinAllShare")):toBe("Retry")
 		TestRunner.expect(once.currentStreak):toBe(1)
 	end)
@@ -231,8 +179,8 @@ end)
 
 TestRunner.describe("ProgressionLogic.formatAudit", function()
 	TestRunner.it("names the before state, the after state and the reason", function()
-		local before: ProgressionLogic.StreakState = { currentStreak = 2, bestStreak = 4, pendingBounty = nil }
-		local after = ProgressionLogic.applyResult(before, "StudioWinAllShare", bounty(3))
+		local before: ProgressionLogic.StreakState = { currentStreak = 2, bestStreak = 4 }
+		local after = ProgressionLogic.applyResult(before, "StudioWinAllShare")
 		local line = ProgressionLogic.formatAudit("Racer", "job:1", "StudioWinAllShare", before, after)
 
 		assert(string.find(line, "Racer", 1, true) ~= nil, "audit line is missing the player")
@@ -241,11 +189,11 @@ TestRunner.describe("ProgressionLogic.formatAudit", function()
 		assert(string.find(line, "streak 2->3", 1, true) ~= nil, "audit line is missing the streak change")
 		assert(string.find(line, "best 4->4", 1, true) ~= nil, "audit line is missing the bestStreak change")
 	end)
+end)
 
-	TestRunner.it("renders a granted bounty and a cleared one", function()
-		local before: ProgressionLogic.StreakState = { currentStreak = 1, bestStreak = 1, pendingBounty = bounty(2) }
-		local after = ProgressionLogic.applyResult(before, "StudioLoss", nil)
-		local line = ProgressionLogic.formatAudit("Racer", "job:1", "StudioLoss", before, after)
-		assert(string.find(line, "bounty tier 2/AllShare->none", 1, true) ~= nil, "bounty transition is missing")
+TestRunner.describe("ProgressionLogic.formatRewardAudit", function()
+	TestRunner.it("names the player, round, outcome, rung and the grant", function()
+		local line = ProgressionLogic.formatRewardAudit("Racer", "job:1", "SoleStealer", 4, "currency +140 (now 140)")
+		TestRunner.expect(line):toBe("Reward: Racer round=job:1 outcome=SoleStealer rung=4 -> currency +140 (now 140)")
 	end)
 end)

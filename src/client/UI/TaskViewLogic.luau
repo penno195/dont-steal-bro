@@ -41,6 +41,57 @@ function TaskViewLogic.windowSize(
 		math.max(0, math.min(want.height, roomHeight - 2 * gap))
 end
 
+-- The card that wraps a view's content: the content's natural size,
+-- scaled down evenly (never up) until the card fits a room of
+-- `roomWidth` x `roomHeight` with `gap` clear on every side, plus the
+-- card's chrome - padding, header and status line. Never narrower than
+-- `minWidth` of content, which the header needs. Scaling both axes by
+-- the same factor matches the views' own fit, so a short screen gives
+-- a smaller card rather than one with spare width round shrunk content.
+function TaskViewLogic.fitCard(
+	content: { width: number, height: number },
+	chrome: { width: number, height: number },
+	minWidth: number,
+	roomWidth: number,
+	roomHeight: number,
+	gap: number,
+	-- The card is never shorter than this (the side rail's buttons and
+	-- status need their height even round a squat view).
+	minHeight: number?
+): (number, number)
+	local freeWidth = roomWidth - 2 * gap - chrome.width
+	local freeHeight = roomHeight - 2 * gap - chrome.height
+	local k = math.max(0, math.min(1, freeWidth / content.width, freeHeight / content.height))
+	local width = math.max(content.width * k, math.min(minWidth, freeWidth)) + chrome.width
+	local height = math.max(content.height * k + chrome.height, minHeight or 0)
+	return math.max(0, math.min(width, roomWidth - 2 * gap)), math.max(0, math.min(height, roomHeight - 2 * gap))
+end
+
+export type ChromeSide = "Top" | "Side"
+
+-- Where the card's chrome (header, status) goes: stacked above and
+-- below the content, or in a rail beside it. Whichever lets the content
+-- scale bigger; a tie keeps it stacked. A landscape phone is only ~330
+-- reference px tall, and the stacked chrome took 128 of it, so content
+-- drew at under half size; it has width to spare for a rail instead.
+function TaskViewLogic.chromeSide(
+	content: { width: number, height: number },
+	top: { width: number, height: number },
+	side: { width: number, height: number },
+	roomWidth: number,
+	roomHeight: number,
+	gap: number
+): ChromeSide
+	local function fit(chrome: { width: number, height: number }): number
+		return math.min(
+			1,
+			(roomWidth - 2 * gap - chrome.width) / content.width,
+			(roomHeight - 2 * gap - chrome.height) / content.height
+		)
+	end
+	return if fit(side) > fit(top) then "Side" else "Top"
+end
+
 -- EDGE MARGIN ----------------------------------------------------------
 
 -- True if `rect` comes within `margin` of any edge of `usable` (both in

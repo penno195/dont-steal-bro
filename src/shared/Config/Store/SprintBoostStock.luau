@@ -19,12 +19,13 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local SprintBoostStock: Validate.StoreItemDef = {
 	key = "stock-sprint-boost-10",
 	kind = "DeveloperProduct",
-	assetId = 0,
-	enabled = false,
+	assetId = 3716319307,
+	enabled = true,
 	displayName = "Sprint Boost x10",
 	description = "Ten Sprint Boosts for your loadout. Also earned free from Studio wins and found on every map.",
-	robuxPrice = 79, -- PLACEHOLDER: display only
+	robuxPrice = 249, -- 24.9 R$ each, matching the Large Coin Chest; display only
 	sortOrder = 40,
+	imageAssetId = 89681650608931, -- assets/store/stock-sprint-boost-10.png
 	grants = {
 		{ kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 10 },
 	},

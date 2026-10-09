@@ -34,6 +34,21 @@ describe("AudioLogic.CUES", function()
 		end
 	end)
 
+	it("gives every cue a real asset", function()
+		for id, def in AudioLogic.CUES do
+			assert(not AudioLogic.isPlaceholder(def.assetId), id .. ": still a placeholder")
+		end
+	end)
+
+	it("only offsets the start of a one-shot, and never before 0", function()
+		for id, def in AudioLogic.CUES do
+			if def.startAt ~= nil then
+				assert(def.startAt >= 0, id .. ": negative startAt")
+				assert(not def.looped, id .. ": a bed would loop back past its startAt")
+			end
+		end
+	end)
+
 	it("never lets the reveal or a resolution be dropped for budget", function()
 		for _, id in { "RevealRiser", "RevealCard", "RevealOutcome", "Win", "Loss" } do
 			expect(AudioLogic.CUES[id].priority):toBe(100)
@@ -183,7 +198,7 @@ end)
 describe("AudioLogic.revealSchedule", function()
 	it("lands each card on the frame revealStep turns it", function()
 		local timing = DecisionLogic.TIMING
-		local schedule, resultAt = AudioLogic.revealSchedule(3, timing)
+		local schedule, resultAt = AudioLogic.revealSchedule(DecisionLogic.cardTurns(3), timing)
 		local cards = 0
 		for _, entry in schedule do
 			if entry.cue == "RevealCard" then
@@ -199,6 +214,35 @@ describe("AudioLogic.revealSchedule", function()
 		expect(cards):toBe(3)
 		expect(DecisionLogic.revealStep(resultAt, 3).resultShown):toBe(true)
 		expect(DecisionLogic.revealStep(resultAt - 0.01, 3).resultShown):toBe(false)
+	end)
+end)
+
+describe("AudioLogic.taskResultCue", function()
+	it("plays success only on the completing result", function()
+		expect(AudioLogic.taskResultCue(true, nil)):toBe("TaskSuccess")
+	end)
+	it("reassures on a step that landed", function()
+		expect(AudioLogic.taskResultCue(false, { accepted = true, entered = 2 })):toBe("TaskStep")
+		expect(AudioLogic.taskResultCue(false, { hit = true, reset = false })):toBe("TaskStep")
+		expect(AudioLogic.taskResultCue(false, { progress = 0.4 })):toBe("TaskStep")
+		expect(AudioLogic.taskResultCue(false, { holding = true })):toBe("TaskStep")
+	end)
+	it("buzzes only on a step that went wrong", function()
+		expect(AudioLogic.taskResultCue(false, { accepted = false })):toBe("TaskFail")
+		expect(AudioLogic.taskResultCue(false, { hit = false, reset = false })):toBe("TaskFail")
+		expect(AudioLogic.taskResultCue(false, { sealed = false })):toBe("TaskFail")
+		expect(AudioLogic.taskResultCue(false, { holding = false, early = true })):toBe("TaskFail")
+		expect(AudioLogic.taskResultCue(false, { progress = 0.1, reset = true })):toBe("TaskFail")
+	end)
+	it("stays quiet on an ignored submission", function()
+		expect(AudioLogic.taskResultCue(false, nil)):toBe(nil)
+	end)
+end)
+
+describe("AudioLogic.heartbeatVolume", function()
+	it("runs quiet to full", function()
+		expect(AudioLogic.heartbeatVolume(0) < AudioLogic.heartbeatVolume(1)):toBe(true)
+		expect(AudioLogic.heartbeatVolume(1)):toBeCloseTo(1)
 	end)
 end)
 

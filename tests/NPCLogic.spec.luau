@@ -287,23 +287,6 @@ TestRunner.describe("NPCLogic.generateDisplayName", function()
 	end)
 end)
 
-TestRunner.describe("NPCLogic.earnsStreakCredit", function()
-	TestRunner.it("credits a round at or below the threshold", function()
-		TestRunner.expect(NPCLogic.earnsStreakCredit(0, 3)):toBe(true)
-		TestRunner.expect(NPCLogic.earnsStreakCredit(3, 3)):toBe(true)
-	end)
-
-	TestRunner.it("refuses credit above it - threat-model.md §8's 'more than N seats'", function()
-		TestRunner.expect(NPCLogic.earnsStreakCredit(4, 3)):toBe(false)
-		TestRunner.expect(NPCLogic.earnsStreakCredit(5, 3)):toBe(false)
-	end)
-
-	TestRunner.it("supports a zero threshold - no bots at all, or no credit", function()
-		TestRunner.expect(NPCLogic.earnsStreakCredit(0, 0)):toBe(true)
-		TestRunner.expect(NPCLogic.earnsStreakCredit(1, 0)):toBe(false)
-	end)
-end)
-
 TestRunner.describe("NPCLogic.newRng", function()
 	TestRunner.it("is deterministic for a given seed", function()
 		local a, b = NPCLogic.newRng(5), NPCLogic.newRng(5)

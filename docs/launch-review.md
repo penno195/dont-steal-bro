@@ -10,16 +10,33 @@ is a finding. Every threshold is the value this review will *act* on,
 taken from the design docs, and none of them is a measurement. The first
 real review replaces the empty log rows.
 
-**The review can't run on day one without §0.** Only 3 of the 18 events
-in `telemetry-schema.md` are actually sent, and the sink uses a
-deprecated API. Fix that before launch, or week one produces a funnel
-with nothing in it.
+**§0's wiring is done** (next-stages steps 6–8, 2026-10-03). Every
+event is sent, through the current API. §0.4 lists the checks below that
+the shipped events still can't answer. Each one has a stand-in.
+
+**Gate before the soft launch** (next-stages, 2026-10-04): these steps
+must be ticked first. A soft launch with any of them open measures a bug
+instead of the design.
+
+| Step | Why it gates the launch |
+|---|---|
+| 9. Events reach Creator Hub | Studio can't send analytics. Unverified events can come back as an empty week one |
+| 13. Tests on the published place | Payouts, purchases and teleports only run there |
+| 4a, 14a–14d. Art, sound, images | A silent game with blank vote cards and imageless store items measures presentation, not the design (added 2026-10-04) |
+| 15. Mobile audit | Most players will be on phones. A broken task shows up in §4.2 as abandonment that tuning can't fix |
+| 16. Device half of the perf check | School's draw calls (`perf-report.md`) decide whether it stays in the map rotation |
+| 18. Group playtests | The first finale played by real people should come from the playtest group, not from strangers |
+| 1. Price tuning | Uses the step 18 sessions. Prices can change later through live config, so this can slip if needed |
 
 ---
 
 ## 0. Pre-launch blocker: the instrumentation gap
 
 ### 0.1 Events that are defined but never sent
+
+> **Done (next-stages step 7, 2026-10-03).** All of them are sent. The
+> round events became steps of the `Round` funnel (`telemetry-schema.md`).
+> The text below is the original finding.
 
 `Telemetry.luau` exports 18 event functions. The only calls to them are
 in `MatchTeleportService` (`userMatched`, `roundStarted`, `mapPlayed`).
@@ -42,6 +59,12 @@ server already knows the fact:
 
 ### 0.2 The sink API
 
+> **Done (next-stages step 6, 2026-10-03).** The sink now uses
+> `LogFunnelStepEvent` / `LogCustomEvent`, and the per-event field mapping
+> is decided in `telemetry-schema.md`. Some event names changed: the
+> funnel events are now steps of the `Matchmaking` and `Round` funnels.
+> The text below is the original finding.
+
 `flush()` calls `AnalyticsService:FireEvent`, which the pinned
 `globalTypes.d.luau` marks `@deprecated`, inside a `pcall` that hides
 any failure. The current methods are the `Log*` family:
@@ -63,19 +86,26 @@ pinned types:
   into the three slots. The mapping per event has to be decided when the
   events are wired, and it controls which breakdowns this review can do.
 
-**Verify in Studio before launch:** fire each event from a test place
-and confirm it appears in Creator Hub analytics. Expect some ingestion
+**Verify on a published place before launch** (Studio can't send
+analytics at all): fire each event and confirm it appears in Creator
+Hub analytics. Expect some ingestion
 delay. Don't trust a `pcall` that returned nothing.
 
 ### 0.3 Events this review needs that the schema doesn't have
+
+> **Done (next-stages step 8, 2026-10-03).** All six exist:
+> `TaskAbandoned`, `PowerUpCollected`, `RoundEnded`, bot seats as
+> `StreakWin`'s `Bots` field, the rung as `StealShareChoice`'s `Rung`,
+> and the config version as the `Round` funnel's `Config` field. The text
+> below is the original finding.
 
 | Missing | Why | Suggested shape |
 |---|---|---|
 | Task abandoned | The brief asks for "too often abandoned". Completions alone can't show it. | `TaskAbandoned(taskId, secondsSpent)` when a player leaves a station with the task unfinished |
 | Power-up collected | "Never used" needs a denominator. Unused because nobody picks it up, or picked up and held? | `PowerUpCollected(powerUpId)` |
 | Round ended | Race length, finishers, backfilled seats, humans still present | `RoundEnded(mapId, raceSeconds, humanFinishers)` |
-| Streak credit | Whether `NPCService.roundEarnsStreakCredit()` refused credit (npc-notes.md §2) | a field on the win event |
-| Bounty tier | The finale check (§3) is done per tier | a field on `StealShareChoice` |
+| NPC seats | How many seats were bots (`NPCService.getNPCSeatCount()`). Since the NPC-seat streak threshold was retired (threat-model.md §8, 2026-10-02), this telemetry is the only check on bot-lobby farming | a field on the win event |
+| Reward rung | The finale check (§3) is done per rung | a field on `StealShareChoice` |
 | Config version | Tells patched rounds apart from unpatched ones during a `rollout` | a field on `RoundStarted` |
 
 The last row pays for itself. `/liveops rollout 10` gives a treatment
@@ -84,6 +114,27 @@ events say which group a round was in.
 
 **Recommendation:** make §0 its own task (wiring, the field mapping,
 the new events and a Studio check). Do it before the soft launch.
+
+### 0.4 Checks the shipped events can't answer (2026-10-04)
+
+Found by matching every check in §2–§6 against `telemetry-schema.md`.
+Creator Hub shows custom events as counts broken down by their fields.
+It can't join two events from the same round or the same player, so a
+check that needs a join has no source. Each row gives the stand-in the
+review uses until a fix ships.
+
+| Check | Why it can't run | Stand-in | Fix, if wanted |
+|---|---|---|---|
+| ~~§3 A: steal rate by rung, all-human Studios only~~ | **Fixed 2026-10-04.** `StealShareChoice`'s F2 is now `Bots` (bot finalists), replacing the `Streak` band, which repeated the value. Filter on `Bots = 0` | — | — |
+| §3 dominance test: realised payoff of Steal vs Share | Needs each player's choice joined to their branch. The free slot went to `Bots` (owner, 2026-10-04) | None that's realised. Compute the expected payoff from each rung's observed steal rate (`payoff-table.md`) and say so | No free field left on `StealShareChoice` |
+| §4.1 vote share vs times offered | `MapVoted` doesn't log which maps were on the ballot | Vote share vs play share (`MapPlayed`) | A field on `MapVoted` |
+| §4.1 NPC qualification rate per map | No event says a bot qualified. `FinaleOutcome` has no `Map` | Human qualification rate per map (`Round` funnel, step 3 ÷ step 1, split by `Map` and `Humans`) | — |
+| §4.2 task times by platform | No platform field | Creator Hub's own platform breakdown, if custom events have one (check at step 9) | — |
+| §5 bots' Studio steal rate | Bots have no `Player` to log against | Not measurable live. It's NPCBrain's logic, so test it headlessly or in Studio | — |
+| §5 leaderboard top 20 by NPC mix, §6 collusion, feeding, farming by account | Need per-account rows, which Creator Hub doesn't give | Investigate a reported or suspicious account by hand: leaderboard, its profile, live server logs. No pair analysis | Out of scope before launch |
+
+The first two rows hit the review's headline question (finale tension).
+Only one field was free, and the owner chose `Bots` (2026-10-04).
 
 ---
 
@@ -120,15 +171,19 @@ both hides whichever effect is real.
 | # | Step | Source |
 |---|---|---|
 | 0 | Joined the hub | Creator Hub (built in) |
-| 1 | Queued | `UserQueued` |
-| 2 | Matched | `UserMatched` |
-| 3 | In a round | `RoundStarted` (join by user via `UserMatched`) |
-| 4 | Completed a first task | first `TaskCompleted` per user per round |
-| 5 | Completed all tasks | `AllTasksCompleted` |
-| 6 | Qualified (top 3) | `Qualified`, placement 1–3 |
-| 7 | Locked a choice | `ChoiceLocked` |
-| 8 | Back in the hub | `ReturnedToHub` |
-| 9 | **Queued again** | a second `UserQueued` in the same session |
+| 1 | Queued | `Matchmaking` funnel step 1 |
+| 2 | Matched | `Matchmaking` funnel step 2 |
+| 3 | In a round | `Round` funnel step 1 (`Started`) |
+| 4 | Completed a first task | `TaskCompleted` with `Order = 1` |
+| 5 | Completed all tasks | `Round` funnel step 2 (`Finished`) |
+| 6 | Qualified (top 3) | `Round` funnel step 3 (`Qualified`) |
+| 7 | Locked a choice | `Round` funnel step 5 (`ChoiceLocked`) |
+| 8 | Back in the hub | `ReturnedToHub` with `Reason = RoundOver` |
+| 9 | **Queued again** | `Matchmaking` funnel sessions per player above 1 (each queue attempt is a new session) |
+
+The two funnels run in different places with different session ids,
+so Creator Hub shows them as two funnels. Steps 2→3 compare their
+totals over the same window. They are not one funnel.
 
 Retention (D1/D7) and session length come from Creator Hub's built-in
 dashboards. Compare those against the **similar experiences** benchmark
@@ -143,7 +198,7 @@ benchmarks:
 | Drop | Expected | Finding if | Most likely cause | Fixability |
 |---|---|---|---|---|
 | 0→1 join→queue | Most people queue | < 70% | Hub doesn't point at the queue, or onboarding stalls (`onboarding.md`) | High: hub UI |
-| 1→2 queue→match | ~100%, NPC fill means nobody waits forever | < 95% | Players leave while waiting. Check wait time against `partialGroupTimeoutSeconds` (60) | High: live tunable |
+| 1→2 queue→match | ~100%, NPC fill means nobody waits forever | < 95% | Players leave while waiting. Check wait time against `partialGroupTimeoutSeconds` (30) | High: live tunable |
 | 2→3 match→round | ~100% | < 97% | Teleport failures (`teleport.md` retry path) | High: engineering |
 | 3→4 round→first task | ~100% | < 90% | Can't find a station or read a task (`station-readability.md`) | Medium |
 | 4→5 first task→all tasks | Race-dependent | Falls on one map or task only | That map or task (§4) | Medium |
@@ -155,15 +210,16 @@ engineering or tunable problems and the fix doesn't need a design
 argument. **Most important drop:** 8→9 after a loss. The whole game
 assumes a reset makes you queue again ("one more go"), and requeue after
 a loss is the only direct test of that. Split it by the streak that was
-lost (`StreakLoss.streakLength`). Losing a 12-streak and not coming back
+lost (`StreakLoss`'s `Streak` band). Losing a 12-streak and not coming back
 is the failure mode that design-decisions.md Q7 accepted, so measure it.
 
 ---
 
 ## 3. Finale health: tension, or a dominant strategy?
 
-The model is in `payoff-table.md`. With `L`/`M`/`S` = sole-stealer,
-lone-sharer and all-share VU, and `Closs` = the value of the streak you
+The model is in `payoff-table.md`. With `L`/`M`/`S` = the sole-stealer,
+lone-sharer and all-share coin payouts at the winner's rung
+(`RewardLogic.currencyFor`), and `Closs` = the value of the streak you
 lose:
 
 ```
@@ -172,7 +228,8 @@ p* = 1 / (1 + √((M + Closs) / (L − S)))
 
 `p*` is the steal rate at which neither choice is better. The design
 bet is that the population steal rate hovers near `p*` and falls as
-streak tier rises (0.53 at tier 1 → 0.41 at tier 5).
+streak rises (0.55 at a first-ever finale → 0.38 at streak 49, on the
+PLACEHOLDER `winRewards`).
 
 **Only count Studios with three human finalists.** A bot's choice is a
 fixed personality probability (Greedy 0.7 / Loyal 0.2 / Chaotic 0.5).
@@ -181,8 +238,8 @@ Report them separately (§5).
 
 ### 3.1 The three checks
 
-**A. Steal rate by tier compared with `p*`.** From `StealShareChoice`,
-steal rate by bounty tier, with a 95% interval
+**A. Steal rate by rung compared with `p*`.** From `StealShareChoice`
+with `Bots = 0`, steal rate by rung (bucketed if a rung is too thin), with a 95% interval
 (`±1.96·√(p(1−p)/n)`). A finding needs the **whole interval** to sit
 outside `p* ± 0.05`.
 
@@ -204,38 +261,41 @@ repeat-pair check tells them apart. Absolute alarm levels are in
 payoff-table.md §4: **AllShare > 50–60%** means the finale is a
 formality, and **AllSteal > 15–20%** means trust has collapsed.
 
-**C. Steal-rate slope across tiers.** It should fall. If it's flat or
+**C. Steal-rate slope across rungs.** It should fall. If it's flat or
 rising, high-streak players aren't protecting what they have, and the
 loss-aversion effect isn't landing.
 
-**The dominance test itself:** for each tier, compute the *realised*
-average payoff of Steal and of Share. A win pays its VU, and a loss
-costs `2 × streak` (payoff-table.md's `c₀ = 2`). If one choice pays
-more in every tier for two windows in a row, it's dominant in practice,
-whatever the model says.
+**The dominance test itself:** for each rung bucket, compute the
+*realised* average payoff of Steal and of Share. A win pays its coins
+(the drop is left out: it's the same for both choices), and a loss
+costs `10 × streak` (payoff-table.md's `c₀ = 10` coins). If one choice
+pays more in every bucket for two windows in a row, it's dominant in
+practice, whatever the model says.
 
 ### 3.2 Which lever moves what
 
-`Closs` is the streak itself and can't be tuned. `c₀` is a modelling
-constant, not a config value. The live levers are only
-`game.bountyTiers.<n>.soleStealerVU | loneSharerVU | allShareVU`, and
-Validate keeps Steal above Share.
+`Closs` is the streak itself and can't be tuned. `c₀`
+(`GameConfig.streakLossWeight`) is a modelling constant that nothing
+reads at runtime. The live levers are only
+`game.winRewards.currency.soleStealer | loneSharer | allShare |
+perRungBonus`, and Validate keeps Steal above Share.
 
 | Observed | Change | Predicted effect on `p*` |
 |---|---|---|
-| Steal rate above `p*` (too greedy) | Lower `L` for that tier | Tier 1, L 20→16: p* 0.53→0.49 |
-| Steal rate below `p*`, AllShare too high | Raise `L` or lower `S` | Tier 1, S 5→3: p* 0.53→0.54 |
-| AllSteal too high | Raise `M` (reward the holdout) | Tier 1, M 10→14: p* 0.53→0.49 |
-| Slope flat or reversed | Flatten the upper tiers' `L` (tiers 4–5 only) | Lowers `p*` at the top only |
+| Steal rate above `p*` (too greedy) | Lower `soleStealer` | 100→80: p* at streak 1 0.53→0.49, at streak 18 0.44→0.40 |
+| Steal rate below `p*`, AllShare too high | Raise `soleStealer` or lower `allShare` | `allShare` 25→15: streak 1 0.53→0.55 |
+| AllSteal too high | Raise `loneSharer` (reward the holdout) | 50→70: streak 1 0.53→0.49 |
+| Slope flat or reversed | Lower `perRungBonus` (reward climbs slower than risk) | 0.1→0.05: streak 1 unchanged, streak 18 0.44→0.41, streak 49 0.38→0.34 |
 
 The `p*` shift is the model's prediction. The effect on the *observed*
 rate is smaller and slower, because players react to their beliefs
-about each other, and those update over many Studios. **Change one tier
-at a time**, starting with tier 1, which has by far the most data.
+about each other, and those update over many Studios. A base moves
+every rung at once, so **change one number at a time**, and judge it
+first on the low rungs, which have by far the most data.
 
-**Confirming metric:** that tier's steal rate over the next window,
+**Confirming metric:** the low rungs' steal rate over the next window,
 compared with the control servers during `rollout`. **Wait:** until the
-changed tier has had its §7 minimum number of choices again. Never less
+low rungs have had their §7 minimum number of choices again. Never less
 than 7 days.
 
 ---
@@ -305,7 +365,7 @@ probably matters more in week one than §3 does.
 | Bots' share of Studio seats in rounds with ≥ 3 humans | Low: bots are floored at median human speed | Bots routinely beat humans into the Studio | Same, or `map.<id>.npcDifficultyModifier` |
 | Bots' Studio steal rate | Matches the personality weights | It doesn't | A bug in NPCBrain, not balance |
 | Humans' realised payoff against bots vs against humans | Similar | Clearly higher against bots | npc-notes.md §2.2's open question. It needs a design decision (payoff-table), so ask |
-| Streak credit refused (`roundEarnsStreakCredit`) | Rare off-peak, near zero at peak | Common at peak hours | `npcSeatStreakCreditThreshold` needs a **deploy**. It isn't in `tunablePaths` |
+| Streak gain rate by bot-seat count | Flat, or rising gently with more bots | Climbs steeply in the 4-5 bot buckets, or clusters on a few accounts off-peak | Nothing tunable since the NPC-seat threshold was retired (threat-model.md §8). Raise it with the user (design-decisions.md Q5) |
 
 A qualification rate that is *distorted* by bots moves the streak
 leaderboard (threat-model.md §8, 4th most damaging attack). Check the
@@ -352,10 +412,11 @@ difference this review acts on.
 | Integrity pair analysis | Never from counts alone. Investigate individual cases |
 | Retention (D1/D7) | Whatever Creator Hub shows with its own confidence display. Don't compare days one at a time |
 
-**Expect tier 4–5 finale data to be noise in week one.** Reaching
+**Expect finale data above rung 10 to be noise in week one.** Reaching
 streak 10 takes 10 wins in a row, and few players will have done it.
-Don't tune tiers 4–5 until they pass their floor, even if the numbers
-look alarming. Tier 1 carries the finale review until then.
+Don't tune `perRungBonus` on the high rungs' numbers until they pass
+their floor, even if they look alarming. Rungs 1–3 carry the finale
+review until then.
 
 Name noise findings in the log anyway, as *"noise at n = …, re-check
 next window"*, so a number that turns out to be real later has a
@@ -400,8 +461,9 @@ Newest first. Copy the block for each weekly review.
 - **Config version at start:**
 - **Volume:** players, rounds, all-human Studios, human Studio choices
   by tier
-- **Instrumentation check:** every §0.1 event present? Anything missing
-  is logged here before any finding
+- **Instrumentation check:** every funnel step and custom event in
+  `telemetry-schema.md` present? Anything missing is logged here before
+  any finding
 
 | # | Finding | n | Change | Expected effect | Confirming metric | Wait | Priority |
 |---|---|---|---|---|---|---|---|

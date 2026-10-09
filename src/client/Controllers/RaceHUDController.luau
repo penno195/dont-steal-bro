@@ -33,12 +33,15 @@ local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local ParticipantIds = require(ReplicatedStorage.Shared.ParticipantIds)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
+local ComponentLogic = require(script.Parent.Parent.UI.Components.ComponentLogic)
 local Toast = require(script.Parent.Parent.UI.Components.Toast)
 local HudLogic = require(script.Parent.Parent.UI.HudLogic)
+local NavigationController = require(script.Parent.NavigationController)
 local RaceHUD = require(script.Parent.Parent.UI.Screens.RaceHUD)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local UIScaleController = require(script.Parent.UIScaleController)
@@ -50,16 +53,25 @@ local source = vide.source
 -- writes when it has moved a whole ARROW_STEP.
 local SEARCH_INTERVAL = 0.2
 local ARROW_STEP = 5
+-- How far above or below you a station can sit and still count as on
+-- your floor: about two-thirds of a storey, so stairs and a raised
+-- station base stay "level" but the floor above does not.
+local LEVEL_BAND = 8
 -- If the server never answers a use (a dropped remote), unstick the
 -- button rather than leaving it spinning for the rest of the race.
 local USE_TIMEOUT = 2
+-- How long a refusal's note stays above the slots. An explanation
+-- stays as long as a toast of the same text would.
+local REFUSAL_SECONDS = 1.5
 
 -- Short, player-facing versions of PowerUpService's refusal reasons
--- that a player can act on. Anything else is an internal refusal the
--- player couldn't do anything about, so it gets no toast.
+-- that a player can act on, shown at the slots (RaceHUD.SlotNote).
+-- Anything else is an internal refusal the player couldn't do anything
+-- about, so it shows nothing.
 local REFUSALS: { [string]: string } = {
 	["no valid target"] = "No target",
 	["on cooldown"] = "Cooling down",
+	["target is protected - item kept"] = "Protected - item kept",
 }
 
 local taskNames: { [string]: string } = {}
@@ -79,9 +91,9 @@ for _, entry in Cosmetics do
 		callingCardImage[def.id] = def.cardImageAssetId :: number
 	end
 end
--- Power-up ids whose description has been toasted this session. The
--- first pickup of each type explains it once; after that it's just
--- the slot icon, so a long race doesn't nag.
+-- Power-up ids whose description has been shown this session. The
+-- first pickup of each type explains it once, above the slots; after
+-- that it's just the slot icon, so a long race doesn't nag.
 local explained: { [string]: boolean } = {}
 
 local function roleColor(role: string): Color3?
@@ -109,6 +121,23 @@ local slots = source(emptySlots())
 local selected = source(1)
 local aiming = source(false)
 local pending = source(false)
+local note = source(nil :: RaceHUD.SlotNote?)
+local noteId = 0
+-- The slot the use in flight was fired from, for the refusal shake.
+local firedSlot = 1
+
+-- Puts a note above the slots for `seconds`, replacing any already up.
+local function showNote(text: string, slot: number, kind: "info" | "warning", seconds: number)
+	noteId += 1
+	local id = noteId
+	note({ text = text, slot = slot, id = id, kind = kind })
+	task.delay(seconds, function()
+		local current = note()
+		if current ~= nil and current.id == id then
+			note(nil)
+		end
+	end)
+end
 local effects = source({} :: { HudLogic.Effect })
 local objective = source(nil :: RaceHUD.Objective?)
 
@@ -160,7 +189,7 @@ local function practiceDummies(): { [number]: Model }
 end
 
 local function characterFor(racerId: number): Model?
-	if racerId < 0 then
+	if ParticipantIds.isNPC(racerId) then
 		local dummy: Model? = practiceDummies()[racerId]
 		if dummy ~= nil then
 			return dummy
@@ -465,6 +494,7 @@ local function fire()
 		payload.aimZ = math.clamp(aim.z, -1, 1)
 	end
 	pending(true)
+	firedSlot = selected()
 	useToken += 1
 	local token = useToken
 	Net.fireServer("PowerUpUseIntent", payload)
@@ -606,8 +636,11 @@ local store: RaceHUD.Store = {
 	selected = selected,
 	aiming = aiming,
 	pending = pending,
+	note = note,
 	effects = effects,
 	objective = objective,
+	navigation = NavigationController.toggle,
+	pressNavigation = NavigationController.press,
 	select = selectSlot,
 	fire = fire,
 	startAim = startAim,
@@ -672,7 +705,8 @@ local function onInventory(payload: any)
 			local def = if id ~= nil then powerUpDefs[id] else nil
 			if def ~= nil and not explained[def.id] then
 				explained[def.id] = true
-				Toast.show(string.format("%s: %s", def.displayName, def.description), "info")
+				local text = string.format("%s: %s", def.displayName, def.description)
+				showNote(text, index, "info", ComponentLogic.toastSeconds(text))
 			end
 			list[index] = table.freeze({
 				index = index,
@@ -715,20 +749,27 @@ local function onUseResult(payload: any)
 	pending(false)
 	local message = if payload.success then nil else REFUSALS[payload.reason]
 	if message ~= nil then
-		Toast.show(message, "warning")
+		showNote(message, firedSlot, "warning", REFUSAL_SECONDS)
 	end
 end
 
--- A rival's power-up landed on you. Named, so a sudden freeze reads as
--- a play someone made rather than lag. The caster's CallingCard, if
--- they wear one, rides along on the same toast.
+-- A rival used a power-up on you. Named, so a sudden freeze reads as
+-- a play someone made rather than lag. Every item says so, even one a
+-- ward or a missing task stopped (`landed` false), so the victim always
+-- knows who tried. The caster's CallingCard, if they wear one, rides
+-- along on the same toast.
 local function onHitYou(payload: any)
 	local def = powerUpDefs[payload.powerUpId]
 	if def == nil or type(payload.casterName) ~= "string" then
 		return
 	end
 	local card = if type(payload.callingCardId) == "string" then callingCardImage[payload.callingCardId] else nil
-	Toast.show(string.format("%s used %s on you", payload.casterName, def.displayName), "danger", card)
+	local text = string.format("%s used %s on you", payload.casterName, def.displayName)
+	if payload.landed == false then
+		Toast.show(text .. " - no effect", "warning", card)
+	else
+		Toast.show(text, "danger", card)
+	end
 end
 
 -- The objective arrow, while mounted. Returns the stop function.
@@ -737,6 +778,7 @@ local function runObjective(): () -> ()
 	local sinceSearch = math.huge
 	local lastBearing: number? = nil
 	local lastDistance: number? = nil
+	local lastLevel: HudLogic.Level? = nil
 
 	local connection = RunService.RenderStepped:Connect(function(dt: number)
 		local character = Players.LocalPlayer.Character
@@ -774,10 +816,11 @@ local function runObjective(): () -> ()
 		local offset = goal.Position - position
 		local bearing =
 			HudLogic.quantize(HudLogic.bearing(look.X, look.Z, offset.X, offset.Z) + ARROW_STEP / 2, ARROW_STEP)
-		local distance = math.floor(Vector2.new(offset.X, offset.Z).Magnitude)
-		if bearing ~= lastBearing or distance ~= lastDistance then
-			lastBearing, lastDistance = bearing, distance
-			objective(table.freeze({ bearing = bearing, distance = distance }))
+		local distance = math.floor(offset.Magnitude)
+		local level: HudLogic.Level = HudLogic.level(offset.Y, LEVEL_BAND)
+		if bearing ~= lastBearing or distance ~= lastDistance or level ~= lastLevel then
+			lastBearing, lastDistance, lastLevel = bearing, distance, level
+			objective(table.freeze({ bearing = bearing, distance = distance, level = level }))
 		end
 	end)
 
@@ -789,7 +832,7 @@ end
 
 local RaceHUDController: Loader.Controller = {
 	name = "RaceHUDController",
-	dependencies = { "UIScaleController", "NPCBubbleController" }, -- NPC rigs, for lock-on
+	dependencies = { "UIScaleController", "NPCBubbleController", "NavigationController" }, -- NPC rigs, for lock-on
 }
 
 local unmount: (() -> ())? = nil
@@ -862,6 +905,7 @@ local function onRoundState(payload: any)
 		slots(emptySlots())
 		selected(1)
 		pending(false)
+		note(nil)
 	end
 	if not racing then
 		mountPractice()

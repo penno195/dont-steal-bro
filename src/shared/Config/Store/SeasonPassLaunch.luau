@@ -1,0 +1,33 @@
+--!strict
+-- The Season Pass launch offer: 99 R$ instead of 199 (user decision,
+-- 2026-10-09, design-decisions.md Q1 "the featured plinths"). A second
+-- developer product granting the same pass. While it's on sale it
+-- `replaces` the full-price SeasonPass, so a request for the pass is
+-- sold through this one; after onSaleUntil the 199 R$ product is back
+-- on its own, with no Creator Dashboard change on the day.
+--
+-- TO SWITCH ON: create a 99 R$ developer product on the Creator
+-- Dashboard (same icon as the Season Pass), paste its id into assetId,
+-- set onSaleUntil to the offer's real end, and set enabled = true.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Validate = require(ReplicatedStorage.Shared.Config.Validate)
+
+local SeasonPassLaunch: Validate.StoreItemDef = {
+	key = "season-pass-launch",
+	kind = "DeveloperProduct",
+	assetId = 0, -- not created yet
+	enabled = false,
+	displayName = "Season Pass",
+	description = "Launch offer! Unlock this season's paid tiers. Every win this season counts, including the ones you've already won.",
+	robuxPrice = 99, -- display only; Roblox charges the product's dashboard price
+	wasPrice = 199,
+	onSaleUntil = "2026-11-01 00:00", -- PLACEHOLDER: the owner sets the real end
+	replaces = "season-pass",
+	featuredSlot = 1,
+	sortOrder = 10,
+	imageAssetId = 130933629115331, -- assets/store/season-pass.png
+	grants = { { kind = "SeasonPass" } },
+}
+
+return SeasonPassLaunch

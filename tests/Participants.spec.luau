@@ -12,6 +12,7 @@
 
 local TestRunner = require("./TestRunner")
 local Participants = require("../src/server/Participants")
+local ParticipantIds = require("../src/shared/ParticipantIds")
 
 local function fakePlayer(userId: number): any
 	return { UserId = userId, Name = "player" .. userId }
@@ -58,6 +59,26 @@ TestRunner.describe("Participants - NPC ids", function()
 
 	TestRunner.it("classifies a real UserId as human", function()
 		TestRunner.expect(Participants.isNPCId(1234567)):toBe(false)
+	end)
+
+	-- Studio's Clients and Servers test gives players UserIds -1, -2, ...
+	TestRunner.it("never collides with a Studio test player's negative UserId", function()
+		Participants.resetForTesting()
+		human(-1)
+		human(-2)
+		for _ = 1, 3 do
+			npc()
+		end
+		TestRunner.expect(Participants.isNPCId(-1)):toBe(false)
+		TestRunner.expect(Participants.isNPCId(-8)):toBe(false)
+		TestRunner.expect((Participants.get(-1) :: any).isNPC):toBe(false)
+	end)
+
+	TestRunner.it("agrees with the client's ParticipantIds", function()
+		TestRunner.expect(Participants.FIRST_NPC_ID):toBe(ParticipantIds.FIRST_NPC_ID)
+		for _, id in { -1, -999, -1000, -1001, 42 } do
+			TestRunner.expect(ParticipantIds.isNPC(id)):toBe(Participants.isNPCId(id))
+		end
 	end)
 end)
 

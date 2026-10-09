@@ -81,6 +81,10 @@ local stationOccupancy: { [string]: number } = {}
 local racerStates: { [number]: RacerRoundState } = {}
 local finishOrder: { number } = {}
 local qualificationEmitted = false
+-- When this race's tasks were dealt: a racer's first task is timed from
+-- here, so for analytics it includes the walk from spawn.
+local raceStartedAt = 0
+local raceSeconds = 0 -- set when Race ends, for RoundEnded
 local nextSeedOverride: number? = nil
 local lastQualificationResult: Qualification.QualificationResult? = nil
 
@@ -283,6 +287,10 @@ local function emitQualification()
 	qualificationEmitted = true
 	lastQualificationResult = result
 	Net.fireAllClients("TaskQualificationResult", result)
+	local Telemetry = Loader.get("Telemetry") :: any
+	for _, id in result.qualifiers do
+		Telemetry.qualified(id)
+	end
 
 	print(
 		string.format(
@@ -299,6 +307,7 @@ local function beginRace()
 	finishOrder = {}
 	racerStates = {}
 	stationOccupancy = {}
+	raceStartedAt = now()
 
 	if #stationPool == 0 then
 		warn("TaskService: no station pool set (no map loaded) - skipping task assignment for this race")
@@ -383,9 +392,14 @@ local function recordCompletionFor(racerId: number, stationId: string, durationS
 		return false
 	end
 
+	-- Since their last task (or the start), not durationSeconds: the
+	-- pacing chart wants the walk between stations in it too.
+	local sincePrevious = now() - (state.lastCompletionTime or raceStartedAt)
 	state.completed[stationId] = true
 	state.tasksCompleted += 1
 	state.lastCompletionTime = now()
+	local Telemetry = Loader.get("Telemetry") :: any
+	Telemetry.taskCompleted(racerId, taskId, sincePrevious, state.tasksCompleted)
 	stationOccupancy[stationId] = math.max(0, (stationOccupancy[stationId] or 0) - 1)
 
 	broadcastProgress()
@@ -394,6 +408,7 @@ local function recordCompletionFor(racerId: number, stationId: string, durationS
 
 	if state.tasksCompleted >= #state.assignments then
 		table.insert(finishOrder, racerId)
+		Telemetry.finished(racerId)
 		if #finishOrder >= GameConfig.qualifierCount and not qualificationEmitted then
 			emitQualification()
 			local RoundService = Loader.get("RoundService") :: any
@@ -450,7 +465,7 @@ end
 
 local TaskService: Loader.Service = {
 	name = "TaskService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "LiveConfig" },
+	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "LiveConfig", "Telemetry" },
 
 	setStations = setStations,
 	debugLoadStationsFromMap = debugLoadStationsFromMap,
@@ -603,6 +618,22 @@ function TaskService:init()
 
 	RoundService.onEnter("Qualified", function()
 		emitQualification()
+	end)
+
+	RoundService.onExit("Race", function()
+		raceSeconds = now() - raceStartedAt
+	end)
+
+	-- Logged at Results, not Race's end, so Humans counts who stayed
+	-- through the finale too.
+	RoundService.onEnter("Results", function()
+		local humanFinishers = 0
+		for _, racerId in finishOrder do
+			if not Participants.isNPCId(racerId) then
+				humanFinishers += 1
+			end
+		end
+		Loader.get("Telemetry").roundEnded(raceSeconds, humanFinishers, Participants.countHumans())
 	end)
 
 	RoundService.onPlayerLeaving(function(player: Player, state: string)

@@ -564,6 +564,40 @@ Net.Remotes = {
 		practice = true,
 	} :: RemoteDef,
 
+	-- The Hold verb's submission remote (AlarmKillswitch, later Crate
+	-- Winch): `pressed` true when the thumb goes down, false when it
+	-- lifts. Only the edges travel - the server times the interval on
+	-- its own clock (src/server/TaskHandlers/AlarmKillswitch.luau), so
+	-- no client-reported duration exists to forge.
+	HoldSubmit = {
+		name = "HoldSubmit",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			stationId = Net.string({ maxLength = 64 }),
+			pressed = Net.boolean(),
+		}),
+		rateLimit = { capacity = 10, refillPerSecond = 4 },
+		states = { "Race" },
+		practice = true,
+	} :: RemoteDef,
+
+	-- The Timing verb's submission remote (ReactorSync, AirlockCycle): one
+	-- stop tap, carrying WHEN on the attempt's clock the player tapped.
+	-- The server clamps that claim to the last half second and runs the
+	-- sweep itself (src/shared/TimingLogic.luau covers why a time, and
+	-- what the clamp does and doesn't allow).
+	TimingSubmit = {
+		name = "TimingSubmit",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			stationId = Net.string({ maxLength = 64 }),
+			at = Net.number({ min = 0, max = 3600 }),
+		}),
+		rateLimit = { capacity = 6, refillPerSecond = 3 },
+		states = { "Race" },
+		practice = true,
+	} :: RemoteDef,
+
 	-- P2-7's power-up remotes. Note what's deliberately NOT in
 	-- PowerUpUseIntent's payload: no powerUpId (the server already knows
 	-- what's in the player's own inventory slot) and no effect of any
@@ -635,17 +669,19 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
-	-- Server -> client (targeted at the VICTIM only): a rival's aimed or
-	-- nearest-target power-up just landed on you. `{ powerUpId,
-	-- casterName, shunt?, callingCardId? }`, so the HUD can say "Freeze
+	-- Server -> client (targeted at the VICTIM only): a rival's power-up
+	-- was just used on you. `{ powerUpId, casterName, landed, shunt?,
+	-- callingCardId? }`, so the HUD can say "Freeze
 	-- from Alex" plus the item's one-line description - playtests showed a
 	-- hit with no explanation reads as lag. `callingCardId` is the caster's
 	-- equipped CallingCard cosmetic, read server-side from their profile
 	-- (nil for NPCs, dummies and anyone without one); the toast shows its
 	-- image. `shunt` ({ x, y, z } studs/s) is the shove
 	-- a thrown item gives; the victim's client applies it because it owns
-	-- its character's physics. Only fired when the effect actually applied; a zone
-	-- (Slow Field) is visible on the ground and doesn't fire it.
+	-- its character's physics, so it's only sent on a landed hit. Fired for
+	-- every item used on a player (powerups.md, user decision 2026-10-03):
+	-- `landed` false when it reached them but did nothing (a ward, no task
+	-- to scramble), and a Slow Field fires it once per zone per player.
 	PowerUpHitYou = {
 		name = "PowerUpHitYou",
 		direction = "ServerBroadcast",
@@ -808,8 +844,10 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
-	-- P6-6: what this round did to YOUR streak and bounty - the results
-	-- screen's data. Targeted at its owner (fireClient), never broadcast:
+	-- P6-6: what this round did to YOUR streak, and (rewards step 2b)
+	-- what your win paid - the results screen's data. A reward is
+	-- already granted when this fires, and this is the first the client
+	-- hears of it (Q7). Targeted at its owner (fireClient), never broadcast:
 	-- it carries streak numbers, design-decisions.md Q7 condition 1.
 	--
 	-- Fired on ENTERING Results, never from the progression write
@@ -818,12 +856,6 @@ Net.Remotes = {
 	-- your own choice, gives away the others' early (the leak P6-5's
 	-- audit found in the old ProgressionStreakSkipped remote this one
 	-- replaces).
-	--
-	-- `streakCredited = false` is threat-model.md §8's required
-	-- explanation: an NPC-heavy round earns no streak credit and "needs
-	-- an explicit 'queue too thin for streak credit right now' message,
-	-- not silent non-progression." It carries the seat count and the
-	-- threshold so the screen can say something specific.
 	RoundRecap = {
 		name = "RoundRecap",
 		direction = "ServerBroadcast",
@@ -860,6 +892,19 @@ Net.Remotes = {
 	-- own countdowns, no per-second remote).
 	DecisionPhaseChanged = {
 		name = "DecisionPhaseChanged",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> one finalist: their own stakes for the stakes panel -
+	-- {soleStealer, loneSharer, allShare, dropChance} at the rung a win
+	-- would put them on (design-decisions.md Q1's 2026-10-08 case).
+	-- Fired once, with DecisionParticipants. Targeted (fireClient), never
+	-- broadcast: the amounts scale with the streak (Q7 condition 1).
+	DecisionStakes = {
+		name = "DecisionStakes",
 		direction = "ServerBroadcast",
 		schema = nil,
 		rateLimit = nil,
@@ -936,6 +981,9 @@ Net.Remotes = {
 	-- that just died. Targeted because it is a streak number (Q7
 	-- condition 1), and fired only AFTER DecisionReveal because "you
 	-- won" plus your own choice is enough to work out the others'.
+	-- A winner's `reward` rides along (rewards-roadmap.md step 3):
+	-- { currency, rung, drop, dropAmount }, their own payout only. The
+	-- reveal never shows another finalist's (user decision, Q7).
 	DecisionPersonalResult = {
 		name = "DecisionPersonalResult",
 		direction = "ServerBroadcast",
@@ -1009,6 +1057,19 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: "Same as last round." No payload. The server
+	-- re-arms the loadout from the profile's own lastLoadout, re-checking
+	-- each entry against stock (StoreLogic.repeatLoadout). The client
+	-- can't name what goes in, so this is no wider than three
+	-- StoreLoadoutIntents.
+	StoreLoadoutRepeatIntent = {
+		name = "StoreLoadoutRepeatIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: equip a cosmetic into a slot, or unequip with a
 	-- nil itemId. Validated against the player's own owned list
 	-- server-side - a client naming a cosmetic it never bought is
@@ -1025,6 +1086,22 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: claim season-pass rewards (user decision
+	-- 2026-10-09: rewards wait to be claimed). `track` + `upTo` is a
+	-- tile's Claim button (that track up to that list position); no
+	-- track is Claim All. Only an intent: SeasonLogic.claim pays nothing
+	-- the player's wins and pass don't cover.
+	SeasonClaimIntent = {
+		name = "SeasonClaimIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			track = Net.optional(Net.stringEnum({ "Free", "Premium" })),
+			upTo = Net.optional(Net.number({ min = 1, max = 200, integer = true })),
+		}),
+		rateLimit = { capacity = 6, refillPerSecond = 1 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- Server -> client (targeted at the owner only, never
 	-- fireAllClients): this player's own store state - currency,
 	-- power-up stock, loadout, owned cosmetics, equipped slots, and
@@ -1032,6 +1109,9 @@ Net.Remotes = {
 	-- inventory: what someone else bought is nobody's business, and
 	-- broadcasting it would also hand a modified client a free census
 	-- of who is worth something.
+	-- Also the open streak buy-back offer (`buyBack`: key, streak,
+	-- robuxPrice), which names your own streak - so StoreService holds
+	-- it back on a match server until your round's Results (Q7).
 	StoreState = {
 		name = "StoreState",
 		direction = "ServerBroadcast",
@@ -1053,6 +1133,41 @@ Net.Remotes = {
 	-- never receives it is still paid.
 	StorePurchaseResult = {
 		name = "StorePurchaseResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server: switch Navigation on or off (design-decisions.md
+	-- Q8, "Navigation"). The client never says whether it has paid: the
+	-- server checks the pass, the round already charged and the rounds
+	-- held, and spends one if it has to (NavigationLogic.switchOn).
+	NavigationToggle = {
+		name = "NavigationToggle",
+		direction = "ServerIntent",
+		schema = Net.struct({ on = Net.boolean() }),
+		rateLimit = { capacity = 4, refillPerSecond = 1 },
+		states = { "Race" },
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the owner only): the toggle's state,
+	-- and on "NeedsPurchase" what the sheet offers. Never broadcast:
+	-- nobody else may see that a player is using it.
+	NavigationState = {
+		name = "NavigationState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the owner only): the path to draw,
+	-- as waypoints from the player's position to the target station.
+	-- Resent only when the target or the waypoints change; an empty list
+	-- clears the line.
+	NavigationPath = {
+		name = "NavigationPath",
 		direction = "ServerBroadcast",
 		schema = nil,
 		rateLimit = nil,
@@ -1094,10 +1209,15 @@ Net.Remotes = {
 	-- the server's own profile and MemoryStore, never the client. No
 	-- `states` gate, because the hub has no round state.
 	-- MatchmakingService refuses both outside the hub place instead.
+	-- `mode`: the Practice button sends "Practice" (design-decisions.md
+	-- Q7, the practice-match case). Absent means ranked. On a private hub
+	-- every queue is practice, whatever this says.
 	QueueJoinIntent = {
 		name = "QueueJoinIntent",
 		direction = "ServerIntent",
-		schema = Net.struct({}),
+		schema = Net.struct({
+			mode = Net.optional(Net.stringEnum({ "Ranked", "Practice" })),
+		}),
 		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
 		states = nil,
 	} :: RemoteDef,
@@ -1113,9 +1233,53 @@ Net.Remotes = {
 	-- Server -> client, sent to that player only: their own queue status
 	-- (Idle / Joining / Waiting with position, size and an estimated wait /
 	-- MatchFound / Travelling (P5-2) / Unavailable, plus a message). Never includes who else
-	-- is queued or anyone's streak (design-decisions.md Q7).
+	-- is queued or anyone's streak (design-decisions.md Q7). Waiting
+	-- carries `practice` when the line is the practice queue, so a party
+	-- member queued by their leader's tap sees which line they're in.
 	QueueState = {
 		name = "QueueState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Practice parties (design-decisions.md Q7, the "practice matches and
+	-- parties" case; PartyService). The client names a player on this
+	-- server and nothing else: the server checks they're here, and
+	-- PartyLogic decides the rest. Hub only, like the queue remotes.
+	PartyInviteIntent = {
+		name = "PartyInviteIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ targetId = Net.number({ integer = true }) }),
+		rateLimit = { capacity = 4, refillPerSecond = 0.25 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- An answer to this player's own pending invite. Which invite is the
+	-- server's to know; the client only says yes or no.
+	PartyRespondIntent = {
+		name = "PartyRespondIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ accept = Net.boolean() }),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	PartyLeaveIntent = {
+		name = "PartyLeaveIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client, to that player only: their party (leaderId,
+	-- memberIds), any invite waiting on them (inviteFromId), and an
+	-- optional one-line notice. User ids only - never a streak or title
+	-- (Q7 condition 1).
+	PartyState = {
+		name = "PartyState",
 		direction = "ServerBroadcast",
 		schema = nil,
 		rateLimit = nil,

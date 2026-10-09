@@ -112,7 +112,6 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Outcomes = require(ReplicatedStorage.Shared.Config.Outcomes)
-local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local Participants = require(ServerScriptService.Server.Participants)
 local FinaleRoster = require(ServerScriptService.Server.FinaleRoster)
 local Signal = require(ReplicatedStorage.Packages.Signal)
@@ -173,7 +172,9 @@ local outcomeWritten = false
 -- broadcast DecisionReveal. Sending it any earlier would tell a client
 -- whether it won - and so, with its own choice, what the others picked
 -- - before the reveal packet, which is the one thing this file forbids.
-type PersonalResult = { streakBefore: number, streakAfter: number, won: boolean }
+-- `reward` (rewards-roadmap.md step 3) is a winner's own payout, from
+-- ProgressionService.rewardFor; nil on a loss. Only its owner gets it.
+type PersonalResult = { streakBefore: number, streakAfter: number, won: boolean, reward: { [string]: any }? }
 local personalResults: { [number]: PersonalResult } = {}
 
 local pendingPhaseTimerThread: thread? = nil
@@ -254,21 +255,6 @@ local function isDebugAuthorized(_player: Player?): boolean
 	return RunService:IsStudio()
 end
 
--- Maps an Outcomes.luau branch name to ProfileLogic's OutcomeTag
--- (design-decisions.md Q1's "streak tier x outcome tier" reward lookup
--- key) - nil for a branch with no winners (AllSteal/TwoSteal), since
--- nothing ever looks up a tag for a loser.
-local function outcomeTagFor(branch: string): ProfileLogic.OutcomeTag?
-	if branch == "SoleSteal" or branch == "OneStealOneShare" then
-		return "SoleStealer"
-	elseif branch == "LoneShare" then
-		return "LoneSharer"
-	elseif branch == "AllShare" or branch == "TwoShare" or branch == "SoloFinalist" then
-		return "AllShare"
-	end
-	return nil
-end
-
 -- Step 3 + 4: resolves via the pure outcome module, then writes every
 -- STILL-CONNECTED qualifier's real result to their profile. A qualifier
 -- who's already disconnected by this point is silently skipped here -
@@ -286,25 +272,24 @@ end
 local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 	local DataService = Loader.get("DataService") :: any
 
+	-- Choices only: what a win pays is RewardLogic's (Outcomes.luau's
+	-- header). Every choice is locked by now, so from here on Q7's
+	-- 2026-10-02 applied case would allow showing levels.
 	local finalists: { Outcomes.FinalistInput } = {}
-	local tierNumberByPlayerId: { [number]: number } = {}
-
 	for _, id in qualifierIds do
-		local player = Players:GetPlayerByUserId(id)
-		local streak = if player ~= nil then DataService.getStreak(player) else 0
-		local tier = ProfileLogic.resolveBountyTier(GameConfig.bountyTiers, streak)
-		tierNumberByPlayerId[id] = tier.tier
-
-		table.insert(finalists, {
-			playerId = id,
-			choice = choices[id],
-			soleStealerVU = tier.soleStealerVU,
-			loneSharerVU = tier.loneSharerVU,
-			allShareVU = tier.allShareVU,
-		})
+		table.insert(finalists, { playerId = id, choice = choices[id] })
 	end
 
 	local outcome = Outcomes.resolve(finalists)
+
+	-- Bot finalists, for telemetry: only an all-human Studio's choices
+	-- measure players (launch-review.md §0.4).
+	local bots = 0
+	for _, id in qualifierIds do
+		if Participants.isNPCId(id) then
+			bots += 1
+		end
+	end
 
 	-- Set BEFORE any profile write, not after (P3-7). From this line on
 	-- the finale's result is committed, and every disconnect and
@@ -319,16 +304,16 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			continue
 		end
 
-		-- Only `won` matters here, not the winner's own bountyVU number -
-		-- PendingBounty (ProfileLogic.luau) stores streakTier + an
-		-- OutcomeTag, not a raw VU figure; the VU-to-item lookup itself
-		-- is design-decisions.md Q1's still-unbuilt RewardTables module.
-		local won = false
+		-- A winner's outcome tier picks their currency base. The reward
+		-- itself is rolled and paid inside applyRoundResult (rewards
+		-- step 2b), at the winner's own after-win rung.
+		local outcomeTag: Outcomes.OutcomeTag? = nil
 		for _, winner in outcome.winners do
 			if winner.playerId == finalist.playerId then
-				won = true
+				outcomeTag = winner.outcomeTag
 			end
 		end
+		local won = outcomeTag ~= nil
 
 		-- P4-1: the streak change goes through ProgressionService and
 		-- nowhere else - reason code, round id, idempotency and the
@@ -337,58 +322,36 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 		local ProgressionService = Loader.get("ProgressionService") :: any
 		local RoundService = Loader.get("RoundService") :: any
 
-		local bounty: ProfileLogic.PendingBounty? = nil
-		if won then
-			local outcomeTag = outcomeTagFor(outcome.branch)
-			if outcomeTag ~= nil then
-				-- Both the annotation and the cast are load-bearing, and
-				-- neither is obvious: confirmed locally that luau-lsp
-				-- widens a string-literal union back to plain `string`
-				-- inside a table constructor unless the table has an
-				-- expected type, and a `{ outcomeTag: string }` is not
-				-- assignable to PendingBounty because Luau table
-				-- properties are invariant. Annotating `granted` supplies
-				-- that expected type; the cast handles the `~= nil`
-				-- refinement widening `OutcomeTag?` to `string` rather
-				-- than to `OutcomeTag`. outcomeTagFor returns one of the
-				-- three literals or nil, and nil is already excluded
-				-- here, so the cast asserts what its signature promises.
-				local granted: ProfileLogic.PendingBounty = {
-					streakTier = tierNumberByPlayerId[finalist.playerId],
-					outcomeTag = outcomeTag :: ProfileLogic.OutcomeTag,
-					grantedAt = os.time(),
-				}
-				bounty = granted
-			else
-				warn(
-					string.format(
-						"DecisionService: %s won but branch %q has no OutcomeTag mapping - no bounty granted",
-						player.Name,
-						outcome.branch
-					)
-				)
-			end
-		end
-
 		local streakBefore = DataService.getStreak(player)
+		local roundId = RoundService.getRoundId()
 		local after = ProgressionService.applyRoundResult(player, {
-			roundId = RoundService.getRoundId(),
+			roundId = roundId,
 			reason = ProgressionService.reasonForOutcome(outcome.branch, won),
-			bounty = bounty,
+			outcomeTag = outcomeTag,
 		})
 		personalResults[finalist.playerId] = {
 			streakBefore = streakBefore,
 			streakAfter = after.currentStreak,
 			won = won,
+			reward = ProgressionService.rewardFor(roundId, player.UserId),
 		}
+		-- Practice matches keep no stats or choice telemetry
+		-- (design-decisions.md Q7). Defaulted choices included: the streak
+		-- they were risking is the one they brought into the Studio.
+		if not ProgressionService.isPracticeMatch() then
+			Loader.get("Telemetry")
+				.stealShareChoice(player, finalist.choice, streakBefore, bots, ProgressionService.rungAtStake(streakBefore))
 
-		DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
-		DataService.recordRoundStat(player, "qualifications")
+			DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
+			DataService.recordRoundStat(player, "qualifications")
+		end
 
 		-- Their real result is now written - the Q4 forfeit fallback
 		-- must never fire for someone who made it through normally.
 		DataService.setPendingRoundOutcomeResolver(player, nil)
 	end
+
+	Loader.get("Telemetry").finaleOutcome(outcome.branch, #outcome.winners, bots)
 
 	print(
 		string.format(
@@ -459,6 +422,7 @@ enterReveal = function(outcome: Outcomes.OutcomeResult)
 		local player = Players:GetPlayerByUserId(id)
 		if player ~= nil then
 			Net.fireClient("DecisionPersonalResult", player, result)
+			Loader.get("Telemetry").resultReceived(player)
 		end
 	end
 
@@ -605,6 +569,9 @@ local function lockIn(racerId: number, choice: any, who: string): boolean
 
 	choices[racerId] = choice :: Outcomes.Choice
 	locked[racerId] = true
+	-- Only a real lock-in is a funnel step; a choice defaulted by the
+	-- Choose timer isn't.
+	Loader.get("Telemetry").choiceLocked(racerId)
 
 	-- Still only {playerId} - the secrecy audit at the top of this file
 	-- holds identically for a bot's lock-in. A client learning WHICH of
@@ -828,6 +795,11 @@ local function beginDecisionStudio()
 		return
 	end
 
+	local Telemetry = Loader.get("Telemetry") :: any
+	for _, id in qualifierIds do
+		Telemetry.finaleEntered(id)
+	end
+
 	local DataService = Loader.get("DataService") :: any
 	local RoundService = Loader.get("RoundService") :: any
 	for _, id in qualifierIds do
@@ -868,7 +840,7 @@ local function beginDecisionStudio()
 			ProgressionService.applyRoundResult(player, {
 				roundId = roundId,
 				reason = "ForfeitDisconnect",
-				bounty = nil,
+				outcomeTag = nil,
 			})
 		end)
 	end
@@ -898,6 +870,17 @@ local function beginDecisionStudio()
 
 	Net.fireAllClients("DecisionParticipants", { qualifierIds = qualifierIds, reputation = reputation })
 
+	-- Each human finalist's own stakes, to them alone (design-decisions.md
+	-- Q1's 2026-10-08 case). Rung-scaled, so they carry a level: the one
+	-- pre-lock-in exception to Q7, and only because nobody else gets it.
+	local ProgressionService = Loader.get("ProgressionService") :: any
+	for _, id in qualifierIds do
+		local player = Players:GetPlayerByUserId(id)
+		if player ~= nil and not ProgressionService.isPracticeMatch() then
+			Net.fireClient("DecisionStakes", player, ProgressionService.stakesFor(player))
+		end
+	end
+
 	-- "With a clear announcement to the others" (P3-7 case 1's own
 	-- requirement). Fired AFTER DecisionParticipants so a client already
 	-- has the roster this refers to, and separately from it so the
@@ -926,7 +909,15 @@ end
 
 local DecisionService: Loader.Service = {
 	name = "DecisionService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "TaskService", "DataService", "ProgressionService" },
+	dependencies = {
+		"NetGuard",
+		"ConfigValidator",
+		"RoundService",
+		"TaskService",
+		"DataService",
+		"ProgressionService",
+		"Telemetry",
+	},
 
 	debugForceOutcome = debugForceOutcome,
 

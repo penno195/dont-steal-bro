@@ -45,14 +45,30 @@ local RunService = game:GetService("RunService")
 local UserService = game:GetService("UserService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local LeaderboardLogic = require(ServerScriptService.Server.LeaderboardLogic)
 local PeriodKeys = require(ServerScriptService.Server.PeriodKeys)
+local LeaderboardPayoutLogic = require(ServerScriptService.Server.LeaderboardPayoutLogic)
+local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 
 local config = GameConfig.leaderboard
+
+-- Separate stores in Studio, like DataService's and LiveConfig's. With
+-- API access on, Studio otherwise shares production DataStores: a test
+-- win would land on the public all-time board, and a Studio session
+-- could write the period snapshot from Studio's own MemoryStore boards
+-- (which Roblox keeps apart from production), claiming the period
+-- before any live server so its real winners went unpaid.
+local STUDIO_SUFFIX = if RunService:IsStudio() then "_Studio" else ""
+local BOARD_STORE_NAME = config.storeName .. STUDIO_SUFFIX
+local SNAPSHOT_STORE_NAME = config.snapshotStoreName .. STUDIO_SUFFIX
+
+-- The first read's random spread after boot (startPolling).
+local FIRST_REFRESH_SPREAD_SECONDS = 15
 
 local store: OrderedDataStore? = nil
 local cachedEntries: { LeaderboardLogic.Entry } = {}
@@ -67,11 +83,11 @@ local pollThread: thread? = nil
 -- winners are still worth showing and still owe a reward.
 local snapshotStore: DataStore? = nil
 
--- P4-4's reward hook. A no-op until something claims it, because what a
--- period win is WORTH is a progression decision (design-decisions.md
--- Q1's still-unbuilt RewardTables), not a leaderboard one. Fired only
--- by the server that won the snapshot race, so exactly once per period
--- across the whole universe.
+-- P4-4's reward hook. LeaderboardPayoutService claims it at init
+-- (rewards-roadmap.md step 4); this logging default only runs if
+-- nothing has. What a placement is WORTH is an economy decision, so it
+-- lives there, not here. Fired only by the server that won the
+-- snapshot race, so exactly once per period across the whole universe.
 local periodRewardHandler: (kind: string, periodKey: string, rank: number, userId: number, streak: number) -> () = function(
 	kind: string,
 	periodKey: string,
@@ -91,13 +107,16 @@ local periodRewardHandler: (kind: string, periodKey: string, rank: number, userI
 	)
 end
 
--- userId -> {name, resolvedAt}. A TTL rather than a permanent cache, so
+-- userId -> {name, dueAt}. A TTL rather than a permanent cache, so
 -- a RENAMED account corrects itself within an hour without costing a
 -- lookup per board render. A DELETED account never resolves and falls
 -- back to LeaderboardLogic.displayNameFor's placeholder every time,
 -- which is cheap because the failure is cached too.
-type NameEntry = { name: string?, resolvedAt: number }
-local nameCache: { [number]: NameEntry } = {}
+local nameCache: { [number]: LeaderboardLogic.NameEntry } = {}
+-- A5: lookups per minute, shared by every board this server resolves.
+local NAME_LIMITS: LeaderboardLogic.BudgetLimits =
+	{ perWindow = config.nameLookupsPerMinute, windowSeconds = 60, softCeiling = 1 }
+local nameBudget = LeaderboardLogic.newBudget(0)
 
 local function now(): number
 	return os.clock()
@@ -153,38 +172,43 @@ end
 -- per row. A 100-row board resolved one id at a time is 100 web calls
 -- every refresh, which is the write-amplification mistake in its
 -- read-shaped form.
+--
+-- A5: capped at nameLookupsPerMinute, top ranks first, so a fresh
+-- server resolving three boards at once cannot trip the rate limit. The
+-- rest stay as placeholders until a later refresh has allowance.
 local function resolveNames(userIds: { number })
 	local nowValue = now()
-	local wanted: { number } = {}
-
-	for _, userId in userIds do
-		local cached = nameCache[userId]
-		if cached == nil or nowValue - cached.resolvedAt > config.nameCacheTtlSeconds then
-			table.insert(wanted, userId)
-		end
-	end
-
+	nameBudget = LeaderboardLogic.rollWindow(nameBudget, nowValue, NAME_LIMITS)
+	local wanted = LeaderboardLogic.namesToLookUp(
+		userIds,
+		nameCache,
+		nowValue,
+		LeaderboardLogic.remaining(nameBudget, NAME_LIMITS)
+	)
 	if #wanted == 0 then
 		return
 	end
+	nameBudget = LeaderboardLogic.spend(nameBudget, #wanted)
 
+	local ttl, retry = config.nameCacheTtlSeconds, config.nameFailureRetrySeconds
 	local ok, infos = pcall(function()
 		return UserService:GetUserInfosByUserIdsAsync(wanted)
 	end)
 
 	if not ok then
-		-- Cache the FAILURE too, with a shorter life, so a persistent
-		-- outage doesn't mean a fresh batch of lookups every refresh.
+		-- Cached as a failure with a short retry, so an outage costs one
+		-- batch per retry window rather than one per refresh.
 		for _, userId in wanted do
-			nameCache[userId] = { name = nil, resolvedAt = nowValue - config.nameCacheTtlSeconds / 2 }
+			nameCache[userId] = LeaderboardLogic.nameAfterLookup(nameCache[userId], "Failed", nil, nowValue, ttl, retry)
 		end
-		warn("LeaderboardService: display name lookup failed - falling back to placeholders this cycle")
+		warn("LeaderboardService: display name lookup failed - retrying in " .. tostring(retry) .. "s")
 		return
 	end
 
 	local seen: { [number]: boolean } = {}
 	for _, info in infos :: { { Id: number, Username: string, DisplayName: string } } do
-		nameCache[info.Id] = { name = info.DisplayName, resolvedAt = nowValue }
+		nameCache[info.Id] =
+			LeaderboardLogic.nameAfterLookup(nameCache[info.Id], "Resolved", info.DisplayName, nowValue, ttl, retry)
 		seen[info.Id] = true
 	end
 
@@ -194,7 +218,8 @@ local function resolveNames(userIds: { number })
 	-- gives it a stable placeholder.
 	for _, userId in wanted do
 		if not seen[userId] then
-			nameCache[userId] = { name = nil, resolvedAt = nowValue }
+			nameCache[userId] =
+				LeaderboardLogic.nameAfterLookup(nameCache[userId], "Missing", nil, nowValue, ttl, retry)
 		end
 	end
 end
@@ -234,7 +259,19 @@ local function fetchTopPage(): { LeaderboardLogic.Entry }?
 	return raw
 end
 
+-- Set in init. Q7 condition 1: a match server sends no board until
+-- Results (LeaderboardLogic.mayBroadcast), and sends both then.
+local isHub = false
+
+local function mayBroadcast(): boolean
+	local RoundService = Loader.get("RoundService") :: any
+	return LeaderboardLogic.mayBroadcast(RoundService.getState(), isHub)
+end
+
 local function broadcastBoard()
+	if not mayBroadcast() then
+		return
+	end
 	local status = LeaderboardLogic.cacheStatus(lastRefreshAt, now(), config.staleAfterSeconds, #cachedEntries > 0)
 
 	local payload = {}
@@ -445,6 +482,91 @@ local function refreshPeriodBoard(kind: string, periodKey: string): boolean
 	return true
 end
 
+-- ===== the shared copy (leaderboard-scale.md §9) ===========================
+--
+-- refreshPeriodBoard above costs 100 MemoryStore units on the board's
+-- one partition, which caps a board at ~450 servers reading it. So the
+-- poll loop reads a published copy instead (1 unit), and only the one
+-- server holding the publish lock reads the sorted map and republishes.
+-- The rollover still reads the sorted map directly: it is once per
+-- period, and it must see the final standings, not a copy.
+--
+-- These calls are not spent against `budget`: that is the DataStore
+-- request budget, and MemoryStore has no per-server one (A6).
+
+local publishedMap: MemoryStoreHashMap? = nil
+local shareConfig = config.periodShare
+-- Unique per server, so the lock's winner can recognise its own value.
+local publishToken = string.format("%s:%d", game.JobId, math.random(1, 2 ^ 30))
+
+local function applyPublished(kind: string, published: LeaderboardLogic.Published)
+	local state = periodState[kind]
+	state.entries = published.entries
+	-- The copy's real age, so staleness on the UI tracks the data and
+	-- not when this server happened to fetch it.
+	state.lastRefreshAt = now() - math.max(0, os.time() - published.publishedAt)
+end
+
+-- MemoryStoreHashMap:UpdateAsync: returning nil cancels, so only the
+-- first server since the lock expired gets its own token back.
+local function tryTakePublishLock(map: MemoryStoreHashMap, kind: string, periodKey: string): boolean
+	local ok, result = pcall(function()
+		return map:UpdateAsync(LeaderboardLogic.publishLockKey(kind, periodKey), function(current: any): any
+			if current ~= nil then
+				return nil
+			end
+			return publishToken
+		end, shareConfig.lockSeconds)
+	end)
+	return ok and result == publishToken
+end
+
+local function publishPeriodBoard(map: MemoryStoreHashMap, kind: string, periodKey: string)
+	local value = LeaderboardLogic.encodePublished(periodState[kind].entries, os.time())
+	for shard = 1, shareConfig.shardCount do
+		local ok = pcall(function()
+			map:SetAsync(LeaderboardLogic.publishedShardKey(kind, periodKey, shard), value, shareConfig.shardTtlSeconds)
+		end)
+		if not ok then
+			-- A shard left old is read as stale and republished by the
+			-- next server to land on it; no retry needed here.
+			warn(string.format("LeaderboardService: publishing %s %s shard %d failed", kind, periodKey, shard))
+		end
+	end
+end
+
+local function refreshPeriodBoardShared(kind: string, periodKey: string)
+	local map = publishedMap
+	if map == nil then
+		refreshPeriodBoard(kind, periodKey)
+		return
+	end
+
+	local shard = LeaderboardLogic.pickShard(shareConfig.shardCount, rng())
+	local ok, value = pcall(function()
+		return map:GetAsync(LeaderboardLogic.publishedShardKey(kind, periodKey, shard))
+	end)
+	if not ok then
+		-- MemoryStore struggling: keep the board this server has, and do
+		-- not pile a sorted-map read on top.
+		return
+	end
+
+	local published = LeaderboardLogic.decodePublished(value)
+	if published ~= nil then
+		applyPublished(kind, published)
+		if LeaderboardLogic.isPublishedFresh(published.publishedAt, os.time(), shareConfig.republishAfterSeconds) then
+			return
+		end
+	end
+
+	-- Missing or stale. One server republishes; the rest keep what they
+	-- have (a stale copy, or nothing on a fresh boot) until next poll.
+	if tryTakePublishLock(map, kind, periodKey) and refreshPeriodBoard(kind, periodKey) then
+		publishPeriodBoard(map, kind, periodKey)
+	end
+end
+
 -- ===== rollover ============================================================
 
 -- P4-4 asks for a frozen snapshot of the finishing standings written to
@@ -534,23 +656,26 @@ local function processRollover(kind: string, finishedKey: string)
 		return
 	end
 
+	-- How many places this kind pays: the last payout band's maxRank, or
+	-- 0 for a kind with no bands.
+	local paidPlaces = LeaderboardPayoutLogic.paidPlaces(config.payouts[kind])
 	print(
 		string.format(
 			"LeaderboardService: froze %s %s with %d entries - awarding top %d",
 			kind,
 			finishedKey,
 			#payload.entries,
-			math.min(config.rewardTopN, #payload.entries)
+			math.min(paidPlaces, #payload.entries)
 		)
 	)
 
 	-- The reward hook. Injected rather than implemented here, because
-	-- what a period win is WORTH is a progression/economy decision
-	-- (design-decisions.md Q1's still-unbuilt RewardTables), not a
-	-- leaderboard one. Fired only by the snapshot's creator, so it is
-	-- fired exactly once across the whole universe.
+	-- what a placement is WORTH is an economy decision
+	-- (LeaderboardPayoutService), not a leaderboard one. Fired only by
+	-- the snapshot's creator, so it is fired exactly once across the
+	-- whole universe.
 	for rank, entry in payload.entries do
-		if rank > config.rewardTopN then
+		if rank > paidPlaces then
 			break
 		end
 		-- Message captured through the handler's upvalue rather than
@@ -612,7 +737,61 @@ local function checkRollovers()
 	end
 end
 
+-- The rollover above only fires on a server that was running at the
+-- boundary. At low player counts there may be none, and then nobody
+-- snapshots or pays the finished period. So every server, once at boot,
+-- looks at the period before the one it booted into: no snapshot means
+-- nobody processed it, and this server does. The live entries last one
+-- extra period (PeriodKeys.liveExpirySeconds) so they are still there
+-- to read.
+--
+-- The cheap GetAsync check keeps every boot from spending an
+-- UpdateAsync. Two servers booting together both pass it, and then the
+-- snapshot write's own guard picks one of them, as at midnight.
+local function catchUpMissedRollovers(bootTime: number)
+	local snapshots = snapshotStore
+	if snapshots == nil then
+		return
+	end
+
+	for _, rawKind in PERIOD_KINDS do
+		local kind = rawKind
+		local previousKey = PeriodKeys.previousKeyFor(kind, bootTime)
+		local readOk, existing = pcall(function()
+			return snapshots:GetAsync(PeriodKeys.snapshotKey(kind, previousKey))
+		end)
+		-- A failed read is not "no snapshot": skip, and leave the period
+		-- to the next server that boots.
+		if readOk and existing == nil then
+			print(string.format("LeaderboardService: %s %s was never snapshotted - catching up", kind, previousKey))
+			local rolloverError: string? = nil
+			local ok = xpcall(processRollover, function(err)
+				rolloverError = tostring(err)
+			end, kind, previousKey)
+			if not ok then
+				warn(
+					string.format(
+						"LeaderboardService: catch-up for %s %s failed - %s",
+						kind,
+						previousKey,
+						tostring(rolloverError)
+					)
+				)
+			end
+
+			-- processRollover read the OLD period into this kind's board;
+			-- the poll loop refills it with the current one.
+			local state = periodState[kind]
+			state.entries = {}
+			state.lastRefreshAt = nil
+		end
+	end
+end
+
 local function broadcastPeriodBoards()
+	if not mayBroadcast() then
+		return
+	end
 	for _, rawKind in PERIOD_KINDS do
 		local kind = rawKind
 		local state = periodState[kind]
@@ -732,7 +911,7 @@ end
 
 -- ===== poll loop ===========================================================
 
-local function startPolling()
+local function startPolling(bootTime: number)
 	if pollThread ~= nil then
 		return
 	end
@@ -740,8 +919,14 @@ local function startPolling()
 	pollThread = task.spawn(function()
 		-- A random first delay as well as a random interval: a hundred
 		-- servers started by the same deploy would otherwise take their
-		-- first read at the same instant.
-		task.wait(LeaderboardLogic.nextRefreshDelay(0, config.refreshMaxSeconds, rng()))
+		-- first read at the same instant. Shorter than the interval,
+		-- because until it ends the server has no board to send and
+		-- the hub's wall and menu say "Loading…".
+		task.wait(LeaderboardLogic.nextRefreshDelay(0, FIRST_REFRESH_SPREAD_SECONDS, rng()))
+
+		-- By boot time, not now: if the delay above crossed a boundary,
+		-- checkRollovers handles that one as an ordinary rollover.
+		catchUpMissedRollovers(bootTime)
 
 		local consecutiveFailures = 0
 		while true do
@@ -756,7 +941,7 @@ local function startPolling()
 				local kind = rawKind
 				local state = periodState[kind]
 				if state.lastSeenKey ~= nil and mayRequest("Read", Enum.DataStoreRequestType.GetSortedAsync) then
-					refreshPeriodBoard(kind, state.lastSeenKey :: string)
+					refreshPeriodBoardShared(kind, state.lastSeenKey :: string)
 				end
 			end
 			broadcastPeriodBoards()
@@ -783,7 +968,7 @@ end
 
 local LeaderboardService: Loader.Service = {
 	name = "LeaderboardService",
-	dependencies = { "NetGuard", "ConfigValidator", "LiveConfig" },
+	dependencies = { "NetGuard", "ConfigValidator", "LiveConfig", "RoundService" },
 
 	submitBestStreak = submitBestStreak,
 	submitPeriodStreak = submitPeriodStreak,
@@ -808,9 +993,9 @@ local LeaderboardService: Loader.Service = {
 
 	-- ===== P4-4 =============================================
 
-	-- The seam a progression/economy system claims to decide what a
-	-- period win is worth. Replaces the logging default; called once
-	-- per rewarded rank, only on the server that won the snapshot race.
+	-- The seam LeaderboardPayoutService claims to pay a placement.
+	-- Replaces the logging default; called once per paid rank, only on
+	-- the server that won the snapshot race.
 	setPeriodRewardHandler = function(handler: (
 		kind: string,
 		periodKey: string,
@@ -848,6 +1033,12 @@ local LeaderboardService: Loader.Service = {
 
 function LeaderboardService:init()
 	budget = LeaderboardLogic.newBudget(now())
+	isHub = StreakTagLogic.isHub(
+		game.PlaceId,
+		GameConfig.matchmaking.hubPlaceId,
+		RunService:IsStudio(),
+		Workspace:FindFirstChild("Hub") ~= nil
+	)
 
 	-- Studio has no live DataStore access unless the place is published
 	-- with API access enabled, and a failed GetOrderedDataStore here
@@ -855,7 +1046,7 @@ function LeaderboardService:init()
 	-- never refreshes", which is exactly the Empty case the UI already
 	-- has to handle.
 	local ok, resolved = pcall(function()
-		return DataStoreService:GetOrderedDataStore(config.storeName, config.storeScope)
+		return DataStoreService:GetOrderedDataStore(BOARD_STORE_NAME, config.storeScope)
 	end)
 
 	if ok then
@@ -875,10 +1066,19 @@ function LeaderboardService:init()
 	-- server that started at 3am from treating its first check as a
 	-- midnight it never witnessed.
 	local snapshotOk, resolvedSnapshot = pcall(function()
-		return DataStoreService:GetDataStore(config.snapshotStoreName)
+		return DataStoreService:GetDataStore(SNAPSHOT_STORE_NAME)
 	end)
 	if snapshotOk then
 		snapshotStore = resolvedSnapshot
+	end
+
+	-- No Studio suffix needed: Roblox keeps Studio's MemoryStores apart
+	-- from production. A nil map falls back to direct sorted-map reads.
+	local shareOk, resolvedShare = pcall(function()
+		return MemoryStoreService:GetHashMap(shareConfig.mapName)
+	end)
+	if shareOk then
+		publishedMap = resolvedShare
 	end
 
 	local bootTime = os.time()
@@ -894,8 +1094,15 @@ function LeaderboardService:init()
 		broadcastBoard()
 		broadcastPeriodBoards()
 	end)
+	-- A match server held its boards all round; Results is when they
+	-- may go out, from the cache, at no request cost.
+	local RoundService = Loader.get("RoundService") :: any
+	RoundService.onEnter("Results", function()
+		broadcastBoard()
+		broadcastPeriodBoards()
+	end)
 
-	startPolling()
+	startPolling(bootTime)
 end
 
 return LeaderboardService

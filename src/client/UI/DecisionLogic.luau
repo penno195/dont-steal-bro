@@ -11,10 +11,11 @@
 -- SECRECY: nothing here can hold another player's choice before the
 -- reveal, because the only function that ever produces one is
 -- parseReveal, and the only input to it is the DecisionReveal packet.
--- parseReveal also drops `bountyVU`: a winner's VU figure is a function
--- of their streak tier (design-decisions.md Q1), so a client that never
--- keeps it can never display it. See docs/decision-studio.md "Secrecy
--- audit".
+-- The packet carries no reward amounts. A winner's own payout arrives
+-- just after it, in the targeted DecisionPersonalResult, and is worded
+-- by PayoutLogic (design-decisions.md Q7's 2026-10-02 applied case:
+-- amounts may show once every choice is locked in, and only your own).
+-- See docs/decision-studio.md "Secrecy audit".
 
 local DecisionLogic = {}
 
@@ -47,13 +48,18 @@ DecisionLogic.TIMING = table.freeze({
 	holdSeconds = 0.8, -- hold-to-confirm; long enough that a brushed thumb can't lock
 	ackTimeout = 1.5, -- resend the same choice if no DecisionLockedIn came back
 	ackRetries = 2,
-	-- Slowed 2026-09-26 for suspense: each card comes up face down in the
-	-- middle of the screen, sits there `suspense` seconds, then turns.
-	-- The whole reveal is ~11 s, which GameConfig.roundTimers.
-	-- resultsSeconds has to outlast (Cleanup sends everyone home).
-	lead = 2.0, -- revealAt -> the first card TURNS (it comes up face down `suspense` before)
-	cardGap = 2.6, -- between turns
-	suspense = 1.3, -- face down, name showing, before each turn
+	-- Slowed 2026-09-26, and twice more 2026-10-08 (owner: "a couple of
+	-- seconds for each and 4-5 for the last one"): each card comes up
+	-- face down in the middle of the screen, sits there `suspense`
+	-- seconds under a heartbeat (DecisionLogic.heartbeats), then turns.
+	-- The LAST card waits longest. The whole reveal is ~17 s for three
+	-- seats, which GameConfig.roundTimers.resultsSeconds has to outlast
+	-- (Cleanup sends everyone home).
+	lead = 3.0, -- revealAt -> the first card TURNS (it comes up face down `suspense` before)
+	cardGap = 4.0, -- between turns
+	finalGap = 6.0, -- the gap before the last card's turn instead of cardGap
+	suspense = 2.5, -- face down, name showing, before each turn
+	finalSuspense = 4.5, -- the same, for the last card
 	outcomeAfter = 1.6, -- last turn -> outcome
 	resultAfter = 2.4, -- outcome -> result panel
 })
@@ -94,7 +100,7 @@ function DecisionLogic.parseReveal(payload: any): Reveal?
 	for _, entry in (payload.outcome.winners or {}) :: { any } do
 		local id = if type(entry) == "table" then toId(entry.playerId) else nil
 		if id ~= nil then
-			table.insert(winnerIds, id) -- bountyVU deliberately not copied
+			table.insert(winnerIds, id)
 		end
 	end
 	local loserIds: { number } = {}
@@ -174,8 +180,10 @@ DecisionLogic.QUICK_PHRASES = table.freeze({ "Share", "Steal", "Please", "Don't"
 -- PAYOFF TABLE -------------------------------------------------------
 
 -- What YOU get, given your choice and how many of the others steal.
--- payoff-table.md §1, read from one seat. Words, never VU: VU is an
--- internal balancing unit a player never sees (payoff-table.md intro).
+-- payoff-table.md §1, read from one seat. Words, never numbers: the
+-- table shows while choices are still open, and a prize's pay scales
+-- with the winner's streak, which must stay hidden until every choice
+-- is locked in (Q7), so it only names the tier.
 function DecisionLogic.prizeFor(mine: Choice, othersStealing: number, seats: number): Prize
 	if seats <= 1 then
 		return "Small" -- Outcomes.resolveOne: a solo finalist always gets the all-share package
@@ -459,19 +467,20 @@ export type RevealStep = {
 -- it. No client-side timer anywhere.
 function DecisionLogic.revealStep(elapsed: number, seats: number): RevealStep
 	local t = DecisionLogic.TIMING
+	-- The epsilon keeps a turn exactly on its beat: sums of the gaps can
+	-- land a hair under it in floating point.
 	local shown = 0
-	if elapsed >= t.lead then
-		-- The epsilon keeps a turn exactly on its beat: (4.6 - 2.0) / 2.6
-		-- is a hair under 1 in floating point.
-		shown = math.min(seats, 1 + math.floor((elapsed - t.lead) / t.cardGap + 1e-9))
-	end
 	local current = 0
 	for i = 1, seats do
-		if elapsed >= t.lead + (i - 1) * t.cardGap - t.suspense then
+		local turnAt = DecisionLogic.cardTurnAt(i, seats)
+		if elapsed + 1e-9 >= turnAt then
+			shown = i
+		end
+		if elapsed + 1e-9 >= turnAt - DecisionLogic.suspenseFor(i, seats) then
 			current = i
 		end
 	end
-	local lastCard = t.lead + math.max(0, seats - 1) * t.cardGap
+	local lastCard = DecisionLogic.cardTurnAt(math.max(1, seats), seats)
 	local outcomeAt = lastCard + t.outcomeAfter
 	return {
 		cardsShown = shown,
@@ -511,12 +520,64 @@ function DecisionLogic.revealOrder(seatIds: { number }, choices: { [number]: Cho
 end
 
 -- Seconds after `revealAt` that card `index` (a position in revealOrder)
--- turns face up - the beat revealStep counts `cardsShown` on. A Reveal
--- cosmetic fires on its wearer's podium at exactly this moment, so the
--- burst and the card land together and never before the choice shows.
-function DecisionLogic.cardTurnAt(index: number): number
+-- of `seats` turns face up - the beat revealStep counts `cardsShown` on.
+-- A Reveal cosmetic fires on its wearer's podium at exactly this moment,
+-- so the burst and the card land together and never before the choice
+-- shows. The last card (when there's more than one) waits finalGap.
+function DecisionLogic.cardTurnAt(index: number, seats: number): number
 	local t = DecisionLogic.TIMING
-	return t.lead + (index - 1) * t.cardGap
+	if index <= 1 then
+		return t.lead
+	end
+	local gaps = (index - 1) * t.cardGap
+	if index == seats then
+		gaps += t.finalGap - t.cardGap
+	end
+	return t.lead + gaps
+end
+
+-- How long card `index` of `seats` sits face down before it turns.
+function DecisionLogic.suspenseFor(index: number, seats: number): number
+	local t = DecisionLogic.TIMING
+	return if seats > 1 and index == seats then t.finalSuspense else t.suspense
+end
+
+-- Every card's turn time, in reveal order.
+function DecisionLogic.cardTurns(seats: number): { number }
+	local out = {}
+	for i = 1, seats do
+		table.insert(out, DecisionLogic.cardTurnAt(i, seats))
+	end
+	return out
+end
+
+-- The heartbeat under each face-down card: one entry per beat, at
+-- seconds after `revealAt`. It quickens and grows card by card, so the
+-- last card - which also waits longest - gets the fastest, loudest one.
+-- `intensity` runs 0..1 (1 = the last card); the audio and the red edge
+-- glow both scale off it. A lone card is the last card.
+export type Heartbeat = { at: number, card: number, intensity: number }
+
+DecisionLogic.HEARTBEAT = table.freeze({
+	slowInterval = 0.9, -- seconds between beats under the first card
+	fastInterval = 0.45, -- under the last: ~2.2 a second, under the 3/s flash limit
+	quietBefore = 0.2, -- no beat this close to the turn, so the turn lands on its own
+})
+
+function DecisionLogic.heartbeats(seats: number): { Heartbeat }
+	local h = DecisionLogic.HEARTBEAT
+	local out: { Heartbeat } = {}
+	for card = 1, seats do
+		local intensity = if seats <= 1 then 1 else (card - 1) / (seats - 1)
+		local interval = h.slowInterval + (h.fastInterval - h.slowInterval) * intensity
+		local turnAt = DecisionLogic.cardTurnAt(card, seats)
+		local at = math.max(0, turnAt - DecisionLogic.suspenseFor(card, seats))
+		while at < turnAt - h.quietBefore do
+			table.insert(out, { at = at, card = card, intensity = intensity })
+			at += interval
+		end
+	end
+	return out
 end
 
 -- DecisionReveal's `revealCosmetics`: a list of `{ playerId, cosmeticId }`,
@@ -539,7 +600,7 @@ end
 
 function DecisionLogic.revealLength(seats: number): number
 	local t = DecisionLogic.TIMING
-	return t.lead + math.max(0, seats - 1) * t.cardGap + t.outcomeAfter + t.resultAfter
+	return DecisionLogic.cardTurnAt(math.max(1, seats), seats) + t.outcomeAfter + t.resultAfter
 end
 
 -- RESULT COPY --------------------------------------------------------
@@ -564,16 +625,11 @@ local function streakLine(personal: Personal?): string?
 	if personal == nil then
 		return nil
 	end
-	local before, after = personal.streakBefore, personal.streakAfter
+	local before = personal.streakBefore
 	if personal.won then
-		if after > before then
-			return string.format("Streak %d", after)
-		end
-		return "No streak credit this round"
+		return string.format("Streak %d", personal.streakAfter)
 	end
-	if after == before and before > 0 then
-		return string.format("Streak %d kept - no streak credit this round", before)
-	elseif before > 0 then
+	if before > 0 then
 		return string.format("Your %d-win streak ends here", before)
 	end
 	return "No streak on the line"
@@ -625,6 +681,22 @@ function DecisionLogic.chatInset(chat: Rect?, usable: Rect, gap: number, maxFrac
 	end
 	local wanted = math.max(usable.y, chat.y + chat.height + gap)
 	return math.min(wanted, usable.y + usable.height * maxFraction)
+end
+
+-- The reveal card's centre x, sideways. Centred on the screen unless
+-- that would put it over the seat cards in the top-left column (a phone
+-- held sideways is only ~900 reference px wide; playtest 2026-10-04);
+-- then just right of them, but never into the right-hand button rail.
+function DecisionLogic.revealStageX(
+	screenWidth: number,
+	columnRight: number,
+	halfWidth: number,
+	gap: number,
+	rightReserve: number
+): number
+	local clear = columnRight + gap + halfWidth
+	local furthest = screenWidth - rightReserve - halfWidth
+	return math.max(screenWidth / 2, math.min(clear, furthest))
 end
 
 -- P6-7: the bottom margin for the decide stack. A player still typing

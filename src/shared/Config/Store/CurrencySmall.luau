@@ -18,14 +18,15 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local CurrencySmall: Validate.StoreItemDef = {
 	key = "currency-small",
 	kind = "DeveloperProduct",
-	assetId = 0,
-	enabled = false,
+	assetId = 3716318892,
+	enabled = true,
 	displayName = "Small Coin Pouch",
-	description = "500 coins. The same coins you earn from playing - these just arrive sooner.",
-	robuxPrice = 49, -- PLACEHOLDER: display only
+	description = "75 coins. The same coins you earn from playing - these just arrive sooner.",
+	robuxPrice = 79, -- three power-ups at about 26 R$ each; display only
 	sortOrder = 30,
+	imageAssetId = 135056611855919, -- assets/store/currency-small.png
 	grants = {
-		{ kind = "Currency", amount = 500 }, -- PLACEHOLDER: no locked economy numbers in docs/ yet
+		{ kind = "Currency", amount = 75 }, -- three power-ups (Q1 pricing, 2026-10-02)
 	},
 }
 

@@ -1,7 +1,9 @@
 --!strict
 -- Panel (P6-2): the surface everything else sits on. Elevation picks
--- the fill and stroke (Tokens.elevation); there are no shadows in
--- Roblox, so "higher" is lighter and more outlined.
+-- the look: 1 is the flat page; 2 (card, HUD panel) and 3 (modal) are
+-- the UI art pass's stage panel, a purple gradient (Tokens.fill.panel)
+-- in a gold rim, thicker at 3. No lip here: a lip is a sibling Frame,
+-- which would fight `automaticSize`; buttons carry the depth instead.
 --
 -- Size is the caller's: a Panel that fills a screen REGION is sized in
 -- Scale by the screen; a card-sized Panel uses token Offsets or
@@ -35,15 +37,19 @@ local function Panel(props: Props): Frame
 	local level = Theme.elevation[props.elevation or 2]
 	assert(level ~= nil, "Panel: elevation must be 1-3")
 
+	-- Elevation 2 and 3 are the gradient stage panel; 1 stays flat.
+	local raised = level ~= Theme.elevation[1]
 	local body: { any } = {
 		Base.corner(Theme.radius.lg),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Color = Theme.color.line,
+			Color = if raised then Theme.fill.panel.rim else Theme.color.line,
 			Transparency = level.strokeTransparency,
-			Thickness = 1,
+			Thickness = if level == Theme.elevation[3] then 3 else 2,
 		}),
 		Base.padding(props.padding or Theme.spacing.lg),
+		if raised then create("UIGradient")({ Rotation = 90, Color = Theme.fill.panel.gradient }) else nil,
 	}
 	if props.gap then
 		table.insert(
@@ -79,7 +85,8 @@ local function Panel(props: Props): Frame
 		Position = props.position or UDim2.new(),
 		AnchorPoint = props.anchorPoint or Vector2.zero,
 		LayoutOrder = props.layoutOrder or 0,
-		BackgroundColor3 = level.surface,
+		-- The UIGradient tints white; a flat panel takes its surface colour.
+		BackgroundColor3 = if raised then Color3.new(1, 1, 1) else level.surface,
 		BackgroundTransparency = 0,
 	}) :: Frame
 	for _, child in body do

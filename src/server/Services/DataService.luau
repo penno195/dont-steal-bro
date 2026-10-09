@@ -33,6 +33,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProfileStoreLib = require(ServerScriptService.ServerPackages.ProfileStore)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
+local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 
 local STORE_NAME = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData"
 
@@ -60,6 +61,17 @@ local pendingRoundOutcomeResolvers: { [Player]: () -> () } = {}
 -- opens on 0 currency and nothing owned until some unrelated write
 -- happens to push again.
 local loadedCallbacks: { (Player) -> () } = {}
+
+-- Rewards-roadmap step 4: routes a ProfileStore message to its handler.
+-- Declared here and defined in the "profile messages" section below,
+-- because loadProfile hooks it up but it needs writable().
+local handleProfileMessage: (player: Player, raw: any, processed: () -> ()) -> ()
+
+-- Messages whose type has no route yet. A profile can load before the
+-- routing service's init runs, and ProfileStore won't offer a message
+-- again until the next session, so they wait here and are replayed when
+-- the route is registered.
+local unroutedMessages: { { player: Player, raw: any, processed: () -> () } } = {}
 
 ProfileStoreLib.OnError:Connect(function(message: string, storeName: string, profileKey: string)
 	warn(string.format("DataService: ProfileStore error on %s/%s: %s", storeName, profileKey, message))
@@ -150,6 +162,14 @@ local function loadProfile(player: Player)
 	for _, callback in loadedCallbacks do
 		task.spawn(callback, player)
 	end
+
+	-- After profiles[player] is set, so a message's grants land through
+	-- the same writable() check every setter uses. ProfileStore replays
+	-- every unprocessed message to this, including ones sent while the
+	-- player was offline.
+	profile:MessageHandler(function(message: any, processed: () -> ())
+		handleProfileMessage(player, message, processed)
+	end)
 end
 
 -- Registers `callback` for every future load, and runs it now for any
@@ -172,6 +192,12 @@ local function releaseProfile(player: Player)
 	if ran then
 		profiles[player] = nil
 		pendingRoundOutcomeResolvers[player] = nil
+		-- Still unprocessed in the profile, so the next session gets it.
+		for i = #unroutedMessages, 1, -1 do
+			if unroutedMessages[i].player == player then
+				table.remove(unroutedMessages, i)
+			end
+		end
 	end
 end
 
@@ -232,12 +258,6 @@ local function getBestStreak(player: Player): number
 	return if d then d.bestStreak else 0
 end
 
--- On a win. Bumps bestStreak too if this is a new peak - bestStreak is
-local function getPendingBounty(player: Player): ProfileLogic.PendingBounty?
-	local d = data(player)
-	return if d then d.pendingBounty else nil
-end
-
 -- ===== the progression write gate (P4-1) ==================================
 --
 -- P4-1 requires `ProgressionService.applyRoundResult` to be the ONLY
@@ -262,23 +282,87 @@ end
 -- ProgressionService declares DataService as a dependency, so it runs
 -- after DataService's own init and before anything that depends on IT.
 --
--- One function, not three, because the whole state moves together:
--- ProgressionLogic.applyResult computes currentStreak, bestStreak and
--- pendingBounty as a single before -> after transformation, and writing
--- them one at a time is what would let a yield land between "streak
--- reset" and "bounty cleared."
-export type ProgressionWriter = (player: Player, state: ProfileLogic.ProgressionState) -> ()
+-- One function, not three, because the whole result moves together: the
+-- streak ProgressionLogic.applyResult computed, and on a win the reward
+-- RewardLogic rolled (rewards-roadmap.md step 2b). Writing them one at a
+-- time is what would let a yield land between "streak raised" and "win
+-- paid". The grants go through StoreLogic.applyGrants, the same path a
+-- purchase takes, and the record lands in the same mutation, so the
+-- profile can't hold a reward record without its grants or the reverse.
+--
+-- Returns applyGrants' change lines for the audit log, or an empty list
+-- when nothing was paid (no reward, profile not loaded, read-only mode).
+export type WinRewardWrite = {
+	record: ProfileLogic.WinRewardRecord,
+	grants: { StoreLogic.Grant },
+}
+
+-- A win also counts toward the live season's tracks (rewards step 5).
+-- The writer hands the step the profile's current season progress and
+-- applies what it returns, in this same mutation: the progress entries
+-- it changed, and the track items that just came due. Running it inside
+-- the writer rather than reading progress beforehand means nothing can
+-- land between the read and the write.
+export type SeasonStep = (
+	progress: { [string]: ProfileLogic.SeasonProgress }
+) -> ({ [string]: ProfileLogic.SeasonProgress }, { StoreLogic.Grant })
+
+export type ProgressionWriter = (
+	player: Player,
+	state: ProfileLogic.ProgressionState,
+	buyBackOffer: ProfileLogic.BuyBackOffer?,
+	reward: WinRewardWrite?,
+	seasonStep: SeasonStep?
+) -> { string }
 
 local progressionWriterClaimedBy: string? = nil
 
-local function writeProgressionState(player: Player, state: ProfileLogic.ProgressionState)
+local function applyGrantsTo(d: ProfileLogic.ProfileData, grants: { StoreLogic.Grant }): { string }
+	local after, changes = StoreLogic.applyGrants({
+		currency = d.currency,
+		powerUpStock = d.powerUpStock,
+		ownedCosmetics = d.ownedCosmetics,
+		unlockedTitles = d.unlockedTitles,
+	}, grants)
+	d.currency = after.currency
+	d.powerUpStock = after.powerUpStock
+	d.ownedCosmetics = after.ownedCosmetics
+	d.unlockedTitles = after.unlockedTitles
+	return changes
+end
+
+local function writeProgressionState(
+	player: Player,
+	state: ProfileLogic.ProgressionState,
+	buyBackOffer: ProfileLogic.BuyBackOffer?,
+	reward: WinRewardWrite?,
+	seasonStep: SeasonStep?
+): { string }
 	local d = writable(player)
 	if d == nil then
-		return
+		return {}
 	end
 	d.currentStreak = state.currentStreak
 	d.bestStreak = state.bestStreak
-	d.pendingBounty = state.pendingBounty
+	-- Written even when nil: a result that opens no offer closes any
+	-- older one (ProgressionLogic.buyBackOffer).
+	d.buyBackOffer = buyBackOffer
+
+	local changes: { string } = {}
+	if reward ~= nil then
+		changes = applyGrantsTo(d, reward.grants)
+		d.lastWinReward = reward.record
+	end
+	if seasonStep ~= nil then
+		local updates, grants = seasonStep(table.clone(d.seasonProgress))
+		for seasonId, progress in updates do
+			d.seasonProgress[seasonId] = progress
+		end
+		-- Not merged into `changes`: those are the win reward's lines,
+		-- and the step logs its own track items (SeasonLogic.describePaid).
+		applyGrantsTo(d, grants)
+	end
+	return changes
 end
 
 local function claimProgressionWriter(claimantName: string): ProgressionWriter
@@ -407,6 +491,99 @@ local function claimReceiptAccess(claimantName: string): (player: Player) -> Rec
 	return receiptHandleFor
 end
 
+-- ===== profile messages (rewards-roadmap.md step 4) ======================
+--
+-- Some grants are owed to a player who may be offline: a leaderboard
+-- payout is decided when a period ends, on whichever server noticed.
+-- ProfileStore:MessageAsync is the package's own answer (its docs:
+-- "gifting paid items to in-game friends that may or may not be
+-- online"). The message waits in the profile until a session reads it.
+--
+-- A handler only RESOLVES a message to grants. This file applies them,
+-- through the same StoreLogic.applyGrants path as purchases and wins,
+-- and marks the message processed in the same synchronous step. Both
+-- the grants and the processed mark save with Profile.Data, so a crash
+-- can't pay a message twice or mark it read without paying it.
+
+export type ProfileMessageRoute = {
+	-- The grants a message pays, or nil to drop it as malformed.
+	resolve: (player: Player, raw: any) -> { StoreLogic.Grant }?,
+	-- Called after the grants are applied, with applyGrants' change
+	-- lines, for audit logging and pushing fresh state to the client.
+	applied: (player: Player, raw: any, changes: { string }) -> (),
+}
+
+local messageRoutes: { [string]: ProfileMessageRoute } = {}
+
+function handleProfileMessage(player: Player, raw: any, processed: () -> ())
+	local messageType = if type(raw) == "table" then raw.type else nil
+	local route = if type(messageType) == "string" then messageRoutes[messageType] else nil
+	if route == nil then
+		table.insert(unroutedMessages, { player = player, raw = raw, processed = processed })
+		return
+	end
+
+	local grants = route.resolve(player, raw)
+	if grants == nil then
+		warn(string.format("DataService: dropped a malformed %s message for %s", tostring(messageType), player.Name))
+		processed()
+		return
+	end
+
+	-- Read-only mode or a released profile: leave it unprocessed, so
+	-- ProfileStore offers it again next session rather than losing it.
+	local d = writable(player)
+	if d == nil then
+		return
+	end
+
+	local after, changes = StoreLogic.applyGrants({
+		currency = d.currency,
+		powerUpStock = d.powerUpStock,
+		ownedCosmetics = d.ownedCosmetics,
+		unlockedTitles = d.unlockedTitles,
+	}, grants)
+	d.currency = after.currency
+	d.powerUpStock = after.powerUpStock
+	d.ownedCosmetics = after.ownedCosmetics
+	d.unlockedTitles = after.unlockedTitles
+	processed()
+
+	task.spawn(route.applied, player, raw, changes)
+end
+
+-- One route per message type, claimed once, like the writers above.
+local function routeProfileMessages(messageType: string, route: ProfileMessageRoute)
+	assert(
+		messageRoutes[messageType] == nil,
+		string.format("DataService.routeProfileMessages: %q already has a route", messageType)
+	)
+	messageRoutes[messageType] = route
+
+	local waiting = unroutedMessages
+	unroutedMessages = {}
+	for _, entry in waiting do
+		if entry.player.Parent == Players and profiles[entry.player] ~= nil then
+			handleProfileMessage(entry.player, entry.raw, entry.processed)
+		end
+	end
+end
+
+-- Queues a message on a profile whether or not its player is online.
+-- Yields: ProfileStore retries with backoff until it lands, and gives up
+-- only when the server is shutting down. Sent even in read-only mode,
+-- because the message only waits; applying it is what writable() gates.
+local function sendProfileMessage(userId: number, message: { [string]: any }): boolean
+	local ok, sent = pcall(function()
+		return PlayerStore:MessageAsync(tostring(userId), message)
+	end)
+	if not ok then
+		warn(string.format("DataService: message to user %d errored - %s", userId, tostring(sent)))
+		return false
+	end
+	return sent == true
+end
+
 -- ===== store-owned profile fields (P4-5) =================================
 -- Ordinary typed accessors, same contract as every other one in this
 -- file: collections are copied out, never handed back by reference.
@@ -438,13 +615,27 @@ end
 -- only make sense as one fact: a loadout entry with no stock backing it
 -- is an item the player will be handed and never paid for. Both callers
 -- (a slot change, and spending the loadout at round start) move both.
-local function setLoadoutAndStock(player: Player, loadout: { string }, stock: { [string]: number })
+-- Spending also passes `lastLoadout`, what was spent, in the same write.
+local function setLoadoutAndStock(
+	player: Player,
+	loadout: { string },
+	stock: { [string]: number },
+	lastLoadout: { string }?
+)
 	local d = writable(player)
 	if d == nil then
 		return
 	end
 	d.starterPowerUps = table.clone(loadout)
 	d.powerUpStock = table.clone(stock)
+	if lastLoadout ~= nil then
+		d.lastLoadout = table.clone(lastLoadout)
+	end
+end
+
+local function getLastLoadout(player: Player): { string }
+	local d = data(player)
+	return if d then table.clone(d.lastLoadout) else {}
 end
 
 -- Refuses a slot this profile doesn't own the item for - the same
@@ -467,9 +658,59 @@ local function setEquippedCosmetic(player: Player, slot: string, itemId: string?
 	return true
 end
 
+-- Paid Navigation rounds held but not yet spent (design-decisions.md Q8,
+-- "Navigation"). StoreService grants them through the receipt handle;
+-- NavigationService spends one on a race's first switch-on.
+local function getNavigationRounds(player: Player): number
+	local d = data(player)
+	return if d then d.navigationRounds else 0
+end
+
+-- Spends one held round, or refuses when none is held. Not forced to
+-- save: a crash before the next autosave hands the round back, which
+-- costs the player nothing.
+local function spendNavigationRound(player: Player): boolean
+	local d = writable(player)
+	if d == nil or d.navigationRounds <= 0 then
+		return false
+	end
+	d.navigationRounds -= 1
+	return true
+end
+
+-- The streak this player may buy back (design-decisions.md Q7, "buying
+-- back a streak"), or nil. The progression writer opens it, a buy-back
+-- receipt closes it, and expireBuyBackOffer closes it at a race start.
+local function getBuyBackOffer(player: Player): ProfileLogic.BuyBackOffer?
+	local d = data(player)
+	return if d and d.buyBackOffer then table.clone(d.buyBackOffer) else nil
+end
+
+-- The offer lasts until the player's next race starts (the 2026-10-08
+-- applied case). Returns whether one was open. Not forced to save: the
+-- race's own result rewrites the field anyway, and a server that dies
+-- before both just leaves the offer as the loss made it.
+local function expireBuyBackOffer(player: Player): boolean
+	local d = writable(player)
+	if d == nil or d.buyBackOffer == nil then
+		return false
+	end
+	d.buyBackOffer = nil
+	return true
+end
+
 local function getCurrency(player: Player): number
 	local d = data(player)
 	return if d then d.currency else 0
+end
+
+-- One season's progress, or nil when the player hasn't been seen during it.
+-- A copy: callers display it, and only the progression writer and
+-- StoreService's pass sync write it.
+local function getSeasonProgress(player: Player, seasonId: string): ProfileLogic.SeasonProgress?
+	local d = data(player)
+	local progress = if d then d.seasonProgress[seasonId] else nil
+	return if progress then table.clone(progress) else nil
 end
 
 local function addCurrency(player: Player, amount: number)
@@ -558,7 +799,6 @@ local DataService: Loader.Service = {
 	setSettings = setSettings,
 	getStreak = getStreak,
 	getBestStreak = getBestStreak,
-	getPendingBounty = getPendingBounty,
 	-- P4-1: incrementStreak/resetStreak/setPendingBounty used to live
 	-- here. They are deliberately gone - see the write gate above.
 	claimProgressionWriter = claimProgressionWriter,
@@ -567,13 +807,23 @@ local DataService: Loader.Service = {
 	-- StoreService, because ProcessReceipt needs durability facts no
 	-- accessor can express.
 	claimReceiptAccess = claimReceiptAccess,
+
+	-- Rewards-roadmap step 4: grants owed to a player who may be offline.
+	routeProfileMessages = routeProfileMessages,
+	sendProfileMessage = sendProfileMessage,
 	getPowerUpStock = getPowerUpStock,
 	getLoadout = getLoadout,
 	setLoadoutAndStock = setLoadoutAndStock,
+	getLastLoadout = getLastLoadout,
 	getOwnedCosmetics = getOwnedCosmetics,
 	getEquipped = getEquipped,
 	setEquippedCosmetic = setEquippedCosmetic,
 	getCurrency = getCurrency,
+	getNavigationRounds = getNavigationRounds,
+	spendNavigationRound = spendNavigationRound,
+	getBuyBackOffer = getBuyBackOffer,
+	expireBuyBackOffer = expireBuyBackOffer,
+	getSeasonProgress = getSeasonProgress,
 	addCurrency = addCurrency,
 	getStats = getStats,
 	recordRoundStat = recordRoundStat,

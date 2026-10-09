@@ -1,8 +1,11 @@
 --!strict
 --# selene: allow(mixed_table) -- Vide props + children, see Base.luau
--- TabBar (P6-2): equal-width tabs with a sliding indicator. The
--- selected tab is marked three ways - indicator bar, ink colour, and
--- bold vs regular weight - so it doesn't rest on colour.
+-- TabBar (P6-2): equal-width tabs with a sliding indicator. Since the
+-- UI art pass the indicator is a raised gold key (Base.raised, primary
+-- fill) that slides behind the selected tab on a stage-panel bar. The
+-- selected tab is marked three ways - a filled key vs bare, dark vs
+-- muted ink, and the display face's outline dropped - so it doesn't
+-- rest on colour.
 --
 -- Controller: tabs are ordinary selectable buttons (left/right moves
 -- focus, A picks), and L1/R1 step the selection from anywhere, the
@@ -22,6 +25,7 @@ local Theme = require(script.Parent.Parent.Theme)
 
 local cleanup = vide.cleanup
 local create = vide.create
+local effect = vide.effect
 
 export type Tab = { label: string, icon: string? }
 
@@ -34,8 +38,49 @@ export type Props = {
 	layoutOrder: number?,
 }
 
-local HEIGHT = Theme.touch.iconButton + Theme.spacing.xs -- 48
-local INDICATOR = Theme.spacing.xs
+-- 56, the primary-button height: an icon stacked over a label had ~1 px
+-- to spare at 48 and the icon sat against the key's top (Locker,
+-- 2026-10-09).
+-- Store, Locker and Leaderboards lay out below it from the same token.
+local HEIGHT = Theme.touch.primaryHeight
+-- The gap between the bar's rim and the gold key.
+local INSET = Theme.spacing.xs
+-- The key's corners run parallel to the bar's: its radius is the bar's
+-- less the gap between them. Any other radius and the two curves visibly
+-- don't match at the ends.
+local KEY_RADIUS = UDim.new(0, Theme.radius.lg.Offset - INSET)
+
+-- The icon sits ABOVE the label (the mockup's tab), so the label gets the
+-- tab's whole width: beside it, five tabs left "Season" 44 px and it
+-- broke into "SEASO / N" (Store, 2026-10-09).
+local ICON = Theme.spacing.lg
+local LABEL_H = Theme.spacing.lg + Theme.spacing.xxs -- 18
+
+-- A tab's label in the display face. Its outline only shows on the bare
+-- (muted) tabs: dark ink on the gold key can't take a dark outline.
+local function labelFor(tab: Tab, ink: () -> Color3, isSelected: () -> boolean): TextLabel
+	local label = Base.text("button", {
+		LayoutOrder = 2,
+		Size = if tab.icon then UDim2.new(1, -Theme.spacing.sm, 0, LABEL_H) else UDim2.new(1, -Theme.spacing.sm, 1, 0),
+		Text = tab.label,
+		TextColor3 = ink,
+		-- Shrink to one line, never wrap (Base.text fits it).
+		TextWrapped = false,
+	})
+	-- A long word on a narrow bar may drop to the caption floor rather
+	-- than clip at the button style's 14.
+	local fit = label:FindFirstChildOfClass("UITextSizeConstraint")
+	if fit then
+		fit.MinTextSize = Theme.type.caption.min
+	end
+	local outline = label:FindFirstChild("Outline") :: UIStroke?
+	if outline then
+		effect(function()
+			outline.Enabled = not isSelected()
+		end)
+	end
+	return label
+end
 
 local function TabBar(props: Props): Frame
 	local count = #props.tabs
@@ -62,26 +107,43 @@ local function TabBar(props: Props): Frame
 		Name = "TabBar",
 		Size = UDim2.fromOffset(tabWidth * count, HEIGHT),
 		LayoutOrder = props.layoutOrder or 0,
-		BackgroundColor3 = Theme.elevation[2].surface,
-		Base.corner(Theme.radius.md),
+		-- The UIGradient tints white into the stage-panel gradient.
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		Base.corner(Theme.radius.lg),
+		create("UIGradient")({ Rotation = 90, Color = Theme.fill.panel.gradient }),
+		create("UIStroke")({
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			Color = Theme.fill.panel.rim,
+			Thickness = 2,
+		}),
+		-- Under the tabs (ZIndex), so the labels draw on the key.
+		create("Frame")({
+			Name = "Indicator",
+			ZIndex = 1,
+			Position = function()
+				return UDim2.new(indicatorX(), INSET, 0, INSET)
+			end,
+			Size = UDim2.new(1 / count, -2 * INSET, 1, -2 * INSET),
+			BackgroundTransparency = 1,
+			Base.raised({
+				fill = function()
+					return Theme.fill.primary
+				end,
+				lip = Theme.lip.small,
+				radius = KEY_RADIUS,
+				gloss = true,
+			}),
+		}),
 		create("Frame")({
 			Name = "Tabs",
+			ZIndex = 2,
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Horizontal,
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
-		}),
-		create("Frame")({
-			Name = "Indicator",
-			AnchorPoint = Vector2.new(0, 1),
-			Position = function()
-				return UDim2.new(indicatorX(), Theme.spacing.md, 1, 0)
-			end,
-			Size = UDim2.new(1 / count, -2 * Theme.spacing.md, 0, INDICATOR),
-			BackgroundColor3 = Theme.color.brand,
-			Base.corner(Theme.radius.pill),
 		}),
 	}) :: Frame
 
@@ -91,55 +153,50 @@ local function TabBar(props: Props): Frame
 			return props.selected() == i
 		end
 		local ink = function(): Color3
-			return if isSelected() then Theme.color.ink else Theme.color.inkMuted
+			return if isSelected() then Theme.fill.primary.ink else Theme.color.inkMuted
 		end
 		local button = Base.interactive({
 			name = "Tab" .. i,
-			size = Vector2.new(tabWidth, HEIGHT - INDICATOR),
-			radius = Theme.radius.md,
+			size = Vector2.new(tabWidth, HEIGHT),
+			radius = KEY_RADIUS,
 			onActivate = function()
 				props.onSelect(i)
 			end,
 			order = (props.order or 0) + i,
 			layoutOrder = i,
 			visual = function(state, _focused)
-				local iconSize = Theme.spacing.lg + Theme.spacing.xs
 				return {
+					-- The hover highlight is the key's shape, where the key
+					-- would sit, not the whole tab cell (a hard square).
 					create("Frame")({
 						Name = "Overlay",
-						Size = UDim2.fromScale(1, 1),
+						Position = UDim2.fromOffset(INSET, INSET),
+						Size = UDim2.new(1, -2 * INSET, 1, -(2 * INSET + Theme.lip.small)),
 						BackgroundColor3 = Color3.new(1, 1, 1),
 						BackgroundTransparency = function()
 							return ComponentLogic.variantStyle("ghost", state()).overlayTransparency
 						end,
-						Base.corner(Theme.radius.md),
+						Base.corner(KEY_RADIUS),
 					}),
 					create("Frame")({
 						Name = "Content",
 						Size = UDim2.fromScale(1, 1),
 						BackgroundTransparency = 1,
+						-- Centred on the gold key's surface, which sits INSET in
+						-- from the bar and a lip short of its bottom.
+						create("UIPadding")({
+							PaddingTop = UDim.new(0, INSET),
+							PaddingBottom = UDim.new(0, INSET + Theme.lip.small),
+						}),
 						create("UIListLayout")({
-							FillDirection = Enum.FillDirection.Horizontal,
+							FillDirection = Enum.FillDirection.Vertical,
 							HorizontalAlignment = Enum.HorizontalAlignment.Center,
 							VerticalAlignment = Enum.VerticalAlignment.Center,
-							Padding = UDim.new(0, Theme.spacing.xs),
+							Padding = UDim.new(0, Theme.spacing.xxs),
 							SortOrder = Enum.SortOrder.LayoutOrder,
 						}),
-						(if tab.icon then Icons.view(tab.icon, iconSize, ink) else nil) :: any,
-						Base.text("label", {
-							LayoutOrder = 2,
-							Size = UDim2.new(
-								1,
-								-(if tab.icon then iconSize + Theme.spacing.xs else 0) - Theme.spacing.sm,
-								0.6,
-								0
-							),
-							Text = tab.label,
-							TextColor3 = ink,
-							FontFace = function()
-								return if isSelected() then Theme.type.label.font else Theme.type.body.font
-							end,
-						}),
+						(if tab.icon then Icons.view(tab.icon, ICON, ink) else nil) :: any,
+						labelFor(tab, ink, isSelected),
 					}),
 				}
 			end,

@@ -15,10 +15,12 @@ local Blind: Validate.PowerUpDef = {
 	kind = "Debuff",
 	role = "Attack",
 	target = "Aimed",
-	durationSeconds = 4,
+	durationSeconds = 4.5, -- was 4; design-decisions.md §12
 	cooldownSeconds = 12,
 	rarity = "Uncommon",
 	hardControl = false,
+	impact = { style = "Flash", rgb = { 255, 245, 200 } }, -- blinding white flash and dark smoke
+	victimLook = "Blinded", -- a cloud of ink round the head
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

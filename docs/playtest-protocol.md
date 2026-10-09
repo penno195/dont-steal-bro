@@ -135,9 +135,11 @@ Then post the survey link and end the call.
 
 ## 2. Observation sheet
 
-Use **one row per player per round**. Copy this table into a
-spreadsheet; the columns match the tables in `docs/telemetry-schema.md`
-where they can.
+Use **one row per player per round**. The ready-made workbook is
+`docs/playtest-observation-sheet.xlsx`: a tab per player, a log for
+questions and bugs with the §5 launch gate, and a survey tab that
+applies §3's reading rules. Save a copy per session. The columns match
+the tables in `docs/telemetry-schema.md` where they can.
 
 **Session header:** date · build version · place id · moderator
 

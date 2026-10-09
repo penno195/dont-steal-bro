@@ -141,14 +141,13 @@ plainly, so rewards can be gated deliberately rather than by accident:
 1. **An NPC-heavy lobby is simply easier to win.** The floor stops a bot
    beating the *median* human; it does not make a bot as good as a *good*
    human. Five bots and one skilled player is a near-guaranteed
-   qualification. **This is the main distortion, and code cannot fix it —
-   only reward gating can.** `NPCService.roundEarnsStreakCredit()` is the
-   call P4-1's `ProgressionService` must make before awarding streak;
-   `GameConfig.npcSeatStreakCreditThreshold` (currently 3, PLACEHOLDER) is
-   the N. Per threat-model.md §8's cost note, a round that fails the check
-   needs an explicit *"queue too thin for streak credit right now"*
-   message — silent non-progression will read as a bug to an honest
-   off-hours player.
+   qualification. **This is the main distortion, and code cannot fix it.**
+   A streak-credit threshold on NPC seats (threat-model.md §8) shipped
+   and was then **retired by user decision on 2026-10-02**
+   (design-decisions.md Q5 applied case): a real player's result always
+   counts, however many seats are bots, because nobody can choose a
+   bot-filled lobby and winning one is still luck. The distortion is an
+   accepted risk, watched by the telemetry in item 3.
 2. **The Decision Studio with NPC finalists.** NPCs can qualify
    (design-decisions.md Q5), and a bot's Steal/Share is drawn from a fixed
    personality probability (P3-6). A human who learns the personality
@@ -157,11 +156,10 @@ plainly, so rewards can be gated deliberately rather than by accident:
    seat filled by a bot should probably be worth less, but that is a
    payoff-table decision, not a P3-5 one. **Flagged, not answered.**
 3. **Time-of-day farming.** Queuing when lobbies are thin is the actual
-   exploit pattern (threat-model.md §8), and the per-round threshold
-   above doesn't see it. What catches it is telemetry: streak-gain rate
-   correlated with NPC seat count per round, clustered by account and
-   hour. That's P4-7's job; `roundEarnsStreakCredit` gives it the field to
-   log.
+   exploit pattern (threat-model.md §8). What catches it is telemetry:
+   streak-gain rate correlated with NPC seat count per round, clustered
+   by account and hour. That's P4-7's job; `NPCService.getNPCSeatCount()`
+   gives it the field to log.
 4. **Power-ups spent on bots.** NPCs are targetable exactly like humans
    (that's the point), so a human who can tell bots apart will aim
    offensive items at the humans and win more contested races than the

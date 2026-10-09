@@ -1,7 +1,8 @@
 --!strict
 -- Cosmetics (P4-6): applying what the store already tracks ownership and
 -- equip state for (P4-5) onto real characters - skins, trails, and the
--- Decision Studio podium flourish - plus the victory emote playback hook.
+-- Decision Studio podium flourish, hats and back items - plus the victory
+-- emote playback hook.
 -- The registry is config (src/shared/Config/Cosmetics/), the
 -- slot/category rules are pure (src/server/CosmeticLogic.luau, tested
 -- headlessly in tests/CosmeticLogic.spec.luau), and this file is what
@@ -184,6 +185,160 @@ local function applyTrail(character: Model, def: CosmeticLogic.CosmeticDef)
 	trail.Parent = rootPart
 end
 
+-- ===== Hat / BackItem: an Accessory that hides the avatar's own ==========
+--
+-- While one is worn, the player's own accessories at the same spot are
+-- parented to nil (not destroyed) and put back on unequip
+-- (design-decisions.md, "wearable cosmetics"). Their AccessoryWeld lives
+-- inside their own Handle, so reparenting them to the character puts
+-- them back exactly where they were. Keyed by character Model, like
+-- skinRestoreFor, so a respawn starts from its own avatar.
+--
+-- The handle is a plain Part + SpecialMesh rather than a MeshPart:
+-- MeshPart.MeshId can't be set from a script, and a SpecialMesh's
+-- MeshId/TextureId/Scale can, with no async load to wait on.
+local WEAR_CATEGORIES = { "Hat", "BackItem" }
+local ACCESSORY_TYPE: { [string]: Enum.AccessoryType } = {
+	Hat = Enum.AccessoryType.Hat,
+	BackItem = Enum.AccessoryType.Back,
+}
+
+local hiddenFor: { [Model]: { [string]: { Accessory } } } = {}
+local watching: { [Model]: boolean } = {}
+
+local function wearName(category: string): string
+	return "DSBCosmetic" .. category
+end
+
+local function handleAttachmentNames(accessory: Accessory): { string }
+	local names = {}
+	local handle = accessory:FindFirstChild("Handle")
+	if handle ~= nil then
+		for _, child in handle:GetChildren() do
+			if child:IsA("Attachment") then
+				table.insert(names, child.Name)
+			end
+		end
+	end
+	return names
+end
+
+local function hideIfClashing(character: Model, category: string, accessory: Accessory)
+	if accessory:GetAttribute(OWNED_ATTRIBUTE) == true then
+		return
+	end
+	if not CosmeticLogic.clashesWith(category, accessory.AccessoryType.Name, handleAttachmentNames(accessory)) then
+		return
+	end
+	local hidden = hiddenFor[character]
+	if hidden == nil then
+		hidden = {}
+		hiddenFor[character] = hidden
+	end
+	local list = hidden[category]
+	if list == nil then
+		list = {}
+		hidden[category] = list
+	end
+	table.insert(list, accessory)
+	accessory.Parent = nil
+end
+
+-- Avatar accessories often arrive after CharacterAdded (appearance
+-- loading), so one listener per character hides any late arrival that
+-- clashes with whatever is worn at that moment. Deferred, because
+-- reparenting a child inside its own ChildAdded is refused.
+local function watchLateAccessories(character: Model)
+	if watching[character] then
+		return
+	end
+	watching[character] = true
+	character.ChildAdded:Connect(function(child: Instance)
+		if not child:IsA("Accessory") then
+			return
+		end
+		task.defer(function()
+			if child.Parent ~= character then
+				return
+			end
+			for _, category in WEAR_CATEGORIES do
+				if character:FindFirstChild(wearName(category)) ~= nil then
+					hideIfClashing(character, category, child :: Accessory)
+				end
+			end
+		end)
+	end)
+	character.Destroying:Connect(function()
+		watching[character] = nil
+		hiddenFor[character] = nil
+	end)
+end
+
+local function removeWear(character: Model, category: string)
+	local worn = character:FindFirstChild(wearName(category))
+	if worn ~= nil and worn:GetAttribute(OWNED_ATTRIBUTE) == true then
+		worn:Destroy()
+	end
+	local hidden = hiddenFor[character]
+	local list = if hidden ~= nil then hidden[category] else nil
+	if hidden ~= nil and list ~= nil then
+		hidden[category] = nil
+		for _, accessory in list do
+			accessory.Parent = character
+		end
+	end
+end
+
+local function applyWear(character: Model, category: string, def: CosmeticLogic.CosmeticDef)
+	removeWear(character, category)
+
+	local humanoid = character:WaitForChild("Humanoid", 5)
+	if humanoid == nil or not humanoid:IsA("Humanoid") then
+		return
+	end
+	local attachmentName = CosmeticLogic.wearAttachmentFor(category) :: string
+
+	watchLateAccessories(character)
+	for _, child in character:GetChildren() do
+		if child:IsA("Accessory") then
+			hideIfClashing(character, category, child)
+		end
+	end
+
+	local accessory = Instance.new("Accessory")
+	accessory.Name = wearName(category)
+	accessory.AccessoryType = ACCESSORY_TYPE[category]
+	accessory:SetAttribute(OWNED_ATTRIBUTE, true)
+
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.one
+	handle.CanCollide = false
+	handle.CanQuery = false
+	handle.CanTouch = false
+	handle.Massless = true
+	handle.Parent = accessory
+
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.FileMesh
+	mesh.MeshId = string.format("rbxassetid://%d", def.wearMeshAssetId :: number)
+	mesh.TextureId = string.format("rbxassetid://%d", def.wearTextureAssetId :: number)
+	mesh.Scale = Vector3.one * (def.wearScale :: number)
+	mesh.Parent = handle
+
+	-- The weld lines this attachment up with the body's, so the mesh's
+	-- offset from the body is this attachment's inverse.
+	local o = def.wearOffset or { 0, 0, 0 }
+	local r = def.wearRotation or { 0, 0, 0 }
+	local attachment = Instance.new("Attachment")
+	attachment.Name = attachmentName
+	local placement = CFrame.new(o[1], o[2], o[3]) * CFrame.Angles(math.rad(r[1]), math.rad(r[2]), math.rad(r[3]))
+	attachment.CFrame = placement:Inverse()
+	attachment.Parent = handle
+
+	humanoid:AddAccessory(accessory)
+end
+
 -- ===== Podium: gated on the Decision Studio round state, not equip ========
 
 local function removePodium(character: Model)
@@ -227,7 +382,7 @@ local function canEquip(slot: string, itemId: string?): (boolean, string?)
 	return CosmeticLogic.canApply(catalogue, slot, itemId)
 end
 
--- Applies (or clears) skin and trail from a player's currently equipped
+-- Applies (or clears) skin, trail, hat and back item from a player's currently equipped
 -- state onto their live character. Called on every spawn and after every
 -- successful equip change - Emote has nothing to apply (see header);
 -- Podium is refreshed separately, gated on round state, by
@@ -254,6 +409,15 @@ local function refreshFor(player: Player)
 		applyTrail(character, trailDef)
 	else
 		removeTrail(character)
+	end
+
+	for _, category in WEAR_CATEGORIES do
+		local def = CosmeticLogic.equippedIn(catalogue, equipped, category)
+		if def ~= nil then
+			applyWear(character, category, def)
+		else
+			removeWear(character, category)
+		end
 	end
 end
 

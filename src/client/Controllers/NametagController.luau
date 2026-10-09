@@ -58,6 +58,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local ParticipantIds = require(ReplicatedStorage.Shared.ParticipantIds)
 local Env = require(script.Parent.Parent.UI.Components.Env)
 
 local LocalPlayer = Players.LocalPlayer
@@ -228,7 +229,7 @@ local function buildNametag(character: Model, info: TitleInfo?, nameplate: Namep
 end
 
 local function characterFor(racerId: number): Model?
-	if racerId < 0 then
+	if ParticipantIds.isNPC(racerId) then
 		-- An NPC: no Player to ask, so the rig is found by the name
 		-- NPCService gave it, under Workspace.NPCs - the same route
 		-- NPCBubbleController takes.

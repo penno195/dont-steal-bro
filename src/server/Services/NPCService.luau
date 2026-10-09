@@ -19,10 +19,9 @@
 -- floors every sampled duration at the median human time for that task
 -- (this server, this round - see `humanDurationSamples` below), so a
 -- lucky roll on a strong profile still can't beat the median human.
--- threat-model.md §8 treats NPC-heavy lobbies as a streak-farming
--- vector; `earnsStreakCredit` below is the check P4-1's
--- ProgressionService gates on, and docs/npc-notes.md states exactly
--- where NPC presence can still distort the leaderboard.
+-- A real player's result counts however many seats are bots
+-- (design-decisions.md Q5's 2026-10-02 applied case); docs/npc-notes.md
+-- states where NPC presence can still distort the leaderboard.
 --
 -- WHERE THE MAP COMES FROM: the same injection-point pattern TaskService
 -- and PowerUpService already use (see either file's header) - no
@@ -65,6 +64,13 @@ end
 -- tick advances it to the next one. Distinct from the arrival radius at
 -- a station (config): this is a pathing detail, not a gameplay knob.
 local WAYPOINT_REACHED_STUDS = 4
+-- Measured flat, with the height checked separately: waypoints sit on
+-- the navmesh, ~3 studs below the root, and on a steep ramp the navmesh
+-- itself can sit another 1-2 studs under the surface. A 3D check then
+-- never fires while the Humanoid, which judges MoveTo flat, has already
+-- stopped on the waypoint - the bot stands still until the stuck timer
+-- gives up (Factory's bridge ramps, 2026-10-03).
+local WAYPOINT_REACHED_HEIGHT_STUDS = 6
 -- A rig that has moved less than this since the last tick is making no
 -- progress, for the stuck timer's purposes. Small enough that a bot
 -- shuffling on the spot against a wall still counts as stuck.
@@ -239,6 +245,26 @@ local function nearestNodeId(position: Vector3): string?
 		end
 	end
 	return bestId
+end
+
+-- The coarse route between two points as NavNode positions, ends
+-- trimmed the way a bot's are, and without the two points themselves.
+-- Empty on a map with no nodes or a disconnected graph. NavigationService
+-- draws a player's path line through these: the graph is server-only
+-- (MapStreaming), and walking it costs no ComputeAsync.
+local function routeBetween(from: Vector3, to: Vector3): { Vector3 }
+	local fromNode = nearestNodeId(from)
+	local toNode = nearestNodeId(to)
+	if fromNode == nil or toNode == nil then
+		return {}
+	end
+	local route = NPCLogic.findNodePath(navGraph(), fromNode, toNode) or {}
+	local trimmed = NPCLogic.trimRoute(route, navPoints(), toPoint(from), toPoint(to))
+	local positions: { Vector3 } = {}
+	for _, nodeId in trimmed do
+		table.insert(positions, navNodes[nodeId].position)
+	end
+	return positions
 end
 
 -- ===== rigs =================================================================
@@ -657,6 +683,78 @@ local function computePath(record: NPCRecord): boolean
 	return true
 end
 
+-- ===== a player's runnable route (Navigation) ===============================
+
+-- One ComputeAsync from `from` to `to`, as positions after `from`; nil
+-- when the navmesh has no path.
+local function navmeshPath(from: Vector3, to: Vector3): { Vector3 }?
+	local path = PathfindingService:CreatePath({
+		AgentRadius = 2,
+		AgentHeight = 5,
+		AgentCanJump = true,
+	})
+	local ok = pcall(function()
+		path:ComputeAsync(from, to)
+	end)
+	if not ok or path.Status ~= Enum.PathStatus.Success then
+		return nil
+	end
+	local points: { Vector3 } = {}
+	for index, waypoint in path:GetWaypoints() do
+		if index > 1 then
+			table.insert(points, waypoint.Position)
+		end
+	end
+	return points
+end
+
+local function routeLength(from: Vector3, points: { Vector3 }): number
+	local total, previous = 0, from
+	for _, point in points do
+		total += (point - previous).Magnitude
+		previous = point
+	end
+	return total
+end
+
+-- The route a player can actually run from `from` to `to`, for
+-- Navigation's path line (owner, 2026-10-08: "the route they can run").
+-- Two candidates, and the shorter wins:
+--   - straight through the navmesh, which is the shortest when the
+--     navmesh is sound;
+--   - the way a bot goes: the NavNode chain, each hop walked straight
+--     when canWalkStraight vouches for it and pathfound when not. This
+--     is the one that survives a ramp the navmesh dropped (see
+--     canWalkStraight), where the direct path takes a long detour.
+-- Up to one ComputeAsync per hop, so NavigationService asks only when
+-- the target changes or the player strays off the line.
+local function walkableRoute(from: Vector3, to: Vector3): { Vector3 }
+	local direct = navmeshPath(from, to)
+
+	local viaNodes: { Vector3 } = {}
+	local previous = from
+	local hops = routeBetween(from, to)
+	table.insert(hops, to)
+	for _, hop in hops do
+		local leg = if canWalkStraight(previous, hop) then nil else navmeshPath(previous, hop)
+		local legPoints: { Vector3 } = if leg ~= nil then leg else { hop }
+		for _, point in legPoints do
+			table.insert(viaNodes, point)
+		end
+		-- A pathfound leg ends on its own last waypoint, not exactly on
+		-- the hop; make sure the hop itself is in the line.
+		if leg ~= nil and #leg > 0 and (leg[#leg] - hop).Magnitude > 1 then
+			table.insert(viaNodes, hop)
+		end
+		previous = hop
+	end
+
+	if direct ~= nil and #direct > 0 and routeLength(from, direct) <= routeLength(from, viaNodes) then
+		return direct
+	end
+	return viaNodes
+end
+
 -- ===== the race =============================================================
 
 local function beginWorking(record: NPCRecord, stationId: string)
@@ -853,7 +951,11 @@ local function tickWalking(record: NPCRecord, nowValue: number)
 		record.jumpWaypoints[record.waypointIndex] = nil
 	end
 
-	if ((waypoint :: Vector3) - position).Magnitude <= WAYPOINT_REACHED_STUDS then
+	local offset = (waypoint :: Vector3) - position
+	if
+		Vector3.new(offset.X, 0, offset.Z).Magnitude <= WAYPOINT_REACHED_STUDS
+		and math.abs(offset.Y) <= WAYPOINT_REACHED_HEIGHT_STUDS
+	then
 		record.waypointIndex += 1
 		local nextWaypoint: Vector3? = record.waypoints[record.waypointIndex]
 		if nextWaypoint ~= nil then
@@ -980,6 +1082,10 @@ local function fillSeats()
 	end
 
 	broadcastRoster()
+	-- Deferred: with the grace already served and no seats to fill, this
+	-- runs inside Loading's onEnter, before MatchTeleportService has
+	-- called Telemetry.roundStarted, and the event would carry no map.
+	task.defer(Loader.get("Telemetry").npcCountInRound, Participants.countNPCs(), humansPresent)
 	print(
 		string.format(
 			"NPCService: %d human(s) after a %.0fs grace window - spawned %d NPC(s)",
@@ -994,12 +1100,22 @@ end
 
 local NPCService: Loader.Service = {
 	name = "NPCService",
-	dependencies = { "NetGuard", "ConfigValidator", "RoundService", "ParticipantService", "TaskService", "LiveConfig" },
+	dependencies = {
+		"NetGuard",
+		"ConfigValidator",
+		"RoundService",
+		"ParticipantService",
+		"TaskService",
+		"LiveConfig",
+		"Telemetry",
+	},
 
 	setNavNodes = setNavNodes,
 	setSpawnPoints = setSpawnPoints,
 	setMapDifficultyModifier = setMapDifficultyModifier,
 	debugLoadFromMap = debugLoadFromMap,
+	routeBetween = routeBetween,
+	walkableRoute = walkableRoute,
 
 	markArrivalGraceServed = function()
 		graceAlreadyServed = true
@@ -1007,14 +1123,6 @@ local NPCService: Loader.Service = {
 
 	getNPCSeatCount = function(): number
 		return Participants.countNPCs()
-	end,
-
-	-- threat-model.md §8's required launch mitigation, as the one call
-	-- P4-1's ProgressionService makes before awarding streak. Kept here
-	-- rather than in ProgressionService so "how many seats were bots"
-	-- and "does that still count" can never drift apart.
-	roundEarnsStreakCredit = function(): boolean
-		return NPCLogic.earnsStreakCredit(Participants.countNPCs(), GameConfig.npcSeatStreakCreditThreshold)
 	end,
 
 	getNPCIds = function(): { number }

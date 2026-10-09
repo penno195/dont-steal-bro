@@ -724,6 +724,7 @@ tryClaimPickup = function(point: SpawnPointRecord, live: LivePickup, hitPart: Ba
 	-- Under Swap this overwrites (evicts) the oldest held item.
 	state.inventory[slotIndex] = { powerUpId = live.def.id, acquiredAt = now() }
 	broadcastInventory(racer)
+	Loader.get("Telemetry").powerUpCollected(racer.id, live.def.id, "Pickup")
 
 	hideLivePickup(point)
 	scheduleRespawn(point)
@@ -1063,6 +1064,20 @@ local function useFor(
 		end
 	end
 
+	-- Rule 1's immunity window refuses a hard-control hit outright, so
+	-- firing into it is refused here, BEFORE the item is spent: the
+	-- caster keeps it (user decision 2026-10-09, after a playtest where
+	-- the attacker lost the item to a target they couldn't affect).
+	local StatusEffects = Loader.get("StatusEffects") :: any
+	local function immune(target: Participants.Participant?): boolean
+		return target ~= nil and target.id ~= racer.id and StatusEffects.isImmuneTo(target.id, def.id)
+	end
+	if immune(resolvedTarget) then
+		audit(racer, def.id, resolvedTarget and resolvedTarget.id, "Rejected", "target immune, item kept")
+		sendResult(racer, false, def.id, resolvedTarget and resolvedTarget.id, "target is protected - item kept")
+		return
+	end
+
 	-- THE ITEM IS CONSUMED HERE, before the effect is applied and
 	-- regardless of whether it lands.
 	--
@@ -1085,7 +1100,10 @@ local function useFor(
 	-- legal target has been committed, and the victim's anti-frustration
 	-- protection is meant to cost the attacker something. Revisit here
 	-- if playtesting says firing into an immunity window feels unfair
-	-- rather than punishing.
+	-- rather than punishing. (It did: rule 1's window is now refused
+	-- above and refunded in land() below, user decision 2026-10-09.
+	-- Wards and the Scramble cap still cost the item.)
+	local previousUsedAt = state.lastUsedAt[def.id]
 	state.inventory[resolvedSlotIndex] = nil -- a hole, not a shift: slots are fixed positions
 	state.lastUsedAt[def.id] = now()
 	broadcastInventory(racer)
@@ -1101,34 +1119,66 @@ local function useFor(
 		-- A throw lands a moment after it was committed: the target may
 		-- have left, or (in practice) walked out of the area, mid-flight.
 		-- The item is already spent, same as any other miss.
+		-- Logged per use that spent the item; a use refused before that
+		-- (cooldown, no target) never reached anyone.
+		local Telemetry = Loader.get("Telemetry") :: any
 		if thrownAt ~= nil and (Participants.get(thrownAt.id) == nil or not EffectContext.mayAct(thrownAt.id)) then
 			audit(racer, def.id, resolvedTargetId, "Rejected", "target gone before impact")
 			sendResult(racer, false, def.id, resolvedTargetId, "target gone before impact")
+			Telemetry.powerUpUsed(racer.id, def.id, false)
+			return
+		end
+
+		-- Someone else's hit landed while this one was in the air, opening
+		-- the target's immunity window: hand the item back (same decision
+		-- as the refusal above). Its own slot if still empty, else any
+		-- free one; with none free it is lost, as a pickup would be.
+		if immune(resolvedTarget) and racerStates[racer.id] == state then
+			local slot = if state.inventory[resolvedSlotIndex] == nil then resolvedSlotIndex else nil
+			for index = 1, GameConfig.powerUpInventorySlots do
+				if slot == nil and state.inventory[index] == nil then
+					slot = index
+				end
+			end
+			if slot ~= nil then
+				state.inventory[slot] = item
+				state.lastUsedAt[def.id] = previousUsedAt
+				broadcastInventory(racer)
+			end
+			audit(racer, def.id, resolvedTargetId, "Rejected", "target immune on impact, item kept")
+			sendResult(racer, false, def.id, resolvedTargetId, "target is protected - item kept")
+			if resolvedTarget ~= nil and resolvedTarget.player ~= nil then
+				StatusEffects.notifyUsedOn(resolvedTarget.player, racer, def.id, false)
+			end
 			return
 		end
 
 		local applied, description = effectApplier(racer, resolvedTarget, def)
 
+		-- The victim hears about every item that reached them, landed or
+		-- not (powerups.md, user decision 2026-10-03): a Task Scramble on
+		-- someone away from a task used to be spent in silence.
+		local victim = if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then resolvedTarget.player else nil
+
 		if not applied then
 			audit(racer, def.id, resolvedTargetId, "Rejected", description)
 			sendResult(racer, false, def.id, resolvedTargetId, description)
+			Telemetry.powerUpUsed(racer.id, def.id, false)
+			if victim ~= nil then
+				StatusEffects.notifyUsedOn(victim, racer, def.id, false)
+			end
 			return
 		end
 
 		audit(racer, def.id, resolvedTargetId, "Applied", description)
 		sendResult(racer, true, def.id, resolvedTargetId, description)
+		Telemetry.powerUpUsed(racer.id, def.id, true)
 
 		-- Only a hit that landed shoves: a Shield or an immunity window
 		-- blocks the push along with the effect.
 		local shunt = if thrownAt ~= nil then shuntFor(racer, thrownAt, def) else nil
-		local victim = if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then resolvedTarget.player else nil
 		if victim ~= nil then
-			Net.fireClient("PowerUpHitYou", victim, {
-				powerUpId = def.id,
-				casterName = racer.displayName,
-				shunt = shunt,
-				callingCardId = (Loader.get("CosmeticService") :: any).equippedIdFor(racer.player, "CallingCard"),
-			})
+			StatusEffects.notifyUsedOn(victim, racer, def.id, true, shunt)
 		end
 	end
 
@@ -1260,10 +1310,12 @@ local function grantLoadouts()
 		end
 		local state = stateFor(racer.id)
 		local at = now()
+		local Telemetry = Loader.get("Telemetry") :: any
 		for slotIndex, powerUpId in granted do
 			-- Validate pins powerUpInventorySlots >= store.loadoutSlots, so
 			-- this never drops an item whose stock was just spent.
 			state.inventory[slotIndex] = { powerUpId = powerUpId, acquiredAt = at }
+			Telemetry.powerUpCollected(player, powerUpId, "Loadout")
 		end
 		broadcastInventory(racer)
 	end
@@ -1299,6 +1351,7 @@ local PowerUpService: Loader.Service = {
 		"LiveConfig",
 		"StoreService",
 		"CosmeticService",
+		"Telemetry",
 	},
 
 	setSpawnPoints = setSpawnPoints,

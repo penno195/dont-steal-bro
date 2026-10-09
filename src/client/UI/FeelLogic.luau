@@ -191,6 +191,29 @@ function FeelLogic.flashTransparency(flash: Flash, t: number): number
 	return flash.transparency + (1 - flash.transparency) * (t / flash.duration)
 end
 
+-- The reveal heartbeat's red edge glow: one soft pulse per beat (the
+-- lub only - pulsing the dub too would flash past 3 times a second on
+-- the last card). It snaps in over GLOW_RISE and fades over GLOW_FADE,
+-- done before the fastest next beat. Stronger card by card (`intensity`
+-- 0..1, DecisionLogic.Heartbeat); reduced motion keeps it, fainter - it
+-- is opacity only, no movement. Returns the edge's transparency.
+FeelLogic.GLOW_RISE = 0.06
+FeelLogic.GLOW_FADE = 0.36
+
+function FeelLogic.heartbeatGlow(intensity: number, sinceBeat: number, reducedMotion: boolean): number
+	if sinceBeat < 0 or sinceBeat >= FeelLogic.GLOW_RISE + FeelLogic.GLOW_FADE then
+		return 1
+	end
+	local peak = 0.7 - 0.5 * math.clamp(intensity, 0, 1) -- 0.7 faint .. 0.2 strong
+	if reducedMotion then
+		peak = 1 - (1 - peak) * 0.5
+	end
+	local strength = if sinceBeat < FeelLogic.GLOW_RISE
+		then sinceBeat / FeelLogic.GLOW_RISE
+		else 1 - (sinceBeat - FeelLogic.GLOW_RISE) / FeelLogic.GLOW_FADE
+	return 1 - (1 - peak) * strength
+end
+
 -- Stacking. A second shake while one is running takes whichever is
 -- stronger right now rather than adding - two task completions in a
 -- row shouldn't sum into a camera quake.

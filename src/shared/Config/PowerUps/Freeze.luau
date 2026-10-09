@@ -17,10 +17,12 @@ local Freeze: Validate.PowerUpDef = {
 	kind = "Debuff",
 	role = "Attack",
 	target = "Aimed",
-	durationSeconds = 2.5,
+	durationSeconds = 4.5, -- was 2.5, then 3.5; design-decisions.md §12
 	cooldownSeconds = 12,
 	rarity = "Uncommon",
 	hardControl = true,
+	impact = { style = "Frost", rgb = { 150, 215, 255 } }, -- icy shards and frost mist
+	victimLook = "Frozen", -- encased in an ice block
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

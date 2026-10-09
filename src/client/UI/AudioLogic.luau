@@ -7,9 +7,11 @@
 -- emotional brief each cue is written against.
 --
 -- ADDING A CUE is one row in CUES plus one call to AudioController.play
--- from whatever moment triggers it. Asset ids are PLACEHOLDERS
--- ("rbxassetid://0") until sound design lands; the controller skips a
--- placeholder silently, so the game is playable with no audio at all.
+-- from whatever moment triggers it. Every asset comes from a library
+-- Roblox licenses to all experiences (Roblox's own UI pack, APM Music,
+-- Pro Sound Effects), so none can be revoked out from under the game;
+-- the picks and their alternates are in docs/audio-and-feel.md §8. A
+-- placeholder ("rbxassetid://0") is skipped silently.
 
 local AudioLogic = {}
 
@@ -41,6 +43,9 @@ export type CueDef = {
 	-- server events turning into a wall of identical sounds.
 	cooldown: number,
 	duck: DuckDef?,
+	-- Seconds into the asset a play starts from, when a stock sound's
+	-- moment lands too late (a riser whose hard stop must hit a beat).
+	startAt: number?,
 }
 
 export type Bed = "Hub" | "Race" | "Studio" | "None"
@@ -61,24 +66,22 @@ local function cue(def: CueDef): CueDef
 	return table.freeze(def)
 end
 
-local P = AudioLogic.PLACEHOLDER_ASSET
-
 AudioLogic.CUES = table.freeze({
 	-- Beds (Music, looped). RaceBed's asset is only the fallback: the map's
 	-- own MapDef.musicTrackId wins when it's set (resolveRaceBed).
 	HubAmbience = cue({
-		assetId = P,
+		assetId = "rbxassetid://80257380636383", -- APM "Game Lobby" (182 s), owner's pick
 		category = "Music",
-		volume = 0.5,
+		volume = 0.125, -- halved twice 2026-10-08: the owner found 0.5, then 0.25, overpowering
 		looped = true,
 		spatial = false,
 		priority = 100,
 		cooldown = 0,
 	}),
 	RaceBed = cue({
-		assetId = P,
+		assetId = "rbxassetid://1837768143", -- APM "Big League (c)" (122 s)
 		category = "Music",
-		volume = 0.55,
+		volume = 0.275, -- halved 2026-10-08 with every music cue (owner)
 		looped = true,
 		spatial = false,
 		priority = 100,
@@ -88,18 +91,18 @@ AudioLogic.CUES = table.freeze({
 	-- intensity (raceIntensity). One stem for every map, so a new map
 	-- never needs its own "tense" mix.
 	RaceTension = cue({
-		assetId = P,
+		assetId = "rbxassetid://9043365842", -- APM "HEARTBEAT 02 96BPM" (60 s): no key, sits on any bed
 		category = "Music",
-		volume = 0.6,
+		volume = 0.3, -- halved 2026-10-08 with every music cue (owner)
 		looped = true,
 		spatial = false,
 		priority = 100,
 		cooldown = 0,
 	}),
 	StudioBed = cue({
-		assetId = P,
+		assetId = "rbxassetid://1843943906", -- APM "Tension Repeat Drones 40" (129 s)
 		category = "Music",
-		volume = 0.45,
+		volume = 0.225, -- halved 2026-10-08 with every music cue (owner)
 		looped = true,
 		spatial = false,
 		priority = 100,
@@ -108,7 +111,7 @@ AudioLogic.CUES = table.freeze({
 
 	-- Hub.
 	QueueReady = cue({
-		assetId = P,
+		assetId = "rbxassetid://15675043410", -- Roblox_UI_Tonal_Stinger
 		category = "SFX",
 		volume = 0.8,
 		looped = false,
@@ -117,10 +120,23 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 1,
 		duck = { level = 0.5, attack = 0.05, hold = 0.6, release = 0.4 },
 	}),
+	-- Season-pass rewards claimed (the claim pop-up): a game-show "win"
+	-- flourish, to match the Game Show art direction. Shorter and lighter
+	-- than the round's Win stinger, which it must never be mistaken for.
+	SeasonClaim = cue({
+		assetId = "rbxassetid://1846251701", -- APM "Fortune Fun 'Win'" (Sonoton, 4 s)
+		category = "SFX",
+		volume = 0.8,
+		looped = false,
+		spatial = false,
+		priority = 80,
+		cooldown = 0.5,
+		duck = { level = 0.4, attack = 0.05, hold = 1.5, release = 0.8 },
+	}),
 
 	-- Race.
 	TimerTick = cue({
-		assetId = P,
+		assetId = "rbxassetid://9114212929", -- PSE "Dvd Player Button 13": a hard, dry click
 		category = "SFX",
 		volume = 0.5,
 		looped = false,
@@ -129,7 +145,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.5,
 	}),
 	TaskStart = cue({
-		assetId = P,
+		assetId = "rbxassetid://15675059323", -- Roblox_UI_Bright_Click
 		category = "SFX",
 		volume = 0.6,
 		looped = false,
@@ -138,7 +154,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.3,
 	}),
 	TaskSuccess = cue({
-		assetId = P,
+		assetId = "rbxassetid://9048770070", -- APM "Seven Leaf Clover - Hit3": mallets, 1.9 s
 		category = "SFX",
 		volume = 0.9,
 		looped = false,
@@ -147,8 +163,20 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.3,
 		duck = { level = 0.6, attack = 0.03, hold = 0.3, release = 0.5 },
 	}),
+	-- A step of a multi-step task landed (a right digit, a fuse seated, a
+	-- hit): small and warm, so a run of them reads as "keep going". The
+	-- buzzer is only for a step that went wrong (taskResultCue).
+	TaskStep = cue({
+		assetId = "rbxassetid://9114380768", -- PSE "Fat Beeps Bubble Like Bursts 1"
+		category = "SFX",
+		volume = 0.5,
+		looped = false,
+		spatial = false,
+		priority = 40,
+		cooldown = 0.06,
+	}),
 	TaskFail = cue({
-		assetId = P,
+		assetId = "rbxassetid://9113085665", -- PSE "Alarm Buzzer 3"
 		category = "SFX",
 		volume = 0.75,
 		looped = false,
@@ -157,7 +185,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.3,
 	}),
 	PowerUpPickup = cue({
-		assetId = P,
+		assetId = "rbxassetid://15675055424", -- Roblox_UI_Cute_Pop
 		category = "SFX",
 		volume = 0.7,
 		looped = false,
@@ -170,7 +198,7 @@ AudioLogic.CUES = table.freeze({
 	-- (it was done to you). Different pitch register AND envelope, not
 	-- just different samples. See docs/audio-and-feel.md §2.
 	PowerUpUsedByYou = cue({
-		assetId = P,
+		assetId = "rbxassetid://9120733055", -- PSE "Whoosh Rising Swish Airy 1"
 		category = "SFX",
 		volume = 0.8,
 		looped = false,
@@ -179,7 +207,7 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.2,
 	}),
 	PowerUpHitYou = cue({
-		assetId = P,
+		assetId = "rbxassetid://9113520887", -- PSE "Body Hit With Rubber Glove 7"
 		category = "SFX",
 		volume = 0.9,
 		looped = false,
@@ -189,7 +217,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.55, attack = 0.02, hold = 0.25, release = 0.4 },
 	}),
 	Qualified = cue({
-		assetId = P,
+		assetId = "rbxassetid://1837769261", -- APM "Time Attack (sting)"
 		category = "SFX",
 		volume = 1,
 		looped = false,
@@ -199,7 +227,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.25, attack = 0.05, hold = 1.2, release = 0.8 },
 	}),
 	NotQualified = cue({
-		assetId = P,
+		assetId = "rbxassetid://9125449274", -- PSE conch-shell honk: a weak, deflating blow
 		category = "SFX",
 		volume = 0.7,
 		looped = false,
@@ -211,7 +239,7 @@ AudioLogic.CUES = table.freeze({
 
 	-- Decision Studio.
 	LockIn = cue({
-		assetId = P,
+		assetId = "rbxassetid://9119727134", -- PSE "Switch Impact On Flip Up Large Metal 2"
 		category = "SFX",
 		volume = 0.9,
 		looped = false,
@@ -222,7 +250,7 @@ AudioLogic.CUES = table.freeze({
 	}),
 	-- Someone else locked in: quieter, so your own lock stays the loud one.
 	OtherLockIn = cue({
-		assetId = P,
+		assetId = "rbxassetid://9114214262", -- PSE "Dvd Player Button 4": the same idea, lighter
 		category = "SFX",
 		volume = 0.5,
 		looped = false,
@@ -234,7 +262,7 @@ AudioLogic.CUES = table.freeze({
 	-- is never buried under music, and the bed is ducked for the whole
 	-- sequence on top of that (revealDuck).
 	RevealRiser = cue({
-		assetId = P,
+		assetId = "rbxassetid://9043343295", -- APM "REVERSE NOISE HARD END 09" (4.1 s)
 		category = "SFX",
 		volume = 0.8,
 		looped = false,
@@ -242,9 +270,25 @@ AudioLogic.CUES = table.freeze({
 		priority = 100,
 		cooldown = 0,
 		duck = { level = 0.3, attack = 0.2, hold = 0.8, release = 0.2 },
+		-- Its hard stop is at 4.1 s; starting 1.1 s in lands it on the
+		-- first card's turn (DecisionLogic's lead, 3.0 s).
+		startAt = 1.1,
+	}),
+	-- One thump of the heartbeat under each face-down card. Played twice
+	-- per beat (lub, then a softer dub: HEARTBEAT_DUB), at a volume that
+	-- grows card by card (heartbeatVolume). No duck of its own: the
+	-- reveal's blanket duck already holds the bed down.
+	RevealHeartbeat = cue({
+		assetId = "rbxassetid://9114457494", -- PSE "Fist Hit Sofa 1": a muffled, low thud
+		category = "SFX",
+		volume = 1,
+		looped = false,
+		spatial = false,
+		priority = 100,
+		cooldown = 0,
 	}),
 	RevealCard = cue({
-		assetId = P,
+		assetId = "rbxassetid://9038652624", -- APM "Big Hair Rock - Hit 3"
 		category = "SFX",
 		volume = 1,
 		looped = false,
@@ -254,7 +298,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.2, attack = 0.02, hold = 0.5, release = 0.3 },
 	}),
 	RevealOutcome = cue({
-		assetId = P,
+		assetId = "rbxassetid://1835333323", -- APM "Angry Heavy Hitter Hit"
 		category = "SFX",
 		volume = 1,
 		looped = false,
@@ -264,7 +308,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.1, attack = 0.02, hold = 1.0, release = 0.5 },
 	}),
 	Win = cue({
-		assetId = P,
+		assetId = "rbxassetid://9038758612", -- APM "Tomorrow Begins Today - Stinger" (13 s, bright)
 		category = "SFX",
 		volume = 1,
 		looped = false,
@@ -274,7 +318,7 @@ AudioLogic.CUES = table.freeze({
 		duck = { level = 0.15, attack = 0.05, hold = 2.5, release = 1.5 },
 	}),
 	Loss = cue({
-		assetId = P,
+		assetId = "rbxassetid://110140058364323", -- APM "Pathos and Persistence - Sting 2" (5 s, low)
 		category = "SFX",
 		volume = 0.9,
 		looped = false,
@@ -457,7 +501,7 @@ end
 
 -- REVEAL TIMELINE ----------------------------------------------------
 
-export type RevealTiming = { lead: number, cardGap: number, outcomeAfter: number, resultAfter: number }
+export type RevealTiming = { outcomeAfter: number, resultAfter: number }
 -- `card` is set on each RevealCard cue: its position in the screen's
 -- reveal order (1 = first to turn), so a finalist's Reveal cosmetic sound
 -- can stand in for that one card's cue.
@@ -465,16 +509,57 @@ export type ScheduledCue = { at: number, cue: string, card: number? }
 
 -- Seconds after revealAt for each reveal sound, lined up with
 -- DecisionLogic.revealStep so a card's sound lands on the frame it turns.
+-- `turns` is DecisionLogic.cardTurns: each card's turn, in reveal order.
 -- Win/Loss are NOT here: they depend on who you are, so the controller
--- plays resolutionCue's answer at `resultAt`.
-function AudioLogic.revealSchedule(seats: number, timing: RevealTiming): ({ ScheduledCue }, number)
+-- plays resolutionCue's answer at `resultAt`. The heartbeat isn't here
+-- either: it has its own volume per beat (heartbeatVolume).
+function AudioLogic.revealSchedule(turns: { number }, timing: RevealTiming): ({ ScheduledCue }, number)
 	local out: { ScheduledCue } = { { at = 0, cue = "RevealRiser" } }
-	for i = 0, math.max(0, seats - 1) do
-		table.insert(out, { at = timing.lead + i * timing.cardGap, cue = "RevealCard", card = i + 1 })
+	for i, at in turns do
+		table.insert(out, { at = at, cue = "RevealCard", card = i })
 	end
-	local outcomeAt = timing.lead + math.max(0, seats - 1) * timing.cardGap + timing.outcomeAfter
+	local outcomeAt = (turns[#turns] or 0) + timing.outcomeAfter
 	table.insert(out, { at = outcomeAt, cue = "RevealOutcome" })
 	return out, outcomeAt + timing.resultAfter
+end
+
+-- The heartbeat's two thumps: the dub lands HEARTBEAT_DUB seconds after
+-- the lub, at HEARTBEAT_DUB_VOLUME of it.
+AudioLogic.HEARTBEAT_DUB = 0.22
+AudioLogic.HEARTBEAT_DUB_VOLUME = 0.6
+
+-- A beat's volume multiplier from its DecisionLogic.Heartbeat intensity
+-- (0 = the first card, 1 = the last): quiet to full.
+function AudioLogic.heartbeatVolume(intensity: number): number
+	return 0.35 + 0.65 * clamp01(intensity)
+end
+
+-- TASK FEEDBACK ------------------------------------------------------
+
+-- Which cue a TaskResult plays. Every step of a multi-step task arrives
+-- as a TaskResult with success = false until the last one, so success
+-- alone can't tell a right step from a wrong one: the handler's feedback
+-- does (Types.TaskFeedback). A step is a MISS when any of its usual
+-- markers says so - accepted/hit/sealed false, or early/reset true -
+-- and otherwise progress. No feedback at all means the server ignored
+-- the submission (too fast, no time left): silence.
+function AudioLogic.taskResultCue(success: boolean, feedback: any): string?
+	if success then
+		return "TaskSuccess"
+	end
+	if type(feedback) ~= "table" then
+		return nil
+	end
+	if
+		feedback.accepted == false
+		or feedback.hit == false
+		or feedback.sealed == false
+		or feedback.early == true
+		or feedback.reset == true
+	then
+		return "TaskFail"
+	end
+	return "TaskStep"
 end
 
 -- The resolution for this client: Win or Loss for a finalist, nothing for

@@ -57,7 +57,8 @@ export type Props = {
 	-- Richer content than `body` can hold (P6-8's payoff explainer):
 	-- built inside the modal's Vide scope and placed between the body
 	-- and the actions. Its width is Modal.CONTENT_WIDTH, and it sizes
-	-- its own height.
+	-- its own height - except a ScrollingFrame, whose height `open`
+	-- fits to the screen (fitToScreen).
 	content: (() -> Instance)?,
 }
 
@@ -110,17 +111,22 @@ function Modal.card(props: Props): Frame
 		Position = UDim2.fromScale(0.5, 0.5),
 		Size = UDim2.fromOffset(CARD_WIDTH, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = Theme.elevation[3].surface,
+		-- The UI art pass's stage panel at elevation 3 (see Panel): the
+		-- UIGradient tints white, in a thick gold rim.
+		BackgroundColor3 = Color3.new(1, 1, 1),
 		SelectionGroup = true,
 		SelectionBehaviorUp = Enum.SelectionBehavior.Stop,
 		SelectionBehaviorDown = Enum.SelectionBehavior.Stop,
 		SelectionBehaviorLeft = Enum.SelectionBehavior.Stop,
 		SelectionBehaviorRight = Enum.SelectionBehavior.Stop,
 		Base.corner(Theme.radius.lg),
+		create("UIGradient")({ Rotation = 90, Color = Theme.fill.panel.gradient }),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Color = Theme.color.line,
+			Color = Theme.fill.panel.rim,
 			Transparency = Theme.elevation[3].strokeTransparency,
+			Thickness = 3,
 		}),
 		Base.padding(Theme.spacing.lg),
 		create("UIListLayout")({
@@ -154,6 +160,46 @@ function Modal.card(props: Props): Frame
 		child.Parent = card
 	end
 	return card
+end
+
+-- Keeps the actions on screen. A ScrollingFrame `content` (one child:
+-- the body it scrolls) is as tall as its body, up to whatever the
+-- screen has left after the card's header, actions and padding; past
+-- that it scrolls. Measured from the laid-out card rather than
+-- estimated, so a short screen, a notch or a big Text and HUD size
+-- can't push "Got it" off the bottom (mobile audit, iPhone portrait).
+-- Everything is converted to reference px by the content's own width
+-- ratio, which already includes the global and enter-animation scales.
+local function fitToScreen(card: Frame, screen: ScreenGui)
+	local scroll = card:FindFirstChildWhichIsA("ScrollingFrame")
+	local body = scroll and scroll:FindFirstChildWhichIsA("GuiObject")
+	if scroll == nil or body == nil then
+		return
+	end
+	local width = scroll.Size.X.Offset
+	local function refit()
+		local s = scroll.AbsoluteSize.X / math.max(width, 1)
+		if s <= 0 then
+			return
+		end
+		local chrome = (card.AbsoluteSize.Y - scroll.AbsoluteSize.Y) / s
+		local room = screen.AbsoluteSize.Y / s - 2 * Theme.spacing.lg - chrome
+		local height = math.max(math.min(body.AbsoluteSize.Y / s, room), Theme.touch.primaryHeight * 2)
+		if math.abs(scroll.Size.Y.Offset - height) > 0.5 then
+			scroll.Size = UDim2.fromOffset(width, height)
+		end
+	end
+	for _, signal in
+		{
+			body:GetPropertyChangedSignal("AbsoluteSize"),
+			scroll:GetPropertyChangedSignal("AbsoluteSize"),
+			card:GetPropertyChangedSignal("AbsoluteSize"),
+			screen:GetPropertyChangedSignal("AbsoluteSize"),
+		}
+	do
+		cleanup(signal:Connect(refit))
+	end
+	refit()
 end
 
 -- Shows the modal. Returns `close`, which animates it out and cleans up;
@@ -221,6 +267,7 @@ function Modal.open(props: Props): () -> ()
 			Parent = dialog,
 		})
 		dialog.Parent = holder
+		fitToScreen(dialog, contentGui)
 		return dialog
 	end)
 

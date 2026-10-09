@@ -256,3 +256,125 @@ TestRunner.describe("LeaderboardLogic.dedupe", function()
 		TestRunner.expect(deduped[2].userId):toBe(1)
 	end)
 end)
+
+TestRunner.describe("LeaderboardLogic.mayBroadcast", function()
+	TestRunner.it("always lets the hub send while it waits for players", function()
+		TestRunner.expect(LeaderboardLogic.mayBroadcast("WaitingForPlayers", true)):toBe(true)
+	end)
+
+	TestRunner.it("holds a match server's boards from arrival until Results", function()
+		-- Q7 condition 1: the racers in the pre-round lobby are the
+		-- ones about to race, so it counts as live.
+		for _, state in { "WaitingForPlayers", "Loading", "Intro", "Race", "Qualified", "DecisionStudio" } do
+			TestRunner.expect(LeaderboardLogic.mayBroadcast(state, false)):toBe(false)
+		end
+	end)
+
+	TestRunner.it("holds a hub-run test round's boards too", function()
+		TestRunner.expect(LeaderboardLogic.mayBroadcast("Race", true)):toBe(false)
+	end)
+
+	TestRunner.it("sends post-match on either server", function()
+		TestRunner.expect(LeaderboardLogic.mayBroadcast("Results", false)):toBe(true)
+		TestRunner.expect(LeaderboardLogic.mayBroadcast("Cleanup", false)):toBe(true)
+	end)
+end)
+
+TestRunner.describe("LeaderboardLogic shared period-board copy (leaderboard-scale.md §9)", function()
+	local entries: { LeaderboardLogic.Entry } = {
+		{ userId = 11, bestStreak = 9, displayName = "Ann" },
+		{ userId = 22, bestStreak = 4, displayName = "Player 22" },
+	}
+
+	TestRunner.it("round-trips a board, names and order included", function()
+		local decoded = LeaderboardLogic.decodePublished(LeaderboardLogic.encodePublished(entries, 1000))
+		TestRunner.expect(decoded ~= nil):toBe(true)
+		local published = decoded :: LeaderboardLogic.Published
+		TestRunner.expect(published.publishedAt):toBe(1000)
+		TestRunner.expect(#published.entries):toBe(2)
+		TestRunner.expect(published.entries[1].userId):toBe(11)
+		TestRunner.expect(published.entries[1].bestStreak):toBe(9)
+		TestRunner.expect(published.entries[2].displayName):toBe("Player 22")
+	end)
+
+	TestRunner.it("round-trips an empty board as a real (empty) copy, not a missing one", function()
+		local decoded = LeaderboardLogic.decodePublished(LeaderboardLogic.encodePublished({}, 5))
+		TestRunner.expect(decoded ~= nil):toBe(true)
+		TestRunner.expect(#(decoded :: LeaderboardLogic.Published).entries):toBe(0)
+	end)
+
+	TestRunner.it("rejects missing, foreign-version and malformed values", function()
+		TestRunner.expect(LeaderboardLogic.decodePublished(nil)):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished("board")):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished({ v = 2, at = 1, rows = {} })):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished({ v = 1, rows = {} })):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished({ v = 1, at = 1, rows = { { 1, "9", "A" } } })):toBe(nil)
+		TestRunner.expect(LeaderboardLogic.decodePublished({ v = 1, at = 1, rows = { { 1, 9 } } })):toBe(nil)
+	end)
+
+	TestRunner.it("counts a copy as fresh until republishAfter has passed", function()
+		TestRunner.expect(LeaderboardLogic.isPublishedFresh(100, 159, 60)):toBe(true)
+		TestRunner.expect(LeaderboardLogic.isPublishedFresh(100, 160, 60)):toBe(false)
+	end)
+
+	TestRunner.it("treats a copy from a server whose clock runs ahead as fresh", function()
+		TestRunner.expect(LeaderboardLogic.isPublishedFresh(200, 100, 60)):toBe(true)
+	end)
+
+	TestRunner.it("picks every shard in range, including at the roll's edges", function()
+		TestRunner.expect(LeaderboardLogic.pickShard(4, 0)):toBe(1)
+		TestRunner.expect(LeaderboardLogic.pickShard(4, 0.26)):toBe(2)
+		TestRunner.expect(LeaderboardLogic.pickShard(4, 0.999)):toBe(4)
+		TestRunner.expect(LeaderboardLogic.pickShard(4, 1)):toBe(4)
+		TestRunner.expect(LeaderboardLogic.pickShard(0, 0.5)):toBe(1)
+	end)
+
+	TestRunner.it("puts the period in every key, so a rollover starts on fresh keys", function()
+		TestRunner.expect(LeaderboardLogic.publishedShardKey("Daily", "2026-10-04", 3)):toBe("Daily|2026-10-04|3")
+		TestRunner.expect(LeaderboardLogic.publishLockKey("Weekly", "2026-W40")):toBe("lock|Weekly|2026-W40")
+	end)
+end)
+
+TestRunner.describe("LeaderboardLogic name lookups (leaderboard-scale.md A5)", function()
+	TestRunner.it("asks for unseen and due ids only, in rank order, once each", function()
+		local cache: { [number]: LeaderboardLogic.NameEntry } = {
+			[2] = { name = "Bo", dueAt = 500 }, -- fresh
+			[3] = { name = "Cy", dueAt = 50 }, -- due
+		}
+		local wanted = LeaderboardLogic.namesToLookUp({ 1, 2, 3, 1, 4 }, cache, 100, 10)
+		TestRunner.expect(#wanted):toBe(3)
+		TestRunner.expect(wanted[1]):toBe(1)
+		TestRunner.expect(wanted[2]):toBe(3)
+		TestRunner.expect(wanted[3]):toBe(4)
+	end)
+
+	TestRunner.it("stops at the allowance, keeping the top ranks", function()
+		local wanted = LeaderboardLogic.namesToLookUp({ 7, 8, 9 }, {}, 0, 2)
+		TestRunner.expect(#wanted):toBe(2)
+		TestRunner.expect(wanted[2]):toBe(8)
+		TestRunner.expect(#LeaderboardLogic.namesToLookUp({ 7 }, {}, 0, 0)):toBe(0)
+	end)
+
+	TestRunner.it("caches a name and a deleted account for the full TTL", function()
+		local resolved = LeaderboardLogic.nameAfterLookup(nil, "Resolved", "Ann", 100, 3600, 120)
+		TestRunner.expect(resolved.name):toBe("Ann")
+		TestRunner.expect(resolved.dueAt):toBe(3700)
+		local missing = LeaderboardLogic.nameAfterLookup(resolved, "Missing", nil, 100, 3600, 120)
+		TestRunner.expect(missing.name):toBe(nil)
+		TestRunner.expect(missing.dueAt):toBe(3700)
+	end)
+
+	TestRunner.it("retries a failed call soon and keeps the name it already had", function()
+		local failed = LeaderboardLogic.nameAfterLookup({ name = "Ann", dueAt = 0 }, "Failed", nil, 100, 3600, 120)
+		TestRunner.expect(failed.name):toBe("Ann")
+		TestRunner.expect(failed.dueAt):toBe(220)
+		TestRunner.expect(LeaderboardLogic.nameAfterLookup(nil, "Failed", nil, 100, 3600, 120).name):toBe(nil)
+	end)
+
+	TestRunner.it("reports what is left of a window, never below zero", function()
+		local limits = { perWindow = 200, windowSeconds = 60, softCeiling = 1 }
+		local state = LeaderboardLogic.spend(LeaderboardLogic.newBudget(0), 150)
+		TestRunner.expect(LeaderboardLogic.remaining(state, limits)):toBe(50)
+		TestRunner.expect(LeaderboardLogic.remaining(LeaderboardLogic.spend(state, 100), limits)):toBe(0)
+	end)
+end)

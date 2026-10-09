@@ -27,7 +27,7 @@ per-map briefs, and they only repeat a shared rule when the map bends it.
 | Race time limit | 300 s | `GameConfig.raceDurationSeconds` (PLACEHOLDER) |
 | Mean task time | ~8.5 s | `tasks-catalogue.md` target-time midpoints |
 | Station arrival radius (NPC) | 6 studs | `GameConfig.npc.stationArrivalRadiusStuds` |
-| Aimed/Nearest power-up range | 24 studs | `GameConfig.powerUpUseRangeStuds` |
+| Aimed/Nearest power-up range | 40 studs | `GameConfig.powerUpUseRangeStuds` |
 | Streaming target radius | 200–300 (to be set from these gray-boxes) | `perf-budget.md` §2 |
 
 **Target a clean human run of about 120 s.** Six tasks at ~8.5 s take
@@ -77,9 +77,12 @@ wants.
   will cost them time.
 - **Nothing within 24 studs of spawn.** Otherwise the first leg is free
   for whoever spawns nearest.
-- **Tagging while the task pool is incomplete.** Only 4 task ids are
-  registered today: `pressure-valve`, `vent-purge`, `fuse-rewire` and
-  `code-playback`. An `AcceptedTaskIds` entry that isn't registered
+- **Tagging while the task pool is incomplete.** 8 task ids are
+  registered today: `pressure-valve`, `vent-purge`, `fuse-rewire`,
+  `code-playback`, `alarm-killswitch`, `breaker-sequence`,
+  `reactor-sync` and `airlock-cycle` (the last four added to their
+  Target stations 2026-10-03; the "Tag today" columns below predate
+  them). An `AcceptedTaskIds` entry that isn't registered
   fails the boot-time assertion (map-kit-spec §1), so every station
   table below has two columns:
   - **Target**: the full thematic list, for when those tasks exist.
@@ -571,6 +574,64 @@ behind the safety line painted around the boundary.
   pack shipped with a script or with velocity set
   (`scripts/sanitise-pack.luau` catches the scripts).
 
+### As built (2026-10-03, Match.rbxl)
+
+Where the build departs from the brief above, the build wins:
+
+- **Layout (v2, rebuilt roomier after playtest feedback that it felt
+  cramped).** The floor is 220 × 160: x −150..70, z −80..80, with the
+  line along z = 0. The yard is x 72..150 and z −120..120, sitting 4
+  studs lower. Crossings, all 12 wide and spread along the line: west
+  bridge x −102..−90, catwalk span x −66..−54, tunnel x −26..−14, east
+  bridge x 4..16. The line guard is 9 tall, the bridge decks are at 10.5
+  and the catwalk ring at 18. The ring is 12 wide and the stairs are 10
+  wide. Every station and prop sits against a wall or has ≥ 7 studs of
+  clearance (a raycast width scan finds no corridor under 7 apart from
+  sealed or decorative pockets). An east bridge at x 0 took 60% of
+  crossings; at x 10, with the tunnel moved east, it's 37%.
+- **Spawn is a staff room** (x −146..−62, z 82..114). It has lockers,
+  benches, vending machines, a CLOCK IN board, two 12–14 wide doors onto
+  the floor, and the staff stair up to the south catwalk.
+- **Tunnel floor at −12, not −10.** Under a 1-stud cover, 9 studs of
+  headroom got no navmesh, because the engine voxelises at 4 studs.
+  Raising it to 11 fixed that. The control room's roof went from 7 to
+  10 studs of headroom for the same reason. **Rule for every map: covered
+  walkways need ≥ 10 studs of headroom.**
+- **Four stair links, not three.** NW, NE and SE stairs, plus the staff
+  stair in the spawn room, which is the spawn's second exit. The
+  ladder-styled NE stair runs along the north wall.
+- **Control room in the NE** (x 34..58, z −46..−30, floor 10), with steps
+  from the west and its door at the NW corner. The furnace sits against
+  the west wall, under the ring.
+- **No `push-trip` restriction on the dock pad.** `push-trip` is Common in
+  config, so an Uncommon pad restricted to it could never roll
+  (`PowerUpService` skips it). The pad stays Uncommon and unrestricted.
+- **Stand-in stations** (see note) carry their Target list in a
+  `TargetTaskIds` attribute on the anchor.
+- **Proofs so far (v2):** spawn reaches all 16 stations and 12 pads, and
+  every nav edge pathfinds. The average station-pair path is 172 studs
+  (10.7 s) and the longest is 346 (21.6 s). On shortest paths, the
+  north–south crossings split span 5, tunnel 7, east 15 (37%), west 13.
+  Two 6-racer rounds qualified at 165 s and 148 s with no `gave up
+  pathing` and no MovementWatch violations.
+- **The line animates, client-side only.** `Belt` is tagged
+  `ConveyorBelt` (Speed 6), the cartons `ConveyorItem` and the rams
+  `ConveyorPress`. `ConveyorController` scrolls slats and cartons, stops
+  the belt whenever a carton reaches a press, and the ram stamps it with a
+  flash. The server never moves anything, so it stays a non-carrying
+  static conveyor. Any map can reuse the three tags.
+- **The line can't be reached.** Jump height is ~6.4, so the 9-tall guards
+  hold from the floor, but the 3.5 railings on the bridges, span and ring
+  could be hopped onto the line, and so could the west press head from the
+  ring. `Geometry.LineScreens` adds see-through screens 6 above every bridge
+  railing, and above the span and ring railings for |z| ≤ 14. The screens
+  are CanQuery off so cameras and throws ignore them.
+- **Studio gotcha:** after a bulk rebuild, the navmesh can stay stale in
+  patches (whole columns report NoPath). Any later edit regenerates it,
+  so re-test before believing a NoPath.
+- **Still to do:** phone readability test, an art pass with real asset
+  packs (the current dressing is primitive parts), and 3 more NPC rounds.
+
 ---
 
 ## 4. Museum
@@ -732,6 +793,75 @@ lighting, and the spectators stand at the velvet rope. It fits the
   the dinosaur is visible and identifiable on a phone.
 - **Nobody gets lost in the corner rooms.** They look alike, so each one
   needs a distinct prop silhouette before the art pass, not during it.
+
+### As built (2026-10-03, Match.rbxl)
+
+Where the build departs from the brief above, the build wins:
+
+- **Layout.** The square is x, z −130..130; the lobby adds z 130..166
+  (x −70..70), so the footprint is 260 × 296. The rotunda is an
+  **octagon**, 88 across (inner faces at 44), not a circle: the balcony,
+  walls and ramps are straight parts. Galleries are the four edge
+  bands, 100 × 80, with 32-high ceilings; the corner rooms are 80 × 80
+  with the upper floor at 18. The ground-floor doors are 14 wide, the
+  rotunda N/S doors 12 and E/W 14, and the SW room → Natural History door
+  10 (choke 3).
+- **Upper floor.** The balcony is a 12-wide octagonal band at 18 (r 32..44)
+  with a 3.5 balustrade. Four **diagonal corridors** run from the
+  balcony's diagonal sides to the inner corner of each upper corner room.
+  Each corridor's walls also chamfer the inner corners of the two
+  galleries beside it (12.7-stud chamfers), and an end wall seals the
+  void under the corridor at ground level.
+- **Corridors are 16 wide, not 12.** With 12-wide diagonal corridors,
+  local paths worked but every long path into the upper NW and SE rooms
+  came back NoPath. The pathfinder's long-range graph lost the thin
+  diagonal link. **Rule for every map: diagonal walkways need ≥ 16
+  studs clear.**
+- **Grand staircases are NW and SE, not N and S.** Each is a 34-long
+  ramp in the rotunda's diagonal, rising to a landing on the N (or S)
+  balcony side, so choke 2 is still "the N staircase's top landing". The
+  ramps sit flush against the balcony edge and have a rail on the
+  inner side only. An outer rail whose top end poked 2 studs onto the
+  balcony split the balcony ring in two for long paths. **Rule: no
+  rail or stub may end on a walkway.**
+- **Back stairs** are 12-wide ramps against the north wall (NE room,
+  rising east) and the west wall (SW room, rising south). The stairwell
+  holes are railed on the upper floor.
+- **Archways are 30 tall.** The four rotunda arches (gallery wall,
+  passage and octagon wall) open from 0 to 30, with a glass rail where
+  the balcony crosses each arch. At 17 tall they showed the dinosaur's
+  body but cut off its neck. Raycasts now see most of the neck and the
+  skull from the far wall of each gallery within about ±15 studs of its
+  axis. The far corners see only the body or nothing.
+- **Spawn** is the lobby: 6 pads in a shallow arc at z ≈ 157, a north
+  exit into Natural History (the hub axis) and a NW exit into the SW
+  room (the ring). The vault keypad station (`mus-16`) sits beside a
+  round vault door on the lobby's east wall.
+- **Dressing is primitive parts.** The dinosaur is a long-necked
+  skeleton, ~34 tall, with collidable legs; the rare pad sits between its
+  feet. The zones get the pyramid and obelisks (Egypt), the hanging
+  rocket, planets and a starfield ceiling (Space), the whale skeleton
+  (Natural History) and the stacked angular sculpture (Modern Art). The
+  corner rooms each get one distinct silhouette: a giant clock (NW), a
+  telegraph mast (NE), a totem pole (SE) and archive stacks (SW). Signs
+  name each gallery on the balcony fascia, and each corner room above
+  its doors.
+- **Stand-in stations** carry their Target list in `TargetTaskIds` on the
+  anchor, as on Factory. Every station whose Tag differs from its Target
+  has one.
+- **Proofs so far:** every one of the 75 nav edges pathfinds, and spawn
+  reaches all 16 stations and 12 pads. The average station-pair path is
+  203 studs (12.7 s) and the longest 338 (21.1 s). On shortest paths,
+  57% of gallery-to-gallery legs go through the corner rooms (≥ 30%
+  wanted). Blocking each choke strands nothing. The worst extra detours
+  are +4.6 s (N door), +10.2 s (S door) and +5.4 s (SW door), all on legs
+  into the rotunda's one station (`mus-10`); the N landing costs +0.8 s.
+  The S-door figure is over the brief's ~4 s, so watch it in playtest.
+  One 6-racer round (1 human, 5 NPCs) qualified with no
+  `gave up pathing` and no MovementWatch violations. The P7-1 validator
+  is clean: 0 errors and 0 warnings, with 807 parts and 0 textures.
+- **Still to do:** a phone readability test, 4 more NPC rounds, and an
+  art pass with real asset packs.
 
 ---
 
@@ -903,6 +1033,84 @@ the only Studio that looks back onto its own map's hero landmark.
   map's identity and its biggest risk to performance. Measure their cost
   in the density placeholder (1.10 item 5) before the art pass relies on
   them.
+
+### As built (2026-10-03, Match.rbxl)
+
+Where the build departs from the brief above, the build wins:
+
+- **Layout.** The footprint is x, z −110..110 (220 × 220). The shaft is
+  a **square** 72 across (|x|, |z| ≤ 36), not 60: the spiral, the core
+  collar and a coolant moat would not fit around a 6-radius core inside
+  60. Each level's ring walkway is the 14-wide band from 36 to 50. Floors
+  are at **y 0 (reactor), 16 (main) and 36 (upper)**, under a roof at 50,
+  so the ceiling heights are 15, 19 and 14. The reactor gallery is
+  enclosed at ±76; under the main floor outside that box is empty.
+- **Shaft.** The containment core is a 6-radius Neon cylinder from the
+  coolant pit to the roof. At reactor level it stands on a 27-radius
+  platform inside a coolant moat (the shaft's `KillZone`, `CoolantPool`).
+  Two catwalks, W and S, cross the moat to the reactor ring. The main
+  bridge (N–S) and the upper bridge (E–W) are 10 wide. Each passes the
+  core on a collar: 16 radius on main, 14 on upper.
+- **Spiral ramp.** 16 plates at radius 16..26 descend clockwise from the
+  main bridge's N arm, via E, to the platform beside the S catwalk:
+  152°, 16 studs down, about 16° of slope. The entrance (choke 2) is a
+  10-stud gap in the bridge's east rail. **The lowest seven plates sit
+  on solid plinths.** Without them, the crawlspace under the spiral's
+  foot (under 5 studs high) made the pathfinder snap a spiral node down
+  onto the platform. Rule for every map: **fill under any walkway that
+  passes less than ~6 studs above another floor.**
+- **Stairs** are 12-wide solid wedges, so nothing can walk under them.
+  NW and SE each switch back: reactor → main (32 long), then main →
+  upper (40 long) beside it. NE is main → upper only, and SW is
+  main → reactor only, along the south band. Holes are railed on three
+  sides; the exit edge stays open. Slopes are 26–27°.
+- **Rails** are 4.5-tall glass with a metal cap. They line every shaft
+  edge, bridge, collar, catwalk, the platform rim, both spiral edges and
+  every stair hole, so the shaft never has a solid parapet.
+- **Rooms.** The upper floor is offices behind solid walls: entry/spawn
+  hall NW, comms NE (radio mast through the roof), security W,
+  director E, server hall S (16 rack rows). Spawn and comms are not
+  connected directly. The main level is open labs behind **glass** ring
+  walls: a glass clean-room box W, a specimen bay NE/E with seven cryo
+  tanks and the hoist gantry, optics N, sorter S. Doors in the ring
+  walls are 16 wide (two per side, one each on the upper W and E).
+- **Level identity.** Each level has its own floor (blue fabric on upper,
+  white on main, diamond plate on reactor) and its own strip-light and
+  shaft-lip colour (blue, white, orange). A "LEVEL n" sign on the N and
+  S walls of each level is readable across the shaft.
+- **Spawn** is 6 pads in an arc at z ≈ −96 in the entry hall, facing
+  south. There are two exits: the ring door (with a yellow decon frame)
+  and the NW stair top. The nearest station (`lab-01`) is 49 studs away.
+- **Power-ups** follow the brief, with one change. The SW stair landing
+  pad has **no `AllowedPowerUpIds`**. `slow-field` is a Common now, so
+  an Uncommon pad restricted to it never spawns anything
+  (`PowerUpService: no eligible power-up defs`). School's slow-field
+  gate was dropped the same way.
+- **Stand-in stations** carry their Target list in `TargetTaskIds`, as on
+  Factory and Museum. The "— note" stations are tagged lab-05
+  `fuse-rewire`, lab-09 `pressure-valve,fuse-rewire`, lab-10
+  `code-playback,fuse-rewire`, lab-13 `code-playback,pressure-valve` and
+  lab-15 `code-playback,vent-purge`.
+- **Proofs so far.** The graph has 83 NavNodes and 105 edges, and every
+  edge pathfinds (AgentRadius 2). Spawn reaches all 16 stations and
+  12 pads. The average station-pair path is 169 studs (10.6 s) and the
+  longest is 313 (19.6 s, lab-02 ↔ lab-14, upper to reactor), inside the
+  25 s vertical budget. Blocking each choke strands nothing. The worst
+  extra detours are +5.4 s (upper bridge), +4.7 s (spiral entrance)
+  and +4.7 s (SE reactor landing). That is over the brief's +3 s and
+  +2 s, so watch it in playtest. One 6-racer round (1 human, 5 NPCs)
+  qualified with no `gave up pathing` and no MovementWatch violations.
+  The P7-1 validator is clean: 0 errors and 0 warnings, with 984 parts
+  and 0 textures.
+- **The coolant is a solid floor 1 stud below the walkways**, not a
+  9-deep pit. In the first playtest a racer fell into the moat and
+  couldn't get out, because no service handled `KillZone` yet
+  (design-decisions.md §9). The `CoolantPool` kill volume stays underneath
+  it. Until the KillZone service exists, falling into the shaft is a free
+  drop to the reactor level.
+- **Still to do:** a phone test of level readability, the emissive
+  cost measurement (core and strips), 4 more NPC rounds, and an art pass
+  with real asset packs.
 
 ---
 

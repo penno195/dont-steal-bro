@@ -218,3 +218,62 @@ Set `hubPlaceId` and `matchPlaceId`, publish both places, then:
    loading screen.
 5. Join the match place's public server directly. You are sent to the
    hub with no round started.
+
+## Practice matches and parties
+
+`design-decisions.md` Q7, the "practice matches and parties" case.
+Every hub runs a **practice queue** next to the ranked one: the
+Practice button (`QueueJoinIntent { mode = "Practice" }`). A **practice
+hub**, meaning any hub server with a `PrivateServerId` (a player's own
+free private server, or a reserved practice lobby), has only the
+practice queue (`TeleportLogic.isPracticeHub`).
+
+- **Queue.** `MatchmakingService` keeps the practice queue local to
+  its server, on its own loop. Its players get no `MatchQueue_v1`
+  entry, so no other server can see or claim them.
+  `MatchmakingLogic.selectPracticeGroup` forms one group when six are
+  waiting, when everyone on the server has queued, or after
+  `partialGroupTimeoutSeconds`. It keeps parties whole, ignores the
+  rematch cooldown, and NPCs fill the empty seats.
+- **Parties.** `PartyService` and `PartyLogic`: invite a player on
+  this server, they accept, up to `groupSize`. Only the leader queues,
+  and the whole party is queued at once. Any member leaving the queue
+  cancels it for the party, and so does any change to the party. A
+  player in a party is refused ranked, and joining a party drops a
+  ranked ticket.
+- **Client.** The Hub queue card (`QueueController`) shows Play and
+  Practice when solo, Practice alone for a party leader and no join
+  button for a member (`PartyViewLogic.queueButtons`), plus a Party
+  button. `PartyController` owns the party panel (members, everyone
+  else here with Invite, Leave party), the Accept/Decline invite
+  prompt, which times itself out after `partyInviteTtlSeconds`, and
+  `PartyState` notices as toasts. QueueState's Waiting carries
+  `practice`, so a member queued by their leader sees which line.
+- **The flag.** The group record carries `practice = true` and the
+  lobby's `returnAccessCode`. The match server reads both from the
+  manifest and settles `isPracticeMatch` once, when the arrival gate
+  closes. `ProgressionService.applyRoundResult` records the result
+  but writes nothing. DecisionService skips its stats, choice
+  telemetry and stakes panel.
+- **Going home.** From a public hub, a practice group goes home like
+  any match: one teleport for everyone, so it lands together on a
+  public hub. A player's private server can't be teleported into,
+  so the first practice group from one reserves a hub server (the
+  **practice lobby**) and records its code under its PrivateServerId
+  in `PracticeLobbies_v1`. At Cleanup the group teleports there by
+  access code. The lobby is itself a practice hub, finds its own code
+  in that map, and sends its next group back to itself. If the lobby
+  can't be reached, the group goes to a public hub instead.
+- **Studio.** Nothing is reserved there. Set the workspace attribute
+  `DebugPracticeMatch = true` before a round to run it as practice.
+
+**The one gap:** with no manifest (a MemoryStore outage on the match
+server's read), practice is decided by the hints, and only when every
+admitted player's hint says practice. One tampered client can't make a
+ranked match practice. But a practice group that strips the flag
+during an outage plays a ranked match among friends. That needs an
+outage plus a modified client, so it's accepted rather than closed.
+
+**VERIFY on a published place:** `ReserveServerAsync(hubPlaceId)` from
+a hub server, a reserved hub server's `PrivateServerOwnerId == 0`, and
+a group arriving back at the lobby together.

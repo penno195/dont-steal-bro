@@ -148,6 +148,12 @@ end
 
 local function broadcastState()
 	Net.fireAllClients("RoundState", { state = currentState, endsAt = currentEndsAt })
+	-- The same state as a replicated attribute, for the ReplicatedFirst
+	-- loading cover (src/first). It starts before any controller and
+	-- can't listen on the remote without taking the queued first event
+	-- from whichever controller connects after it; an attribute is just
+	-- there, late joiners included. The remote stays the real feed.
+	Workspace:SetAttribute("RoundState", currentState)
 end
 
 -- Forward-declared: the timer-elapsed callback below and `transition`

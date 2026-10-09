@@ -14,9 +14,9 @@
 -- group record the hub wrote to MemoryStore (the "manifest"). Members,
 -- map and NPC slots all come from there. TeleportData is sent, but the
 -- match server only compares it against the manifest and logs any
--- mismatch. The single exception is the map id during a MemoryStore
--- outage, and even then only an enabled map id is accepted - see
--- resolveMapId.
+-- mismatch. The exceptions apply only during a MemoryStore outage: the
+-- map id, and then only an enabled one (resolveMapId), and the practice
+-- flag, and then only to switch practice ON (isPractice).
 
 local TeleportLogic = {}
 
@@ -115,10 +115,17 @@ export type Hint = {
 	groupId: string,
 	mapId: string?,
 	npcSlots: number,
+	practice: boolean?, -- only ever consulted with no manifest, see isPractice
 }
 
-function TeleportLogic.buildHint(groupId: string, mapId: string?, npcSlots: number): Hint
-	return { v = TeleportLogic.HINT_VERSION, groupId = groupId, mapId = mapId, npcSlots = npcSlots }
+function TeleportLogic.buildHint(groupId: string, mapId: string?, npcSlots: number, practice: boolean?): Hint
+	return {
+		v = TeleportLogic.HINT_VERSION,
+		groupId = groupId,
+		mapId = mapId,
+		npcSlots = npcSlots,
+		practice = if practice then true else nil,
+	}
 end
 
 -- What the match server trusts: the group record the hub committed,
@@ -128,7 +135,38 @@ export type Manifest = {
 	members: { number },
 	npcSlots: number,
 	mapId: string?,
+	-- design-decisions.md Q7, the practice-match case.
+	practice: boolean?,
+	returnAccessCode: string?,
 }
+
+-- Whether this match is a practice match (nothing at stake). The
+-- manifest decides. With no manifest (a MemoryStore outage), it takes
+-- EVERY arriving player's hint saying practice: one tampered client in
+-- a ranked match can't turn the match into practice to dodge its own
+-- loss. A practice group's hints all agree, unless someone strips the
+-- flag to make it ranked; that's the one gap (teleport.md).
+function TeleportLogic.isPractice(manifest: Manifest?, rawHints: { any }): boolean
+	if manifest ~= nil then
+		return manifest.practice == true
+	end
+	if #rawHints == 0 then
+		return false
+	end
+	for _, hint in rawHints do
+		if type(hint) ~= "table" or hint.practice ~= true then
+			return false
+		end
+	end
+	return true
+end
+
+-- A hub server that isn't public: a player's own private server, or a
+-- reserved practice lobby. Either way, design-decisions.md Q7 says its
+-- matches are practice. `privateServerId` is game.PrivateServerId.
+function TeleportLogic.isPracticeHub(privateServerId: string): boolean
+	return privateServerId ~= ""
+end
 
 -- Compares a raw, untrusted TeleportData value against the manifest.
 -- Returns one flag per disagreement, for logging only: nothing the

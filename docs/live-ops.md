@@ -108,7 +108,8 @@ validation. Covered today:
 - **Timers:** `game.raceDurationSeconds`, `game.roundTimers.*`,
   `game.studioTimers.*`, `game.powerUpRotationTimers.*`
 - **Race shape:** `game.tasksPerPlayer`, `game.qualificationFloorPercent`
-- **Bounty:** `game.bountyTiers.<n>.soleStealerVU|loneSharerVU|allShareVU`
+- **Win rewards:** `game.winRewards.**` (currency bases and per-rung
+  bonus, drop chances, rarity weights, duplicate payouts)
 - **Power-ups:** `powerUp.<id>.durationSeconds|cooldownSeconds`,
   `effect.<id>.magnitude|durationSeconds`, `game.powerUpUseRangeStuds`
 - **NPCs:** `game.npc.**`, `game.npcBrain.**`,
@@ -177,7 +178,7 @@ access on, and your id in `adminUserIds`:
 | # | Value | Why it moves | Covered by |
 |---|---|---|---|
 | 1 | **Race length** | The first real sessions show whether 300s drags or rushes | `set game.raceDurationSeconds …` ✅ |
-| 2 | **Bounty payouts** | P9-2's gate is "the payoff numbers survive contact with real players" | `set game.bountyTiers.<n>.soleStealerVU …` (and `loneSharerVU`, `allShareVU`) ✅, with Validate enforcing the Steal > Share ordering |
+| 2 | **Win payouts** | P9-2's gate is "the payoff numbers survive contact with real players" | `set game.winRewards.currency.soleStealer …` (and `loneSharer`, `allShare`, `perRungBonus`) ✅, with Validate enforcing the Steal > Share ordering |
 | 3 | **NPC difficulty** | At soft-launch player counts most lobbies have bots, and bots that win too often feel unfair | `game.npc.**`, `game.npcBrain.**`, `map.<id>.npcDifficultyModifier` ✅, plus `kill npcfill` as a last resort |
 | 4 | **Power-up balance** | One power-up always turns out too strong | `powerUp.<id>.cooldownSeconds`, `effect.<id>.magnitude/durationSeconds` ✅, or `disable powerup <id>` ✅ |
 | 5 | **Matchmaking wait** | Low concurrency means long waits for a full group | `set game.matchmaking.partialGroupTimeoutSeconds …` ✅ (per server, so safe in a partial rollout) |

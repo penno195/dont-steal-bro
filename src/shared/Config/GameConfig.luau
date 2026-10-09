@@ -1,6 +1,6 @@
 --!strict
 -- The root config: round/player counts, Decision Studio timers, and
--- bounty tiers. See Validate.luau for field provenance - most of these
+-- win rewards. See Validate.luau for field provenance - most of these
 -- numbers are locked design decisions, not guesses; the ones that aren't
 -- are marked PLACEHOLDER, the same stance perf-budget.md and threat-
 -- model.md take on their own unverified figures. ConfigValidator
@@ -16,8 +16,7 @@ local GameConfig: Validate.GameConfig = {
 	qualifierCount = 3, -- gdd.md
 	tasksPerPlayer = 6, -- PLACEHOLDER: no locked value in docs/ yet
 	qualificationFloorPercent = 0.5, -- design-decisions.md Q2
-	streakLossWeight = 2, -- payoff-table.md §3's c0; Closs(n) = 2n
-	npcSeatStreakCreditThreshold = 3, -- PLACEHOLDER: threat-model.md §8, playtest-tuned
+	streakLossWeight = 10, -- payoff-table.md §3's c0 in coins (was 2 VU; 1 VU = 5 coins); Closs(n) = 10n
 	raceDurationSeconds = 300, -- PLACEHOLDER: no locked value in docs/ yet
 
 	-- architecture.md §6's network trace, verbatim.
@@ -39,25 +38,33 @@ local GameConfig: Validate.GameConfig = {
 		loadingSeconds = 5,
 		introSeconds = 5,
 		qualifiedSeconds = 3,
-		resultsSeconds = 16, -- must outlast DecisionLogic.revealLength (~11 s) plus reading the result; was 8
+		resultsSeconds = 24, -- must outlast DecisionLogic.revealLength (~17 s) plus reading the result; was 16 before the heartbeat reveal
 		cleanupSeconds = 5,
 	},
 
-	-- payoff-table.md §3's table, with one fix found integrating P3-2:
-	-- the doc's own "Tier 1: streak range 1-2" leaves streak 0 - a
-	-- player's very first-ever qualification, before they've won
-	-- anything - uncovered by every tier. ProfileLogic.resolveBountyTier
-	-- (P1-5) errors loudly on an uncovered streak by design, which is
-	-- correct behavior for a genuinely misconfigured table, but streak 0
-	-- reaching the Decision Studio is not a misconfiguration - it's the
-	-- ordinary first-time-winner case. Tier 1's floor is lowered to 0
-	-- here (payoff-table.md itself should be updated to "0-2" to match).
-	bountyTiers = {
-		{ tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
-		{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
-		{ tier = 3, minStreak = 6, soleStealerVU = 28, loneSharerVU = 14, allShareVU = 7 },
-		{ tier = 4, minStreak = 10, soleStealerVU = 32, loneSharerVU = 16, allShareVU = 8 },
-		{ tier = 5, minStreak = 15, soleStealerVU = 36, loneSharerVU = 18, allShareVU = 9 },
+	-- What a win pays (design-decisions.md Q1, revised 2026-09-30 and
+	-- applied 2026-10-02): currency for the outcome tier, scaled by the
+	-- winner's title-ladder rung after this win, plus a chance at a random
+	-- drop. Replaced the five VU bountyTiers (rewards-roadmap.md 2c).
+	-- Every number is PLACEHOLDER until playtest. soleStealer went 100
+	-- -> 250 on 2026-10-08 ("a much bigger reason to steal", Q1).
+	winRewards = {
+		-- Rung 0 pays the base; rung 21 (streak 50) pays 3.1x.
+		currency = { soleStealer = 250, loneSharer = 50, allShare = 25, perRungBonus = 0.1 },
+		drop = {
+			-- 10% at rung 0, up to the 50% cap by rung 20.
+			baseChance = 0.1,
+			perRungChance = 0.02,
+			maxChance = 0.5,
+			-- At rung 0: 70/25/5. At rung 21: about 48/35/18.
+			rarityWeights = {
+				Common = { weight = 70, perRungGrowth = 0 },
+				Uncommon = { weight = 25, perRungGrowth = 0.05 },
+				Rare = { weight = 5, perRungGrowth = 0.2 },
+			},
+			powerUpAmount = 1,
+			duplicateCurrency = { Common = 10, Uncommon = 20, Rare = 50 }, -- 0.4, 0.8 and 2 power-ups
+		},
 	},
 
 	-- P2-7: PowerUpService's in-round inventory. The pre-game loadout
@@ -66,8 +73,8 @@ local GameConfig: Validate.GameConfig = {
 	-- cone and slack are PLACEHOLDER, same stance as raceDurationSeconds.
 	powerUpInventorySlots = 3, -- matches store.loadoutSlots, so a full loadout fits
 	powerUpFullInventoryPolicy = "Refuse", -- picking up while full is refused (the world pickup stays available) rather than swapping the held item
-	powerUpUseRangeStuds = 24, -- max range for an Aimed/Nearest target
-	powerUpTargetConeDegrees = 90, -- full width of the lock-on cone an Aimed power-up picks its target from
+	powerUpUseRangeStuds = 40, -- max range for an Aimed/Nearest target
+	powerUpTargetConeDegrees = 50, -- full width of the lock-on cone an Aimed power-up picks its target from
 	-- Extra allowance when the server re-checks the target the client had
 	-- locked on to: the client saw that target a round trip ago, so a
 	-- lock that was legal on screen can be a few studs or degrees out by
@@ -287,6 +294,10 @@ local GameConfig: Validate.GameConfig = {
 		staleAfterSeconds = 300,
 
 		nameCacheTtlSeconds = 3600, -- a renamed account corrects itself within the hour
+		-- leaderboard-scale.md A5: GetUserInfosByUserIdsAsync is reported to
+		-- allow ~250 results/min (undocumented); stay under it per server.
+		nameLookupsPerMinute = 200,
+		nameFailureRetrySeconds = 120, -- a failed lookup (429, outage) is retried after this
 		maxWriteAttempts = 3,
 		backoffBaseSeconds = 1,
 		backoffCapSeconds = 60,
@@ -308,13 +319,42 @@ local GameConfig: Validate.GameConfig = {
 		-- outlive every MemoryStore TTL - yesterday's winners are still
 		-- worth showing and still owe a reward.
 		snapshotStoreName = "PeriodSnapshots_v1",
-		-- How long a finished period's live entries linger past its end,
-		-- so the rollover can still read the final standings. Small on
-		-- purpose: the snapshot is the durable copy, so the live map has
-		-- no reason to outlast it by more than the read takes. 1 hour is
-		-- generous against a refresh interval measured in minutes.
+		-- Extra time a finished period's live entries last, on top of one
+		-- full extra period (PeriodKeys.liveExpirySeconds). The extra
+		-- period lets a server booting any time in the next period catch
+		-- up a rollover no server saw; this margin covers a boot at the
+		-- very end of it. 1 hour is generous against a refresh interval
+		-- measured in minutes.
 		periodGraceSeconds = 3600,
-		rewardTopN = 10, -- PLACEHOLDER: no locked value in docs/ yet
+		-- leaderboard-scale.md §9: one server at a time reads each period
+		-- board's sorted map (100 units) and publishes it to a hash map;
+		-- every other server reads one shard (1 unit).
+		periodShare = {
+			mapName = "PeriodBoardsPublished_v1",
+			shardCount = 4, -- copies of the board, so no one key takes every read
+			republishAfterSeconds = 60, -- a copy older than this is replaced on the next read
+			lockSeconds = 30, -- how long one server holds the right to republish
+			shardTtlSeconds = 900, -- an abandoned copy (old period, dead servers) expires
+		},
+		-- What a finished period pays (design-decisions.md Q1, applied
+		-- 2026-10-02; rewards-roadmap.md step 4). Bands of places in
+		-- ascending maxRank: #1, #2-3, #4-10. The last band's maxRank is
+		-- how many places get paid. A band may also name a limited
+		-- cosmetic via `cosmeticId`; none do yet. The all-time board has
+		-- no entry on purpose: it never pays (user decision). Every
+		-- amount is PLACEHOLDER until playtest (roadmap step 7).
+		payouts = {
+			Daily = {
+				{ maxRank = 1, currency = 75 }, -- 3 power-ups
+				{ maxRank = 3, currency = 50 },
+				{ maxRank = 10, currency = 25 },
+			},
+			Weekly = {
+				{ maxRank = 1, currency = 250 }, -- 10 power-ups, under the free track
+				{ maxRank = 3, currency = 125 },
+				{ maxRank = 10, currency = 50 },
+			},
+		},
 	},
 
 	-- P4-5: the store. Two of these are locked by a design decision and
@@ -367,7 +407,7 @@ local GameConfig: Validate.GameConfig = {
 	-- Validate.checkMatchmakingConfig enforces the orderings between
 	-- them, which are what keep the queue moving.
 	matchmaking = {
-		hubPlaceId = 0, -- PLACEHOLDER: set once the Hub place is published; 0 runs matchmaking in Studio only
+		hubPlaceId = 96878739507497, -- the published Hub (start) place; 0 would run matchmaking in Studio only
 		-- Versioned like the leaderboard stores: a schema change means
 		-- new names, never an in-place migration of live queue state.
 		queueMapName = "MatchQueue_v1",
@@ -376,7 +416,7 @@ local GameConfig: Validate.GameConfig = {
 		metaMapName = "MatchmakingMeta_v1",
 
 		groupSize = 6, -- gdd.md; must equal playerCount
-		partialGroupTimeoutSeconds = 60, -- PLACEHOLDER: no locked value in docs/ yet
+		partialGroupTimeoutSeconds = 30, -- owner's choice 2026-10-04: long enough to fill a group, short enough not to annoy. Live-tunable
 		partialGroupMinPlayers = 1, -- P5-1: "with at least 1 player"
 		formationTickSeconds = 2, -- PLACEHOLDER: also the UI refresh rate and the claim-discovery latency
 		queuePageSize = 200, -- the oldest 200 waiting are the only ones who can form a group this tick
@@ -398,13 +438,30 @@ local GameConfig: Validate.GameConfig = {
 		backoffBaseSeconds = 2,
 		backoffCapSeconds = 30,
 		unavailableAfterFailures = 3, -- consecutive failed reads before the UI says so
+
+		-- matchmaking.md, partition ceiling: only the lease holder reads the
+		-- queue page and publishes a summary into metaMapName; every other
+		-- hub server reads one shard (1 unit) instead of the page.
+		summaryShardCount = 4,
+		summaryStaleSeconds = 10, -- older than this, a server reads the page itself
+		summaryTtlSeconds = 60,
+
+		-- design-decisions.md Q7, practice matches on private servers: each
+		-- reserved practice lobby's access code, keyed by its PrivateServerId.
+		-- Refreshed every time the lobby sends a group, so it only lapses
+		-- after this long with no match.
+		practiceLobbyMapName = "PracticeLobbies_v1",
+		practiceLobbyTtlSeconds = 21600,
+		-- Practice parties (PartyLogic): how long an invite waits for an answer.
+		-- A party holds one match, groupSize.
+		partyInviteTtlSeconds = 30,
 	},
 
 	-- P5-2: hub-to-match teleport. docs/teleport.md explains each number.
 	-- The arrival grace window is npc.fillGraceSeconds (architecture.md
 	-- §4's ~10s), not a second knob here: it's the same window.
 	teleport = {
-		matchPlaceId = 0, -- PLACEHOLDER: set once the Match place is published; 0 disables teleporting
+		matchPlaceId = 126392243548802, -- the published Match place; 0 would disable teleporting
 		maxAttempts = 4, -- PLACEHOLDER: per player, including the first
 		retryBaseSeconds = 1, -- PLACEHOLDER
 		retryCapSeconds = 8, -- PLACEHOLDER
@@ -440,7 +497,7 @@ local GameConfig: Validate.GameConfig = {
 	-- except these. All PLACEHOLDER, to tune in playtest: the aim is fun
 	-- for a few seconds, never annoying for long.
 	practice = {
-		durationScale = 0.5, -- a 2.5s Freeze lands as 1.25s
+		durationScale = 0.5, -- a 4.5s Freeze lands as 2.25s
 		maxEffectSeconds = 2, -- nothing lasts longer than this, whatever the item
 		maxActiveEffects = 1, -- one effect per player at a time
 		itemSpawnRarities = { "Common", "Uncommon", "Rare" }, -- so every tier shows up to try
@@ -481,7 +538,7 @@ local GameConfig: Validate.GameConfig = {
 	-- enabled = false to test the hub/queue in Studio instead.
 	studioTest = {
 		enabled = true,
-		mapId = "SpaceStation", -- any model name in ServerStorage.Maps, enabled or not
+		mapId = "Laboratory", -- any model name in ServerStorage.Maps, enabled or not
 		minHumans = 1,
 		startDelaySeconds = 3, -- after minHumans is reached, so a second test client can join
 	},
@@ -501,11 +558,12 @@ local GameConfig: Validate.GameConfig = {
 
 	-- P4-2's NPC title distribution. PLACEHOLDER, both: bots wear a
 	-- title so a filled lobby doesn't look obviously fake, drawn from
-	-- the lower rungs only. 3 top rungs excluded - a bot wearing the
+	-- the lower rungs only. The top 6 of the 21 rungs (25 and up) are
+	-- excluded, so a bot tops out at Twenty Deep - a bot wearing the
 	-- rarest title in the game is MORE obviously fake than a bot
 	-- wearing nothing.
 	npcTitleNoneChance = 0.35,
-	npcTitleTopRungsExcluded = 3,
+	npcTitleTopRungsExcluded = 6,
 
 	-- P4-7: analytics instrumentation. All PLACEHOLDER - no analytics
 	-- schema exists yet. The disabled flag is a hard kill switch for when
@@ -523,6 +581,10 @@ local GameConfig: Validate.GameConfig = {
 		-- Per-event-name rate limit. 0 = no limit, >0 = max events per
 		-- minute. Applied per player. PLACEHOLDER.
 		perMinuteLimit = 0,
+		-- Roblox only accepts analytics from a published game's server,
+		-- so in Studio every event is dropped. true prints each one to
+		-- Output instead, to check what would have been sent.
+		studioEcho = false,
 	},
 
 	-- P3-6: "every probability and timing exposed for tuning without
@@ -587,9 +649,9 @@ local GameConfig: Validate.GameConfig = {
 		-- switch reaches every server within a minute.
 		refreshSeconds = 60,
 		auditLogCap = 200,
-		-- PLACEHOLDER: the developers' Roblox user ids. Empty = nobody
-		-- can run admin commands (edit the DataStore by hand instead).
-		adminUserIds = {},
+		-- The developers' Roblox user ids. Empty = nobody can run admin
+		-- commands (edit the DataStore by hand instead).
+		adminUserIds = { 11654855572 }, -- Corvus2026
 
 		-- What an override may touch. "*" = one path segment, a trailing
 		-- "**" = any depth. Roots: game = GameConfig, powerUp = PowerUps
@@ -609,9 +671,7 @@ local GameConfig: Validate.GameConfig = {
 			"game.qualificationFloorPercent",
 			"game.roundTimers.*",
 			"game.studioTimers.*",
-			"game.bountyTiers.*.soleStealerVU",
-			"game.bountyTiers.*.loneSharerVU",
-			"game.bountyTiers.*.allShareVU",
+			"game.winRewards.**",
 			"game.powerUpRotationTimers.*",
 			"game.powerUpUseRangeStuds",
 			"game.npc.**",

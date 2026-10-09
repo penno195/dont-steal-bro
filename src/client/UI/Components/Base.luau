@@ -52,10 +52,54 @@ function Base.padding(px: number): Instance
 	return create("UIPadding")({ PaddingTop = u, PaddingBottom = u, PaddingLeft = u, PaddingRight = u })
 end
 
+-- One-line text at the largest TextSize that fits its box, between the
+-- label's UITextSizeConstraint floor and `maxSize` - what TextScaled
+-- does, without wrapping. TextBounds is in the same scaled space as
+-- AbsoluteSize and updates as soon as TextSize is set, and width is
+-- linear in size, so one ratio step lands on the fit. Refits when the
+-- box, the text or the font (it loads async, changing TextBounds) does;
+-- a refit that lands on the current size sets nothing, so it settles.
+-- Past the floor, the caller's TextTruncate takes over.
+local function fitOneLine(label: TextLabel, maxSize: number)
+	local function fit()
+		local box, bounds = label.AbsoluteSize, label.TextBounds
+		if box.X <= 0 or bounds.X <= 0 or bounds.Y <= 0 then
+			return -- not laid out yet, or no text
+		end
+		local constraint = label:FindFirstChildOfClass("UITextSizeConstraint")
+		local floor = if constraint then constraint.MinTextSize else 1
+		local ratio = math.min(box.X / bounds.X, box.Y / bounds.Y)
+		local size = math.floor(label.TextSize * ratio)
+		-- Truncated text reports its truncated width, which always "fits":
+		-- without this a long name would creep up to maxSize, losing more
+		-- of itself to the ellipsis at every step.
+		if not label.TextFits then
+			size = math.min(size, label.TextSize - 1)
+		end
+		size = math.clamp(size, floor, maxSize)
+		if size ~= label.TextSize then
+			label.TextSize = size
+		end
+		-- Still truncated: step down to the floor now (TextFits updates
+		-- as soon as TextSize is set); the truncated width may not change,
+		-- so no TextBounds signal would come to finish it.
+		while not label.TextFits and label.TextSize > floor do
+			label.TextSize -= 1
+		end
+	end
+	label.TextSize = maxSize
+	label:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
+	label:GetPropertyChangedSignal("Text"):Connect(fit)
+	label:GetPropertyChangedSignal("TextBounds"):Connect(fit)
+	fit()
+end
+
 -- A themed label. TextScaled bounded by a UITextSizeConstraint
 -- (architecture.md §5.6): it fits its box, but never shrinks below the
 -- style's `min` or grows past its `size`. Box size comes from `props`.
-function Base.text(styleName: string, props: { [any]: any }): TextLabel
+-- `outline` false drops the display face's outline: dark ink on a light
+-- fill (a gold button) would blur into a dark outline.
+function Base.text(styleName: string, props: { [any]: any }, outline: boolean?): TextLabel
 	local style = Theme.type[styleName]
 	assert(style ~= nil, string.format("Base.text: no type style %q", styleName))
 	local merged: { [any]: any } = {
@@ -65,6 +109,15 @@ function Base.text(styleName: string, props: { [any]: any }): TextLabel
 		TextColor3 = Theme.color.ink,
 		TextWrapped = true,
 		create("UITextSizeConstraint")({ MaxTextSize = style.size, MinTextSize = style.min }),
+		-- Display-face labels carry a dark outline (Tokens.outline).
+		if style.outline and outline ~= false
+			then create("UIStroke")({
+				Name = "Outline",
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Contextual,
+				Color = Theme.outline.color,
+				Thickness = Theme.outline.thickness,
+			})
+			else nil,
 	}
 	for k, v in props do
 		if type(k) == "number" then
@@ -73,7 +126,18 @@ function Base.text(styleName: string, props: { [any]: any }): TextLabel
 			merged[k] = v
 		end
 	end
-	return create("TextLabel")(merged) :: TextLabel
+	local label = create("TextLabel")(merged) :: TextLabel
+	-- TextScaled and TextWrapped are coupled in the engine: turning one
+	-- on turns the other on, turning one off turns the other off. Vide
+	-- sets properties in no fixed order, so `TextWrapped = false` came out
+	-- as wrapped-and-scaled (names broke mid-word: "SEASO / N") or as
+	-- neither (stuck at the default size). A caller asking for one line
+	-- gets it here, fitted by fitOneLine instead of TextScaled.
+	if merged.TextWrapped == false and merged.TextScaled == true then
+		label.TextWrapped = false
+		fitOneLine(label, style.size)
+	end
+	return label
 end
 
 -- The focus ring: a stroke outside the visual in Theme.color.focus.
@@ -83,7 +147,11 @@ function Base.focusRing(focused: Source<boolean>): Instance
 	return create("UIStroke")({
 		Name = "FocusRing",
 		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-		BorderStrokePosition = Enum.BorderStrokePosition.Outer,
+		-- Inner, like every border stroke in the UI: an Outer stroke
+		-- draws past the element's edge, so a card flush against a
+		-- ScrollingFrame's (or any ClipsDescendants) edge lost that side
+		-- of its outline (playtest, 2026-10-06).
+		BorderStrokePosition = Enum.BorderStrokePosition.Inner,
 		Color = Theme.color.focus,
 		Thickness = 3,
 		Enabled = focused,
@@ -273,6 +341,143 @@ function Base.interactive(props: InteractiveProps): TextButton
 			props.visual(state, focused),
 		}),
 	}) :: TextButton
+end
+
+-- Just the stage-panel gradient (on a Base.STAGE_BACKGROUND Frame), for
+-- a surface that keeps its own stroke - a store tile's rarity rim. While
+-- `lit` is true it lifts a step toward white: the pressed/selected look.
+local LIT = 0.12
+function Base.stageGradient(lit: Source<boolean>?): Instance
+	local panel = Theme.fill.panel
+	local litGradient =
+		ColorSequence.new(panel.top:Lerp(Color3.new(1, 1, 1), LIT), panel.bottom:Lerp(Color3.new(1, 1, 1), LIT))
+	return create("UIGradient")({
+		Rotation = 90,
+		Color = function()
+			return if lit and lit() then litGradient else panel.gradient
+		end,
+	})
+end
+
+export type StageProps = {
+	-- Rim colour; default the gold panel rim.
+	rim: (Color3 | Source<Color3>)?,
+	-- Rim thickness in reference px; default 2.
+	thickness: (number | Source<number>)?,
+	-- The gradient; default the stage panel's (Tokens.fill.panel).
+	gradient: ColorSequence?,
+}
+
+-- The UI art pass's stage-panel surface for a plain Frame: a vertical
+-- UIGradient and an inner rim stroke, as children. The UIGradient TINTS,
+-- so the Frame's BackgroundColor3 must be Base.STAGE_BACKGROUND (white);
+-- any other colour comes out murky.
+-- Typed `any`: Vide takes a nested child array, but a props table whose
+-- other children are Instances would refuse a `{ Instance }` among them.
+function Base.stage(props: StageProps?): any
+	local p: StageProps = props or {}
+	return {
+		create("UIGradient")({ Rotation = 90, Color = p.gradient or Theme.fill.panel.gradient }),
+		create("UIStroke")({
+			Name = "Rim",
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = p.rim or Theme.fill.panel.rim,
+			Thickness = p.thickness or 2,
+		}),
+	}
+end
+
+-- The background a Base.stage Frame takes.
+Base.STAGE_BACKGROUND = Color3.new(1, 1, 1)
+
+export type RaisedProps = {
+	fill: Source<Theme.Fill>,
+	-- Lip depth (Theme.lip). The surface is that much shorter than the
+	-- box, so lip and surface together never spill past it.
+	lip: number,
+	radius: UDim,
+	-- True drops the surface onto its lip: the press.
+	sunk: Source<boolean>?,
+	rimThickness: number?,
+	-- A white sheen over the top 40% (the mockup's glossy buttons).
+	gloss: boolean?,
+	-- Fades lip, surface and rim together (the ghost variant at rest).
+	transparency: Source<number>?,
+	-- Children of the surface (content, overlays).
+	children: { any }?,
+}
+
+-- The UI art pass's raised surface (Tokens.fill): a darker lip Frame
+-- under a gradient surface with a rim stroke. Roblox has no box-shadow;
+-- this is the shadow. Returns the two Frames for the caller to parent.
+function Base.raised(props: RaisedProps): { Instance }
+	local lip = props.lip
+	local transparency: Source<number> = props.transparency or function()
+		return 0
+	end
+	local sunk: Source<boolean> = props.sunk or function()
+		return false
+	end
+	local surface: { [any]: any } = {
+		Name = "Surface",
+		Size = UDim2.new(1, 0, 1, -lip),
+		Position = Env.animate(function(): UDim2
+			return UDim2.fromOffset(0, if sunk() then lip else 0)
+		end, Theme.motion.fast),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = transparency,
+		ZIndex = 2,
+		Base.corner(props.radius),
+		create("UIGradient")({
+			Rotation = 90,
+			Color = function()
+				return props.fill().gradient
+			end,
+		}),
+		create("UIStroke")({
+			Name = "Rim",
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = function()
+				return props.fill().rim
+			end,
+			Thickness = props.rimThickness or 2,
+			Transparency = transparency,
+		}),
+		if props.gloss
+			then create("Frame")({
+				Name = "Gloss",
+				AnchorPoint = Vector2.new(0.5, 0),
+				Position = UDim2.new(0.5, 0, 0, Theme.spacing.xs),
+				Size = UDim2.new(1, -Theme.spacing.md, 0.4, 0),
+				BackgroundColor3 = Color3.new(1, 1, 1),
+				ZIndex = 2,
+				Base.corner(props.radius),
+				create("UIGradient")({
+					Rotation = 90,
+					Transparency = NumberSequence.new(0.55, 1),
+				}),
+			})
+			else nil,
+	}
+	local children: { any } = props.children or {}
+	for _, child in children do
+		table.insert(surface, child)
+	end
+	return {
+		create("Frame")({
+			Name = "Lip",
+			Size = UDim2.new(1, 0, 1, -lip),
+			Position = UDim2.fromOffset(0, lip),
+			BackgroundColor3 = function()
+				return props.fill().lip
+			end,
+			BackgroundTransparency = transparency,
+			Base.corner(props.radius),
+		}),
+		create("Frame")(surface),
+	}
 end
 
 return Base

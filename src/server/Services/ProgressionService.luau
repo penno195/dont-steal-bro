@@ -1,9 +1,12 @@
 --!strict
--- Streak and bounty resolution (P4-1). `applyRoundResult` below is THE
+-- Streak resolution (P4-1) and win rewards (rewards-roadmap.md 2b). `applyRoundResult` below is THE
 -- only path to a streak change anywhere in this game - not by
 -- convention, but because DataService no longer publishes a way to
 -- change one and hands its single atomic writer to exactly one claimant
 -- (see DataService's own "progression write gate" section).
+-- The one exception is paid and narrow: a streak buy-back receipt
+-- (design-decisions.md Q7) restores the streak this writer recorded
+-- losing, through StoreService's receipt path and its audit line.
 --
 -- The rules themselves - what a win does, what a loss does, which
 -- reason code an outcome maps to, what counts as a duplicate - are pure
@@ -46,8 +49,14 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local Titles = require(ReplicatedStorage.Shared.Config.Titles)
+local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
+local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
+local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local ProgressionLogic = require(ServerScriptService.Server.ProgressionLogic)
+local RewardLogic = require(ServerScriptService.Server.RewardLogic)
 local Participants = require(ServerScriptService.Server.Participants)
 
 export type ReasonCode = ProgressionLogic.ReasonCode
@@ -55,9 +64,9 @@ export type ReasonCode = ProgressionLogic.ReasonCode
 export type RoundResult = {
 	roundId: string,
 	reason: ReasonCode,
-	-- Only meaningful on a win: what this player earned. A loss clears
-	-- any pending bounty regardless of what's passed here.
-	bounty: ProfileLogic.PendingBounty?,
+	-- Only read on a win: which currency base the win pays
+	-- (RewardLogic.currencyFor). A win with none pays nothing and warns.
+	outcomeTag: ProfileLogic.OutcomeTag?,
 }
 
 type LedgerEntry = {
@@ -66,8 +75,119 @@ type LedgerEntry = {
 	-- P6-6: kept for the RoundRecap sent on entering Results, which
 	-- can't be sent from the write itself (see sendRecaps).
 	before: ProgressionLogic.StreakState,
-	credited: boolean,
+	-- What this round paid. Rolled once and kept here, so a retry
+	-- returns the same reward rather than rolling a second one.
+	reward: ProfileLogic.WinRewardRecord?,
+	-- The drop grant's amount: a power-up drop's stock count, or what a
+	-- duplicate cosmetic paid in coins instead. Read off the grants so
+	-- the screens show what was granted rather than recomputing it from
+	-- a config LiveConfig can retune between roll and screen.
+	dropAmount: number?,
+	-- A practice match's result: recorded, never written (applyRoundResult).
+	practice: boolean?,
 }
+
+-- ===== season tracks (rewards-roadmap.md step 5) ===========================
+
+-- A win counts toward every live season's tracks. Seasons don't overlap
+-- (Validate), so in practice that's at most one. Returned as a step the
+-- progression writer runs inside its own mutation, so the count, the
+-- items it unlocks and the streak all land together.
+local function seasonStepFor(): (progress: { [string]: any }) -> ({ [string]: any }, { any })
+	return function(progress)
+		local now = os.time()
+		local updates: { [string]: any } = {}
+		local grants: { any } = {}
+		for _, entry in Seasons do
+			local season = SeasonLogic.fromDef(entry.def :: any)
+			if season == nil then
+				continue
+			end
+			-- The items a win reaches wait to be claimed on the pass screen
+			-- (StoreService's SeasonClaimIntent), so a win only counts.
+			local after = SeasonLogic.recordWin(progress[season.id], season, now)
+			if after ~= nil and after ~= progress[season.id] then
+				updates[season.id] = after
+			end
+		end
+		return updates, grants
+	end
+end
+
+-- ===== win rewards (rewards-roadmap.md step 2b) ============================
+
+-- Every title's minStreak: the ladder is the reward rung axis
+-- (design-decisions.md Q1's 2026-09-30 revision), so a new title file
+-- is a new rung with nothing to edit here.
+local rungThresholds: { number } = {}
+for _, entry in Titles do
+	table.insert(rungThresholds, (entry.def :: any).minStreak :: number)
+end
+
+-- Server-side randomness only. The client never sees a roll before
+-- Results, and never supplies one.
+local rewardRng = Random.new()
+
+local function nextRoll(): number
+	return rewardRng:NextNumber()
+end
+
+-- Rebuilt per roll rather than at load, so a power-up LiveConfig has
+-- switched off stops dropping without a restart.
+local function dropPool(): { RewardLogic.PoolItem }
+	local LiveConfig = Loader.get("LiveConfig") :: any
+	local powerUps: { RewardLogic.PowerUpSource } = {}
+	for _, entry in PowerUps do
+		local def = entry.def :: any
+		if LiveConfig.isPowerUpEnabled(def.id) then
+			table.insert(powerUps, def)
+		end
+	end
+	local cosmetics: { RewardLogic.CosmeticSource } = {}
+	for _, entry in Cosmetics do
+		table.insert(cosmetics, entry.def :: any)
+	end
+	return RewardLogic.buildDropPool(powerUps, cosmetics)
+end
+
+-- Rolls what one win pays. `streakAfter` is the streak the win took the
+-- player to (applied case 2026-10-02: a first win pays at rung 1).
+local function rollReward(
+	player: Player,
+	roundId: string,
+	outcomeTag: ProfileLogic.OutcomeTag,
+	streakAfter: number
+): (ProfileLogic.WinRewardRecord, { RewardLogic.Grant })
+	local DataService = Loader.get("DataService") :: any
+	local reward = RewardLogic.rollWinReward(
+		GameConfig.winRewards,
+		outcomeTag,
+		streakAfter,
+		rungThresholds,
+		dropPool(),
+		DataService.getOwnedCosmetics(player),
+		nextRoll
+	)
+
+	local drop: ProfileLogic.WinDropRecord? = nil
+	if reward.drop ~= nil then
+		drop = {
+			kind = reward.drop.item.kind,
+			id = reward.drop.item.id,
+			rarity = reward.drop.item.rarity,
+			duplicate = reward.drop.duplicate,
+		}
+	end
+	local record: ProfileLogic.WinRewardRecord = {
+		roundId = roundId,
+		outcomeTag = outcomeTag,
+		rung = reward.rung,
+		currency = reward.currency,
+		drop = drop,
+		grantedAt = os.time(),
+	}
+	return record, reward.grants
+end
 
 -- The idempotency ledger: "<roundId>|<userId>" -> what was recorded.
 -- Server-local and never persisted, which is the right scope: a round
@@ -75,7 +195,16 @@ type LedgerEntry = {
 -- double-reported by something on that same server.
 local ledger: { [string]: LedgerEntry } = {}
 
-local writeProgressionState: ((player: Player, state: ProfileLogic.ProgressionState) -> ())? = nil
+-- DataService.ProgressionWriter's shape: the reward is its WinRewardWrite
+-- and the step its SeasonStep.
+local writeProgressionState: ((
+	player: Player,
+	state: ProfileLogic.ProgressionState,
+	buyBackOffer: ProfileLogic.BuyBackOffer?,
+	reward: any,
+	seasonStep: any
+) -> { string })? =
+	nil
 
 local function ledgerKey(roundId: string, userId: number): string
 	return string.format("%s|%d", roundId, userId)
@@ -86,44 +215,8 @@ local function currentRoundId(): string
 	return RoundService.getRoundId() :: string
 end
 
--- ===== threat-model.md §8's required launch mitigation =====================
-
--- "No streak credit above a defined NPC-seat threshold. Exact N is a
--- playtest tuning call, but *some* threshold must ship day one" -
--- threat-model.md §8, which ranks farming NPC-filled lobbies as the 4th
--- most damaging attack on leaderboard credibility. This is the one
--- place that check happens, so a win can't reach a streak without
--- passing it.
---
--- The decision itself lives in NPCLogic.earnsStreakCredit and the count
--- in NPCService, deliberately: "how many seats were bots" and "does
--- that still count" must not drift apart, which they would the moment
--- two services each kept their own idea of the threshold.
---
--- Returns true when NPCService isn't loaded at all, which is the honest
--- default - a round with no NPC system running had no bot seats to
--- worry about.
-local function npcService(): any?
-	local ok, service = pcall(function()
-		return Loader.get("NPCService")
-	end)
-	return if ok then service else nil
-end
-
-local function shouldCreditStreak(): boolean
-	local service = npcService()
-	if service == nil then
-		return true
-	end
-	return service.roundEarnsStreakCredit() :: boolean
-end
-
-local function npcSeatCount(): number
-	local service = npcService()
-	if service == nil then
-		return 0
-	end
-	return service.getNPCSeatCount() :: number
+local function isPracticeMatch(): boolean
+	return (Loader.get("MatchTeleportService") :: any).isPracticeMatch() == true
 end
 
 -- ===== the one function ====================================================
@@ -174,33 +267,106 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	local before: ProgressionLogic.StreakState = {
 		currentStreak = DataService.getStreak(player),
 		bestStreak = DataService.getBestStreak(player),
-		pendingBounty = DataService.getPendingBounty(player),
 	}
 
-	local credited = shouldCreditStreak()
-	local after = ProgressionLogic.applyResult(before, result.reason, result.bounty, credited)
+	-- design-decisions.md Q7, the practice-match case: nothing is at
+	-- stake. The result is still recorded in the ledger, so a
+	-- contradiction still asserts and the recap still goes out, but the
+	-- streak stays where it was and nothing is written: no reward, stat,
+	-- telemetry, title, leaderboard or buy-back offer.
+	if isPracticeMatch() then
+		ledger[key] = { reason = result.reason, after = before, before = before, reward = nil, practice = true }
+		print(
+			string.format(
+				"Progression: %s round=%s reason=%s PRACTICE - nothing at stake, nothing written",
+				player.Name,
+				result.roundId,
+				result.reason
+			)
+		)
+		return before
+	end
+
+	-- A real player's result always counts, however many seats were
+	-- bots (design-decisions.md Q5's 2026-10-02 applied case).
+	local after = ProgressionLogic.applyResult(before, result.reason)
+
+	-- Every win pays (design-decisions.md Q1 revision). Rolled before
+	-- the ledger entry so the entry carries it.
+	local rewardRecord: ProfileLogic.WinRewardRecord? = nil
+	local rewardGrants: { RewardLogic.Grant } = {}
+	if ProgressionLogic.isWin(result.reason) then
+		local outcomeTag = result.outcomeTag
+		if outcomeTag ~= nil then
+			-- The cast undoes the `~= nil` refinement widening the
+			-- literal union to `string` (same luau-lsp quirk noted on
+			-- ProgressionLogic's types).
+			rewardRecord, rewardGrants =
+				rollReward(player, result.roundId, outcomeTag :: ProfileLogic.OutcomeTag, after.currentStreak)
+		else
+			warn(
+				string.format(
+					"ProgressionService: %s won round %s (%s) with no outcome tag - no reward paid",
+					player.Name,
+					result.roundId,
+					result.reason
+				)
+			)
+		end
+	end
 
 	-- Recorded in the ledger BEFORE the write, so even a write that
 	-- errors can't leave the round open to a second attempt that would
 	-- double-count. A failed write is a lost result; a double-counted
-	-- one is a corrupted streak, and of the two, the second is far
-	-- worse for a leaderboard nobody can audit.
-	ledger[key] = { reason = result.reason, after = after, before = before, credited = credited }
+	-- one is a corrupted streak (or a win paid twice), and of the two,
+	-- the second is far worse for a leaderboard nobody can audit.
+	-- rollWinReward lists the currency grant first, then the drop's.
+	local dropGrant = if rewardRecord ~= nil and rewardRecord.drop ~= nil then rewardGrants[2] else nil
+	local dropAmount = if dropGrant ~= nil then dropGrant.amount else nil
+	ledger[key] = {
+		reason = result.reason,
+		after = after,
+		before = before,
+		reward = rewardRecord,
+		dropAmount = dropAmount,
+	}
 
 	local write = writeProgressionState
 	if write == nil then
 		warn("ProgressionService: no progression writer claimed - DataService init must run first")
 		return after
 	end
-	write(player, after :: any)
+	local rewardWrite = if rewardRecord ~= nil then { record = rewardRecord, grants = rewardGrants } else nil
+	local seasonStep = if ProgressionLogic.isWin(result.reason) then seasonStepFor() else nil
+	local buyBackOffer = ProgressionLogic.buyBackOffer(result.roundId, before, result.reason)
+	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep)
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
+	if ProgressionLogic.isWin(result.reason) then
+		Loader.get("Telemetry").streakWin(player, after.currentStreak)
+	else
+		Loader.get("Telemetry").streakLoss(player, before.currentStreak, result.reason)
+	end
 
-	-- No client message here. threat-model.md §8's "explicit message,
-	-- not silent non-progression" for an uncredited round now travels in
-	-- the RoundRecap, sent on entering Results (sendRecaps below). It
-	-- used to be fired right here, which for a finalist is just BEFORE
-	-- DecisionReveal - and `reason` told them whether they'd won.
+	-- One audit line per grant, beside the Progression: line below.
+	if rewardRecord ~= nil then
+		for _, change in rewardChanges do
+			print(
+				ProgressionLogic.formatRewardAudit(
+					player.Name,
+					result.roundId,
+					rewardRecord.outcomeTag,
+					rewardRecord.rung,
+					change
+				)
+			)
+		end
+	end
+
+	-- No client message here. The RoundRecap is sent on entering
+	-- Results (sendRecaps below). Fired from here it would land, for a
+	-- finalist, just BEFORE DecisionReveal - and `reason` would tell
+	-- them whether they'd won.
 
 	-- "One auditable function that logs the before state, the after
 	-- state, and the reason code" (P4-1's own requirement). Every
@@ -239,7 +405,7 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	-- the current period, so they are fed on EVERY win rather than only
 	-- on an all-time best - a player whose record is 40 but who has
 	-- reached 3 today belongs on today's board at 3.
-	if credited and after.currentStreak > before.currentStreak then
+	if after.currentStreak > before.currentStreak then
 		local periodOk, periodBoard = pcall(function()
 			return Loader.get("LeaderboardService")
 		end)
@@ -253,6 +419,31 @@ end
 
 local function hasResultFor(roundId: string, userId: number): boolean
 	return ledger[ledgerKey(roundId, userId)] ~= nil
+end
+
+-- A win's reward as the client sees it (ResultsLogic.RecapReward /
+-- DecisionLogic.Payout), from the ledger rather than the profile, so it
+-- is this round's reward even if the write was skipped. Only ever sent
+-- to its owner, and only after every choice is locked in (Q7's
+-- 2026-10-02 applied case): your own rung is your own streak.
+local function rewardPayload(entry: LedgerEntry): { [string]: any }?
+	local reward = entry.reward
+	if reward == nil then
+		return nil
+	end
+	return {
+		currency = reward.currency,
+		rung = reward.rung,
+		drop = reward.drop,
+		dropAmount = entry.dropAmount,
+	}
+end
+
+-- rewards-roadmap.md step 3: DecisionService adds this to a finalist's
+-- DecisionPersonalResult, which only goes out after DecisionReveal.
+local function rewardFor(roundId: string, userId: number): { [string]: any }?
+	local entry = ledger[ledgerKey(roundId, userId)]
+	return if entry ~= nil then rewardPayload(entry) else nil
 end
 
 -- ===== design-decisions.md Q7's missing half ===============================
@@ -284,7 +475,7 @@ local function sweepNonQualifiers()
 			continue -- already recorded: a finalist, or an earlier forfeit
 		end
 
-		applyRoundResult(player, { roundId = roundId, reason = "FailedToQualify", bounty = nil })
+		applyRoundResult(player, { roundId = roundId, reason = "FailedToQualify", outcomeTag = nil })
 		swept += 1
 	end
 
@@ -302,7 +493,6 @@ end
 -- treats that as "you were watching".
 local function sendRecaps()
 	local roundId = currentRoundId()
-	local seats = npcSeatCount()
 	for _, participant in Participants.humans() do
 		local player = participant.player
 		local entry = ledger[ledgerKey(roundId, participant.id)]
@@ -316,13 +506,14 @@ local function sendRecaps()
 			streakAfter = entry.after.currentStreak,
 			bestStreakBefore = entry.before.bestStreak,
 			bestStreakAfter = entry.after.bestStreak,
-			-- Q1's item-package reference (streak tier x outcome tier) -
-			-- the lookup to actual items is RewardTables', not yet built.
-			bounty = entry.after.pendingBounty,
-			streakCredited = entry.credited,
-			npcSeatCount = seats,
-			npcSeatThreshold = GameConfig.npcSeatStreakCreditThreshold,
+			reward = rewardPayload(entry),
+			practice = entry.practice,
 		})
+		-- The win's coins, drop and season progress, now that Results is
+		-- on screen. Not from the write itself, for the reason RoundRecap
+		-- isn't: it would land before DecisionReveal.
+		local StoreService = Loader.get("StoreService") :: any
+		StoreService.pushState(player)
 	end
 end
 
@@ -330,19 +521,40 @@ end
 
 local ProgressionService: Loader.Service = {
 	name = "ProgressionService",
-	dependencies = { "DataService", "RoundService", "ParticipantService" },
+	dependencies = { "DataService", "RoundService", "ParticipantService", "Telemetry" },
 
 	applyRoundResult = applyRoundResult,
 	hasResultFor = hasResultFor,
+	rewardFor = rewardFor,
+	isPracticeMatch = isPracticeMatch,
+
+	-- The rung a win from `streak` would pay at (the after-win rung, as
+	-- rollReward uses). Analytics splits the finale by it.
+	rungAtStake = function(streak: number): number
+		return RewardLogic.rungFor(rungThresholds, streak + 1)
+	end,
+
+	-- What each outcome would pay `player`, and their drop chance, at
+	-- the rung a win would put them on: the Studio's stakes panel
+	-- (design-decisions.md Q1, "a much bigger reason to steal"). The
+	-- same RewardLogic calls rollReward makes, so the panel can't
+	-- promise a different number from the one a win pays.
+	stakesFor = function(player: Player): { [string]: number }
+		local DataService = Loader.get("DataService") :: any
+		local rung = RewardLogic.rungFor(rungThresholds, (DataService.getStreak(player) :: number) + 1)
+		local config = GameConfig.winRewards
+		return {
+			soleStealer = RewardLogic.currencyFor(config, "SoleStealer", rung),
+			loneSharer = RewardLogic.currencyFor(config, "LoneSharer", rung),
+			allShare = RewardLogic.currencyFor(config, "AllShare", rung),
+			dropChance = RewardLogic.dropChanceFor(config, rung),
+		}
+	end,
 
 	-- Re-exported so a caller (DecisionService) maps an outcome branch
 	-- to a reason code through the same function the tests cover,
 	-- rather than keeping its own copy of the mapping.
 	reasonForOutcome = ProgressionLogic.reasonForOutcome,
-
-	-- threat-model.md §8, readable so a results screen can explain
-	-- itself without re-deriving the rule.
-	roundEarnsStreakCredit = shouldCreditStreak,
 }
 
 function ProgressionService:init()
@@ -353,6 +565,20 @@ function ProgressionService:init()
 	RoundService.onEnter("Results", function()
 		sweepNonQualifiers()
 		sendRecaps()
+	end)
+
+	-- A streak buy-back offer lasts until its owner's next race starts
+	-- (design-decisions.md Q7, the 2026-10-08 applied case). Every human
+	-- racing is past the point of buying back an earlier loss.
+	RoundService.onEnter("Race", function()
+		for _, participant in Participants.humans() do
+			local player = participant.player
+			if player ~= nil and player.Parent ~= nil and DataService.expireBuyBackOffer(player) then
+				print(
+					string.format("ProgressionService: %s's streak buy-back offer expired at race start", player.Name)
+				)
+			end
+		end
 	end)
 
 	-- The ledger is per-round state, not per-server: clearing it on

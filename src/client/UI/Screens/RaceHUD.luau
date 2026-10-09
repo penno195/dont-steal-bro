@@ -10,12 +10,13 @@
 --     effect chips (and, in portrait, the task progress bar).
 --   - Top-left, landscape only: the task list. Portrait has no room
 --     beside the info bar, so it gets the bar alone.
---   - The first Primary zone: the power-up slots (powerups.md
---     "Inventory and aiming"), above and left of Roblox's jump button.
+--   - The bottom of the first Primary zone, left of Roblox's jump
+--     button (the screen's bottom-right corner without touch): the
+--     power-up slots (powerups.md "Inventory and aiming").
 --     Tap or click a slot to select it (the glow outline); tap the
 --     selected one to quick-fire; press and drag out of a slot to aim,
 --     release to fire, drag back onto it to cancel. Dragging a held
---     item also brings up a bin above the slots: release on it to
+--     item also brings up a bin left of the slots: release on it to
 --     throw the item away. With a keyboard, 1-N select, Q fires, X
 --     discards, and holding left-click aims in first person (let go to
 --     fire; right-click still turns the camera); a gamepad uses L1/R1,
@@ -74,13 +75,22 @@ export type Slot = { index: number, id: string?, name: string?, aimable: boolean
 -- How the player is aiming: along the first-person camera (hold
 -- left-click / L2), or along a drag from the slot (touch).
 export type AimMode = "Camera" | "Drag"
--- Degrees clockwise from screen-up, and studs on the ground plane.
-export type Objective = { bearing: number, distance: number }
+-- Degrees clockwise from screen-up, studs away in a straight line, and
+-- whether the station is on your floor or one up or down.
+export type Objective = { bearing: number, distance: number, level: HudLogic.Level }
 
 -- What the HUD reads. Sources are owned by whoever mounts it (so they
 -- outlive a remount), and list entries should be frozen: Vide treats a
 -- frozen table as unchanged when the same one comes back, which is what
 -- stops a task row or effect chip redrawing when nothing about it moved.
+-- A line about one slot, shown above the slots where the thumb is,
+-- rather than as a toast (playtest, 2026-10-06):
+--   "warning": a use the server refused for a reason the player can act
+--              on ("No target", "Cooling down"); that slot shakes.
+--   "info":    what a power-up does, the first time one lands in a slot.
+-- `id` changes per note, so the same refusal twice still shakes twice.
+export type SlotNote = { text: string, slot: number, id: number, kind: "info" | "warning" }
+
 export type Store = {
 	selfId: number,
 	qualifierCount: number,
@@ -92,8 +102,14 @@ export type Store = {
 	selected: () -> number,
 	aiming: () -> boolean,
 	pending: () -> boolean, -- a use is on its way to the server
+	note: () -> SlotNote?, -- the latest slot note, nil once it has faded
 	effects: () -> { HudLogic.Effect },
 	objective: () -> Objective?,
+	-- Navigation (design-decisions.md Q8): the toggle beside the compass.
+	-- "Off" | "On" | "Waiting" (asked, no answer yet); nil hides it, as
+	-- does leaving both out (the preview, the practice tray).
+	navigation: (() -> string?)?,
+	pressNavigation: (() -> ())?,
 	select: (index: number) -> (),
 	fire: () -> (), -- the selected slot, at whatever is locked on
 	-- screenPoint: where a mouse aim was clicked (InputObject.Position),
@@ -136,6 +152,7 @@ local PILL = 72
 local GAP = Theme.spacing.sm
 local TOP_WIDTH = 2 * PILL + RING + 2 * GAP
 local TOP_MARGIN = 4 -- px from the top bar (or the screen top, when lifted into the bar)
+local NAV = Theme.touch.minTargetPoints -- the Navigation toggle; a spacer of the same width balances it
 local CHIP = 36
 local TASK_WIDTH = 150
 local TASK_ROW = 18
@@ -148,9 +165,14 @@ local SLOT_LABEL = 14
 -- a cancel (roughly back over the slot it started on).
 local DRAG_DEADZONE = 12
 local CANCEL_RADIUS = SLOT / 2
--- The discard bin, over the left end of the slot row while a held item
--- is dragged.
+-- The discard bin, left of the slot row while a held item is dragged.
+-- Not above it: aiming drags up the screen, and a bin up there caught
+-- aims that overshot.
 local BIN = SLOT
+-- The refused-use shake: degrees per step, SHAKE_STEP seconds apart.
+local SHAKE = { -7, 7, -5, 5, -2, 0 }
+local SHAKE_STEP = 0.035
+local NOTE_MAX = 300 -- wider notes wrap
 
 local CATEGORY_ICON: { [string]: string } = { HardControl = "lock", Movement = "slow", Vision = "eye" }
 local EFFECT_ICONS = { "boost", "lock", "slow", "eye", "warning" }
@@ -224,10 +246,12 @@ local function card(name: string, order: number, size: UDim2, children: { any })
 		Name = name,
 		LayoutOrder = order,
 		Size = size,
-		BackgroundColor3 = Theme.color.surface,
+		-- The stage panel (UI art pass), lit from above so a card reads as
+		-- raised, not a hole; a touch see-through over the map.
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = 0.15,
 		Base.corner(Theme.radius.md),
-		create("UIStroke")({ Color = Theme.color.line, Transparency = 0.6, Thickness = 1 }),
+		Base.stage(),
 		Base.padding(Theme.spacing.xs),
 	}
 	for _, child in children do
@@ -312,18 +336,33 @@ local function placementCard(standing: () -> HudLogic.Standing?): Frame
 	return placement
 end
 
+-- The compass. A station a floor up or down turns the arrow, the
+-- distance and the card's edge blue or orange, and adds a chevron
+-- pointing that way, so it's told by shape as well as colour (P6-8).
 local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean): Frame
-	local arrow = Icons.view("arrow", 28, Theme.color.ink)
+	local level = derive(function(): HudLogic.Level
+		local o = objective()
+		return if o then o.level else "level"
+	end)
+	local tint = function(): Color3
+		local l = level()
+		return if l == "above" then Theme.color.above elseif l == "below" then Theme.color.below else Theme.color.ink
+	end
+	local arrow = Icons.view("arrow", 28, tint)
 	arrow.LayoutOrder = 1
 	local done = Icons.view("check", 28, Theme.color.success)
 	done.LayoutOrder = 1
+	local chevron = Icons.view("chevron", 14, tint)
+	chevron.LayoutOrder = 1
 	effect(function()
 		local o = objective()
 		arrow.Rotation = if o then o.bearing else 0
 		arrow.Visible = o ~= nil and not allDone()
 		done.Visible = allDone()
+		chevron.Visible = level() ~= "level" and not allDone()
+		chevron.Rotation = if level() == "below" then 180 else 0
 	end)
-	return card("Objective", 3, UDim2.fromOffset(PILL, RING), {
+	local panel = card("Objective", 3, UDim2.fromOffset(PILL, RING), {
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -332,19 +371,43 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 		}),
 		arrow,
 		done,
-		Base.text("label", {
-			Name = "Distance",
+		create("Frame")({
+			Name = "Reading",
 			LayoutOrder = 2,
+			BackgroundTransparency = 1,
 			Size = UDim2.fromOffset(PILL - 2 * Theme.spacing.xs, 20),
-			Text = derive(function()
-				local o = objective()
-				if allDone() then
-					return "Done"
-				end
-				return if o then tostring(math.floor(o.distance)) else "-"
-			end),
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, Theme.spacing.xxs),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			chevron,
+			Base.text("label", {
+				Name = "Distance",
+				LayoutOrder = 2,
+				Size = UDim2.fromOffset(40, 20),
+				TextColor3 = function(): Color3
+					return if allDone() then Theme.color.ink else tint()
+				end,
+				Text = derive(function()
+					local o = objective()
+					if allDone() then
+						return "Done"
+					end
+					return if o then tostring(math.floor(o.distance)) else "-"
+				end),
+			}),
 		}),
 	})
+	local stroke = panel:FindFirstChildOfClass("UIStroke") :: UIStroke
+	effect(function()
+		local plain = level() == "level" or allDone()
+		stroke.Color = if plain then Theme.fill.panel.rim else tint()
+		stroke.Thickness = if plain then 2 else 3
+	end)
+	return panel
 end
 
 local function effectChip(entry: () -> HudLogic.Effect, now: () -> number): Frame
@@ -357,7 +420,7 @@ local function effectChip(entry: () -> HudLogic.Effect, now: () -> number): Fram
 	return create("Frame")({
 		Name = "Effect",
 		Size = UDim2.fromOffset(CHIP + 24, CHIP),
-		BackgroundColor3 = Theme.color.surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = 0.15,
 		-- Shape as well as colour: a buff is a pill, a debuff is square.
 		create("UICorner")({
@@ -365,7 +428,7 @@ local function effectChip(entry: () -> HudLogic.Effect, now: () -> number): Fram
 				return if buff() then Theme.radius.pill else Theme.radius.sm
 			end,
 		}),
-		create("UIStroke")({ Color = ink, Thickness = 2 }),
+		Base.stage({ rim = ink }),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -461,11 +524,43 @@ local function powerUpSlot(
 	store: Store,
 	slot: () -> Slot,
 	cancelling: () -> boolean,
-	press: (index: number, input: InputObject) -> ()
+	press: (index: number, input: InputObject) -> (),
+	practice: boolean
 ): TextButton
 	local empty = derive(function()
 		return slot().id == nil
 	end)
+
+	-- Hub practice: a PRACTICE badge sitting on the slot's top edge (just
+	-- above it, clear of the keyboard number), so a practice pickup never
+	-- reads as something owned. Owned stock shows its count in the Locker
+	-- instead (design-decisions.md Q8, "the Locker and choosing a loadout").
+	local practiceTag = if practice
+		then create("Frame")({
+			Name = "PracticeTag",
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.new(0.5, 0, 0, 2),
+			Size = UDim2.fromOffset(SLOT - Theme.spacing.xs, SLOT_LABEL),
+			BackgroundColor3 = Theme.color.background,
+			ZIndex = 3,
+			Visible = function()
+				return not empty()
+			end,
+			Base.corner(Theme.radius.pill),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner,
+				Color = Theme.color.warning,
+			}),
+			Base.text("caption", {
+				Name = "Label",
+				Size = UDim2.fromScale(1, 1),
+				Text = "PRACTICE",
+				TextScaled = true,
+				TextColor3 = Theme.color.warning,
+				ZIndex = 3,
+			}),
+		})
+		else nil
 	local isSelected = derive(function()
 		return store.selected() == slot().index
 	end)
@@ -483,6 +578,8 @@ local function powerUpSlot(
 
 	local button = create("TextButton")({
 		Name = "Slot",
+		-- Rotation, not Position: the row's UIListLayout owns Position.
+		Rotation = 0,
 		LayoutOrder = function()
 			return slot().index
 		end,
@@ -490,17 +587,25 @@ local function powerUpSlot(
 		Text = "",
 		AutoButtonColor = false,
 		Selectable = false, -- L1/R1 select on a gamepad; the stick is steering
-		-- Mostly surface, so the caption stays readable; enough role
-		-- colour to tell Attack from Defence from Utility at a glance.
-		BackgroundColor3 = function(): Color3
-			local role = slot().roleColor
-			return if role then Theme.color.surface:Lerp(role, 0.45) else Theme.color.surface
-		end,
+		-- Mostly the stage gradient, so the caption stays readable; enough
+		-- role colour to tell Attack from Defence from Utility at a glance.
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = function()
 			return if store.pending() and isSelected() then 0.5 else 0.15
 		end,
 		Base.corner(Theme.radius.md),
+		create("UIGradient")({
+			Rotation = 90,
+			Color = function(): ColorSequence
+				local role = slot().roleColor
+				local top, bottom = Theme.fill.panel.top, Theme.fill.panel.bottom
+				return if role
+					then ColorSequence.new(top:Lerp(role, 0.45), bottom:Lerp(role, 0.45))
+					else ColorSequence.new(top, bottom)
+			end,
+		}),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = function(): Color3
 				if not isSelected() then
@@ -509,13 +614,11 @@ local function powerUpSlot(
 				return if cancelling() then Theme.color.danger else Theme.color.warning
 			end,
 			Thickness = function()
-				return if isSelected() then 3 else 1
-			end,
-			Transparency = function()
-				return if isSelected() then 0 else 0.6
+				return if isSelected() then 3 else 2
 			end,
 		}),
 		icon,
+		practiceTag,
 		Base.text("caption", {
 			Name = "Name",
 			AnchorPoint = Vector2.new(0.5, 1),
@@ -546,6 +649,27 @@ local function powerUpSlot(
 	button.InputBegan:Connect(function(input: InputObject)
 		press(slot().index, input)
 	end)
+
+	-- A short shake when a use from this slot is refused. Skipped under
+	-- reduced motion; the label above the slots still says why.
+	local shookFor = 0
+	vide.effect(function()
+		local r = store.note()
+		if r == nil or r.kind ~= "warning" or r.id == shookFor or r.slot ~= vide.untrack(slot).index then
+			return
+		end
+		shookFor = r.id
+		if Env.reducedMotion() then
+			return
+		end
+		task.spawn(function()
+			for _, angle in SHAKE do
+				button.Rotation = angle
+				task.wait(SHAKE_STEP)
+			end
+			button.Rotation = 0
+		end)
+	end)
 	return button
 end
 
@@ -555,8 +679,8 @@ end
 local function discardBin(shown: () -> boolean, over: () -> boolean): Frame
 	return create("Frame")({
 		Name = "Bin",
-		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.fromOffset(0, -GAP),
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(0, -GAP, 0.5, 0),
 		Size = function()
 			local edge = if over() then BIN + 8 else BIN
 			return UDim2.fromOffset(edge, edge)
@@ -568,6 +692,7 @@ local function discardBin(shown: () -> boolean, over: () -> boolean): Frame
 		BackgroundTransparency = 0.15,
 		Base.corner(Theme.radius.md),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = Theme.color.danger,
 			Thickness = 2,
@@ -581,13 +706,58 @@ local function discardBin(shown: () -> boolean, over: () -> boolean): Frame
 	}) :: Frame
 end
 
+-- The latest SlotNote, floating above the slots' right end. The bin
+-- sits left of the slots, so the two never meet.
+local function slotNote(store: Store): Frame
+	local color = function(): Color3
+		local r = store.note()
+		return if r and r.kind == "info" then Theme.color.brand else Theme.color.warning
+	end
+	return create("Frame")({
+		Name = "Note",
+		AnchorPoint = Vector2.new(1, 1),
+		Position = UDim2.new(1, 0, 0, -GAP),
+		Size = UDim2.new(),
+		AutomaticSize = Enum.AutomaticSize.XY,
+		Visible = function()
+			return store.note() ~= nil
+		end,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
+		BackgroundTransparency = 0.1,
+		Base.corner(Theme.radius.md),
+		Base.stage({ rim = color }),
+		create("UIPadding")({
+			PaddingLeft = UDim.new(0, Theme.spacing.sm),
+			PaddingRight = UDim.new(0, Theme.spacing.sm),
+			PaddingTop = UDim.new(0, Theme.spacing.xs),
+			PaddingBottom = UDim.new(0, Theme.spacing.xs),
+		}),
+		Base.text("body", {
+			Name = "Text",
+			Size = UDim2.new(),
+			AutomaticSize = Enum.AutomaticSize.XY,
+			TextWrapped = true,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextColor3 = function(): Color3
+				local r = store.note()
+				return if r and r.kind == "info" then Theme.color.ink else Theme.color.warning
+			end,
+			Text = function()
+				local r = store.note()
+				return if r then r.text else ""
+			end,
+			create("UISizeConstraint")({ MaxSize = Vector2.new(NOTE_MAX, math.huge) }),
+		}),
+	}) :: Frame
+end
+
 -- The slot row, and under it (keyboard and gamepad only) the keys to
 -- fire and aim with. Owns the one press in flight: a tap selects, or
 -- fires if the slot is already selected; a drag aims and fires on
 -- release; dragged back onto its start it cancels (HudLogic.slotGesture).
 -- Dragging a held item also shows the bin; released over it, the item
 -- is discarded instead of fired.
-local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: number): Frame
+local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: number, practice: boolean?): Frame
 	local cancelling = source(false)
 	local binShown = source(false)
 	local overBin = source(false)
@@ -687,7 +857,7 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 	local width = slotCount * SLOT + (slotCount - 1) * GAP
 	return create("Frame")({
 		Name = "PowerUps",
-		AnchorPoint = Vector2.new(1, 0.5),
+		AnchorPoint = Vector2.new(1, 1),
 		Position = position,
 		Size = UDim2.fromOffset(width, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
@@ -698,28 +868,35 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 			Padding = UDim.new(0, Theme.spacing.xxs),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
-		-- No height of its own, so the bin floats above the slots
+		-- No height of its own, so the note floats above the slots
 		-- without pushing them down when it appears.
 		create("Frame")({
-			Name = "BinAnchor",
+			Name = "NoteAnchor",
 			LayoutOrder = 0,
 			Size = UDim2.fromOffset(width, 0),
 			BackgroundTransparency = 1,
-			bin,
+			slotNote(store),
 		}),
 		create("Frame")({
 			Name = "Slots",
 			LayoutOrder = 1,
 			Size = UDim2.fromOffset(width, SLOT),
 			BackgroundTransparency = 1,
-			create("UIListLayout")({
-				FillDirection = Enum.FillDirection.Horizontal,
-				Padding = UDim.new(0, GAP),
-				SortOrder = Enum.SortOrder.LayoutOrder,
+			-- Its own frame, so the row's layout leaves the bin alone.
+			create("Frame")({
+				Name = "Row",
+				Size = UDim2.fromScale(1, 1),
+				BackgroundTransparency = 1,
+				create("UIListLayout")({
+					FillDirection = Enum.FillDirection.Horizontal,
+					Padding = UDim.new(0, GAP),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+				indexes(store.slots, function(slot: () -> Slot)
+					return powerUpSlot(store, slot, cancelling, press, practice == true)
+				end) :: any,
 			}),
-			indexes(store.slots, function(slot: () -> Slot)
-				return powerUpSlot(store, slot, cancelling, press)
-			end) :: any,
+			bin,
 		}),
 		Base.text("caption", {
 			Name = "Keys",
@@ -743,17 +920,21 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 	}) :: Frame
 end
 
--- The right edge of this orientation's first Primary zone, vertically
--- centred in it. The slots hang left from there, so they stay clear of
--- the jump button in landscape and of the screen edge in portrait.
+-- Where the panel's bottom-right corner goes. Without touch there's no
+-- jump button, so it takes the screen's own bottom-right corner. On
+-- touch it takes the bottom-right of this orientation's first Primary
+-- zone, which keeps it clear of the jump button in landscape.
 local function primaryAnchor(orientation: string): UDim2
-	for _, zone in Layout.THUMB_ZONES[orientation :: Layout.Orientation] do
-		if zone.kind == "Primary" then
-			local r = zone.rect
-			return UDim2.new(r.x + r.width, -Theme.spacing.sm, r.y + r.height / 2, 0)
+	local margin = Theme.spacing.sm
+	if Env.inputMode() == Enum.PreferredInput.Touch then
+		for _, zone in Layout.THUMB_ZONES[orientation :: Layout.Orientation] do
+			if zone.kind == "Primary" then
+				local r = zone.rect
+				return UDim2.new(r.x + r.width, -margin, r.y + r.height, -margin)
+			end
 		end
 	end
-	return UDim2.new(1, -Theme.spacing.sm, 0.75, 0)
+	return UDim2.new(1, -margin, 1, -margin)
 end
 
 -- EDGES ----------------------------------------------------------------
@@ -921,6 +1102,62 @@ local RaceHUD = {}
 
 -- `controller` is UIScaleController (passed in, as the debug screens
 -- do). Returns unmount.
+-- The Navigation toggle, right of the compass (design-decisions.md Q8,
+-- "Navigation"). Lit green while the path line is up; dimmed while the
+-- server hasn't answered. Whether a tap spends a round or opens the buy
+-- sheet is the server's call, not this button's.
+local function navigationToggle(state: () -> string?, press: () -> ()): TextButton
+	local lit = function(): boolean
+		return state() == "On"
+	end
+	local button = create("TextButton")({
+		Name = "Navigation",
+		LayoutOrder = 4,
+		Size = UDim2.fromOffset(NAV, RING),
+		Text = "",
+		AutoButtonColor = false,
+		Selectable = false,
+		Visible = function()
+			return state() ~= nil
+		end,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
+		BackgroundTransparency = function()
+			return if state() == "Waiting" then 0.5 else 0.15
+		end,
+		Base.corner(Theme.radius.md),
+		-- The stage panel, tinted green while navigation is on.
+		create("UIGradient")({
+			Rotation = 90,
+			Color = function(): ColorSequence
+				local top, bottom = Theme.fill.panel.top, Theme.fill.panel.bottom
+				return if lit()
+					then ColorSequence.new(top:Lerp(Theme.color.success, 0.35), bottom:Lerp(Theme.color.success, 0.35))
+					else ColorSequence.new(top, bottom)
+			end,
+		}),
+		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = function(): Color3
+				return if lit() then Theme.color.success else Theme.fill.panel.rim
+			end,
+			Thickness = function()
+				return if lit() then 3 else 2
+			end,
+		}),
+		Base.text("label", {
+			Name = "Label",
+			Size = UDim2.fromScale(1, 1),
+			Text = "NAV",
+			TextColor3 = function(): Color3
+				return if lit() then Theme.color.success else Theme.color.ink
+			end,
+		}),
+		Activated = press,
+	}) :: TextButton
+	return button
+end
+
 function RaceHUD.mount(controller: any, store: Store): () -> ()
 	-- Under the HUD's own layer, and full-bleed so the bands reach the
 	-- physical edges, notch and all. Nothing on it is interactive.
@@ -986,11 +1223,19 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 		-- just under the bar. This gui lays out below the bar, so lifting
 		-- is a negative offset of the bar's height. The Position isn't
 		-- under the stack's UIScale, so it's in real pixels.
+		local navState: () -> string? = store.navigation or function(): string?
+			return nil
+		end
+		local navShown = derive(function()
+			return navState() ~= nil
+		end)
 		local topY = source(TOP_MARGIN)
 		local function placeTop()
 			local camera = Workspace.CurrentCamera
 			local inset = GuiService.TopbarInset
-			local half = TOP_WIDTH * controller.getScale() / 2
+			-- The Navigation toggle and its spacer stick out either side.
+			local width = if navShown() then TOP_WIDTH + 2 * (NAV + GAP) else TOP_WIDTH
+			local half = width * controller.getScale() / 2
 			local centre = if camera ~= nil then camera.ViewportSize.X / 2 else 0
 			local fits = inset.Height > 0 and centre - half >= inset.Min.X and centre + half <= inset.Max.X
 			topY(if fits then TOP_MARGIN - inset.Height else TOP_MARGIN)
@@ -1024,7 +1269,16 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			row(1, RING, {
 				placementCard(standing),
 				C.CountdownRing({ secondsLeft = secondsLeft, total = store.raceSeconds, size = RING, layoutOrder = 2 }),
+				-- Balances the toggle, so the countdown stays centred.
+				create("Frame")({
+					Name = "NavigationSpacer",
+					LayoutOrder = 0,
+					Size = UDim2.fromOffset(NAV, RING),
+					BackgroundTransparency = 1,
+					Visible = navShown,
+				}),
 				objectiveCard(store.objective, allDone),
+				navigationToggle(navState, store.pressNavigation or function() end),
 			}),
 			compactTasks,
 			row(3, CHIP, {
@@ -1035,6 +1289,11 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			Parent = gui,
 		}) :: Frame
 		cleanup(controller.attachScale(top))
+		-- Toasts hang under this stack, clear of the timer (Toast.follow).
+		C.Toast.follow(top)
+		cleanup(function()
+			C.Toast.follow(nil)
+		end)
 
 		-- Landscape task list, top-left.
 		local tasks = create("Frame")({
@@ -1042,12 +1301,13 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			Position = UDim2.fromScale(0.01, 0.02),
 			Size = UDim2.fromOffset(TASK_WIDTH, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = Theme.color.surface,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
 			BackgroundTransparency = 0.25,
 			Visible = function()
 				return not portrait()
 			end,
 			Base.corner(Theme.radius.md),
+			Base.stage(),
 			Base.padding(Theme.spacing.sm),
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Vertical,
@@ -1123,9 +1383,10 @@ function RaceHUD.mountPowerUps(controller: any, store: Store): () -> ()
 		end))
 
 		local slotCount = #store.slots()
+		-- `true`: every item here is a practice pickup, tagged as such.
 		local power = powerUpPanel(store, function()
 			return primaryAnchor(orientation())
-		end, slotCount)
+		end, slotCount, true)
 		power.Parent = gui
 		cleanup(controller.attachScale(power))
 

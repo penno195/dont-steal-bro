@@ -285,3 +285,22 @@ TestRunner.describe("PowerUpLogic.isInsideZone (Slow Field)", function()
 		TestRunner.expect(PowerUpLogic.isInsideZone(floor, 15, { x = 0, y = -10, z = 0 })):toBe(false)
 	end)
 end)
+
+TestRunner.describe("PowerUpLogic.lookFor", function()
+	local order = { "Frozen", "Ragdoll", "Blinded" }
+	local lookById = { freeze = "Frozen", ["push-trip"] = "Ragdoll", blind = "Blinded" }
+
+	TestRunner.it("is nil with no effect that has a look", function()
+		TestRunner.expect(PowerUpLogic.lookFor({}, lookById, order)):toBe(nil)
+		TestRunner.expect(PowerUpLogic.lookFor({ "slow-field" }, lookById, order)):toBe(nil)
+	end)
+
+	TestRunner.it("returns the one effect's look", function()
+		TestRunner.expect(PowerUpLogic.lookFor({ "blind" }, lookById, order)):toBe("Blinded")
+	end)
+
+	TestRunner.it("picks the strongest of several, whatever their order", function()
+		TestRunner.expect(PowerUpLogic.lookFor({ "blind", "slow-field", "freeze" }, lookById, order)):toBe("Frozen")
+		TestRunner.expect(PowerUpLogic.lookFor({ "blind", "push-trip" }, lookById, order)):toBe("Ragdoll")
+	end)
+end)

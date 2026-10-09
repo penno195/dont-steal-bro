@@ -12,7 +12,8 @@
 --   - Open/close transitions (slide up / grow), zero under reduced motion.
 --   - The header: task name, an elapsed timer, and the close button
 --     (the abort path; B on a gamepad does the same).
---   - The status line under the play area, with a feedback icon so a
+--   - The status line under the play area (or under the header in a
+--     side rail on a short landscape screen), with a feedback icon so a
 --     state is never shown by colour alone.
 --   - The input lock: camera and character controls frozen from open to
 --     close via UI/InputLock, released on EVERY close path - success,
@@ -41,6 +42,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local Base = require(script.Parent.Components.Base)
 local Env = require(script.Parent.Components.Env)
 local Focus = require(script.Parent.Focus)
+local Button = require(script.Parent.Components.Button)
 local IconButton = require(script.Parent.Components.IconButton)
 local Icons = require(script.Parent.Components.Icons)
 local InputLock = require(script.Parent.InputLock)
@@ -58,14 +60,30 @@ local source = vide.source
 local T = Tokens.taskView
 local HEADER_HEIGHT = Theme.touch.iconButton
 local STATUS_HEIGHT = Theme.touch.iconButton
+-- Everything in the card but the play area, top to bottom: padding,
+-- header, list gap, (play area), list gap, status, padding.
+local CHROME_HEIGHT = 2 * Theme.spacing.md + HEADER_HEIGHT + STATUS_HEIGHT + 2 * Theme.spacing.sm
+-- The header (i), restart, timer and the close overhang need this much.
+local MIN_CONTENT_WIDTH = 300
 -- The close button's art, a touch bigger than its 44 hit area so it
 -- reads as THE way out; its centre sits this far in from the window's
 -- corner (the card's rounded corner), so half of it hangs off.
 local CLOSE_SIZE = 52
 local CORNER_INSET = 6
--- How long the success tick stays up before the sheet leaves. Not
--- motion (nothing moves), so reduced motion keeps it.
-local SUCCESS_HOLD = 0.6
+-- The side rail (TaskViewLogic.chromeSide), for a short landscape
+-- screen: the header row on top, the status two lines tall at the
+-- bottom, the play area to its right. The play area keeps clear of the
+-- close button's corner by RAIL_CLOSE_CLEAR on its right.
+local RAIL_WIDTH = 2 * HEADER_HEIGHT + 2 * Theme.spacing.sm + 1.5 * HEADER_HEIGHT
+local RAIL_STATUS_HEIGHT = 2 * STATUS_HEIGHT
+local RAIL_CLOSE_CLEAR = CLOSE_SIZE / 2 - Theme.spacing.md
+local RAIL_MIN_HEIGHT = 2 * Theme.spacing.md + HEADER_HEIGHT + Theme.spacing.sm + RAIL_STATUS_HEIGHT
+local TOP_CHROME = { width = 2 * Theme.spacing.md, height = CHROME_HEIGHT }
+local SIDE_CHROME =
+	{ width = 2 * Theme.spacing.md + RAIL_WIDTH + Theme.spacing.sm + RAIL_CLOSE_CLEAR, height = 2 * Theme.spacing.md }
+-- How long COMPLETE stays up before the sheet leaves. Not motion
+-- (nothing moves), so reduced motion keeps it.
+local SUCCESS_HOLD = 1.2
 local FLASH_SECONDS = 0.4
 local FEEDBACKS: { TaskViewLogic.Feedback } = { "Neutral", "Active", "Good", "Bad" }
 
@@ -101,17 +119,31 @@ export type Spec = {
 	-- Builds the task's content into ctx.area. Runs inside the attempt's
 	-- Vide scope. May return instances to parent into the area.
 	build: (ctx: Context) -> { Instance }?,
+	-- The play area's natural size in reference px: what build() lays
+	-- out at a fit scale of 1. The card is sized to wrap it (plus the
+	-- header and status line) rather than a fixed window, so there's no
+	-- dead space round small tasks; on a screen too small for that, the
+	-- card shrinks and the view's own fit scales its content down. A
+	-- function gets the challenge, for content that grows with it.
+	-- Omitted: Tokens.taskView.windowSize.
+	contentSize: (Vector2 | (challenge: any) -> Vector2)?,
 	-- A non-final result (the attempt stays open). Default: "Keep going".
 	-- `feedback` is the handler's optional per-submission detail. The
 	-- shell owns success, but a successful result that carries feedback
 	-- reaches here first, so the last step paints before "Done!".
 	onProgress: ((ctx: Context, feedback: any?) -> ())?,
+	-- Seconds the view's success payoff (onProgress's last paint) plays
+	-- before the COMPLETE cover goes over it. Omitted: 0.
+	payoffSeconds: number?,
 }
 
 type Attempt = {
 	stationId: string,
 	ctx: Context,
 	close: (immediate: boolean) -> (),
+	-- The last step landed but the server is holding the completion
+	-- (TaskResult's `completing`): show COMPLETE, take no more input.
+	onComplete: () -> (),
 	onSuccess: () -> (),
 }
 
@@ -168,9 +200,28 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 
 	local shown = source(false)
 	local closing = false
-	-- Set on success: the shell stays up for SUCCESS_HOLD, but nothing
-	-- more is submitted and no cue overwrites the tick.
+	-- Set on success: the shell stays up for the view's payoff and then
+	-- SUCCESS_HOLD, but nothing more is submitted and no cue overwrites
+	-- the tick.
 	local finished = false
+	-- Set on success only. The controller has already let go of the
+	-- attempt by then, so session.close would do nothing: the way out
+	-- is the shell's own close.
+	local succeeded = false
+	-- Shows the COMPLETE cover over the whole card. Set after the payoff
+	-- on success, or as soon as the server says the last step landed
+	-- (`completing`), so a view's own loop starting another round
+	-- underneath is never seen.
+	local complete = source(false)
+	local close: (immediate: boolean) -> ()
+	-- X, B and the cover's Close button all leave through here.
+	local function exit()
+		if succeeded then
+			close(false)
+		else
+			session.close()
+		end
+	end
 	local ctxOut: Context
 	local areaOut: Frame
 	local rootOut: Frame
@@ -191,23 +242,53 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			return presentation() == "Sheet"
 		end)
 
-		-- Reference-pixel size of the card: the whole usable rect for a
-		-- sheet (divided back out of the global scale), the token size
-		-- for a window - shrunk until it fits (TaskViewLogic.windowSize).
-		local cardSize = derive(function(): UDim2
+		-- Reference-pixel size of the card, sheet or window alike: the
+		-- view's content wrapped in the chrome, the content shrunk evenly
+		-- until it fits (TaskViewLogic.fitCard). A view with no
+		-- contentSize gets the token window (TaskViewLogic.windowSize).
+		local content: Vector2? = nil
+		if spec.contentSize ~= nil then
+			content = if typeof(spec.contentSize) == "Vector2"
+				then spec.contentSize
+				else (spec.contentSize :: (any) -> Vector2)(challenge)
+		end
+		-- Room for the close button hanging off the top-right corner:
+		-- half its size off the width and the height (the holder then
+		-- sits CLOSE_SIZE / 4 low, so the overhang is only at the top).
+		local function room(): (number, number)
 			local r, s = usable(), Env.scale()
-			if isSheet() then
-				return UDim2.fromOffset(r.width / s, r.height / s)
+			return r.width / s - CLOSE_SIZE, r.height / s - CLOSE_SIZE / 2
+		end
+		-- The chrome in a rail beside the play area, not above and below.
+		local side = derive(function(): boolean
+			if content == nil then
+				return false
 			end
-			-- Room for the close button hanging off the top-right corner:
-			-- half its size off the width and the height (the holder then
-			-- sits CLOSE_SIZE / 4 low, so the overhang is only at the top).
+			local roomWidth, roomHeight = room()
+			return TaskViewLogic.chromeSide(
+				{ width = content.X, height = content.Y },
+				TOP_CHROME,
+				SIDE_CHROME,
+				roomWidth,
+				roomHeight,
+				T.edgeMargin
+			) == "Side"
+		end)
+		local cardSize = derive(function(): UDim2
+			local roomWidth, roomHeight = room()
+			if content == nil then
+				return UDim2.fromOffset(TaskViewLogic.windowSize(T.windowSize, roomWidth, roomHeight, T.edgeMargin))
+			end
+			local isSide = side()
 			return UDim2.fromOffset(
-				TaskViewLogic.windowSize(
-					T.windowSize,
-					r.width / s - CLOSE_SIZE,
-					r.height / s - CLOSE_SIZE / 2,
-					T.edgeMargin
+				TaskViewLogic.fitCard(
+					{ width = content.X, height = content.Y },
+					if isSide then SIDE_CHROME else TOP_CHROME,
+					if isSide then 0 else MIN_CONTENT_WIDTH,
+					roomWidth,
+					roomHeight,
+					T.edgeMargin,
+					if isSide then RAIL_MIN_HEIGHT else nil
 				)
 			)
 		end)
@@ -242,21 +323,42 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 
 		local b = UserInputService.InputBegan:Connect(function(input)
 			if input.KeyCode == Enum.KeyCode.ButtonB then
-				session.close()
+				exit()
 			end
 		end)
 		cleanup(function()
 			b:Disconnect()
 		end)
 
+		-- Restart: a fresh challenge at the same station. It's the same
+		-- TaskInteract a walk-up sends, so the server ends this attempt
+		-- and starts a new one - nothing a player couldn't already do by
+		-- walking off and back, so it needs no new rule server-side.
+		local restartButton = IconButton({
+			icon = "restart",
+			iconSize = HEADER_HEIGHT,
+			label = "Restart",
+			onActivate = function()
+				if not closing and not finished then
+					Net.fireServer("TaskInteract", { stationId = stationId })
+				end
+			end,
+			anchorPoint = Vector2.new(0, 0.5),
+			position = UDim2.new(0, HEADER_HEIGHT + Theme.spacing.sm, 0.5, 0),
+		})
+
 		create("Frame")({
 			Name = "Scrim",
 			Size = UDim2.fromScale(1, 1),
 			BackgroundColor3 = Theme.color.scrim,
-			-- A sheet covers the world; a window dims it but leaves it visible.
+			-- A sheet all but blacks the world out round the card, and
+			-- swallows touches there (InputLock already holds the camera;
+			-- this keeps a stray thumb off the world entirely). A window
+			-- dims it but leaves it visible.
 			BackgroundTransparency = Env.animate(function()
 				return if not shown() then 1 elseif isSheet() then 0.2 else 0.5
 			end, Theme.motion.base),
+			Active = isSheet,
 			Parent = scrimGui,
 		})
 
@@ -264,7 +366,16 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			Name = "PlayArea",
 			LayoutOrder = 1,
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 1, -(HEADER_HEIGHT + STATUS_HEIGHT + 2 * Theme.spacing.sm)),
+			Position = function()
+				return if side()
+					then UDim2.fromOffset(RAIL_WIDTH + Theme.spacing.sm, 0)
+					else UDim2.fromOffset(0, HEADER_HEIGHT + Theme.spacing.sm)
+			end,
+			Size = function()
+				return if side()
+					then UDim2.new(1, -(RAIL_WIDTH + Theme.spacing.sm + RAIL_CLOSE_CLEAR), 1, 0)
+					else UDim2.new(1, 0, 1, -(HEADER_HEIGHT + STATUS_HEIGHT + 2 * Theme.spacing.sm))
+			end,
 			ClipsDescendants = false,
 		}) :: Frame
 
@@ -275,20 +386,23 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			Size = cardSize,
 			-- Sheet: slides up from below. Window: fixed, grows in (below).
 			Position = Env.animate(function(): UDim2
-				if isSheet() then
-					return if shown() then UDim2.fromScale(0.5, 0.5) else UDim2.fromScale(0.5, 1.5)
-				end
 				-- (The screen isn't under the UI scale: offsets are real px.)
-				return UDim2.new(0.5, 0, 0.5, CLOSE_SIZE / 4 * Env.scale())
+				local placed = UDim2.new(0.5, 0, 0.5, CLOSE_SIZE / 4 * Env.scale())
+				if isSheet() and not shown() then
+					return UDim2.fromScale(0.5, 1.5)
+				end
+				return placed
 			end, Theme.motion.base),
 			Parent = gui,
 		}) :: Frame
 		cleanup(UIScaleController.attachScale(holder))
 
-		-- The card's inner padding (see the UIPadding below).
-		local padPx = derive(function(): number
-			return if isSheet() then T.edgeMargin else Theme.spacing.md
-		end)
+		-- The card's inner padding (see the UIPadding below). The card
+		-- always sits T.edgeMargin clear of the screen's edges
+		-- (TaskViewLogic.windowSize), so a normal padding does.
+		local padPx = function(): number
+			return Theme.spacing.md
+		end
 		local pad = function(): UDim
 			return UDim.new(0, padPx())
 		end
@@ -337,14 +451,10 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				return UDim2.new(1, -2 * padPx(), 0, 0)
 			end,
 			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = Theme.elevation[3].surface,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
 			Visible = explainerOpen,
 			Base.corner(Theme.radius.md),
-			create("UIStroke")({
-				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-				Color = Theme.color.brand,
-				Thickness = 2,
-			}),
+			Base.stage({ rim = Theme.color.brand }),
 			create("UIPadding")({
 				PaddingTop = UDim.new(0, Theme.spacing.md),
 				PaddingBottom = UDim.new(0, Theme.spacing.md),
@@ -379,28 +489,25 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		})
 
 		-- The close button straddles the card's top-right corner, over
-		-- the edge. A sheet IS the screen, so there it tucks into the
-		-- corner inside the edge margin instead of hanging off the glass.
+		-- the edge (the card is sized with room for the overhang).
 		local closeButton = IconButton({
 			icon = "close-button",
 			iconSize = CLOSE_SIZE,
 			label = "Close task",
-			onActivate = session.close,
+			onActivate = exit,
 			order = 1000, -- last in gamepad order: never the default focus
+			anchorPoint = Vector2.new(0.5, 0.5),
+			position = UDim2.new(1, -CORNER_INSET, 0, CORNER_INSET),
 		})
 		closeButton.ZIndex = 10
-		cleanup(Env.observe(isSheet, function(sheet: boolean)
-			closeButton.AnchorPoint = if sheet then Vector2.new(1, 0) else Vector2.new(0.5, 0.5)
-			closeButton.Position = if sheet
-				then UDim2.new(1, -T.edgeMargin, 0, T.edgeMargin)
-				else UDim2.new(1, -CORNER_INSET, 0, CORNER_INSET)
-		end))
 		closeButton.Parent = holder
 
 		local card = create("Frame")({
 			Name = "TaskViewCard",
 			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Theme.elevation[3].surface,
+			-- The stage panel in a thick gold rim, like a Modal.
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
+			Base.stage({ thickness = 3 }),
 			BackgroundTransparency = function()
 				return if isSheet() then 0 else 0.02
 			end,
@@ -410,9 +517,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			SelectionBehaviorLeft = Enum.SelectionBehavior.Stop,
 			SelectionBehaviorRight = Enum.SelectionBehavior.Stop,
 			create("UICorner")({
-				CornerRadius = function()
-					return if isSheet() then UDim.new(0, 0) else Theme.radius.lg
-				end,
+				CornerRadius = Theme.radius.lg,
 			}),
 			create("UIScale")({
 				Name = "Enter",
@@ -429,25 +534,30 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				PaddingLeft = pad,
 				PaddingRight = pad,
 			}),
-			create("UIListLayout")({
-				Padding = UDim.new(0, Theme.spacing.sm),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-				HorizontalAlignment = Enum.HorizontalAlignment.Center,
-			}),
+			-- Header, play area and status are placed by hand (no list
+			-- layout): stacked, or header over status in a rail on the
+			-- left with the play area beside it (`side`).
 
-			-- No title: the (i) opens the explainer instead. The timer
-			-- keeps clear of the top-right corner, where the close button
-			-- sits (on the holder, below).
+			-- No title: the (i) opens the explainer instead. Stacked, the
+			-- timer keeps clear of the top-right corner, where the close
+			-- button sits (on the holder, below).
 			create("Frame")({
 				Name = "Header",
 				LayoutOrder = 0,
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, HEADER_HEIGHT),
+				Size = function()
+					return if side()
+						then UDim2.fromOffset(RAIL_WIDTH, HEADER_HEIGHT)
+						else UDim2.new(1, 0, 0, HEADER_HEIGHT)
+				end,
 				infoButton :: any,
+				restartButton :: any,
 				Base.text("label", {
 					Name = "Timer",
 					AnchorPoint = Vector2.new(1, 0),
-					Position = UDim2.new(1, -(HEADER_HEIGHT + Theme.spacing.sm), 0, 0),
+					Position = function()
+						return UDim2.new(1, if side() then 0 else -(HEADER_HEIGHT + Theme.spacing.sm), 0, 0)
+					end,
 					Size = UDim2.fromOffset(HEADER_HEIGHT * 1.5, HEADER_HEIGHT),
 					TextColor3 = Theme.color.inkMuted,
 					Text = function()
@@ -461,15 +571,22 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			create("Frame")({
 				Name = "Status",
 				LayoutOrder = 2,
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.fromScale(0, 1),
 				BackgroundColor3 = function()
 					return Theme.color[style().color]
 				end,
 				BackgroundTransparency = function()
 					return if feedback() == "Neutral" then 1 else 0.75
 				end,
-				Size = UDim2.new(1, 0, 0, STATUS_HEIGHT),
+				Size = function()
+					return if side()
+						then UDim2.fromOffset(RAIL_WIDTH, RAIL_STATUS_HEIGHT)
+						else UDim2.new(1, 0, 0, STATUS_HEIGHT)
+				end,
 				Base.corner(Theme.radius.md),
 				create("UIStroke")({
+					BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					Color = function()
 						return Theme.color[style().color]
@@ -493,6 +610,62 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			}),
 			Parent = holder,
 		}) :: Frame
+
+		local cover = create("Frame")({
+			Name = "Complete",
+			Size = UDim2.fromScale(1, 1),
+			-- Over the card, under the close button (ZIndex 10), so X
+			-- still closes the sheet early.
+			ZIndex = 5,
+			Visible = complete,
+			Active = true, -- swallows taps meant for the task underneath
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
+			Base.stage({ thickness = 3 }),
+			create("UICorner")({
+				CornerRadius = Theme.radius.lg,
+			}),
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Vertical,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			(function()
+				-- 40% of the card's height, square, so it reads at any
+				-- window size and leaves room for Close below.
+				local badge = Icons.view("check-badge", 0, Theme.color.success)
+				badge.LayoutOrder = 0
+				badge.Size = UDim2.fromScale(0.4, 0.4)
+				local square =
+					create("UIAspectRatioConstraint")({ AspectRatio = 1, DominantAxis = Enum.DominantAxis.Height })
+				square.Parent = badge
+				return badge
+			end)(),
+			Base.text("display", {
+				Name = "Text",
+				LayoutOrder = 1,
+				Text = "COMPLETE",
+				TextColor3 = Theme.color.success,
+			}),
+			-- A second way out beside the X: a thumb at the bottom of a
+			-- phone reaches this more easily than the top corner.
+			Button({
+				label = "Close",
+				variant = "secondary",
+				onActivate = exit,
+				layoutOrder = 2,
+				order = 1,
+			}),
+			Parent = holder,
+		})
+
+		-- A gamepad's selection lands on Close once the cover is up.
+		vide.effect(function()
+			if complete() and UIScaleController.getInputMode() == Enum.PreferredInput.Gamepad then
+				GuiService.SelectedObject = Focus.firstSelectable(cover)
+			end
+		end)
 
 		local function setStatus(text: string, fb: TaskViewLogic.Feedback?)
 			status(text)
@@ -566,7 +739,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		end
 	end)
 
-	local function close(immediate: boolean)
+	close = function(immediate: boolean)
 		if closing then
 			return
 		end
@@ -596,11 +769,23 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		stationId = stationId,
 		ctx = ctxOut,
 		close = close,
+		onComplete = function()
+			finished = true
+			complete(true)
+		end,
 		onSuccess = function()
 			InputLock.release(lockToken)
-			ctxOut.setStatus("Done!", "Good")
 			finished = true
-			task.delay(SUCCESS_HOLD, close, false)
+			succeeded = true
+			-- The view's payoff (steam, goo) plays out before the cover
+			-- hides it. The player can already walk, so it costs no time.
+			task.delay(spec.payoffSeconds or 0, function()
+				if closing then
+					return
+				end
+				complete(true)
+				task.delay(SUCCESS_HOLD, close, false)
+			end)
 		end,
 	}
 end
@@ -627,7 +812,7 @@ function TaskViewBase.define(spec: Spec): TaskViewTypes.TaskView
 			end
 			current = open(spec, stationId, challenge, session)
 		end,
-		onResult = function(stationId: string, success: boolean, feedback: any?)
+		onResult = function(stationId: string, success: boolean, feedback: any?, completing: boolean?)
 			local a = current
 			if a == nil or a.stationId ~= stationId then
 				return
@@ -642,6 +827,9 @@ function TaskViewBase.define(spec: Spec): TaskViewTypes.TaskView
 				spec.onProgress(a.ctx, feedback)
 			else
 				a.ctx.setStatus("Keep going", "Active")
+			end
+			if not success and completing then
+				a.onComplete()
 			end
 		end,
 		hide = hide,

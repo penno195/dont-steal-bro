@@ -71,8 +71,10 @@ Studio's Intro, about 8 s, so the move onto the set happens behind it
 and the Studio opens on Negotiate. Everyone sees it. It shows who made
 the final (from `TaskQualificationResult`, then `DecisionParticipants`),
 one tile per prize on the table (`DecisionLogic.rewardTiles`, read from
-`prizeFor`), the one-line lesson, and a spinner. The prize icons are
-stand-in glyphs until `RewardTables` (Q1) gives the packages real art.
+`prizeFor`), the one-line lesson, and a spinner. Every prize is coins,
+so each tile's icon is a pile of three, two or one coin, or a cross for
+nothing (rewards step 3). It shows the tier, never an amount: the card
+is up before lock-in, where Q7 allows words only.
 
 **Ready-up (2026-09-28).** The loading card is the finale's explainer,
 so the Negotiate clock must never run while someone is still reading it.
@@ -119,10 +121,15 @@ opposite if anyone did, then the rest. That keeps the result open until
 the last card wherever it can be: a stealer who saw a second steal next
 would already know it was over. A spectator gets seat order. The turns
 keep one shared server clock, so all three cards land on the same beats
-on every screen even though the faces differ. Timing: first turn at
-2.0 s, then every 2.6 s, outcome 1.6 s after the last, result 2.4 s
-later, about 11 s in all. `roundTimers.resultsSeconds` went from 8 to 16
-so Cleanup's teleport home doesn't cut it off.
+on every screen even though the faces differ. Timing (slowed again
+2026-10-08): first turn at 3.0 s, the next 4.0 s later, and the LAST
+card 6.0 s after that; outcome 1.6 s after the last, result 2.4 s later,
+about 17 s for three seats. Each card sits face down 2.5 s (the last
+4.5 s) under a heartbeat (`DecisionLogic.heartbeats`): a thump and a
+red pulse round the screen's edges, quickening and growing card by card,
+so the last card's wait is the longest, fastest and loudest. The glow
+stays under 3 pulses a second. `roundTimers.resultsSeconds` went from 8
+to 16, then 24, so Cleanup's teleport home doesn't cut it off.
 
 **Held on the podium.** Anchoring a finalist mid-stride left the run
 animation playing all finale: an anchored root stops the Humanoid
@@ -132,8 +139,9 @@ off its movement input (`InputLock.holdMovement`, camera left free),
 stops the walk/run tracks and plays the rig's idle.
 
 **Payoff table.** Always visible until the outcome shows. Words only: BIG,
-MEDIUM, SMALL, ✕ NOTHING. Never the VU numbers, which are an internal
-balancing unit that payoff-table.md says a player never sees. It adapts
+MEDIUM, SMALL, ✕ NOTHING. Never coin amounts: the table shows while
+choices are open, and amounts scale with each winner's streak, so they
+would tell the room who has the most to lose (Q7). It adapts
 to the seat count (3, 2 or 1). `tests/DecisionLogic.spec.luau` checks it
 against `Outcomes.resolve` for every combination of choices at every seat
 count, so the table can't tell a player something the resolver won't do.
@@ -193,13 +201,19 @@ WINS/LOSES is a word on a badge as well as a stroke colour.
 ## Result
 
 The personal panel shows the headline for your side of the branch, the
-bounty tier in words, and the streak line:
+prize line, and the streak line:
 
-- Win: "MEDIUM bounty", "Streak 3".
+- Win: "+110 coins", then the drop if there was one (its icon and
+  "Common drop: 2x Freeze"), then "Streak 3". Until the payout lands a
+  moment after the reveal, the prize line shows the tier in words
+  ("MEDIUM bounty"). Rewards step 3; the wording is `PayoutLogic`'s,
+  shared with the results screen.
 - Loss: "No bounty", "**Your 7-win streak ends here**". It's the same size
   as the bounty line, neither hidden in a caption nor blown up into a
   headline. It offers no consolation and takes no cheap shot.
-- A round with no streak credit (NPC-heavy) says so, on a win or a loss.
+- You only ever see your **own** payout. Another finalist's coins and
+  drop never reach your client (user decision, recorded under
+  design-decisions.md Q7's 2026-10-02 applied case).
 
 The streak numbers come from the new **`DecisionPersonalResult`**, fired by
 `DecisionService.enterReveal` to each human finalist **alone** and **only
@@ -246,6 +260,7 @@ against a full memory dump of it:
 | Its own choice | `confirm` (a Vide source) | from its own completed hold |
 | Everyone's choices | `reveal` | from `DecisionReveal` and nowhere else; `DecisionLogic.parseReveal` is the only function that produces a choice for another id |
 | Its own streak before/after | `personal` | from `DecisionPersonalResult`, targeted, fired after the reveal |
+| Its own win's payout (coins, rung, drop) | `payout` | the same `DecisionPersonalResult`; nobody else's is ever sent |
 
 - **Attributes / ValueObjects / replicated instances:** none written.
   Everything is Lua locals and Vide sources.
@@ -253,12 +268,13 @@ against a full memory dump of it:
   are built for every seat at mount, from the same two tokens, so their
   existence says nothing. The reveal is a visibility change, not an asset
   chosen early.
-- **`bountyVU`:** `DecisionReveal` does broadcast each winner's VU, and a
-  VU is a function of streak tier. `parseReveal` drops it, so this client
-  never keeps or shows it. It arrives *after* the result is in, which
-  Q7's applied case permits for titles, but a modified client can still
-  read it. Consider trimming it from the payload server-side (a one-line
-  change, and nothing on the client needs it).
+- **Closed: `bountyVU` in `DecisionReveal`.** The packet used to
+  broadcast each winner's VU, a function of their streak tier. Rewards
+  step 2c removed it: Outcomes now gives each winner only an
+  `outcomeTag`, and a player's coins reach them at Results in
+  `RoundRecap`. It was never a real leak, though. The reveal only
+  fires once every choice is locked in, and Q7's 2026-10-02 applied
+  case lets levels and amounts show from then on.
 - **Fixed in P6-6: `ProgressionStreakSkipped` fired before the reveal.**
   `ProgressionService.applyRoundResult` fires it during
   `computeOutcomeAndWriteProfiles`, which runs about 0.2 s before
@@ -386,5 +402,5 @@ in `StudioStageLogic` and are unit-tested.
 - ~~**P6-6:** gate the results screen on `DecisionStudioController.isActive()`.~~
   Done: `MenuController` waits on it before opening Results.
 - **Server:** ~~defer `ProgressionStreakSkipped` until after the reveal~~ (done in P6-6, as `RoundRecap`), and
-  consider dropping `bountyVU` from `DecisionReveal` (see the secrecy audit).
+  ~~consider dropping `bountyVU` from `DecisionReveal`~~ (done in rewards step 2c).
 - **Q1 `RewardTables`:** the per-player item reveal belongs in the result panel.

@@ -64,6 +64,7 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local MovementSanity = require(ReplicatedStorage.Shared.MovementSanity)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
+local Ragdoll = require(ServerScriptService.Server.Ragdoll)
 
 export type SanityEvent = {
 	at: number,
@@ -200,7 +201,11 @@ local function sample(player: Player, nowValue: number, inRace: boolean)
 
 	local character = player.Character :: Model
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local isFalling = humanoid ~= nil and humanoid:GetState() == Enum.HumanoidStateType.Freefall
+	-- A Push/Trip ragdoll is a tumble, not locomotion, so WalkSpeed
+	-- doesn't cap it either. Asked of the server's own record, never of
+	-- the Humanoid's state, which the client owns and could fake.
+	local isFalling = (humanoid ~= nil and humanoid:GetState() == Enum.HumanoidStateType.Freefall)
+		or Ragdoll.isRagdolled(character)
 
 	local observedSpeed =
 		MovementSanity.horizontalSpeed(toVec3(track.lastPosition :: Vector3), toVec3(root.Position), elapsed)

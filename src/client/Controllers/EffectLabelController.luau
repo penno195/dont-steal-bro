@@ -5,6 +5,9 @@
 -- power-up reads as one that did nothing. Your own effects already show
 -- on your HUD, so you get no label.
 --
+-- A debuff with a victim look (PowerUpDef.victimLook) gets that instead
+-- of a word - VictimLookController.
+--
 -- One label, the strongest effect only: a stack of words over a head is
 -- unreadable at race distance on a phone.
 
@@ -109,6 +112,12 @@ function EffectLabelController:init()
 		end
 		local character = characterFor(payload.playerId)
 		if character == nil then
+			return
+		end
+		-- A racer with a victim look (iced, ragdolled, inked) needs no
+		-- word: VictimLookController draws them instead.
+		if type(payload.look) == "string" then
+			show(character, nil)
 			return
 		end
 		local categories = if type(payload.categories) == "table" then payload.categories else {}

@@ -1,5 +1,5 @@
 --!strict
--- The streak and bounty rules (P4-1), as arithmetic. Every change to a
+-- The streak rules (P4-1), as arithmetic. Every change to a
 -- player's progression is computed here as a pure before -> after
 -- transformation; ProgressionService.luau is the thin Roblox-touching
 -- wrapper that reads the real profile, calls `applyResult`, and writes
@@ -14,27 +14,14 @@
 -- see tests/ProgressionLogic.spec.luau. Ground Rule 4.
 
 -- Self-contained: no requires of sibling files, no Roblox API calls
--- anywhere, so it stays requirable under Lune. `PendingBounty` below
--- duplicates ProfileLogic.PendingBounty's three fields rather than
--- requiring that module, for exactly the reason ProfileLogic's own
--- header gives about Validate.BountyTier: Luau's structural typing
--- means a real ProfileLogic.PendingBounty satisfies this type with no
--- cast at the call site, and a Roblox Instance-path require here would
--- make the whole module unloadable in the test runner.
+-- anywhere, so it stays requirable under Lune.
+--
+-- What a win PAYS is not here. RewardLogic works it out and
+-- ProgressionService applies it in the same write as the streak
+-- (rewards-roadmap.md step 2b). This module only says whether the round
+-- was a win and what that does to the streak.
 
 local ProgressionLogic = {}
-
-export type PendingBounty = {
-	streakTier: number,
-	-- The same three literals ProfileLogic.OutcomeTag declares, spelled
-	-- out rather than widened to `string`: Luau table properties are
-	-- invariant, so a `{ outcomeTag: string }` is NOT assignable where a
-	-- `{ outcomeTag: "SoleStealer" | "LoneSharer" | "AllShare" }` is
-	-- wanted, and the structural-compatibility trick this duplication
-	-- exists for only works if the types actually match.
-	outcomeTag: "SoleStealer" | "LoneSharer" | "AllShare",
-	grantedAt: number,
-}
 
 -- ===== reason codes =========================================================
 
@@ -110,14 +97,13 @@ end
 export type StreakState = {
 	currentStreak: number,
 	bestStreak: number,
-	pendingBounty: PendingBounty?,
 }
 
--- THE rule, in six lines:
+-- THE rule, in four lines:
 --
---   A win increments currentStreak, raises bestStreak to the max of the
---   two, and attaches the bounty this win earned.
---   Any loss zeroes currentStreak and clears pendingBounty.
+--   A win increments currentStreak and raises bestStreak to the max of
+--   the two.
+--   Any loss zeroes currentStreak.
 --
 -- bestStreak is never lowered by anything, ever - it's what titles key
 -- off (gdd.md §3: "never revoked when a streak resets"), so it is the
@@ -126,61 +112,36 @@ export type StreakState = {
 --
 -- Returns a NEW table; `before` is never mutated, so a caller can log
 -- both sides of the change without having to snapshot first.
--- `streakCredited = false` is threat-model.md §8's required launch
--- mitigation reaching this function: a round with more than
--- GameConfig.npcSeatStreakCreditThreshold bot seats moves nobody's
--- streak, in EITHER direction.
 --
--- Both directions matters and is a deliberate call. The threat model
--- only asks for "no streak credit above a defined NPC-seat threshold",
--- which on its own would mean wins stop counting while losses still
--- reset - so an honest player queueing at 4am could only ever go
--- backwards, and the mitigation aimed at farmers would land hardest on
--- exactly the players it isn't about. A round that doesn't count,
--- doesn't count.
---
--- The bounty still follows the normal rule. threat-model.md §8 scopes
--- itself to streak credit, and the bounty is a deterministic item
--- package (design-decisions.md Q1), not a leaderboard position - the
--- thing being protected here is the credibility of the streak ladder,
--- not the item economy. Revisit if item farming in thin lobbies turns
--- out to matter.
-function ProgressionLogic.applyResult(
-	before: StreakState,
-	reason: ReasonCode,
-	bounty: PendingBounty?,
-	streakCredited: boolean?
-): StreakState
-	local credited = streakCredited ~= false
-
-	if not credited then
-		return {
-			currentStreak = before.currentStreak,
-			bestStreak = before.bestStreak,
-			pendingBounty = if ProgressionLogic.isWin(reason) then bounty else nil,
-		}
-	end
-
+-- There is no "round didn't count" case: a real player's result always
+-- counts, however many seats were bots (design-decisions.md Q5's
+-- 2026-10-02 applied case, which retired threat-model.md §8's NPC-seat
+-- threshold).
+function ProgressionLogic.applyResult(before: StreakState, reason: ReasonCode): StreakState
 	if not ProgressionLogic.isWin(reason) then
-		-- The bounty is cleared on EVERY loss, including a forfeit, and
-		-- including a loss in a round where the player had an unclaimed
-		-- bounty pending from... nothing. There is no such case today
-		-- (a bounty is granted and consumed inside one round), but
-		-- clearing unconditionally is what makes that still true if
-		-- claiming ever becomes asynchronous.
-		return {
-			currentStreak = 0,
-			bestStreak = before.bestStreak,
-			pendingBounty = nil,
-		}
+		return { currentStreak = 0, bestStreak = before.bestStreak }
 	end
 
 	local currentStreak = before.currentStreak + 1
 	return {
 		currentStreak = currentStreak,
 		bestStreak = math.max(before.bestStreak, currentStreak),
-		pendingBounty = bounty,
 	}
+end
+
+-- The buy-back offer a result leaves open (design-decisions.md Q7,
+-- "buying back a streak"): any loss of a streak of 1 or more, priced by
+-- that streak. Nil otherwise, and the writer stores the nil too, so a
+-- win or a loss from 0 never leaves an older offer behind.
+function ProgressionLogic.buyBackOffer(
+	roundId: string,
+	before: StreakState,
+	reason: ReasonCode
+): { roundId: string, streak: number }?
+	if ProgressionLogic.isWin(reason) or before.currentStreak < 1 then
+		return nil
+	end
+	return { roundId = roundId, streak = before.currentStreak }
 end
 
 -- Which stat a reason bumps. Split out rather than inlined so the
@@ -232,26 +193,30 @@ function ProgressionLogic.formatAudit(
 	before: StreakState,
 	after: StreakState
 ): string
-	local function bountyText(state: StreakState): string
-		local bounty = state.pendingBounty
-		if bounty == nil then
-			return "none"
-		end
-		return string.format("tier %d/%s", bounty.streakTier, bounty.outcomeTag)
-	end
-
 	return string.format(
-		"Progression: %s round=%s reason=%s streak %d->%d best %d->%d bounty %s->%s",
+		"Progression: %s round=%s reason=%s streak %d->%d best %d->%d",
 		playerName,
 		roundId,
 		reason,
 		before.currentStreak,
 		after.currentStreak,
 		before.bestStreak,
-		after.bestStreak,
-		bountyText(before),
-		bountyText(after)
+		after.bestStreak
 	)
+end
+
+-- One line per grant a win paid (rewards-roadmap.md step 2b), on its
+-- own `Reward:` prefix so the economy is greppable apart from streaks.
+-- `change` is one of StoreLogic.applyGrants' lines, so a win and a
+-- purchase describe the same grant the same way.
+function ProgressionLogic.formatRewardAudit(
+	playerName: string,
+	roundId: string,
+	outcomeTag: string,
+	rung: number,
+	change: string
+): string
+	return string.format("Reward: %s round=%s outcome=%s rung=%d -> %s", playerName, roundId, outcomeTag, rung, change)
 end
 
 return ProgressionLogic

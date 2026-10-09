@@ -111,6 +111,16 @@ function ComponentLogic.variantStyle(variant: Variant, state: State): Style
 	}
 end
 
+-- The Tokens.fill a variant paints in a state (the UI art pass's
+-- gradient-and-lip surface). Disabled is one flat muted fill for every
+-- variant, matching variantStyle's DISABLED.
+function ComponentLogic.fillName(variant: Variant, state: State): string
+	if state == "disabled" then
+		return "muted"
+	end
+	return variant
+end
+
 -- Multiplier on the visual (not the hit area): pressed shrinks it a
 -- touch, so a thumb that covers the label still feels the press land.
 -- Shared by every interactive component, whatever its variant.
@@ -250,6 +260,23 @@ function ComponentLogic.pushToast<T>(queue: { T }, item: T, max: number): ({ T }
 		dropped = table.remove(out, 1)
 	end
 	return out, dropped
+end
+
+-- Repeats: a toast that says the same thing as one already up merges
+-- into it (count + fresh timer) rather than stacking a copy - three
+-- "No target"s were three full cards over the race (playtest,
+-- 2026-10-06). Returns the index of the match, or nil.
+function ComponentLogic.findToast<T>(queue: { T }, same: (T) -> boolean): number?
+	for i, entry in queue do
+		if same(entry) then
+			return i
+		end
+	end
+	return nil
+end
+
+function ComponentLogic.toastLabel(text: string, count: number): string
+	return if count > 1 then string.format("%s  ×%d", text, count) else text
 end
 
 return table.freeze(ComponentLogic)

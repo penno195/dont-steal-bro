@@ -4,8 +4,6 @@
 --
 -- Dresses the streak counter over your head in the Hub
 -- (StreakTagController) - Hub only, never on a match server (Q7).
---
--- Disabled until it has a Roblox asset and a store product.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
@@ -17,8 +15,9 @@ local WildfireStreakFlair: Validate.CosmeticDef = {
 	description = "Your streak counter burns. Cosmetic only.",
 	rarity = "Uncommon",
 	sortOrder = 60,
-	enabled = false, -- PLACEHOLDER: no Roblox asset id or product yet
-	flairTextureAssetId = 0,
+	enabled = true,
+	winDrop = true, -- design-decisions.md Q1 applied case (2026-10-02): no pass grants it, so wins can drop it
+	flairTextureAssetId = 96171864864984,
 	flairColorHex = "#ff7a1a",
 }
 

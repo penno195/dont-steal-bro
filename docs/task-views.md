@@ -6,7 +6,7 @@ for the handler, config and remote. This page covers only the view.
 
 | File | What it owns |
 |---|---|
-| `src/client/UI/TaskViewBase.luau` | The shell: sheet/window, transitions, header ((i) explainer, timer), the corner close button, status line, play area, input lock, submit |
+| `src/client/UI/TaskViewBase.luau` | The shell: sheet/window, transitions, header ((i) explainer, restart, timer), the corner close button, status line, the COMPLETE cover, play area, input lock, submit |
 | `src/client/UI/InputAdapters.luau` | One adapter per verb: Tap, Hold, Drag, Sequence, Timing, Aim |
 | `src/client/UI/InputLock.luau` | Freezes camera + character input; restores exactly, reference-counted |
 | `src/client/UI/TaskViewLogic.luau` | The pure maths behind all of the above (tested headlessly) |
@@ -18,7 +18,9 @@ for the handler, config and remote. This page covers only the view.
 1. **Server half first** — config, handler, submission remote, per
    `how-to-add-a-task.md`. Your `TaskDef.verb` picks your adapter.
 2. **Create `src/client/TaskViews/<Name>.luau`** and return
-   `TaskViewBase.define({ taskId, title, explainer, build, onProgress? })`.
+   `TaskViewBase.define({ taskId, title, explainer, contentSize, build, onProgress?, payoffSeconds? })`.
+   `contentSize` is what `build` lays out at a fit scale of 1, in reference
+   px (a function of the challenge if it varies); the card wraps it.
    The card shows no title; `title` and `explainer` (a sentence or two
    on how to play) appear behind the header's (i). The registry picks
    it up; nothing else is edited.
@@ -49,7 +51,9 @@ for the handler, config and remote. This page covers only the view.
    base does all of it. `onProgress(ctx, feedback)` is for a non-final result
    (default text: "Keep going"), plus the handler's optional per-submission
    feedback; a successful result carrying feedback reaches it first so
-   the last step paints before "Done!". `FuseRewire.luau` uses it.
+   the last step paints before "Done!". `FuseRewire.luau` uses it. If that
+   last paint is a payoff animation (steam, goo), set `payoffSeconds` to
+   its length so the COMPLETE cover waits for it (`VentPurge.luau`).
 8. **Lay out for one thumb:** read-only content at the top of the area,
    interactive content anchored to the bottom (`AnchorPoint (0.5, 1)`).
    Sizes are reference pixels from `Theme` tokens.
@@ -74,9 +78,16 @@ for the handler, config and remote. This page covers only the view.
 
 ## What the shell guarantees
 
-- **Presentation:** full-screen sheet on any touch device or small
-  screen; a centred window on a big mouse/gamepad screen
-  (`Tokens.taskView.windowMinShortAxis`). Re-decided live on rotate.
+- **Presentation:** a card sized to the view's content (`contentSize`:
+  the play area's natural size, plus header and status line), scaled
+  down evenly to fit the screen (`TaskViewLogic.fitCard`). On a short
+  landscape screen (a phone) the header and status move to a rail left
+  of the play area when that lets the content draw bigger
+  (`TaskViewLogic.chromeSide`); a wide, squat view keeps them stacked. On any touch
+  device or small screen it slides up over a near-black backdrop that
+  swallows touches (a sheet); on a big mouse/gamepad screen it grows in
+  over a dimmed world (a window, `Tokens.taskView.windowMinShortAxis`).
+  Re-decided live on rotate.
 - **Input lock:** controls and camera are frozen from open to close and
   restored on every close path. The lock works at the input layer
   (`ControlModule:Disable`); it never touches `WalkSpeed`/`JumpPower`,

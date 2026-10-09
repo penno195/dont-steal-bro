@@ -24,10 +24,10 @@ audit that produced it is in `docs/mobile-audit.md`.
 
 Use the LayoutHarness viewports, or a real phone.
 
-- [ ] **Portrait, 360×640:** the primary action is in the bottom third
-      and reachable by one thumb.
 - [ ] **Landscape, about 390 tall:** nothing is cut off, and anything
-      taller than the screen scrolls or reflows.
+      taller than the screen scrolls or reflows. Phones are locked to
+      landscape (`design-decisions.md` §11), so there is no portrait
+      check; the primary action must still be reachable by one thumb.
 - [ ] **Notched phone:** nothing interactive sits under the cutout, the
       home indicator, or the Roblox top-bar buttons.
 - [ ] **Smallest text:** legible at scale 1.0 on the 360-pt reference.

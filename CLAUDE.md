@@ -21,8 +21,8 @@ status and what's left: `README.md`.
 2. **Data-driven config.** Adding a map, task, power-up or title means adding
    **one config file** (and at most one handler module). If it requires
    editing a service, the abstraction is leaking — stop and reconsider.
-3. **Mobile-first.** Design for one thumb, portrait orientation, on a cheap
-   Android phone. A mini-game that needs two thumbs or camera control is cut.
+3. **Mobile-first.** Design for one thumb, landscape orientation (phones
+   are locked to it, `design-decisions.md` §11), on a cheap Android phone. A mini-game that needs two thumbs or camera control is cut.
 4. **`--!strict` everywhere.** Pure logic (outcome tables, pricing, ranking,
    tie-breaks, streak math) must stay free of any Roblox API calls, so it can
    be unit-tested headlessly in CI (`lune run tests/run`, a hand-rolled
@@ -35,6 +35,7 @@ status and what's left: `README.md`.
 src/shared/     -> ReplicatedStorage.Shared                  (Config/, Net.luau, Loader.luau)
 src/server/     -> ServerScriptService.Server                (Services/, TaskHandlers/, *Logic.luau)
 src/client/     -> StarterPlayer.StarterPlayerScripts.Client (Controllers/, UI/, TaskViews/)
+src/first/      -> ReplicatedFirst.First                     (LoadingCover: the loading screen)
 docs/           design and architecture
 tests/          pure-logic specs, run headlessly via Lune
 ```

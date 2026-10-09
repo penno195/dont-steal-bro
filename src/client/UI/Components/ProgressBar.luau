@@ -4,6 +4,10 @@
 -- of the track, so the bar is correct at any width the caller gives it.
 -- An optional label sits above the track with the value on the right,
 -- so progress never relies on the fill colour alone.
+--
+-- UI art pass: a dark track in the gold rim, and a glossy fill running
+-- left to right - gold into pink by default, or a lighter-to-full ramp
+-- of the caller's colour.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -37,6 +41,9 @@ local function ProgressBar(props: Props): Frame
 	end, Theme.motion.base)
 	local fill: Color3? = Theme.color[props.color or "primary"]
 	assert(fill ~= nil, "ProgressBar: unknown colour token")
+	local ramp = if props.color == nil
+		then ColorSequence.new(Theme.fill.primary.top, Theme.color.brand)
+		else ColorSequence.new(fill:Lerp(Color3.new(1, 1, 1), 0.3), fill)
 
 	local hasLabel = props.label ~= nil
 	local labelRow = Theme.type.caption.size + Theme.spacing.xs
@@ -77,12 +84,16 @@ local function ProgressBar(props: Props): Frame
 			AnchorPoint = Vector2.new(0, 1),
 			Position = UDim2.fromScale(0, 1),
 			Size = UDim2.new(1, 0, 0, TRACK),
-			BackgroundColor3 = Theme.color.surfaceRaised,
+			BackgroundColor3 = Theme.color.background,
 			Base.corner(Theme.radius.pill),
-			create("UIStroke")({ Color = Theme.color.line, Thickness = 1 }),
+			create("UIStroke")({
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.color.rim,
+				Thickness = 2,
+			}),
 			create("Frame")({
 				Name = "Fill",
-				BackgroundColor3 = fill,
+				BackgroundColor3 = Color3.new(1, 1, 1),
 				Size = function()
 					return UDim2.fromScale(fraction(), 1)
 				end,
@@ -90,6 +101,15 @@ local function ProgressBar(props: Props): Frame
 					return fraction() > 0.001
 				end,
 				Base.corner(Theme.radius.pill),
+				create("UIGradient")({ Color = ramp }),
+				create("Frame")({
+					Name = "Gloss",
+					Position = UDim2.fromOffset(Theme.spacing.xs, Theme.spacing.xxs),
+					Size = UDim2.new(1, -Theme.spacing.sm, 0.35, 0),
+					BackgroundColor3 = Color3.new(1, 1, 1),
+					BackgroundTransparency = 0.55,
+					Base.corner(Theme.radius.pill),
+				}),
 			}),
 		}),
 	}) :: Frame

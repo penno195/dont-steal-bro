@@ -14,7 +14,6 @@ local function validGameConfig(): Validate.GameConfig
 		tasksPerPlayer = 6,
 		qualificationFloorPercent = 0.5,
 		streakLossWeight = 2,
-		npcSeatStreakCreditThreshold = 3,
 		raceDurationSeconds = 300,
 		studioTimers = {
 			introSeconds = 5,
@@ -32,9 +31,20 @@ local function validGameConfig(): Validate.GameConfig
 			resultsSeconds = 8,
 			cleanupSeconds = 5,
 		},
-		bountyTiers = {
-			{ tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
-			{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
+		winRewards = {
+			currency = { soleStealer = 100, loneSharer = 50, allShare = 25, perRungBonus = 0.1 },
+			drop = {
+				baseChance = 0.1,
+				perRungChance = 0.02,
+				maxChance = 0.5,
+				rarityWeights = {
+					Common = { weight = 70, perRungGrowth = 0 },
+					Uncommon = { weight = 25, perRungGrowth = 0.05 },
+					Rare = { weight = 5, perRungGrowth = 0.2 },
+				},
+				powerUpAmount = 1,
+				duplicateCurrency = { Common = 50, Uncommon = 100, Rare = 250 },
+			},
 		},
 		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
@@ -110,13 +120,25 @@ local function validGameConfig(): Validate.GameConfig
 			refreshMaxSeconds = 120,
 			staleAfterSeconds = 300,
 			nameCacheTtlSeconds = 3600,
+			nameLookupsPerMinute = 200,
+			nameFailureRetrySeconds = 120,
 			maxWriteAttempts = 3,
 			backoffBaseSeconds = 1,
 			backoffCapSeconds = 60,
 			budget = { perWindow = 60, windowSeconds = 60, softCeiling = 0.7 },
 			snapshotStoreName = "TestSnapshots",
 			periodGraceSeconds = 3600,
-			rewardTopN = 10,
+			periodShare = {
+				mapName = "TestShare",
+				shardCount = 4,
+				republishAfterSeconds = 60,
+				lockSeconds = 30,
+				shardTtlSeconds = 900,
+			},
+			payouts = {
+				Daily = { { maxRank = 1, currency = 500 }, { maxRank = 10, currency = 100 } },
+				Weekly = { { maxRank = 3, currency = 1000 } },
+			},
 		},
 		store = {
 			purchaseIdCacheSize = 100,
@@ -150,6 +172,12 @@ local function validGameConfig(): Validate.GameConfig
 			backoffBaseSeconds = 2,
 			backoffCapSeconds = 30,
 			unavailableAfterFailures = 3,
+			summaryShardCount = 4,
+			summaryStaleSeconds = 10,
+			summaryTtlSeconds = 60,
+			practiceLobbyMapName = "PracticeLobbies_v1",
+			practiceLobbyTtlSeconds = 21600,
+			partyInviteTtlSeconds = 30,
 		},
 		teleport = {
 			matchPlaceId = 0,
@@ -187,7 +215,13 @@ local function validGameConfig(): Validate.GameConfig
 		},
 		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
-		telemetry = { enabled = true, batchSize = 50, flushIntervalSeconds = 10, perMinuteLimit = 0 },
+		telemetry = {
+			enabled = true,
+			batchSize = 50,
+			flushIntervalSeconds = 10,
+			perMinuteLimit = 0,
+			studioEcho = false,
+		},
 		titleDisplayDuringRound = false,
 		npcTitleNoneChance = 0.35,
 		npcTitleTopRungsExcluded = 3,
@@ -276,6 +310,8 @@ local COSMETIC_CATEGORIES = {
 	"StreakFlair",
 	"Nameplate",
 	"CallingCard",
+	"Hat",
+	"BackItem",
 }
 
 local function validCosmetic(id: string, category: Validate.CosmeticCategory): Validate.CosmeticDef
@@ -313,6 +349,10 @@ local function validCosmetic(id: string, category: Validate.CosmeticCategory): V
 		def.nameplateColorHex = "#c0c0c0"
 	elseif category == "CallingCard" then
 		def.cardImageAssetId = 121
+	elseif category == "Hat" or category == "BackItem" then
+		def.wearMeshAssetId = 122
+		def.wearTextureAssetId = 123
+		def.wearScale = 1
 	end
 	return def
 end
@@ -452,6 +492,52 @@ TestRunner.describe("Validate.checkMap", function()
 	end)
 end)
 
+TestRunner.describe("Validate.checkPowerUp impact", function()
+	local function impactIssues(target: Validate.PowerUpTarget, impact: any): number
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.target = target
+		powerUp.impact = impact
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		return #issues
+	end
+
+	TestRunner.it("accepts a valid impact on a thrown item", function()
+		TestRunner.expect(impactIssues("Aimed", { style = "Frost", rgb = { 150, 215, 255 } })):toBe(0)
+	end)
+
+	TestRunner.it("rejects an impact on a Self item", function()
+		TestRunner.expect(impactIssues("Self", { style = "Frost", rgb = { 150, 215, 255 } })):toBe(1)
+	end)
+
+	TestRunner.it("rejects an unknown style and a bad colour", function()
+		TestRunner.expect(impactIssues("Aimed", { style = "Lava", rgb = { 1, 2, 3 } })):toBe(1)
+		TestRunner.expect(impactIssues("Aimed", { style = "Flash", rgb = { 1, 2, 300 } })):toBe(1)
+		TestRunner.expect(impactIssues("Aimed", { style = "Flash", rgb = { 1, 2 } })):toBe(1)
+	end)
+end)
+
+TestRunner.describe("Validate.checkPowerUp victimLook", function()
+	local function lookIssues(kind: Validate.PowerUpKind, look: any): number
+		local issues = {}
+		local powerUp = validPowerUp("p")
+		powerUp.kind = kind
+		powerUp.role = if kind == "Debuff" then "Attack" else "Utility"
+		powerUp.victimLook = look
+		Validate.checkPowerUp("P.luau", powerUp, issues)
+		return #issues
+	end
+
+	TestRunner.it("accepts a known look on a Debuff", function()
+		TestRunner.expect(lookIssues("Debuff", "Frozen")):toBe(0)
+	end)
+
+	TestRunner.it("rejects a look on a Buff, and an unknown look", function()
+		TestRunner.expect(lookIssues("Buff", "Frozen")):toBe(1)
+		TestRunner.expect(lookIssues("Debuff", "OnFire")):toBe(1)
+	end)
+end)
+
 TestRunner.describe("Validate.checkPowerUp (design-decisions.md Q8)", function()
 	TestRunner.it("rejects a Robux price with no free acquisition path", function()
 		local issues = {}
@@ -564,6 +650,113 @@ TestRunner.describe("Validate.checkTitle", function()
 		title.colorHex = "teal"
 		Validate.checkTitle("T.luau", title, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (leaderboard payouts, rewards step 4)", function()
+	local function issuesWith(payouts: any): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		config.leaderboard.payouts = payouts
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the fixture's bands", function()
+		TestRunner.expect(#issuesWith(validGameConfig().leaderboard.payouts)):toBe(0)
+	end)
+
+	TestRunner.it("refuses an all-time payout: that board never pays", function()
+		TestRunner.expect(#issuesWith({ AllTime = { { maxRank = 1, currency = 100 } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses bands out of order or past topCount", function()
+		local unordered = { Daily = { { maxRank = 3, currency = 100 }, { maxRank = 3, currency = 50 } } }
+		TestRunner.expect(#issuesWith(unordered) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 101, currency = 100 } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an empty kind, negative currency and a band that pays nothing", function()
+		TestRunner.expect(#issuesWith({ Daily = {} }) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 1, currency = -5 } } }) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 1, currency = 0 } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("accepts a cosmetic-only band", function()
+		TestRunner.expect(#issuesWith({ Daily = { { maxRank = 1, currency = 0, cosmeticId = "x" } } })):toBe(0)
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (shared period-board copy)", function()
+	local function issuesWith(field: string, value: any): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		config.leaderboard.periodShare[field] = value
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("accepts the fixture", function()
+		TestRunner.expect(#issuesWith("shardCount", 4)):toBe(0)
+	end)
+
+	TestRunner.it("refuses a fractional or zero shard count", function()
+		TestRunner.expect(#issuesWith("shardCount", 0) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith("shardCount", 2.5) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a lock that outlives the republish age", function()
+		TestRunner.expect(#issuesWith("lockSeconds", 61) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a republish age that would make a waiting copy read as stale", function()
+		TestRunner.expect(#issuesWith("republishAfterSeconds", 180) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a copy that expires before its replacement is due", function()
+		TestRunner.expect(#issuesWith("shardTtlSeconds", 120) > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (name lookups, A5)", function()
+	local function issuesWith(field: string, value: number): { Validate.Issue }
+		local issues = {}
+		local config = validGameConfig()
+		config.leaderboard[field] = value
+		Validate.checkGameConfig(config, issues)
+		return issues
+	end
+
+	TestRunner.it("refuses an allowance that cannot fill one board", function()
+		TestRunner.expect(#issuesWith("nameLookupsPerMinute", 99) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a failure retry longer than the name TTL, or none", function()
+		TestRunner.expect(#issuesWith("nameFailureRetrySeconds", 3601) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith("nameFailureRetrySeconds", 0) > 0):toBeTruthy()
+	end)
+end)
+
+TestRunner.describe("Validate.run - leaderboard payout cosmetics (rewards step 4)", function()
+	local function runWithBandCosmetic(cosmeticId: string): { Validate.Issue }
+		local config = validGameConfig()
+		config.leaderboard.payouts = { Weekly = { { maxRank = 1, currency = 2000, cosmeticId = cosmeticId } } }
+		return Validate.run({
+			gameConfig = config,
+			maps = {},
+			tasks = {},
+			powerUps = {},
+			titles = {},
+			cosmetics = { { fileName = "Skin.luau", def = validCosmetic("skin-weekly", "Skin") } },
+		})
+	end
+
+	TestRunner.it("accepts a registered cosmetic", function()
+		TestRunner.expect(#runWithBandCosmetic("skin-weekly")):toBe(0)
+	end)
+
+	TestRunner.it("refuses an id no cosmetic has", function()
+		TestRunner.expect(#runWithBandCosmetic("blind") > 0):toBeTruthy()
 	end)
 end)
 
@@ -842,43 +1035,49 @@ TestRunner.describe("Validate.checkGameConfig (P3-5 npc block)", function()
 	end)
 end)
 
-TestRunner.describe("Validate.checkGameConfig (bounty ordering)", function()
-	TestRunner.it("rejects a tier where soleStealer does not exceed loneSharer", function()
-		local issues = {}
-		local config = validGameConfig()
-		config.bountyTiers = { { tier = 1, minStreak = 1, soleStealerVU = 5, loneSharerVU = 10, allShareVU = 2 } }
-		Validate.checkGameConfig(config, issues)
-		TestRunner.expect(#issues > 0):toBeTruthy()
-	end)
-
-	TestRunner.it("rejects tiers not sorted by ascending minStreak", function()
-		local issues = {}
-		local config = validGameConfig()
-		config.bountyTiers = {
-			{ tier = 1, minStreak = 5, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
-			{ tier = 2, minStreak = 1, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
+TestRunner.describe("Validate.checkGameConfig (win rewards)", function()
+	TestRunner.it("rejects each broken win-reward number", function()
+		local cases: { (any) -> () } = {
+			function(c)
+				c.winRewards.currency.loneSharer = c.winRewards.currency.soleStealer -- steal must beat share
+			end,
+			function(c)
+				c.winRewards.currency.allShare = 0
+			end,
+			function(c)
+				c.winRewards.currency.perRungBonus = -0.1
+			end,
+			function(c)
+				c.winRewards.drop.maxChance = 1.5
+			end,
+			function(c)
+				c.winRewards.drop.baseChance = 0.6 -- above maxChance
+			end,
+			function(c)
+				c.winRewards.drop.perRungChance = -0.01
+			end,
+			function(c)
+				c.winRewards.drop.rarityWeights.Rare.perRungGrowth = -1
+			end,
+			function(c)
+				c.winRewards.drop.rarityWeights.Common.weight = 0
+				c.winRewards.drop.rarityWeights.Uncommon.weight = 0
+				c.winRewards.drop.rarityWeights.Rare.weight = 0
+			end,
+			function(c)
+				c.winRewards.drop.duplicateCurrency.Rare = 0
+			end,
+			function(c)
+				c.winRewards.drop.powerUpAmount = 1.5
+			end,
 		}
-		Validate.checkGameConfig(config, issues)
-		TestRunner.expect(#issues > 0):toBeTruthy()
-	end)
-
-	TestRunner.it(
-		"rejects a tier set where no tier covers streak 0 - a first-ever win would have no bounty tier",
-		function()
+		for _, mutate in cases do
 			local issues = {}
 			local config = validGameConfig()
-			config.bountyTiers = { { tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 } }
+			mutate(config)
 			Validate.checkGameConfig(config, issues)
 			TestRunner.expect(#issues > 0):toBeTruthy()
 		end
-	)
-
-	TestRunner.it("accepts a tier set whose lowest floor is exactly 0", function()
-		local issues = {}
-		local config = validGameConfig()
-		config.bountyTiers = { { tier = 1, minStreak = 0, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 } }
-		Validate.checkGameConfig(config, issues)
-		TestRunner.expect(#issues):toBe(0)
 	end)
 end)
 
@@ -1174,6 +1373,7 @@ local function validProduct(key: string): Validate.StoreItemDef
 		description = "A thing you can buy.",
 		robuxPrice = 49,
 		sortOrder = 1,
+		imageAssetId = 654321,
 		grants = { { kind = "Currency", amount = 500 } },
 	}
 end
@@ -1222,19 +1422,36 @@ TestRunner.describe("Validate.checkStoreItem (P4-5)", function()
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 
+	TestRunner.it("refuses an ENABLED entry with no image, allows a disabled one (14d)", function()
+		local def = validProduct("t")
+		def.imageAssetId = 0
+		local issues = runWithStore({ { fileName = "T.luau", def = def } })
+		TestRunner.expect(#issues):toBe(1)
+		TestRunner.expect(issues[1].field):toBe("imageAssetId")
+		def.enabled = false
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a non-integer imageAssetId", function()
+		local def = validProduct("t")
+		def.imageAssetId = 1.5
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
 	TestRunner.it("refuses a product that grants nothing", function()
 		local def = validProduct("t")
 		def.grants = {}
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 
-	TestRunner.it("refuses a game pass that grants currency or power-up stock", function()
-		-- A pass is permanent and its grants re-apply on every join, so a
-		-- consumable grant here is either a one-shot or an infinite tap.
+	TestRunner.it("refuses a game pass that grants anything itself", function()
+		-- Every pass is a season pass: its items live on the season's
+		-- premium track, where only wins inside the window count.
 		for _, grant in
 			{
 				{ kind = "Currency" :: any, amount = 100 },
 				{ kind = "PowerUpStock" :: any, powerUpId = "sprint-boost", amount = 5 },
+				{ kind = "Cosmetic" :: any, cosmeticId = "skin-founder" },
 			}
 		do
 			local def = validProduct("t")
@@ -1244,11 +1461,11 @@ TestRunner.describe("Validate.checkStoreItem (P4-5)", function()
 		end
 	end)
 
-	TestRunner.it("accepts a game pass that grants a cosmetic", function()
+	TestRunner.it("refuses a game pass with no perk (a season pass is a product now)", function()
 		local def = validProduct("t")
 		def.kind = "GamePass"
-		def.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
-		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(0)
+		def.grants = {}
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } })):toBe(1)
 	end)
 
 	TestRunner.it("refuses a grant missing the field its own kind requires", function()
@@ -1349,6 +1566,92 @@ TestRunner.describe("Validate.run - store cross-registry checks (P4-5)", functio
 	end)
 end)
 
+-- ===== Navigation (design-decisions.md Q8, "Navigation") ===================
+
+local function navRound(key: string, kind: Validate.StoreProductKind): Validate.StoreItemDef
+	local def = validProduct(key)
+	def.kind = kind
+	def.grants = { { kind = "NavigationRound", amount = 1 } }
+	if kind == "CoinOffer" then
+		def.assetId = 0
+		def.robuxPrice = 0
+		def.coinPrice = 100
+	end
+	return def
+end
+
+local function navPass(key: string): Validate.StoreItemDef
+	local def = validProduct(key)
+	def.kind = "GamePass"
+	def.grants = {}
+	def.perk = "UnlimitedNavigation"
+	def.assetId = 900000 + string.byte(key) -- distinct from validProduct's id
+	return def
+end
+
+TestRunner.describe("Validate - Navigation rounds and the unlimited pass", function()
+	TestRunner.it("accepts the full set: Robux round, coin round, perk pass", function()
+		local issues = runWithStore({
+			{ fileName = "R.luau", def = navRound("r", "DeveloperProduct") },
+			{ fileName = "C.luau", def = navRound("c", "CoinOffer") },
+			{ fileName = "P.luau", def = navPass("p") },
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("lets a CoinOffer grant a NavigationRound, the named exception", function()
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = navRound("c", "CoinOffer") } })):toBe(0)
+	end)
+
+	TestRunner.it("still refuses a CoinOffer granting anything else", function()
+		local def = navRound("c", "CoinOffer")
+		def.grants = { { kind = "Currency", amount = 10 } }
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a NavigationRound grant with no positive amount", function()
+		local def = navRound("c", "CoinOffer")
+		def.grants = { { kind = "NavigationRound" } }
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses Robux Navigation with no enabled coin path (Q8)", function()
+		local coins = navRound("c", "CoinOffer")
+		coins.enabled = false
+		local issues = runWithStore({
+			{ fileName = "P.luau", def = navPass("p") },
+			{ fileName = "C.luau", def = coins },
+		})
+		TestRunner.expect(#issues):toBe(1)
+		TestRunner.expect(issues[1].fileName):toBe("P.luau")
+	end)
+
+	TestRunner.it("refuses a perk on anything but a GamePass", function()
+		local def = navRound("c", "CoinOffer")
+		def.perk = "UnlimitedNavigation"
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an unknown perk", function()
+		local def = navPass("p")
+		def.perk = "Teleport" :: any
+		local issues = runWithStore({
+			{ fileName = "P.luau", def = def },
+			{ fileName = "C.luau", def = navRound("c", "CoinOffer") },
+		})
+		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses two passes unlocking the same perk", function()
+		local issues = runWithStore({
+			{ fileName = "P.luau", def = navPass("p") },
+			{ fileName = "Q.luau", def = navPass("q") },
+			{ fileName = "C.luau", def = navRound("c", "CoinOffer") },
+		})
+		TestRunner.expect(#issues):toBe(1)
+	end)
+end)
+
 -- ===== P4-6's cosmetics catalogue =========================================
 
 local function runWithCosmetics(cosmetics: { { fileName: string, def: Validate.CosmeticDef } }): { Validate.Issue }
@@ -1440,6 +1743,18 @@ TestRunner.describe("Validate.checkCosmeticItem (P4-6)", function()
 		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 
+	TestRunner.it("refuses a hat with no scale", function()
+		local def = validCosmetic("t", "Hat")
+		def.wearScale = nil
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a back item whose offset isn't three numbers", function()
+		local def = validCosmetic("t", "BackItem")
+		def.wearOffset = { 0, 1 }
+		TestRunner.expect(#runWithCosmetics({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
 	TestRunner.it("refuses an unrecognised rarity", function()
 		local def = validCosmetic("t", "Skin");
 		(def :: any).rarity = "Legendary"
@@ -1456,10 +1771,10 @@ TestRunner.describe("Validate.checkCosmeticItem (P4-6)", function()
 end)
 
 TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", function()
-	TestRunner.it("accepts a game pass granting a registered, enabled cosmetic", function()
+	TestRunner.it("accepts a product granting a registered, enabled cosmetic", function()
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		local issues = Validate.run({
 			gameConfig = validGameConfig(),
 			maps = {},
@@ -1474,8 +1789,8 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 
 	TestRunner.it("refuses a grant of a cosmetic nobody registered, once a cosmetics registry is provided", function()
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.grants = { { kind = "Cosmetic", cosmeticId = "not-a-cosmetic" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		local issues = Validate.run({
 			gameConfig = validGameConfig(),
 			maps = {},
@@ -1494,15 +1809,15 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 		-- "omitted store registry" test) - a caller/fixture that
 		-- predates P4-6 keeps working unchanged.
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.grants = { { kind = "Cosmetic", cosmeticId = "whatever" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = product } })):toBe(0)
 	end)
 
 	TestRunner.it("refuses a grant of a cosmetic that exists but isn't enabled yet", function()
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		local cosmetic = validCosmetic("skin-founder", "Skin")
 		cosmetic.enabled = false
 		cosmetic.shirtAssetId = 0
@@ -1520,14 +1835,13 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 	end)
 
 	TestRunner.it("allows a DISABLED product forward-referencing a not-yet-built cosmetic", function()
-		-- The real bootstrap state FounderPass.luau and
-		-- VictoryEmotePass.luau are in right now: neither the product nor
-		-- the cosmetic it names has a Roblox asset id yet.
+		-- The bootstrap state every store entry ships in: neither the
+		-- product nor the cosmetic it names has a Roblox asset id yet.
 		local product = validProduct("t")
-		product.kind = "GamePass"
 		product.enabled = false
 		product.assetId = 0
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		local cosmetic = validCosmetic("skin-founder", "Skin")
 		cosmetic.enabled = false
 		cosmetic.shirtAssetId = 0
@@ -1610,6 +1924,18 @@ TestRunner.describe("Validate.checkGameConfig (P5-1 matchmaking)", function()
 		config.matchmaking = nil :: any
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a queue summary that goes stale within two ticks, or expires before it is stale", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.summaryStaleSeconds = 3
+		end) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.summaryTtlSeconds = 5
+		end) > 0):toBeTruthy()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.summaryShardCount = 0
+		end) > 0):toBeTruthy()
 	end)
 
 	TestRunner.it("rejects a groupSize that isn't playerCount", function()
@@ -2113,5 +2439,415 @@ TestRunner.describe("Validate.checkGameConfig (P8-5 liveOps)", function()
 		TestRunner.expect(#issuesWith(function(lo)
 			lo.tunablePaths = { "game..seconds" }
 		end)):toBe(1)
+	end)
+end)
+
+-- ===== seasons (rewards step 5) =============================================
+
+local function validSeason(id: string, startsOn: string, endsOn: string, passKey: string): Validate.SeasonDef
+	return {
+		id = id,
+		enabled = true,
+		displayName = "Test Season",
+		startsOn = startsOn,
+		endsOn = endsOn,
+		passKey = passKey,
+		free = {
+			{ wins = 3, grant = { kind = "Currency", amount = 100 } },
+			{ wins = 10, grant = { kind = "PowerUpStock", powerUpId = "earnable", amount = 1 } },
+		},
+		premium = {
+			{ wins = 0, grant = { kind = "Cosmetic", cosmeticId = "trail-s1" } },
+			{ wins = 5, grant = { kind = "Currency", amount = 250 } },
+		},
+	}
+end
+
+local function seasonPass(key: string): Validate.StoreItemDef
+	local def = validProduct(key)
+	def.assetId = 0
+	def.enabled = false
+	def.grants = { { kind = "SeasonPass" } }
+	return def
+end
+
+type SeasonInput = {
+	seasons: { { fileName: string, def: Validate.SeasonDef } },
+	store: { { fileName: string, def: Validate.StoreItemDef } }?,
+	cosmetics: { { fileName: string, def: Validate.CosmeticDef } }?,
+}
+
+local function runSeasons(input: SeasonInput): { Validate.Issue }
+	local earnable = validPowerUp("earnable")
+	earnable.acquisition.freelyEarnable = true
+	return Validate.run({
+		gameConfig = validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = {
+			{ fileName = "Earnable.luau", def = earnable },
+			{ fileName = "PaidOnly.luau", def = validPowerUp("paid-only") },
+		},
+		titles = {},
+		seasons = input.seasons,
+		store = input.store or { { fileName = "S1Pass.luau", def = seasonPass("s1-pass") } },
+		cosmetics = input.cosmetics or { { fileName = "TrailS1.luau", def = validCosmetic("trail-s1", "Trail") } },
+	})
+end
+
+TestRunner.describe("Validate.checkSeason and season cross-checks (rewards step 5)", function()
+	TestRunner.it("accepts a well-formed season with its pass", function()
+		local issues = runSeasons({
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass") } },
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("refuses bad dates, and a window that doesn't end on the 1st after it starts", function()
+		for _, dates in
+			{
+				{ "2026-02-30", "2026-03-01" },
+				{ "2026/10/01", "2026-11-01" },
+				{ "2026-11-01", "2026-10-01" },
+				{ "2026-11-01", "2026-11-01" },
+				{ "2026-10-02", "2026-11-02" },
+				{ "2026-10-01", "2026-11-15" },
+			}
+		do
+			local issues = runSeasons({
+				seasons = { { fileName = "S1.luau", def = validSeason("s1", dates[1], dates[2], "s1-pass") } },
+			})
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
+		local december = validSeason("s1", "2026-12-01", "2027-01-01", "s1-pass")
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = december } } })):toBe(0)
+		-- Season 1's long launch window (user decision, 2026-10-09)
+		local launch = validSeason("s1", "2026-10-09", "2026-12-01", "s1-pass")
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = launch } } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a track listed out of win order", function()
+		local def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
+		def.free = { def.free[2], def.free[1] }
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a Title on a track", function()
+		local def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
+		table.insert(def.free, { wins = 20, grant = { kind = "Title", titleId = "got-one" } })
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a power-up on a track that isn't freely earnable (Q8)", function()
+		local def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
+		def.premium[2] = { wins = 5, grant = { kind = "PowerUpStock", powerUpId = "paid-only", amount = 1 } }
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = def } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses overlapping seasons, but lets every month share one pass", function()
+		local s1 = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
+		local overlapping = validSeason("s2", "2026-10-01", "2026-11-01", "s1-pass")
+		overlapping.premium = {}
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = s1 }, { fileName = "S2.luau", def = overlapping } },
+		}) > 0):toBeTruthy()
+
+		local next = validSeason("s2", "2026-11-01", "2026-12-01", "s1-pass")
+		next.premium = {}
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = s1 }, { fileName = "S2.luau", def = next } },
+		})):toBe(0)
+	end)
+
+	TestRunner.it("refuses a pass that isn't a SeasonPass product, and a GamePass with no perk", function()
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2026-11-01", "nope") } },
+		}) > 0):toBeTruthy()
+
+		local oldStyle = validProduct("s1-pass")
+		oldStyle.kind = "GamePass"
+		oldStyle.assetId = 0
+		oldStyle.enabled = false
+		oldStyle.grants = {}
+		TestRunner.expect(#runSeasons({
+			store = { { fileName = "S1Pass.luau", def = oldStyle } },
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass") } },
+		}) > 0):toBeTruthy()
+
+		local bundled = seasonPass("s1-pass")
+		table.insert(bundled.grants, { kind = "Currency", amount = 10 })
+		TestRunner.expect(#runSeasons({
+			store = { { fileName = "S1Pass.luau", def = bundled } },
+			seasons = { { fileName = "S1.luau", def = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass") } },
+		}) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("keeps a track cosmetic track-only: not a win drop, not sold, not on two tracks", function()
+		local season = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
+
+		local dropping = validCosmetic("trail-s1", "Trail")
+		dropping.winDrop = true
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = season } },
+			cosmetics = { { fileName = "TrailS1.luau", def = dropping } },
+		}) > 0):toBeTruthy()
+
+		local seller = validProduct("trail-bundle")
+		seller.grants = { { kind = "Cosmetic", cosmeticId = "trail-s1" } }
+		TestRunner.expect(#runSeasons({
+			seasons = { { fileName = "S1.luau", def = season } },
+			store = {
+				{ fileName = "S1Pass.luau", def = seasonPass("s1-pass") },
+				{ fileName = "Bundle.luau", def = seller },
+			},
+		}) > 0):toBeTruthy()
+
+		local twice = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
+		table.insert(twice.free, { wins = 20, grant = { kind = "Cosmetic", cosmeticId = "trail-s1" } })
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = twice } } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an enabled season granting a disabled cosmetic, but allows it while disabled", function()
+		local cosmetic = validCosmetic("trail-s1", "Trail")
+		cosmetic.enabled = false
+		cosmetic.trailTextureAssetId = 0
+		local cosmetics = { { fileName = "TrailS1.luau", def = cosmetic } }
+		local season = validSeason("s1", "2026-10-01", "2026-11-01", "s1-pass")
+		TestRunner.expect(
+			#runSeasons({ seasons = { { fileName = "S1.luau", def = season } }, cosmetics = cosmetics }) > 0
+		)
+			:toBeTruthy()
+		season.enabled = false
+		TestRunner.expect(#runSeasons({ seasons = { { fileName = "S1.luau", def = season } }, cosmetics = cosmetics }))
+			:toBe(0)
+	end)
+end)
+
+-- ===== coin offers (rewards step 6) =========================================
+
+local function coinOffer(key: string): Validate.StoreItemDef
+	local def = validProduct(key)
+	def.kind = "CoinOffer"
+	def.assetId = 0
+	def.robuxPrice = 0
+	def.coinPrice = 150
+	def.grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 1 } }
+	return def
+end
+
+TestRunner.describe("Validate.checkStoreItem (CoinOffer, rewards step 6)", function()
+	TestRunner.it("accepts an enabled coin offer with no Roblox asset", function()
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = coinOffer("c") } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a coin offer without a sane coinPrice", function()
+		for _, price in { 0, -1, 2.5 } do
+			local def = coinOffer("c")
+			def.coinPrice = price
+			TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+		end
+		local def = coinOffer("c")
+		def.coinPrice = nil
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a coin offer with a Roblox id or price", function()
+		local withId = coinOffer("c")
+		withId.assetId = 99
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = withId } }) > 0):toBeTruthy()
+		local withRobux = coinOffer("c")
+		withRobux.robuxPrice = 49
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = withRobux } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a coin offer granting anything but power-up stock", function()
+		for _, grant in
+			{
+				{ kind = "Currency" :: any, amount = 100 },
+				{ kind = "Cosmetic" :: any, cosmeticId = "skin-founder" },
+				{ kind = "Title" :: any, titleId = "got-one" },
+			}
+		do
+			local def = coinOffer("c")
+			def.grants = { grant :: any }
+			TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+		end
+	end)
+
+	TestRunner.it("refuses a coinPrice on anything but a coin offer", function()
+		local def = validProduct("t")
+		def.coinPrice = 100
+		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+end)
+
+-- ===== streak buy-back (design-decisions.md Q7) ============================
+
+local function buyBackTier(min: number, max: number?): Validate.StoreItemDef
+	local def = validProduct("save-" .. tostring(min))
+	def.assetId = 700000 + min
+	def.grants = { { kind = "StreakBuyBack", minStreak = min, maxStreak = max } }
+	return def
+end
+
+local function tiers(...: Validate.StoreItemDef): { { fileName: string, def: Validate.StoreItemDef } }
+	local list = {}
+	for index, def in { ... } do
+		table.insert(list, { fileName = string.format("Save%d.luau", index), def = def })
+	end
+	return list
+end
+
+TestRunner.describe("Validate - streak buy-back tiers", function()
+	TestRunner.it("accepts tiers running on from 1 to an open top", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, 1), buyBackTier(2, 7), buyBackTier(8, nil)))):toBe(0)
+	end)
+
+	TestRunner.it("refuses a gap between tiers", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, 1), buyBackTier(3, nil))) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses tiers that don't start at 1", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(2, nil))) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a capped top tier, leaving long streaks unpriced", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, 7))) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses an open tier below the top", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, nil), buyBackTier(2, nil))) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("ignores disabled tiers when checking coverage", function()
+		local hole = buyBackTier(2, 7)
+		hole.enabled = false
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(1, 1), hole)) > 0):toBeTruthy()
+		local all = { buyBackTier(1, 1), hole, buyBackTier(8, nil) }
+		for _, def in all do
+			def.enabled = false
+		end
+		TestRunner.expect(#runWithStore(tiers(table.unpack(all)))):toBe(0)
+	end)
+
+	TestRunner.it("refuses a buy-back sold for coins or bundled with another grant", function()
+		local coins = buyBackTier(1, nil)
+		coins.kind = "CoinOffer"
+		coins.assetId = 0
+		coins.robuxPrice = 0
+		coins.coinPrice = 100
+		TestRunner.expect(#runWithStore(tiers(coins)) > 0):toBeTruthy()
+		local bundle = buyBackTier(1, nil)
+		table.insert(bundle.grants, { kind = "Currency", amount = 10 })
+		TestRunner.expect(#runWithStore(tiers(bundle)) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a maxStreak below minStreak", function()
+		TestRunner.expect(#runWithStore(tiers(buyBackTier(3, 2))) > 0):toBeTruthy()
+	end)
+end)
+
+-- ===== Sales, limited cosmetics and plinths (Q1, 2026-10-09) =============
+
+local function runSelling(
+	store: { { fileName: string, def: Validate.StoreItemDef } },
+	cosmetic: Validate.CosmeticDef?,
+	config: Validate.GameConfig?
+): { Validate.Issue }
+	return Validate.run({
+		gameConfig = config or validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = { { fileName = "SprintBoost.luau", def = validPowerUp("sprint-boost") } },
+		titles = {},
+		store = store,
+		cosmetics = { { fileName = "Hat.luau", def = cosmetic or validCosmetic("hat-ltd", "Skin") } },
+	})
+end
+
+local function limitedHat(): Validate.StoreItemDef
+	local def = validProduct("hat-ltd")
+	def.grants = { { kind = "Cosmetic", cosmeticId = "hat-ltd" } }
+	def.onSaleUntil = "2026-12-01 00:00"
+	return def
+end
+
+TestRunner.describe("Validate - sales and limited cosmetics", function()
+	TestRunner.it("accepts a limited cosmetic sold for Robux", function()
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } })):toBe(0)
+	end)
+
+	TestRunner.it("accepts a limited cosmetic sold for coins", function()
+		local def = limitedHat()
+		def.kind = "CoinOffer"
+		def.assetId = 0
+		def.robuxPrice = 0
+		def.coinPrice = 150
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a cosmetic sold with no end date", function()
+		local def = limitedHat()
+		def.onSaleUntil = nil
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses selling a win-drop cosmetic", function()
+		local hat = validCosmetic("hat-ltd", "Skin")
+		hat.winDrop = true
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } }, hat) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses selling a leaderboard prize", function()
+		local config = validGameConfig()
+		config.leaderboard.payouts = { Weekly = { { maxRank = 1, currency = 100, cosmeticId = "hat-ltd" } } }
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } }, nil, config) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a malformed time or an end before the start", function()
+		local bad = limitedHat()
+		bad.onSaleUntil = "2026-12-01"
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = bad } }) > 0):toBeTruthy()
+		local backwards = limitedHat()
+		backwards.onSaleFrom = "2026-12-02 00:00"
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = backwards } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("needs wasPrice above the item's own price", function()
+		local def = validProduct("t")
+		def.wasPrice = 49 -- robuxPrice is 49
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+		def.wasPrice = 99
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("needs `replaces` to name another real item", function()
+		local def = validProduct("t")
+		def.replaces = "nope"
+		local full = validProduct("full")
+		full.assetId = 999
+		local both = { { fileName = "T.luau", def = def }, { fileName = "Full.luau", def = full } }
+		TestRunner.expect(#runSelling(both) > 0):toBeTruthy()
+		def.replaces = "full"
+		TestRunner.expect(#runSelling(both)):toBe(0)
+	end)
+
+	TestRunner.it("refuses two enabled items on one plinth at once, allows them back to back", function()
+		local a = validProduct("a")
+		a.featuredSlot = 1
+		a.onSaleUntil = "2026-11-01 00:00"
+		local b = validProduct("b")
+		b.assetId = 999
+		b.featuredSlot = 1
+		local both = { { fileName = "A.luau", def = a }, { fileName = "B.luau", def = b } }
+		TestRunner.expect(#runSelling(both) > 0):toBeTruthy()
+		b.onSaleFrom = "2026-11-01 00:00"
+		TestRunner.expect(#runSelling(both)):toBe(0)
+	end)
+
+	TestRunner.it("refuses a plinth slot the hub doesn't have", function()
+		local def = validProduct("t")
+		def.featuredSlot = 4
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 end)

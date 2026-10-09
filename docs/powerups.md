@@ -100,11 +100,11 @@ coexist (`store-receipts.md` §5).
 | `task-insight` | Buff | Utility | Self | next attempt (≤15s) | -1 difficulty tier on current task's rolled challenge | 12s | Uncommon |
 | `phase-step` | Buff | Defence | Self | 3s | Untargetable by targeted effects; passes through hazards & players | 15s | Rare |
 | `overclock` | Buff | Utility | Self | 10s | -50% cooldown on own other power-ups | 20s | Rare |
-| `freeze` | Debuff | Attack | Aimed | 2.5s | Full immobilize, can't interact with tasks | 12s | Uncommon |
+| `freeze` | Debuff | Attack | Aimed | 4.5s | Full immobilize, can't interact with tasks | 12s | Uncommon |
 | `slow-field` | Debuff | Attack | Area | 5s zone | -40% move speed while inside | 15s | Common |
-| `blind` | Debuff | Attack | Aimed | 4s | Obscures screen, no movement lock | 12s | Uncommon |
+| `blind` | Debuff | Attack | Aimed | 4.5s | Obscures screen, no movement lock | 12s | Uncommon |
 | `task-scramble` | Debuff | Attack | Aimed | instant | Forces current task's challenge to re-roll (~4s added) | 10s | Common |
-| `push-trip` | Debuff | Attack | Aimed | 1s stagger | Knockback + brief stun | 7s | Common |
+| `push-trip` | Debuff | Attack | Aimed | 2s stagger (ragdoll) | Knockback + brief stun | 7s | Common |
 
 **Role** is the colour family on the HUD slot and pickup orb: Attack red
 (exactly the Debuffs, enforced by `Validate.checkPowerUp`), Defence blue,
@@ -126,11 +126,18 @@ did, whether they were using one or being hit by one. So:
 - **First pickup:** the first time a player holds each type in a
   session, a toast shows `displayName: description`. After that there's
   only the slot icon, so it never nags.
-- **Being hit:** when an aimed or nearest-target item lands, the server
-  sends the victim alone `PowerUpHitYou` `{ powerUpId, casterName }`, and
-  a red toast reads "Alex used Freeze on you". A blocked hit sends
-  nothing. Slow Field is a zone rather than a hit on one player, so it
-  doesn't send this; its ground visual has to explain it instead.
+- **Being hit:** the victim is told about **every** item used on them
+  (user decision, 2026-10-03, after a two-player test where Task Scramble
+  on someone away from a task was spent in silence). The server sends the
+  victim alone `PowerUpHitYou` `{ powerUpId, casterName, landed }`:
+  - Landed: a red toast reads "Alex used Freeze on you".
+  - Reached them but did nothing (a ward, an immunity window, no task to
+    scramble, the scramble cap): an amber "Alex used Task Scramble on
+    you - no effect".
+  - Slow Field: once per zone per player, the first time it catches
+    them (landed or warded).
+  An item that never reached them (out of range, target gone before a
+  throw lands) sends nothing.
 
 ### 1. Sprint Boost (Buff, Self)
 
@@ -190,7 +197,7 @@ Overclock is active; this is intentional (see anti-frustration note below)
 ### 6. Freeze (Debuff, Aimed)
 
 **Counter-play:** Second Wind cleanses it; Phase Step blocks it if timed
-before the cast lands; failing either, the fixed 2.5s duration plus the
+before the cast lands; failing either, the fixed 4.5s duration plus the
 post-effect hard-control immunity window (below) bounds the worst case.
 **Stacking:** does not extend past its own duration if reapplied — see the
 anti-frustration layer for cross-effect stacking rules.
@@ -252,7 +259,7 @@ Bots have no task view, so it does nothing to them.
 ### 10. Push/Trip (Debuff, Aimed)
 
 **Counter-play:** Phase Step blocks it; Second Wind cleanses the stagger;
-its 1s duration means even a fully unmitigated hit rarely costs real race
+its 2s duration means even a fully unmitigated hit rarely costs real race
 position. **Stacking:** classified as hard control (see below) despite its
 short duration — it shares the same post-effect immunity window and
 rolling disable-time cap as Freeze, not Slow Field's softer treatment.
@@ -271,6 +278,10 @@ Push/Trip effect ends on a player, they become immune to *any* new
 hard-control effect for 3 seconds, regardless of caster. Long enough to
 guarantee real, unimpeded recovery movement; short enough that it's not a
 standing free pass for the rest of the round.
+
+Firing a hard-control item into the window is refused and the caster
+**keeps the item** (user decision 2026-10-09, design-decisions.md Q12
+"firing into the immunity window"). Wards and rule 5 still spend it.
 
 **2. Diminishing returns across the same 20-second window: -50% on the
 2nd, -75% on the 3rd, floor 0.5s.** The immunity window already prevents

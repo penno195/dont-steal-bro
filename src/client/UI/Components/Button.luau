@@ -11,7 +11,6 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Base)
 local ComponentLogic = require(script.Parent.ComponentLogic)
-local Env = require(script.Parent.Env)
 local Icons = require(script.Parent.Icons)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -26,6 +25,9 @@ export type Props = {
 	icon: string?,
 	-- Reference pixels. Defaults to a comfortable single-action width.
 	width: number?,
+	-- The minimum touch height (44) instead of the primary 56, with
+	-- slimmer padding: an action inside a list row (PlayerRow.accessory).
+	compact: boolean?,
 	disabled: (boolean | Base.Source<boolean>)?,
 	loading: (boolean | Base.Source<boolean>)?,
 	order: number?,
@@ -39,12 +41,16 @@ local DEFAULT_WIDTH = Theme.spacing.xxxl * 4 -- 192
 local function Button(props: Props): TextButton
 	local variant: ComponentLogic.Variant = props.variant or "primary"
 	local loading: Base.Source<boolean> = Base.read(props.loading or false)
-	local size = Vector2.new(props.width or DEFAULT_WIDTH, Theme.touch.primaryHeight)
+	local compact = props.compact == true
+	local size =
+		Vector2.new(props.width or DEFAULT_WIDTH, if compact then Theme.touch.iconButton else Theme.touch.primaryHeight)
+	local ghost = variant == "ghost"
+	local lip = if compact then Theme.lip.small else Theme.lip.button
 
 	return Base.interactive({
 		name = "Button",
 		size = size,
-		radius = Theme.radius.md,
+		radius = Theme.radius.lg,
 		disabled = props.disabled,
 		loading = loading,
 		onActivate = props.onActivate,
@@ -59,30 +65,28 @@ local function Button(props: Props): TextButton
 			local ink = function(): Color3
 				return Theme.color[style().ink]
 			end
-			local fill = Env.animate(function(): Color3
-				return Theme.color[style().fill]
-			end, Theme.motion.fast)
+			-- The gradient fill for the variant; disabled (and the
+			-- surfaceless ghost) fall back to a flat fill of the same shape.
+			local fill = derive(function(): Theme.Fill
+				return Theme.fill[ComponentLogic.fillName(variant, state())]
+			end)
+			-- Dark ink (gold, red) can't take the dark display outline.
+			local outlined = Theme.takesOutline(Theme.fill[variant].ink)
 
-			return {
-				create("Frame")({
-					Name = "Surface",
-					Size = UDim2.fromScale(1, 1),
-					BackgroundColor3 = fill,
-					BackgroundTransparency = function()
-						return style().fillTransparency
-					end,
-					Base.corner(Theme.radius.md),
-					create("UIStroke")({
-						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-						Color = function()
-							return Theme.color[style().stroke]
-						end,
-						Transparency = function()
-							return style().strokeTransparency
-						end,
-						Thickness = 1,
-					}),
-					-- Hover/press brighten through a white overlay.
+			return Base.raised({
+				fill = fill,
+				-- The ghost has no surface at rest, so nothing to sink onto.
+				lip = if ghost then 0 else lip,
+				transparency = function()
+					return style().fillTransparency
+				end,
+				radius = Theme.radius.lg,
+				gloss = not ghost,
+				sunk = function()
+					return state() == "pressed"
+				end,
+				children = {
+					-- Hover brightens through a white overlay.
 					create("Frame")({
 						Name = "Overlay",
 						Size = UDim2.fromScale(1, 1),
@@ -91,7 +95,7 @@ local function Button(props: Props): TextButton
 							return style().overlayTransparency
 						end,
 						ZIndex = 2,
-						Base.corner(Theme.radius.md),
+						Base.corner(Theme.radius.lg),
 					}),
 					create("Frame")({
 						Name = "Content",
@@ -101,21 +105,39 @@ local function Button(props: Props): TextButton
 						Visible = function()
 							return not loading()
 						end,
-						Base.padding(Theme.spacing.md),
-						create("UIListLayout")({
-							FillDirection = Enum.FillDirection.Horizontal,
-							HorizontalAlignment = Enum.HorizontalAlignment.Center,
-							VerticalAlignment = Enum.VerticalAlignment.Center,
-							Padding = UDim.new(0, Theme.spacing.sm),
-							SortOrder = Enum.SortOrder.LayoutOrder,
-						}),
-						(if props.icon then Icons.view(props.icon, Theme.spacing.xl, ink) else nil) :: any,
-						Base.text("label", {
-							LayoutOrder = 2,
-							Size = UDim2.new(1, if props.icon then -(Theme.spacing.xl + Theme.spacing.sm) else 0, 1, 0),
+						if compact
+							then create("UIPadding")({
+								PaddingLeft = UDim.new(0, Theme.spacing.sm),
+								PaddingRight = UDim.new(0, Theme.spacing.sm),
+								PaddingTop = UDim.new(0, Theme.spacing.xs),
+								PaddingBottom = UDim.new(0, Theme.spacing.xs),
+							})
+							else Base.padding(Theme.spacing.md),
+						-- The icon pins to the left; the label is centred on the
+						-- WHOLE button, inset the icon's width on both sides so
+						-- the two never meet. Laid out side by side, the label
+						-- centred in what the icon left and sat visibly right of
+						-- the button's middle (Locker's Close, 2026-10-09).
+						(if props.icon
+							then (function()
+								local icon = Icons.view(props.icon, Theme.spacing.xl, ink)
+								icon.AnchorPoint = Vector2.new(0, 0.5)
+								icon.Position = UDim2.fromScale(0, 0.5)
+								return icon
+							end)()
+							else nil) :: any,
+						Base.text("button", {
+							AnchorPoint = Vector2.new(0.5, 0.5),
+							Position = UDim2.fromScale(0.5, 0.5),
+							Size = UDim2.new(
+								1,
+								if props.icon then -2 * (Theme.spacing.xl + Theme.spacing.sm) else 0,
+								1,
+								0
+							),
 							Text = props.label,
 							TextColor3 = ink,
-						}),
+						}, outlined),
 					}),
 					-- Only built while loading, so no spinner ticks otherwise.
 					show(loading, function()
@@ -123,8 +145,8 @@ local function Button(props: Props): TextButton
 						spinner.ZIndex = 3
 						return spinner
 					end) :: any,
-				}),
-			}
+				},
+			})
 		end,
 	})
 end

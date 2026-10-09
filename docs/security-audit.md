@@ -48,7 +48,8 @@ is dropped after one token-bucket check and, at most, one throttled report.
 | `TitleEquipIntent` | any / any | Equips an **owned** title | dropped | 5 burst, 1/s | None. Ownership is checked against the profile |
 | `StorePurchaseIntent` | any / any | Opens a Roblox purchase prompt for an enabled catalogue key | dropped | 4 burst, 0.5/s | A prompt for themselves. Nothing is granted here |
 | `StoreEquipIntent` | any / any | Equips an owned cosmetic into a slot the category allows | dropped | 6 burst, 1/s | None |
-| `StoreLoadoutIntent` | any / any | Places stocked power-ups into loadout slots. Stock is spent only in `consumeLoadout`, which re-checks it | dropped | 6 burst, 1/s | None |
+| `StoreLoadoutIntent` | any / any | Places stocked power-ups into loadout slots. Stock is spent only in `consumeLoadout`, which re-checks it. Refused once the player is Departing | dropped | 6 burst, 1/s | None |
+| `StoreLoadoutRepeatIntent` | any / any | "Same as last round": re-arms the profile's own `lastLoadout` through `setLoadoutSlot`'s checks. No payload, so the client names nothing. Refused once Departing | dropped | 3 burst, 0.5/s | None |
 | `QueueJoinIntent` / `QueueLeaveIntent` | hub player / any | Matchmaking queue membership (MemoryStore) | dropped | 3 burst, 0.5/s each | Queue churn, bounded to about 1 MemoryStore write per 2s |
 | `MapVoteIntent` | group member with a live ballot / any | Casts a vote through a CAS on the group record | dropped | 4 burst, 1/s | One vote, changeable. See F7 for quota cost |
 | `SettingsIntent` | any / any | Patches their own settings. Bounds come from the schema | dropped | 8 burst, 2/s | Their own settings |
@@ -246,3 +247,55 @@ These can't be run headlessly because they bind to Roblox instances:
 4. **F1:** set `receiptMaxWaitSeconds` to 0 and buy a dev product in Studio.
    Expect the first attempt to decline, the retry to wait for a save, and
    "already granted and saved" in the log only after it lands.
+
+## 7. Re-run: code added since the audit (next-stages step 17, 2026-10-04)
+
+Scope: everything after `e386fa2` — rewards and coin offers, profile
+messages (leaderboard payouts), throws, the Hold and Timing task verbs,
+live config, the live map loader and the Decision Studio ready card.
+The boundary is unchanged: `NetGuard` still connects the only
+`OnServerEvent`, there are still no `RemoteFunction`s, and the power-up
+pickup is still the only server `Touched`.
+
+New client → server inputs:
+
+| Remote / input | Caller / states | What it does | Best gain |
+|---|---|---|---|
+| `HoldSubmit` | session owner / Race | Press and release edges only. `AlarmKillswitch` times the hold on the server clock, so no duration is ever sent | None. A repeated edge changes nothing |
+| `TimingSubmit` | session owner / Race | Claims when the stop was tapped. `TimingLogic.clampStop` forces it into the last 0.5s and after the previous stop | Picks a moment from the last 0.5s, which a screen-reading bot could do anyway. A miss still costs a life |
+| `PowerUpDiscardIntent` | roster racer / Race | Empties one of the sender's own slots | None. No cooldown or effect on others |
+| `DecisionReadyIntent` | qualifier / DecisionStudio, phase Intro | Marks "Got it". The Intro ends early once every finalist is ready | Skips their own reading time |
+| `PowerUpUseIntent` aim (`aimX`, `aimZ`) | as before | A ground-plane direction that replaces the caster's facing. Range is still measured from the server-side root | See F12 |
+| `StorePurchaseIntent` for a `CoinOffer` | any / any | Price from config by key, balance from the profile. Check, deduction and grant are one synchronous mutation, then saved | None |
+| `/liveops` `TextChatCommand` | `liveOps.adminUserIds` / any | Edits live flags. Gated on the engine-supplied `TextSource.UserId`; a non-admin gets no reply | None for a non-admin |
+| Profile messages (`MessageHandler`) | server only | Pays a leaderboard rank. Written only by `LeaderboardPayoutService` through `MessageAsync`; no client path reaches it. Malformed messages are dropped and marked processed | None |
+
+| # | Finding | Expl. | Dmg | Score | Status |
+|---|---|---|---|---|---|
+| F10 | A match server sent `LeaderboardState` and `PeriodBoardState` (user ids + streaks) to every client during the round | 5 | 2 | **10** | **Fixed** |
+| F11 | Knockback (throw recoil and the victim's shunt) is applied by the shoved player's own client, which can ignore it | 5 | 1 | 5 | Accepted |
+| F12 | The client's aim direction makes the use cone a formality for a modified client: any target in range can be hit without facing it | 5 | 1 | 5 | Accepted |
+
+### F10: Streaks reached clients mid-round (fixed)
+
+The menu closes during play, so no honest player saw the boards. But the
+payloads still went out on join and on every refresh. An exploiter could
+read the best streak of anyone in the round who is on a board, which
+breaks Q7 condition 1 ("hub and post-match leaderboard only").
+
+**Fix:** `LeaderboardLogic.mayBroadcast` gates both broadcasts. A match
+server sends nothing until Results, including its pre-round lobby (the
+same reasoning as `StreakTagLogic`). It pushes both boards from cache when
+Results starts. The hub, which stays in `WaitingForPlayers`, is unchanged.
+Covered in `tests/LeaderboardLogic.spec.luau`.
+
+### F11 and F12 (accepted)
+
+F11: a player's client owns its physics, so the server can't move it.
+Ignoring a shove only keeps that cheater where they were; the effect still
+lands on the server. Each throw makes `MovementWatch` skip one sample, but
+throws are bounded by inventory and cooldowns.
+
+F12: a player could always turn to face a target. Range, inventory,
+cooldown and `mayAct` are unaffected, and only racers already legal can
+be hit.

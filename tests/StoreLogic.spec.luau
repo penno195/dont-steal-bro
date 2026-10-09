@@ -323,6 +323,53 @@ TestRunner.describe("StoreLogic.consumeLoadout", function()
 	end)
 end)
 
+TestRunner.describe("StoreLogic.repeatLoadout (the Locker's Same as last round)", function()
+	local eligible = { ["sprint-boost"] = true, ["slow-field"] = true, ["push-trip"] = true }
+
+	TestRunner.it("re-arms last round's picks in order while the stock lasts", function()
+		local placed = StoreLogic.repeatLoadout(
+			{ "slow-field", "sprint-boost" },
+			{ ["sprint-boost"] = 4, ["slow-field"] = 1 },
+			eligible,
+			3
+		)
+		TestRunner.expect(#placed):toBe(2)
+		TestRunner.expect(placed[1]):toBe("slow-field")
+		TestRunner.expect(placed[2]):toBe("sprint-boost")
+	end)
+
+	TestRunner.it("leaves an item with no stock out, and puts nothing in its place", function()
+		local placed = StoreLogic.repeatLoadout({ "slow-field", "sprint-boost" }, { ["sprint-boost"] = 4 }, eligible, 3)
+		TestRunner.expect(#placed):toBe(1)
+		TestRunner.expect(placed[1]):toBe("sprint-boost")
+	end)
+
+	TestRunner.it("never places more copies than the stock holds", function()
+		local placed = StoreLogic.repeatLoadout(
+			{ "sprint-boost", "sprint-boost", "sprint-boost" },
+			{ ["sprint-boost"] = 2 },
+			eligible,
+			3
+		)
+		TestRunner.expect(#placed):toBe(2)
+	end)
+
+	TestRunner.it("skips an item that is no longer loadout-eligible", function()
+		local placed = StoreLogic.repeatLoadout({ "freeze" }, { freeze = 5 }, eligible, 3)
+		TestRunner.expect(#placed):toBe(0)
+	end)
+
+	TestRunner.it("honours the cap even if the stored list is longer", function()
+		local placed = StoreLogic.repeatLoadout(
+			{ "sprint-boost", "slow-field", "push-trip", "sprint-boost" },
+			{ ["sprint-boost"] = 5, ["slow-field"] = 5, ["push-trip"] = 5 },
+			eligible,
+			3
+		)
+		TestRunner.expect(#placed):toBe(3)
+	end)
+end)
+
 TestRunner.describe("StoreLogic.isOwnershipFresh", function()
 	TestRunner.it("a cache miss is never fresh", function()
 		TestRunner.expect(StoreLogic.isOwnershipFresh(nil, true, 100, 3600, 60)):toBe(false)
@@ -435,4 +482,75 @@ TestRunner.describe("StoreLogic.passSyncDelay (P8-1 F5)", function()
 		TestRunner.expect(StoreLogic.passSyncDelay(100, 110, 10)):toBe(0)
 		TestRunner.expect(StoreLogic.passSyncDelay(100, 500, 10)):toBe(0)
 	end)
+end)
+
+TestRunner.describe("StoreLogic.buyWithCoins (rewards step 6)", function()
+	local function wallet(coins: number): StoreLogic.GrantState
+		return { currency = coins, powerUpStock = { ["sprint-boost"] = 1 }, ownedCosmetics = {}, unlockedTitles = {} }
+	end
+	local grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 1 } } :: { any }
+
+	TestRunner.it("deducts the price and grants the stock together", function()
+		local after, lines, reason = StoreLogic.buyWithCoins(wallet(200), 150, grants)
+		TestRunner.expect(reason):toBe(nil)
+		TestRunner.expect((after :: any).currency):toBe(50)
+		TestRunner.expect((after :: any).powerUpStock["sprint-boost"]):toBe(2)
+		TestRunner.expect(lines[1]):toBe("Currency -150 (coin price)")
+	end)
+
+	TestRunner.it("lets a player spend exactly their balance", function()
+		local after = StoreLogic.buyWithCoins(wallet(150), 150, grants)
+		TestRunner.expect((after :: any).currency):toBe(0)
+	end)
+
+	TestRunner.it("refuses when the player is short, changing nothing", function()
+		local state = wallet(149)
+		local after, lines, reason = StoreLogic.buyWithCoins(state, 150, grants)
+		TestRunner.expect(after):toBe(nil)
+		TestRunner.expect(#lines):toBe(0)
+		TestRunner.expect(reason):toBe("not enough coins")
+		TestRunner.expect(state.currency):toBe(149)
+		TestRunner.expect(state.powerUpStock["sprint-boost"]):toBe(1)
+	end)
+
+	TestRunner.it("refuses a missing or nonsense price", function()
+		for _, price in { 0, -5, 1.5 } do
+			local after = StoreLogic.buyWithCoins(wallet(1000), price, grants)
+			TestRunner.expect(after):toBe(nil)
+		end
+	end)
+end)
+
+-- design-decisions.md Q1: nothing bought is ever random, for Robux or for
+-- coins (rewards-roadmap.md step 6's audit). Every purchase path's grants
+-- come from config through these modules, so none of them may reach a
+-- random source. Win drops are the only random prize, and they're rolled
+-- in RewardLogic, called from ProgressionService on a win, never here.
+-- Paths are relative to the repo root, where CI runs `lune run tests/run`.
+TestRunner.describe("purchase paths never roll anything", function()
+	local fs = require("@lune/fs")
+	local PURCHASE_PATHS = {
+		"src/server/StoreLogic.luau",
+		"src/server/SeasonLogic.luau",
+		"src/server/LeaderboardPayoutLogic.luau",
+		"src/server/Services/StoreService.luau",
+		"src/server/Services/LeaderboardPayoutService.luau",
+		"src/server/Services/DataService.luau",
+	}
+	local RANDOM_APIS = { "math.random", "Random.new", "NextNumber", "NextInteger", "RewardLogic" }
+
+	for _, path in PURCHASE_PATHS do
+		TestRunner.it(path .. " has no random source", function()
+			-- Code only: a comment naming RewardLogic to say why this module
+			-- avoids it is fine.
+			local code = {}
+			for line in string.gmatch(fs.readFile(path), "[^\n]+") do
+				table.insert(code, (string.gsub(line, "%-%-.*$", "")))
+			end
+			local source = table.concat(code, "\n")
+			for _, api in RANDOM_APIS do
+				TestRunner.expect(string.find(source, api, 1, true)):toBe(nil)
+			end
+		end)
+	end
 end)

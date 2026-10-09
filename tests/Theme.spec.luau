@@ -103,6 +103,41 @@ describe("Tokens: text contrast", function()
 		end
 	end)
 
+	it("meets WCAG AA for each fill's ink on both gradient stops", function()
+		-- The label sits on every colour between the stops; a linear blend
+		-- can't dip below the worse of its two ends by much, so both ends
+		-- clearing AA is the check.
+		for name, fill in Tokens.fill do
+			for _, stop in { "top", "bottom" } do
+				local ratio = ColorVision.contrast(hex(fill.ink), ColorVision.fromHex((fill :: any)[stop]))
+				assert(ratio >= Tokens.contrast.textMin, string.format("fill.%s %s ink is %.2f", name, stop, ratio))
+			end
+		end
+	end)
+
+	it("keeps the Steal/Share fills on their decision colours", function()
+		-- The owner chose these hexes (design-decisions); the gradient may
+		-- only add a top stop, never move the colour itself.
+		expect(Tokens.fill.steal.bottom):toBe(Tokens.color.steal)
+		expect(Tokens.fill.share.bottom):toBe(Tokens.color.share)
+	end)
+
+	it("keeps the toast badge's dark icon visible on every kind colour", function()
+		-- Toast.luau draws each kind's icon in `outline` on a badge of the
+		-- kind's colour (brand, success, warning, danger): an icon is a UI
+		-- shape, so WCAG 1.4.11's 3:1.
+		for _, kind in { "brand", "success", "warning", "danger" } do
+			local ratio = ColorVision.contrast(hex("outline"), hex(kind))
+			assert(ratio >= Tokens.contrast.nonTextMin, string.format("outline on %s is %.2f", kind, ratio))
+		end
+	end)
+
+	it("has a fill for every button variant and the disabled look", function()
+		for _, name in { "primary", "secondary", "danger", "ghost", "muted" } do
+			expect((Tokens.fill :: any)[name] ~= nil):toBeTruthy()
+		end
+	end)
+
 	it("has every elevation surface defined as a colour", function()
 		for _, level in Tokens.elevation do
 			expect((Tokens.color :: any)[level.surface] ~= nil):toBeTruthy()

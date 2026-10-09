@@ -16,7 +16,8 @@ describe("DecisionLogic.prizeFor agrees with Outcomes.resolve", function()
 	-- disagreed with the real resolver, a player would lose on a table
 	-- that lied to them - so every combination, for every seat count,
 	-- is checked against the resolver itself.
-	local PRIZE_BY_VU: { [number]: DecisionLogic.Prize } = { [3] = "Big", [2] = "Medium", [1] = "Small" }
+	local PRIZE_BY_TAG: { [string]: DecisionLogic.Prize } =
+		{ SoleStealer = "Big", LoneSharer = "Medium", AllShare = "Small" }
 
 	for seats = 1, 3 do
 		it(string.format("matches every combination with %d seat(s)", seats), function()
@@ -24,13 +25,7 @@ describe("DecisionLogic.prizeFor agrees with Outcomes.resolve", function()
 				local finalists: { Outcomes.FinalistInput } = {}
 				for i = 1, seats do
 					local steals = math.floor(mask / 2 ^ (i - 1)) % 2 == 1
-					table.insert(finalists, {
-						playerId = i,
-						choice = if steals then "Steal" else "Share",
-						soleStealerVU = 3,
-						loneSharerVU = 2,
-						allShareVU = 1,
-					})
+					table.insert(finalists, { playerId = i, choice = if steals then "Steal" else "Share" })
 				end
 				local result = Outcomes.resolve(finalists)
 				for _, me in finalists do
@@ -43,7 +38,7 @@ describe("DecisionLogic.prizeFor agrees with Outcomes.resolve", function()
 					local expected: DecisionLogic.Prize = "Nothing"
 					for _, winner in result.winners do
 						if winner.playerId == me.playerId then
-							expected = PRIZE_BY_VU[winner.bountyVU]
+							expected = PRIZE_BY_TAG[winner.outcomeTag]
 						end
 					end
 					expect(DecisionLogic.prizeFor(me.choice, othersStealing, seats)):toBe(expected)
@@ -75,7 +70,9 @@ describe("DecisionLogic.parseReveal", function()
 			choices = choices,
 			outcome = {
 				branch = "SoleSteal",
-				winners = { { playerId = 1, bountyVU = 20 } },
+				-- bountyVU is a field from a pre-2c server, kept here to
+				-- prove parseReveal copies only what it knows.
+				winners = { { playerId = 1, outcomeTag = "SoleStealer", bountyVU = 20 } },
 				loserIds = { 2, -7 },
 			},
 			revealAt = 100,
@@ -92,7 +89,7 @@ describe("DecisionLogic.parseReveal", function()
 		expect(r.loserIds[2]):toBe(-7)
 	end)
 
-	it("never keeps a winner's bountyVU (a streak-tier tell)", function()
+	it("copies only winner ids, dropping any field it doesn't know", function()
 		local r = DecisionLogic.parseReveal(payload({ [1] = "Steal" })) :: any
 		for _, value in r do
 			if type(value) == "table" then
@@ -230,6 +227,8 @@ describe("DecisionLogic.revealStep", function()
 		expect(DecisionLogic.revealStep(t.lead - 0.01, 3).cardsShown):toBe(0)
 		expect(DecisionLogic.revealStep(t.lead, 3).cardsShown):toBe(1)
 		expect(DecisionLogic.revealStep(t.lead + t.cardGap, 3).cardsShown):toBe(2)
+		expect(DecisionLogic.revealStep(t.lead + t.cardGap + t.finalGap - 0.01, 3).cardsShown):toBe(2)
+		expect(DecisionLogic.revealStep(t.lead + t.cardGap + t.finalGap, 3).cardsShown):toBe(3)
 		expect(DecisionLogic.revealStep(t.lead + 10 * t.cardGap, 3).cardsShown):toBe(3)
 	end)
 
@@ -292,10 +291,53 @@ describe("DecisionLogic.revealOrder", function()
 	end)
 end)
 
+describe("DecisionLogic.heartbeats", function()
+	local beats = DecisionLogic.heartbeats(3)
+
+	local function under(card: number)
+		local out = {}
+		for _, beat in beats do
+			if beat.card == card then
+				table.insert(out, beat)
+			end
+		end
+		return out
+	end
+
+	it("beats only while a card is face down", function()
+		for _, beat in beats do
+			local step = DecisionLogic.revealStep(beat.at, 3)
+			expect(step.current):toBe(beat.card)
+			expect(step.faceUp):toBe(false)
+		end
+	end)
+
+	it("quickens and grows card by card, the last fastest and strongest", function()
+		local first, last = under(1), under(3)
+		expect(first[2].at - first[1].at > last[2].at - last[1].at):toBe(true)
+		expect(first[1].intensity < under(2)[1].intensity):toBe(true)
+		expect(last[1].intensity):toBe(1)
+		expect(#last > #first):toBe(true)
+	end)
+
+	it("waits longest before the last card", function()
+		local gap2 = DecisionLogic.cardTurnAt(2, 3) - DecisionLogic.cardTurnAt(1, 3)
+		local gap3 = DecisionLogic.cardTurnAt(3, 3) - DecisionLogic.cardTurnAt(2, 3)
+		expect(gap3 > gap2):toBe(true)
+	end)
+
+	it("treats a lone card as the last", function()
+		local solo = DecisionLogic.heartbeats(1)
+		expect(#solo > 0):toBe(true)
+		expect(solo[1].intensity):toBe(1)
+		expect(solo[1].at >= 0):toBe(true)
+	end)
+end)
+
 describe("DecisionLogic.cardTurnAt", function()
 	it("lands on the beat revealStep turns each card", function()
 		for index = 1, 3 do
-			local at = DecisionLogic.cardTurnAt(index)
+			local at = DecisionLogic.cardTurnAt(index, 3)
 			expect(DecisionLogic.revealStep(at, 3).cardsShown):toBe(index)
 			expect(DecisionLogic.revealStep(at - 0.01, 3).cardsShown):toBe(index - 1)
 		end
@@ -353,21 +395,6 @@ describe("DecisionLogic.resultCopy", function()
 		)
 		expect(copy.detail):toBe("MEDIUM bounty")
 		expect(copy.streak):toBe("Streak 3")
-	end)
-
-	it("says so when the round carried no streak credit", function()
-		local won = DecisionLogic.resultCopy(reveal("AllShare", { 1, 2, 3 }, {}), 1, {
-			streakBefore = 4,
-			streakAfter = 4,
-			won = true,
-		})
-		expect(won.streak):toBe("No streak credit this round")
-		local lost = DecisionLogic.resultCopy(reveal("AllSteal", {}, { 1, 2, 3 }), 1, {
-			streakBefore = 4,
-			streakAfter = 4,
-			won = false,
-		})
-		expect(lost.streak):toBe("Streak 4 kept - no streak credit this round")
 	end)
 
 	it("shows a spectator the outcome and no streak", function()
@@ -429,5 +456,20 @@ describe("DecisionLogic.waitingNotice", function()
 
 	it("tells a spectator who they're waiting on", function()
 		expect(DecisionLogic.waitingNotice(false, ids, {}, {})):toBe("Waiting for the finalists…")
+	end)
+end)
+
+describe("DecisionLogic.revealStageX (playtest 2026-10-04)", function()
+	it("stays centred when the seats column is clear of it", function()
+		expect(DecisionLogic.revealStageX(2000, 400, 130, 16, 112)):toBe(1000)
+	end)
+
+	it("moves right of the seats on a narrow sideways phone", function()
+		-- ~910 reference px wide: the column ends at 24 + 344.
+		expect(DecisionLogic.revealStageX(910, 368, 130, 16, 112)):toBe(514)
+	end)
+
+	it("never pushes into the right-hand rail", function()
+		expect(DecisionLogic.revealStageX(700, 368, 130, 16, 112)):toBe(458)
 	end)
 end)

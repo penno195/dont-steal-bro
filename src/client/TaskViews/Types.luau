@@ -39,7 +39,10 @@ export type TaskView = {
 	-- result ends the attempt. `feedback` is the handler's optional
 	-- per-submission detail (its own shape, e.g. Fuse Rewire's accepted
 	-- pair) - see the server's TaskHandlers/Types.luau TaskFeedback.
-	onResult: (stationId: string, success: boolean, feedback: any?) -> (),
+	-- `completing`: this was the LAST step, and the server is holding
+	-- the completion (too fast to be human) - success follows unless the
+	-- attempt ends first. Show it as done; take no more input.
+	onResult: (stationId: string, success: boolean, feedback: any?, completing: boolean?) -> (),
 
 	-- The attempt ended for any OTHER reason before success - walked
 	-- away, a new interaction started elsewhere, disconnecting. Tears

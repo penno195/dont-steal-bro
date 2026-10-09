@@ -13,7 +13,7 @@ local ProfileLogic = require("../src/server/ProfileLogic")
 TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 	TestRunner.it("fills every v1 field with defaults for a completely empty old profile", function()
 		local migrated = ProfileLogic.migrate({})
-		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(migrated.schemaVersion):toBe(8)
 		TestRunner.expect(migrated.currentStreak):toBe(0)
 		TestRunner.expect(migrated.bestStreak):toBe(0)
 		TestRunner.expect(migrated.currency):toBe(0)
@@ -27,7 +27,7 @@ TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 			bestStreak = 12,
 			currency = 250,
 		})
-		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(migrated.schemaVersion):toBe(8)
 		TestRunner.expect(migrated.currentStreak):toBe(7)
 		TestRunner.expect(migrated.bestStreak):toBe(12)
 		TestRunner.expect(migrated.currency):toBe(250)
@@ -38,7 +38,7 @@ TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 		template.currentStreak = 4
 		local migrated = ProfileLogic.migrate(template :: any)
 		TestRunner.expect(migrated.currentStreak):toBe(4)
-		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(migrated.schemaVersion):toBe(8)
 	end)
 
 	TestRunner.it("gives a v2 profile an empty settings table and keeps its store fields", function()
@@ -48,11 +48,49 @@ TestRunner.describe("ProfileLogic.migrate (migration chain)", function()
 			purchaseIdCache = { "a" },
 			powerUpStock = { SprintBoost = 2 },
 		})
-		TestRunner.expect(migrated.schemaVersion):toBe(3)
+		TestRunner.expect(migrated.schemaVersion):toBe(8)
 		TestRunner.expect(next(migrated.settings)):toBe(nil)
 		TestRunner.expect(migrated.currentStreak):toBe(5)
 		TestRunner.expect(migrated.purchaseIdCache[1]):toBe("a")
 		TestRunner.expect(migrated.powerUpStock.SprintBoost):toBe(2)
+	end)
+
+	TestRunner.it("drops a v3 profile's pendingBounty and starts it with no win reward", function()
+		-- A PendingBounty never paid anything (its reward table was never
+		-- built), so there is nothing to carry into lastWinReward.
+		local migrated: any = ProfileLogic.migrate({
+			schemaVersion = 3,
+			currentStreak = 2,
+			currency = 40,
+			pendingBounty = { streakTier = 1, outcomeTag = "AllShare", grantedAt = 1000 },
+		})
+		TestRunner.expect(migrated.schemaVersion):toBe(8)
+		TestRunner.expect(migrated.pendingBounty):toBe(nil)
+		TestRunner.expect(migrated.lastWinReward):toBe(nil)
+		TestRunner.expect(migrated.currentStreak):toBe(2)
+		TestRunner.expect(migrated.currency):toBe(40)
+	end)
+
+	TestRunner.it("gives a v4 profile no season progress and keeps its win reward", function()
+		local reward = { roundId = "r1", outcomeTag = "AllShare", rung = 1, currency = 50, grantedAt = 1000 }
+		local migrated = ProfileLogic.migrate({ schemaVersion = 4, currentStreak = 1, lastWinReward = reward })
+		TestRunner.expect(migrated.schemaVersion):toBe(8)
+		TestRunner.expect(next(migrated.seasonProgress)):toBe(nil)
+		TestRunner.expect((migrated.lastWinReward :: any).currency):toBe(50)
+	end)
+
+	TestRunner.it("gives a v5 profile an empty last loadout and keeps its selection", function()
+		local migrated = ProfileLogic.migrate({ schemaVersion = 5, starterPowerUps = { "freeze" } })
+		TestRunner.expect(migrated.schemaVersion):toBe(8)
+		TestRunner.expect(#migrated.lastLoadout):toBe(0)
+		TestRunner.expect(migrated.starterPowerUps[1]):toBe("freeze")
+	end)
+
+	TestRunner.it("gives a v6 profile no paid Navigation rounds", function()
+		local migrated = ProfileLogic.migrate({ schemaVersion = 6, currency = 40 })
+		TestRunner.expect(migrated.schemaVersion):toBe(8)
+		TestRunner.expect(migrated.navigationRounds):toBe(0)
+		TestRunner.expect(migrated.currency):toBe(40)
 	end)
 
 	TestRunner.it("never mutates the table passed in", function()
@@ -125,29 +163,5 @@ TestRunner.describe("ProfileLogic.release (double-release)", function()
 		end)
 		TestRunner.expect(order[1]):toBe("outcome")
 		TestRunner.expect(order[2]):toBe("end")
-	end)
-end)
-
-TestRunner.describe("ProfileLogic.resolveBountyTier", function()
-	local tiers: { ProfileLogic.BountyTier } = {
-		{ tier = 1, minStreak = 1, soleStealerVU = 20, loneSharerVU = 10, allShareVU = 5 },
-		{ tier = 2, minStreak = 3, soleStealerVU = 24, loneSharerVU = 12, allShareVU = 6 },
-		{ tier = 5, minStreak = 15, soleStealerVU = 36, loneSharerVU = 18, allShareVU = 9 },
-	}
-
-	TestRunner.it("picks the lowest tier at its exact floor", function()
-		TestRunner.expect(ProfileLogic.resolveBountyTier(tiers, 1).tier):toBe(1)
-	end)
-
-	TestRunner.it("picks the highest tier whose floor has been reached", function()
-		TestRunner.expect(ProfileLogic.resolveBountyTier(tiers, 4).tier):toBe(2)
-		TestRunner.expect(ProfileLogic.resolveBountyTier(tiers, 20).tier):toBe(5)
-	end)
-
-	TestRunner.it("errors when no tier covers the streak", function()
-		local ok = pcall(function()
-			ProfileLogic.resolveBountyTier(tiers, 0)
-		end)
-		TestRunner.expect(ok):toBe(false)
 	end)
 end)

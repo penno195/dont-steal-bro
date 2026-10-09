@@ -15,9 +15,9 @@ starting-power-up design crosses the pay-to-win line.
 | `src/server/Services/DataService.luau` | The receipt write gate — the one narrow handle that exposes durability facts. |
 | `tests/StoreLogic.spec.luau` | 53 cases over the pure half. |
 
-Everything in `Config/Store/` currently ships `enabled = false` and
-`assetId = 0`. Nothing is for sale until somebody creates the pass or
-developer product in the Creator Dashboard and pastes its id in — and
+A Robux product is for sale only once its pass or developer product
+exists in the Creator Dashboard and its id is pasted in (the four
+developer products went live 2026-10-03; see `store-products.md`) — and
 `ConfigValidator` refuses to boot a server with an enabled entry that
 still has no id, so a half-finished product cannot reach a player.
 
@@ -80,14 +80,22 @@ explicitly rather than pretending it isn't there.
 
 ## 3. What a game pass may grant, and why
 
-A pass is permanent, so its grants are re-applied on **every join**.
-That makes cosmetic and title grants safe — both are set insertions that
-do nothing the second time — and makes consumable grants a disaster:
-currency on a pass is an infinite tap.
+Nothing directly. Every pass is a **season pass** (design-decisions.md
+Q1, applied 2026-10-02; rewards-roadmap.md step 5), and
+`Validate.checkStoreItem` refuses a `GamePass` with any `grants`. What
+a pass unlocks is its season's premium track (`Config/Seasons/`): items
+at win counts, where only wins between the pass's first sighting and the
+season's end count. A Roblox pass is owned forever, so that window is
+ours to enforce, and a new season needs a new pass.
 
-`Validate.checkStoreItem` refuses a `GamePass` that grants `Currency` or
-`PowerUpStock` at boot, rather than leaving it to review. Consumables
-are sold as developer products, which come with receipts.
+Track items can be cosmetics, coins or power-up stock. They're paid
+once, not on every join: the profile's `seasonProgress` records how many
+items of each track were paid, in the same mutation as the grants
+(`SeasonLogic`). A power-up on a track must be `freelyEarnable` (Q8),
+and a track cosmetic is track-only forever: it never drops, is never
+sold, and is on no other track or leaderboard band. The store refuses
+to prompt for a pass outside its season. Consumables bought outright
+are still developer products, which come with receipts.
 
 No shipped product grants a `Title`. The grant kind exists and is
 validated, but the title ladder keys off `bestStreak` alone (P4-2), and
@@ -192,11 +200,13 @@ happen is a double grant, and the PurchaseId cache is what rules it out.
 
 ### Case 7 — game passes
 
-1. Enable a pass entry with a real `gamePassId` you own.
-2. Join. **Expect:** `syncPasses` grants its cosmetics once, with a
-   `Store: GRANT` line and no purchaseId.
-3. Rejoin. **Expect:** no second `Store: GRANT` line — the grants
-   re-apply and change nothing.
+1. Enable a season pass with a real `assetId` you own, and its season
+   with a window that includes today.
+2. Join. **Expect:** `syncPasses` records `passSeenAt` and pays the
+   premium track's 0-win item once, with a `Season ... Premium @0 wins`
+   line.
+3. Rejoin. **Expect:** no second line — the progress entry's
+   `premiumPaid` already covers it.
 4. `StoreService.ownsPass(player, id)` twice in a row: the second should
    not produce a second web call (watch the output; a failure warns).
 
@@ -274,7 +284,8 @@ correct rule, and this task made it structural rather than aspirational:
   price.
 - `Validate.checkStoreConfig` pins `loadoutSlots` to exactly 3, so the
   cap cannot be raised by editing a number.
-- A game pass cannot grant a consumable at all.
+- A game pass grants nothing itself, and a power-up on a season track
+  must be `freelyEarnable`.
 
 So the *mechanical* pay-to-win vector — buy power nobody can earn, or
 buy more of it than anyone can carry — is closed at boot, in four
@@ -314,10 +325,10 @@ two players can attempt a high-stakes round.
 Roughly in order of how much they cost:
 
 1. **Cheapest, and I would do this one regardless: exclude bought stock
-   from streak-credited rounds above a threshold.** The machinery
-   already exists — `threat-model.md` §8's NPC-seat rule already gates
-   streak credit on round conditions, and `ProgressionService.
-   shouldCreditStreak` is the single place it is asked. Either a round
+   from streak-credited rounds above a threshold.** When this was
+   written, `threat-model.md` §8's NPC-seat rule already gated streak
+   credit on round conditions; that gate was retired on 2026-10-02
+   (rewards-roadmap.md step 2d), so this would now need its own. Either a round
    entered with a purchased loadout earns no streak credit above some
    streak, or loadouts are simply disabled above it. High-streak rounds
    become skill-only; the store keeps its whole audience, which is the
@@ -331,17 +342,19 @@ Roughly in order of how much they cost:
 
 3. **Make the free path fast enough to be real.** Q8's rule is only true
    if "also earnable" means earnable on a comparable timescale. There
-   are no economy numbers in `docs/` yet — `CurrencySmall`'s 500 coins
-   and `SprintBoostStock`'s ten items are marked PLACEHOLDER precisely
-   because nothing anchors them. **Whoever sets those numbers is the
+   are targets now (design-decisions.md Q1, "pricing", 2026-10-02): one
+   power-up is one rung-0 win, or about 23-29 Robux, so ten Sprint
+   Boosts are ten wins or 249 Robux. Playtest still has to confirm how
+   long a win takes. **Whoever sets those numbers is the
    person who decides whether this design is pay-to-win, not whoever
    wrote Q8.** If ten Sprint Boosts cost 79 Robux or forty minutes of
    play, the rule holds. If it is 79 Robux or six hours, the rule is
    decorative.
 
-4. **Cosmetics-only, if any doubt remains.** Passes are already
-   cosmetic-only and structurally cannot be otherwise. Extending that to
-   the whole store costs real revenue and is the safe answer — Q8
+4. **Cosmetics-only, if any doubt remains.** Season tracks can pay
+   freely-earnable power-up stock (user decision, 2026-10-02); dropping
+   that, and extending cosmetics-only to the whole store, costs real
+   revenue and is the safe answer — Q8
    explicitly notes this direction is cheap to tighten and expensive to
    loosen later.
 
@@ -354,6 +367,58 @@ bucketed by whether the player has ever bought stock. If the two curves
 separate at the top end, this design crossed the line regardless of what
 the config validates.
 
+## 6b. Coin offers and the random-item audit (rewards step 6, 2026-10-02)
+
+**Coin offers.** Coins are spent on `CoinOffer` store entries: one file
+per offer in `Config/Store/`, with a fixed `coinPrice` and no Roblox
+asset. User decision: coins buy **power-up stock only**, one of each
+freely earnable power-up, 25 coins each (one rung-0 win). Validate refuses a
+coin offer that grants anything else. `StoreService.buyWithCoins`
+deducts the price and applies the grant in one profile mutation
+(`StoreLogic.buyWithCoins`), then saves. No prompt and no receipt are
+involved, so the client's flow goes straight to Succeeded on `Granted`.
+
+**Nothing bought is random.** Every way to pay, and what it yields:
+
+| Paid with | What | Yields |
+|---|---|---|
+| Robux | Developer product | Its config `grants`, fixed |
+| Robux | Season pass | Nothing itself; fixed track items at fixed win counts |
+| Coins (buyable with Robux) | Coin offer | Its config `grants`, fixed |
+
+The only random prize is the win drop (`RewardLogic`, rolled by
+ProgressionService on a win). Entering a round costs nothing, and the
+drop odds depend on the streak alone. No grant kind can move a streak or
+an odd. `tests/StoreLogic.spec.luau` scans every purchase-path module
+and fails if one gains a random source or a call into RewardLogic.
+
+**Roblox policy, checked 2026-10-02.** The [paid random items
+guidelines](https://create.roblox.com/docs/production/monetization/paid-random-items)
+and the [26 May 2026 clarification](https://devforum.roblox.com/t/clarifying-requirements-for-paid-random-items/4654622):
+- A paid random item is a random outcome bought with Robux, or with
+  in-game currency bought with Robux. Our coins count as such a currency.
+- Random rewards earned through gameplay without payment, including
+  "random rewards from winning matches", are explicitly out of scope.
+  That covers win drops.
+- An item that boosts the odds of a random outcome (a "lucky potion")
+  is in scope, and its effect has to be shown numerically.
+- Restricted users (`PolicyService:GetPolicyInfoForPlayerAsync`'s
+  `ArePaidRandomItemsRestricted`, which also covers under-18s in Brazil
+  since 17 March 2026) can't be offered paid random items at all.
+
+So today we need no odds display and no PolicyService gate. Three
+things would change that, and each needs both before it ships:
+1. Anything sold for Robux or coins that yields a random outcome, such
+   as a crate or a re-roll.
+2. Anything sold that raises drop odds, such as a luck boost or a
+   streak shield that keeps the rung.
+3. Paying to enter a round, since its win drop would then be bought.
+
+Bought power-ups help win a race, which leads to drops only through
+play. We read that as gameplay, not an odds boost, because no item
+touches the roll. Re-check this if a power-up ever affects streaks or
+rewards directly.
+
 ## 7. Unverified platform assumptions
 
 Same stance as `leaderboard-scale.md` §6. Each of these is believed
@@ -365,11 +430,11 @@ before launch.
 
 | # | Assumption | Status | If wrong |
 |---|---|---|---|
-| S1 | `MarketplaceService.ProcessReceipt` tolerates the callback yielding until it returns a decision | **Behavioural, unverified.** ProfileStore's own docs state it, based on observation, not documentation | Falls back to a `NotProcessedYet` and a later re-offer — the PurchaseId is already in `Data`, so nothing is lost. This is the assumption to check first |
-| S2 | `ProcessReceipt` may only be assigned by one script | Documented by Roblox; enforced here by `claimReceiptAccess` | A second assignment silently wins and receipts route somewhere else |
+| S1 | `MarketplaceService.ProcessReceipt` tolerates the callback yielding until it returns a decision | **Behavioural, still unverified (2026-10-04).** ProfileStore's own docs state it from observation. The current `MarketplaceService` reference says nothing about yielding or a timeout either way. Step 13's test B (`live-test-plan.md`) exercises it on the live place | Falls back to a `NotProcessedYet` and a later re-offer — the PurchaseId is already in `Data`, so nothing is lost. This is the assumption to check first |
+| S2 | `ProcessReceipt` may only be assigned by one script | **Confirmed 2026-10-04:** the reference says it "can only be done once by one script on the server". Enforced here by `claimReceiptAccess` | A second assignment silently wins and receipts route somewhere else |
 | S3 | `UserOwnsGamePassAsync(userId, gamePassId)` takes a **user id**, not a Player | **Verified** against `globalTypes.d.luau` | Runtime error on every ownership check |
 | S4 | `PromptGamePassPurchaseFinished` passes a `Player`; `PromptProductPurchaseFinished` passes a **number userId** | **Verified** against `globalTypes.d.luau` (`RBXScriptSignal<(Player, number, boolean)>` vs `<(number, number, boolean)>`) | The pass handler would index a number. Not connected for products at all, deliberately |
-| S5 | A `PurchaseId` is stable across rejoins for one purchase | Documented by Roblox and load-bearing for the replay cache | The replay guard stops working; duplicates become possible |
+| S5 | A `PurchaseId` is stable across rejoins for one purchase | Load-bearing for the replay cache. **Implied, not stated (2026-10-04):** the docs say a `NotProcessedYet` receipt is offered again the next time the player joins, and Roblox's own sample keys its duplicate guard on `PurchaseId`, but no sentence guarantees stability. Test B's rejoin step checks it | The replay guard stops working; duplicates become possible |
 | S6 | `Profile.LastSavedData` reflects only confirmed DataStore writes | **Verified** in the pinned ProfileStore source (set in the save path, fired with `OnAfterSave`) | The confirm step confirms nothing and the guarantee in §2 is void |
 | S7 | With Studio API access off, ProfileStore's mock still updates `LastSavedData` | **Verified** in the pinned source | §4's test plan needs API access enabled |
 | S8 | `GetProductInfo` is deprecated in favour of `GetProductInfoAsync` | **Verified** in `globalTypes.d.luau` | Only relevant if a store UI ever fetches live prices; nothing here does |

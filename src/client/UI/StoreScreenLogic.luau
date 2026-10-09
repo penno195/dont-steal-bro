@@ -27,12 +27,15 @@ export type Grant = {
 
 export type Item = {
 	key: string,
-	kind: string, -- "GamePass" | "DeveloperProduct"
+	kind: string, -- "GamePass" | "DeveloperProduct" | "CoinOffer"
 	enabled: boolean,
 	displayName: string,
 	robuxPrice: number,
+	coinPrice: number?, -- CoinOffer only
 	sortOrder: number,
+	imageAssetId: number, -- 0 = no art yet (disabled items only, Validate enforces it)
 	grants: { Grant },
+	perk: string?, -- a perk pass (Unlimited Navigation), not a season pass
 }
 
 -- The StoreState payload (StoreService.pushState), as the client gets it.
@@ -40,19 +43,30 @@ export type StoreState = {
 	currency: number,
 	powerUpStock: { [string]: number },
 	loadout: { string },
+	lastLoadout: { string }?, -- what the last round spent; the Locker's "Same as last round"
+	-- The Locker's Titles tab: this player's own titles only.
+	unlockedTitles: { string }?,
+	equippedTitle: string?, -- their own pick; nil = wear the highest rung
+	wornTitle: string?, -- what they're shown wearing, resolved server-side
+
 	ownedCosmetics: { string },
 	equipped: { [string]: string },
 	ownedPasses: { string },
 	loadoutSlots: number,
+	-- The live season and this player's progress on it, or nil when no
+	-- season is running. SeasonTrackLogic.SeasonState's shape; loose here
+	-- because this module has no requires.
+	season: { [string]: any }?,
 }
 
-export type Category = "Passes" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"
+export type Category = "Season" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"
 
--- Tab order, left to right. Passes first: a permanent purchase is the
--- one a player most wants to find, and the one least worth burying.
-StoreScreenLogic.CATEGORIES = table.freeze({ "Passes", "Bundles", "PowerUps", "Cosmetics", "Currency" } :: { Category })
+-- Tab order, left to right. Season first: the pass is the purchase a
+-- player most wants to find, and its track is where wins pay off.
+StoreScreenLogic.CATEGORIES = table.freeze({ "Season", "Bundles", "PowerUps", "Cosmetics", "Currency" } :: { Category })
 
 local KIND_CATEGORY: { [string]: Category } = {
+	SeasonPass = "Season",
 	PowerUpStock = "PowerUps",
 	Cosmetic = "Cosmetics",
 	Currency = "Currency",
@@ -62,10 +76,11 @@ local KIND_CATEGORY: { [string]: Category } = {
 -- Derived from what the item GRANTS rather than a new config field, so
 -- adding a product stays one file (Ground Rule 2) and a product can't be
 -- filed under a tab that disagrees with its contents. A game pass is
--- always Passes; anything granting two different kinds is a bundle.
+-- Season (rewards step 5) unless it's a perk pass, which grants nothing
+-- and sits in Bundles; anything granting two different kinds is a bundle.
 function StoreScreenLogic.categoryOf(item: Item): Category
 	if item.kind == "GamePass" then
-		return "Passes"
+		return if item.perk ~= nil then "Bundles" else "Season"
 	end
 	local found: Category? = nil
 	for _, grant in item.grants do
@@ -108,6 +123,7 @@ export type ItemState =
 	| "Buyable"
 	| "Owned" -- a pass already owned: nothing to buy again
 	| "Equipped" -- owned, and something it grants is being worn
+	| "TooFewCoins" -- a coin offer the player can't afford yet
 
 local function cosmeticIds(item: Item): { string }
 	local out = {}
@@ -128,8 +144,19 @@ local function isEquipped(state: StoreState, cosmeticId: string): boolean
 	return false
 end
 
+-- The monthly season pass: a developer product whose grant is SeasonPass.
+function StoreScreenLogic.isSeasonPass(item: Item): boolean
+	for _, grant in item.grants do
+		if grant.kind == "SeasonPass" then
+			return true
+		end
+	end
+	return false
+end
+
 -- A developer product is never "Owned": it's a consumable, and buying a
--- second currency pack is the point. Only passes can be owned outright.
+-- second currency pack is the point. Only passes can be owned outright,
+-- and the season pass for the season running now.
 -- `state` nil means StoreState hasn't arrived - the screen is loading,
 -- and no item gets a Buy button it might have to take back.
 function StoreScreenLogic.itemState(item: Item, state: StoreState?): ItemState?
@@ -138,6 +165,14 @@ function StoreScreenLogic.itemState(item: Item, state: StoreState?): ItemState?
 	end
 	if not item.enabled then
 		return "Unavailable"
+	end
+	if item.kind == "CoinOffer" then
+		return if state.currency >= (item.coinPrice or 0) then "Buyable" else "TooFewCoins"
+	end
+	-- The season pass is bought again each month, so it's "owned" only
+	-- for the season running now.
+	if StoreScreenLogic.isSeasonPass(item) then
+		return if state.season ~= nil and state.season.passSeen == true then "Owned" else "Buyable"
 	end
 	if item.kind ~= "GamePass" or table.find(state.ownedPasses, item.key) == nil then
 		return "Buyable"
@@ -180,6 +215,8 @@ local SLOT_FOR_CATEGORY: { [string]: string } = {
 	StreakFlair = "streakFlair",
 	Nameplate = "nameplate",
 	CallingCard = "callingCard",
+	Hat = "hat",
+	BackItem = "backItem",
 }
 
 function StoreScreenLogic.slotFor(category: string): string?
@@ -188,10 +225,29 @@ end
 
 -- One tab's items, sorted by config sortOrder then key (so two items
 -- with the same order still land in a stable place across refreshes).
-function StoreScreenLogic.itemsIn(items: { Item }, category: Category): { Item }
+-- `livePassKey` is the running season's pass: the Season tab offers only
+-- that one, since an old season's pass would unlock nothing (and the
+-- server refuses to sell it). nil = no season running, nothing to offer.
+-- A Navigation round is never in the grid: it's sold only from the
+-- in-match toggle (design-decisions.md Q8, "Navigation"). Nor is a
+-- streak buy-back: it's offered only to a player who just lost one (Q7).
+local function inGrid(item: Item): boolean
+	for _, grant in item.grants do
+		if grant.kind == "NavigationRound" or grant.kind == "StreakBuyBack" then
+			return false
+		end
+	end
+	return true
+end
+
+function StoreScreenLogic.itemsIn(items: { Item }, category: Category, livePassKey: string?): { Item }
 	local out = {}
 	for _, item in items do
-		if StoreScreenLogic.categoryOf(item) == category then
+		if
+			inGrid(item)
+			and StoreScreenLogic.categoryOf(item) == category
+			and (category ~= "Season" or item.key == livePassKey)
+		then
 			table.insert(out, item)
 		end
 	end
@@ -256,6 +312,7 @@ local FALLBACK_MESSAGES: { [string]: string } = {
 	Unavailable = "That item isn't available right now.",
 	AlreadyOwned = "You already own this.",
 	PromptFailed = "Couldn't open the purchase window. Please try again.",
+	NotEnoughCoins = "You don't have enough coins for that yet.",
 }
 
 function StoreScreenLogic.idle(): Flow
@@ -274,6 +331,10 @@ local function landed(key: string, before: StoreState?, after: StoreState): bool
 	end
 	if before == nil then
 		return false
+	end
+	local hadPass = before.season ~= nil and before.season.passSeen == true
+	if after.season ~= nil and after.season.passSeen == true and not hadPass then
+		return true
 	end
 	if after.currency > before.currency or #after.ownedCosmetics > #before.ownedCosmetics then
 		return true
@@ -303,6 +364,11 @@ function StoreScreenLogic.step(flow: Flow, event: FlowEvent, now: number): Flow
 	elseif e.type == "Result" then
 		if flow.phase ~= "Requesting" or e.key ~= flow.key then
 			return flow -- a late answer to something we've moved past
+		end
+		-- A coin offer is settled server-side in one step: no prompt, no
+		-- receipt to wait for.
+		if e.status == "Granted" then
+			return { phase = "Succeeded", key = flow.key, since = now, message = nil, baseline = nil }
 		end
 		if e.status == "Prompted" then
 			return { phase = "Prompted", key = flow.key, since = now, message = nil, baseline = flow.baseline }

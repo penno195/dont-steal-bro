@@ -7,7 +7,7 @@ them touches a remote.
 | File | Role | Tested |
 |---|---|---|
 | `UI/StoreScreenLogic.luau`, `UI/BoardLogic.luau`, `UI/ResultsLogic.luau`, `shared/SettingsLogic.luau` | Pure view logic: tabs, rarity, item state, purchase-flow reducer, board view and virtualisation maths, beat sequencing, settings bounds | Headless (`tests/MenuScreens.spec.luau`) |
-| `UI/Screens/MenuShell.luau` | The shared frame: title, body, Close at the bottom, B/Escape to close, a loading/empty/error message block | On device |
+| `UI/Screens/MenuShell.luau` | The shared frame: title, the X (or a Continue footer), body, B/Escape to close, a loading/empty/error message block | On device |
 | `UI/Screens/Store.luau`, `Leaderboards.luau`, `Results.luau`, `Settings.luau` | The four screens | On device |
 | `Controllers/MenuController.luau` | Remotes → sources, the purchase flow and its clock, the launcher, one-menu-at-a-time, auto-opening Results | On device |
 | `Controllers/SettingsController.luau` | Settings source, applies each setting, throttled `SettingsIntent` | On device |
@@ -17,10 +17,10 @@ them touches a remote.
 | Screen | Data | Freshness |
 |---|---|---|
 | Store | Catalogue, cosmetic/power-up/title registries | Static config |
-| | `StoreState` (currency, stock, owned, equipped, passes) | **Live**, targeted; pushed on profile load and after every change |
+| | `StoreState` (currency, stock, owned, equipped, passes, live season progress) | **Live**, targeted; pushed on profile load and after every change |
 | | `StorePurchaseResult` + `MarketplaceService.Prompt*PurchaseFinished` | Per request. They only move the spinner; ownership comes from `StoreState` alone |
 | Leaderboards | `LeaderboardState` (all-time), `PeriodBoardState` (daily/weekly) | **Cached** server-side, broadcast every 60–120 s, kept by MenuController for the session. There's no request remote. Staleness comes with the entries |
-| Results | `RoundRecap` (reason, streak before/after, bounty, streak credit) | **Per round**, targeted, sent on entering Results |
+| Results | `RoundRecap` (reason, streak before/after, win reward: coins and drop) | **Per round**, targeted, sent on entering Results |
 | | Tally: placement, tasks from `TaskQualificationResult`, power-ups from own successful `PowerUpUseResult`s | Counted locally, display only |
 | Settings | `SettingsState` | **Live**, targeted; applied locally first, then the server's copy wins |
 
@@ -28,8 +28,17 @@ them touches a remote.
 
 - **Layout.** Every screen is one column, 344 reference px wide and as tall
   as the usable rect, centred over an opaque backdrop. The primary action
-  sits at the bottom, where the thumb already is: Close/Continue, and on the
-  store the Buy button.
+  sits at the bottom, where the thumb already is: Results' Continue, and on
+  the store the Buy button. Every other screen closes with the task views'
+  X in the header's top-right corner (user decision 2026-10-09), which
+  gives the body back the old Close button's height.
+- **Landscape split (store).** The scale follows the short axis, so a
+  landscape screen is always about 360 tall, too short for the store's
+  tabs + grid + 212 px item panel in one column (the panel used to cover
+  the tabs). A screen can opt into `MenuShell` `split`: in landscape the
+  column widens to two panes, each up to 312 wide, with the grid or
+  season track on the left and the item panel on the right. Portrait
+  is unchanged. Found in the 2026-10-03 Studio pass.
 - **Store.** Tapping a card only selects it. Only the panel's Buy button
   buys, so a tap while scrolling can never open a prompt. Rarity shows as a
   coloured edge *and* the word. While any purchase is in flight, every Buy
@@ -65,11 +74,11 @@ them touches a remote.
 
 ## Decisions made here
 
-- **No 3D item preview yet.** The prompt asks for a viewport preview. Every
-  sellable item is still a placeholder (`enabled = false`, asset id 0), so
-  there's no model to render. The panel shows a tile with the rarity edge
-  instead. When assets exist, swap the `Preview` frame in `Store.luau` for a
-  `ViewportFrame`; nothing else changes.
+- **No 3D item preview yet.** The prompt asks for a viewport preview. Since
+  next-stages 14d (2026-10-06) every item has a 2D picture
+  (`StoreItemDef.imageAssetId`), shown on its card and in the panel's
+  rarity-edged `Preview` tile. A 3D preview would swap that tile in
+  `Store.luau` for a `ViewportFrame`; nothing else changes.
 - **Client copy of the cosmetic slot map.** `StoreEquipIntent` needs the slot
   name, and `CosmeticLogic` lives in ServerScriptService.
   `StoreScreenLogic.slotFor` is a copy, and the spec asserts it matches the
@@ -94,6 +103,12 @@ them touches a remote.
   nothing.
 - **Colour-blind mode consumers.** The source exists. P6-8's accessibility
   pass decides what extra labels each screen shows when it's on.
-- **Loadout editing.** `StoreLoadoutIntent` exists, but no screen sets
-  loadout slots yet. It isn't in P6-6's list; it belongs with the pre-round
-  lobby.
+- **Loadout editing.** Done (2026-10-08): the Locker (`Screens/Locker`,
+  first button on the launcher) sets loadout slots and equips cosmetics,
+  and QueueController's strip shows the loadout while queued, with
+  "Same as last round". Rules: design-decisions.md Q8, "the Locker and
+  choosing a loadout". Its Titles tab reads the player's own
+  `unlockedTitles`/`equippedTitle`/`wornTitle` from StoreState, which
+  TitleService re-pushes after every unlock and equip. The Locker icon is
+  `assets/ui/locker.png` (scripts/make-ui-icons.ps1). Hub practice slots
+  carry a PRACTICE badge (`RaceHUD.mountPowerUps`).

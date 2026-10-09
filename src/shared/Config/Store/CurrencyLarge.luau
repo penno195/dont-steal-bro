@@ -9,14 +9,15 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local CurrencyLarge: Validate.StoreItemDef = {
 	key = "currency-large",
 	kind = "DeveloperProduct",
-	assetId = 0,
-	enabled = false,
+	assetId = 3716319109,
+	enabled = true,
 	displayName = "Large Coin Chest",
-	description = "3,000 coins. The same coins you earn from playing - these just arrive sooner.",
-	robuxPrice = 249, -- PLACEHOLDER: display only
+	description = "250 coins. The same coins you earn from playing - these just arrive sooner.",
+	robuxPrice = 249, -- ten power-ups at about 25 R$ each; display only
 	sortOrder = 31,
+	imageAssetId = 96446701704970, -- assets/store/currency-large.png
 	grants = {
-		{ kind = "Currency", amount = 3000 }, -- PLACEHOLDER: no locked economy numbers in docs/ yet
+		{ kind = "Currency", amount = 250 }, -- ten power-ups (Q1 pricing, 2026-10-02)
 	},
 }
 

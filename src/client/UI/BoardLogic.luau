@@ -98,6 +98,109 @@ function BoardLogic.emptyText(tab: Tab): (string, string)
 	return "No streaks recorded yet", "The first win puts you at the top."
 end
 
+-- ===== what a board pays ====================================================
+--
+-- The prize strip under the tabs (design-decisions.md Q1, "what the
+-- leaderboards pay"). Read straight from GameConfig.leaderboard.payouts,
+-- which ships with the client and isn't live-tunable, so the strip can't
+-- disagree with LeaderboardPayoutService. The all-time board has no
+-- entry there and never pays: being on it is the prize.
+
+-- The slice of LeaderboardPayoutLogic.PayoutBand the strip reads.
+export type PrizeBand = { maxRank: number, currency: number, cosmeticId: string? }
+
+export type PrizeChip = {
+	places: string, -- "#1", "#2-3", "#4-10"
+	coins: string,
+	item: boolean, -- the band also pays a limited cosmetic
+}
+
+export type Prizes = {
+	chips: { PrizeChip }, -- empty for a board that never pays
+	note: string,
+}
+
+local PRIZE_WHEN: { [string]: string } = {
+	Daily = "Paid to the top %d when the day ends.",
+	Weekly = "Paid to the top %d when the week ends.",
+}
+
+function BoardLogic.prizes(tab: Tab, bands: { PrizeBand }?): Prizes
+	local when = PRIZE_WHEN[tab]
+	if bands == nil or #bands == 0 or when == nil then
+		return table.freeze({ chips = {}, note = "No prizes here. Being on it is the prize." })
+	end
+	local chips: { PrizeChip } = {}
+	local from = 1
+	for _, band in bands do
+		local places = if band.maxRank == from
+			then string.format("#%d", from)
+			else string.format("#%d-%d", from, band.maxRank)
+		table.insert(
+			chips,
+			table.freeze({ places = places, coins = tostring(band.currency), item = band.cosmeticId ~= nil })
+		)
+		from = band.maxRank + 1
+	end
+	return table.freeze({ chips = table.freeze(chips), note = string.format(when, bands[#bands].maxRank) })
+end
+
+-- ===== the hub's wall boards ===============================================
+--
+-- The three HubLeaderboardSurface parts (hub-spec.md), one per tab,
+-- drawn by HubBoardController from the same broadcasts as the menu
+-- screen. A wall can't scroll, so it shows the top WALL_ROWS only: five,
+-- because the hub's boards are 9 studs tall and ten rows were too small
+-- to read from the path on a phone. The full 100 is in the menu.
+
+BoardLogic.WALL_ROWS = 5
+
+BoardLogic.WALL_TITLES = table.freeze({
+	Daily = "TODAY'S TOP STREAKS",
+	Weekly = "THIS WEEK'S TOP STREAKS",
+	AllTime = "ALL-TIME BEST STREAKS",
+} :: { [string]: string })
+
+export type WallRow = { rank: string, name: string, streak: string, isViewer: boolean }
+
+export type Wall = {
+	title: string,
+	rows: { WallRow },
+	-- Shown instead of rows when there are none: Loading or Empty.
+	message: string?,
+	detail: string?,
+	stale: boolean,
+}
+
+-- Only a Tab key gets a wall; anything else (a mistyped Period
+-- attribute) returns nil, so the controller skips that part.
+function BoardLogic.wall(tab: string, payload: Payload?, viewerId: number): Wall?
+	local title = BoardLogic.WALL_TITLES[tab]
+	if title == nil then
+		return nil
+	end
+	local v = BoardLogic.view(payload, viewerId)
+	if v.phase == "Loading" then
+		return { title = title, rows = {}, message = "Loading…", detail = nil, stale = false }
+	elseif v.phase == "Empty" then
+		local headline, body = BoardLogic.emptyText(tab :: Tab)
+		return { title = title, rows = {}, message = headline, detail = body, stale = v.stale }
+	end
+	local rows: { WallRow } = {}
+	for i, entry in v.rows do
+		if i > BoardLogic.WALL_ROWS then
+			break
+		end
+		table.insert(rows, {
+			rank = "#" .. entry.rank,
+			name = entry.displayName,
+			streak = tostring(entry.bestStreak),
+			isViewer = entry.userId == viewerId,
+		})
+	end
+	return { title = title, rows = rows, message = nil, detail = nil, stale = v.stale }
+end
+
 -- ===== virtualisation ======================================================
 --
 -- 100 rows built as 100 Frames each with a PlayerRow's worth of children

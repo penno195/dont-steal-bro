@@ -34,12 +34,19 @@ local StoreLogic = {}
 -- ===== types ==============================================================
 
 -- Structurally identical to Validate.StoreGrant, duplicated rather than
--- required for the same reason ProfileLogic duplicates BountyTier:
+-- required, the same as every pure module here:
 -- requiring Config/Validate means an Instance-path require this module
 -- can't resolve under Lune. Luau's structural typing means a real
 -- `Validate.StoreGrant` value satisfies these with no cast at the call
 -- site, so the duplication costs nothing.
-export type GrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title"
+export type GrantKind =
+	"Currency"
+	| "PowerUpStock"
+	| "Cosmetic"
+	| "Title"
+	| "NavigationRound"
+	| "StreakBuyBack"
+	| "SeasonPass"
 
 export type Grant = {
 	kind: GrantKind,
@@ -47,6 +54,14 @@ export type Grant = {
 	powerUpId: string?,
 	cosmeticId: string?,
 	titleId: string?,
+	minStreak: number?,
+	maxStreak: number?,
+}
+
+-- Structurally ProfileLogic.BuyBackOffer.
+export type BuyBackOffer = {
+	roundId: string,
+	streak: number,
 }
 
 -- The slice of a profile a grant can touch. Passed in and returned as a
@@ -57,6 +72,15 @@ export type GrantState = {
 	powerUpStock: { [string]: number },
 	ownedCosmetics: { string },
 	unlockedTitles: { string },
+	-- Paid Navigation rounds held (ProfileLogic schema v7). Optional so a
+	-- caller that never sells one (season tracks, leaderboard payouts)
+	-- can leave it out; a NavigationRound grant reads nil as 0.
+	navigationRounds: number?,
+	-- The streak and its open buy-back offer (ProfileLogic schema v8).
+	-- Optional for the same reason: only a receipt can carry a
+	-- StreakBuyBack grant, and only StoreService passes these.
+	currentStreak: number?,
+	buyBackOffer: BuyBackOffer?,
 }
 
 -- ===== receipts ===========================================================
@@ -207,6 +231,9 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 		powerUpStock = table.clone(state.powerUpStock),
 		ownedCosmetics = table.clone(state.ownedCosmetics),
 		unlockedTitles = table.clone(state.unlockedTitles),
+		navigationRounds = state.navigationRounds,
+		currentStreak = state.currentStreak,
+		buyBackOffer = state.buyBackOffer,
 	}
 	local lines: { string } = {}
 
@@ -257,12 +284,151 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 				table.insert(updated.unlockedTitles, titleId)
 				table.insert(lines, string.format("title %s unlocked", titleId))
 			end
+		elseif grant.kind == "NavigationRound" then
+			local amount = grant.amount
+			if amount == nil or amount <= 0 then
+				table.insert(lines, "SKIPPED NavigationRound grant with no positive amount")
+				continue
+			end
+			local held = (updated.navigationRounds or 0) + amount
+			updated.navigationRounds = held
+			table.insert(lines, string.format("navigation rounds +%d (now %d)", amount, held))
+		elseif grant.kind == "StreakBuyBack" then
+			-- Cancels the reset the offer records (design-decisions.md Q7,
+			-- "buying back a streak"): the streak goes back to what it was,
+			-- no higher. No offer, or one priced in another tier, is a
+			-- receipt only a tampered prompt can produce, and it buys
+			-- nothing (the 2026-10-08 applied case).
+			local offer = updated.buyBackOffer
+			if offer == nil then
+				table.insert(lines, "NOTHING to buy back: no streak buy-back offer is open")
+				continue
+			end
+			if not StoreLogic.buyBackCovers(grant, offer.streak) then
+				table.insert(
+					lines,
+					string.format(
+						"NOTHING bought back: this tier does not price a streak of %d (round %s)",
+						offer.streak,
+						offer.roundId
+					)
+				)
+				continue
+			end
+			table.insert(
+				lines,
+				string.format(
+					"streak bought back %d -> %d (round %s)",
+					updated.currentStreak or 0,
+					offer.streak,
+					offer.roundId
+				)
+			)
+			updated.currentStreak = offer.streak
+			updated.buyBackOffer = nil
+		elseif grant.kind == "SeasonPass" then
+			-- Nothing in GrantState: the caller unlocks the live season
+			-- (grantsSeasonPass) and logs what that paid.
+			continue
 		else
 			table.insert(lines, string.format("SKIPPED unrecognised grant kind %q", tostring(grant.kind)))
 		end
 	end
 
 	return updated, lines
+end
+
+-- Whether a product is the season pass. Its one grant touches season
+-- progress, not GrantState, so StoreService applies it through
+-- SeasonLogic.buyPass instead of applyGrants.
+function StoreLogic.grantsSeasonPass(grants: { Grant }): boolean
+	for _, grant in grants do
+		if grant.kind == "SeasonPass" then
+			return true
+		end
+	end
+	return false
+end
+
+-- Whether a product sells a Navigation round. Those are sold only from
+-- the in-match toggle (design-decisions.md Q8, "Navigation"), so the
+-- purchase intent checks this before opening any prompt.
+function StoreLogic.grantsNavigationRound(grants: { Grant }): boolean
+	for _, grant in grants do
+		if grant.kind == "NavigationRound" then
+			return true
+		end
+	end
+	return false
+end
+
+-- ===== streak buy-back (design-decisions.md Q7) ============================
+
+-- Whether a StreakBuyBack grant's tier prices a lost streak of `streak`.
+-- `maxStreak` nil is the top tier: that many or more.
+function StoreLogic.buyBackCovers(grant: Grant, streak: number): boolean
+	local min = grant.minStreak
+	if grant.kind ~= "StreakBuyBack" or min == nil or streak < min then
+		return false
+	end
+	local max = grant.maxStreak
+	return max == nil or streak <= max
+end
+
+-- Whether a product sells a streak buy-back. Those are never sold from
+-- the store grid, only against an open offer.
+function StoreLogic.grantsStreakBuyBack(grants: { Grant }): boolean
+	for _, grant in grants do
+		if grant.kind == "StreakBuyBack" then
+			return true
+		end
+	end
+	return false
+end
+
+-- Whether a buy-back offer may be shown or bought right now. An offer
+-- from THIS server's current round waits for Results, or the end screen
+-- would tell a finalist they'd lost before the reveal did. One from an
+-- earlier round only tells its owner what they already know. A Hub's
+-- round id never matches an offer, so the Hub always shows it.
+function StoreLogic.mayShowBuyBack(offer: BuyBackOffer?, currentRoundId: string, roundState: string): boolean
+	if offer == nil then
+		return false
+	end
+	return offer.roundId ~= currentRoundId or roundState == "Results" or roundState == "Cleanup"
+end
+
+-- ===== coin offers (rewards-roadmap.md step 6) ==============================
+
+-- Spends `price` coins on `grants`, or refuses. design-decisions.md Q1:
+-- currency buys specific named items at fixed prices, never anything
+-- random. The deduction and the grant come back as one new state, so the
+-- caller writes both in the same profile mutation or neither.
+--
+-- No PurchaseId is involved: nothing here is a Roblox transaction, and a
+-- replayed intent spends coins again, which is just a second purchase.
+-- The intent's rate limit and the coin balance bound that.
+function StoreLogic.buyWithCoins(
+	state: GrantState,
+	price: number,
+	grants: { Grant }
+): (GrantState?, { string }, string?)
+	if type(price) ~= "number" or price <= 0 or price % 1 ~= 0 then
+		return nil, {}, "bad price"
+	end
+	if state.currency < price then
+		return nil, {}, "not enough coins"
+	end
+	local paid: GrantState = {
+		currency = state.currency - price,
+		powerUpStock = state.powerUpStock,
+		ownedCosmetics = state.ownedCosmetics,
+		unlockedTitles = state.unlockedTitles,
+		navigationRounds = state.navigationRounds,
+	}
+	local after, lines = StoreLogic.applyGrants(paid, grants)
+	table.insert(lines, 1, string.format("Currency -%d (coin price)", price))
+	return after, lines, nil
 end
 
 -- ===== the loadout ========================================================
@@ -348,6 +514,30 @@ function StoreLogic.setLoadoutSlot(
 	end
 
 	return updated, nil
+end
+
+-- "Same as last round": last round's loadout, placed again slot by slot
+-- through setLoadoutSlot, so it passes exactly the checks a hand-picked
+-- one does. An entry that no longer passes (no stock left, no longer
+-- eligible) is skipped rather than refusing the rest, and nothing takes
+-- its place (design-decisions.md Q8, "the Locker and choosing a loadout").
+function StoreLogic.repeatLoadout(
+	lastLoadout: { string },
+	stock: { [string]: number },
+	loadoutEligible: { [string]: boolean },
+	slots: number
+): { string }
+	local placed: { string } = {}
+	for _, powerUpId in lastLoadout do
+		if #placed >= slots then
+			break
+		end
+		local updated = StoreLogic.setLoadoutSlot(placed, #placed + 1, powerUpId, stock, loadoutEligible, slots)
+		if updated ~= nil then
+			placed = updated
+		end
+	end
+	return placed
 end
 
 -- What a round should actually consume, given a stored loadout and the

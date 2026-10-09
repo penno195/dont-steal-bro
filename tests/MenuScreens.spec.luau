@@ -9,6 +9,7 @@ local Net = require("../src/shared/Net")
 local ProgressionLogic = require("../src/server/ProgressionLogic")
 local ResultsLogic = require("../src/client/UI/ResultsLogic")
 local SettingsLogic = require("../src/shared/SettingsLogic")
+local SeasonTrackLogic = require("../src/client/UI/SeasonTrackLogic")
 local StoreScreenLogic = require("../src/client/UI/StoreScreenLogic")
 local TestRunner = require("./TestRunner")
 
@@ -110,6 +111,7 @@ local function item(key: string, kind: string, grants: { any }, enabled: boolean
 		displayName = key,
 		robuxPrice = 10,
 		sortOrder = 1,
+		imageAssetId = 1,
 		grants = grants,
 	}
 end
@@ -142,7 +144,7 @@ local bundle = item("bundle", "DeveloperProduct", {
 
 describe("StoreScreenLogic catalogue", function()
 	it("files items by what they grant", function()
-		expect(StoreScreenLogic.categoryOf(pass)):toBe("Passes")
+		expect(StoreScreenLogic.categoryOf(pass)):toBe("Season")
 		expect(StoreScreenLogic.categoryOf(coins)):toBe("Currency")
 		expect(StoreScreenLogic.categoryOf(bundle)):toBe("Bundles")
 	end)
@@ -187,6 +189,8 @@ describe("StoreScreenLogic catalogue", function()
 				"StreakFlair",
 				"Nameplate",
 				"CallingCard",
+				"Hat",
+				"BackItem",
 				"NotACategory",
 			}
 		do
@@ -343,10 +347,7 @@ local function recap(reason: string, before: number, after: number, overrides: {
 		streakAfter = after,
 		bestStreakBefore = before,
 		bestStreakAfter = math.max(before, after),
-		bounty = nil,
-		streakCredited = true,
-		npcSeatCount = 0,
-		npcSeatThreshold = 3,
+		reward = nil,
 	}
 	for k, v in overrides or {} do
 		r[k] = v
@@ -379,13 +380,6 @@ describe("ResultsLogic.streakChange", function()
 		expect(ResultsLogic.streakChange(recap("FailedToQualify", 0, 0)).kind):toBe("None")
 	end)
 
-	it("explains an uncredited win specifically, never as a silent no-change", function()
-		local held =
-			ResultsLogic.streakChange(recap("QualifiedWin", 2, 2, { streakCredited = false, npcSeatCount = 4 }))
-		expect(held.kind):toBe("Held")
-		expect((held.note :: string):find("4 of the seats") ~= nil):toBe(true)
-	end)
-
 	it("names the number of a streak that died", function()
 		local change = ResultsLogic.streakChange(recap("StudioLoss", 12, 0))
 		expect(ResultsLogic.streakHeadline(change)):toBe("Your 12-win streak ends here")
@@ -403,7 +397,7 @@ describe("ResultsLogic.beats", function()
 
 	it("always lands the streak last, with a longer pause before it", function()
 		local beats = ResultsLogic.beats(recap("StudioWinSoleStealer", 1, 2, {
-			bounty = { streakTier = 1, outcomeTag = "SoleStealer" },
+			reward = { currency = 110, rung = 1 },
 		}))
 		expect(ids(beats)):toBe("Placement,Tasks,PowerUps,Finale,Rewards,Streak")
 		local n = #beats
@@ -414,9 +408,21 @@ describe("ResultsLogic.beats", function()
 		expect(ids(ResultsLogic.beats(recap("FailedToQualify", 3, 0)))):toBe("Placement,Tasks,PowerUps,Streak")
 	end)
 
-	it("shows no rewards for a loss even if a bounty is present", function()
-		local r = recap("StudioLoss", 3, 0, { bounty = { streakTier = 1, outcomeTag = "AllShare" } })
+	it("shows no rewards for a loss even if a reward is present", function()
+		local r = recap("StudioLoss", 3, 0, { reward = { currency = 25, rung = 0 } })
 		expect(ids(ResultsLogic.beats(r))):toBe("Placement,Tasks,PowerUps,Finale,Streak")
+	end)
+
+	it("gives a win's drop its own beat, after the coins", function()
+		local r = recap("StudioWinAllShare", 1, 2, {
+			reward = {
+				currency = 50,
+				rung = 2,
+				drop = { kind = "PowerUp", id = "freeze", rarity = "Common", duplicate = false },
+				dropAmount = 1,
+			},
+		})
+		expect(ids(ResultsLogic.beats(r))):toBe("Placement,Tasks,PowerUps,Finale,Rewards,Drop,Streak")
 	end)
 
 	it("has no streak beat for a spectator with no recap", function()
@@ -440,5 +446,335 @@ describe("ResultsLogic.placementText", function()
 		expect(ResultsLogic.placementText(13, 20)):toBe("13th of 20")
 		expect(ResultsLogic.placementText(21, 30)):toBe("21st of 30")
 		expect(ResultsLogic.placementText(nil, 6)):toBe("Unplaced")
+	end)
+end)
+
+-- ===== the store's Season tab (rewards step 5b) =============================
+
+describe("StoreScreenLogic.itemsIn (Season tab)", function()
+	local s1 = item("s1-pass", "DeveloperProduct", { { kind = "SeasonPass" } })
+	local s2 = item("s2-pass", "DeveloperProduct", { { kind = "SeasonPass" } })
+
+	it("offers only the live season's pass", function()
+		local here = StoreScreenLogic.itemsIn({ s1, s2 }, "Season", "s2-pass")
+		expect(#here):toBe(1)
+		expect(here[1].key):toBe("s2-pass")
+	end)
+
+	it("offers no pass when no season is running", function()
+		expect(#StoreScreenLogic.itemsIn({ s1, s2 }, "Season", nil)):toBe(0)
+	end)
+
+	it("shows the pass owned only for the season it was bought in", function()
+		expect(StoreScreenLogic.itemState(s1, state({ season = { passSeen = false } }))):toBe("Buyable")
+		expect(StoreScreenLogic.itemState(s1, state({ season = { passSeen = true } }))):toBe("Owned")
+		expect(StoreScreenLogic.itemState(s1, state({ season = nil }))):toBe("Buyable")
+	end)
+end)
+
+describe("SeasonTrackLogic", function()
+	local def: SeasonTrackLogic.SeasonDef = {
+		id = "s1",
+		displayName = "Season 1",
+		passKey = "s1-pass",
+		free = {
+			{ wins = 3, grant = { kind = "Currency", amount = 100 } },
+			{ wins = 10, grant = { kind = "Currency", amount = 250 } },
+		},
+		premium = {
+			{ wins = 0, grant = { kind = "Cosmetic", cosmeticId = "trail" } },
+			{ wins = 5, grant = { kind = "Currency", amount = 250 } },
+		},
+	}
+	local function text(grant: SeasonTrackLogic.Grant): string
+		return if grant.kind == "Currency" then string.format("%d coins", grant.amount or 0) else grant.cosmeticId or ""
+	end
+	local function state(overrides: { [string]: any }): SeasonTrackLogic.SeasonState
+		local s: { [string]: any } = {
+			id = "s1",
+			secondsLeft = 10 * 86400,
+			passSeen = false,
+			freeWins = 4,
+			premiumWins = 0,
+			freePaid = 1,
+			premiumPaid = 0,
+		}
+		for k, v in overrides do
+			s[k] = v
+		end
+		return s :: any
+	end
+
+	it("marks claimed rows, then the next one, then locked", function()
+		local view = SeasonTrackLogic.view(def, state({}), text)
+		expect(view.free.rows[1].status):toBe("Claimed")
+		expect(view.free.rows[2].status):toBe("Next")
+		expect(view.free.nextAt):toBe(10)
+		expect(view.free.rows[1].text):toBe("100 coins")
+	end)
+
+	it("pictures an item by its own art, else its icon", function()
+		local view = SeasonTrackLogic.view(def, state({}), text, function(grant)
+			return if grant.cosmeticId == "trail" then 42 else nil
+		end)
+		expect(view.premium.rows[1].image):toBe(42)
+		expect(view.premium.rows[2].image):toBe(nil)
+		expect(view.premium.rows[2].icon):toBe("coin")
+		expect(SeasonTrackLogic.view(def, state({}), text).premium.rows[1].image):toBe(nil)
+	end)
+
+	it("shows a power-up reward with that power-up's own icon", function()
+		expect(SeasonTrackLogic.iconFor({ kind = "PowerUpStock", powerUpId = "overclock", amount = 2 })):toBe(
+			"overclock"
+		)
+		expect(SeasonTrackLogic.iconFor({ kind = "Cosmetic", cosmeticId = "x" })):toBe("gem")
+	end)
+
+	it("locks the whole premium track without the pass", function()
+		local view = SeasonTrackLogic.view(def, state({}), text)
+		expect(view.premium.locked):toBe(true)
+		expect(view.premium.rows[1].status):toBe("Locked")
+		expect(view.premium.title):toBe("Premium track · needs the pass")
+	end)
+
+	it("opens the premium track once the pass is seen", function()
+		local view = SeasonTrackLogic.view(def, state({ passSeen = true, premiumPaid = 1, premiumWins = 2 }), text)
+		expect(view.premium.locked):toBe(false)
+		expect(view.premium.rows[1].status):toBe("Claimed")
+		expect(view.premium.rows[2].status):toBe("Next")
+	end)
+
+	it("offers reached, unclaimed items to claim", function()
+		local view = SeasonTrackLogic.view(def, state({ freeWins = 12, freePaid = 0 }), text)
+		expect(view.free.rows[1].status):toBe("Claimable")
+		expect(view.free.rows[2].status):toBe("Claimable")
+		expect(view.free.rows[2].index):toBe(2)
+		expect(view.free.claimable):toBe(2)
+	end)
+
+	it("offers nothing to claim on the pass row until it's bought", function()
+		local view = SeasonTrackLogic.view(def, state({ premiumWins = 6 }), text)
+		expect(view.premium.rows[1].status):toBe("Locked")
+		expect(view.premium.claimable):toBe(0)
+		local bought = SeasonTrackLogic.view(def, state({ passSeen = true, premiumWins = 6 }), text)
+		expect(bought.premium.rows[1].status):toBe("Claimable")
+		expect(bought.premium.claimable):toBe(2)
+	end)
+
+	it("names what a claim just paid, pass items first", function()
+		local before = state({ passSeen = true, premiumWins = 6, freeWins = 6, freePaid = 0, premiumPaid = 0 })
+		local after = state({ passSeen = true, premiumWins = 6, freeWins = 6, freePaid = 1, premiumPaid = 2 })
+		local rewards = SeasonTrackLogic.claimedBetween(def, before, after)
+		expect(#rewards):toBe(3)
+		expect(rewards[1].premium):toBe(true)
+		expect(rewards[1].grant.cosmeticId):toBe("trail")
+		expect(rewards[3].premium):toBe(false)
+		expect(rewards[3].grant.amount):toBe(100)
+	end)
+
+	it("pops nothing across seasons, on first load, or with no change", function()
+		local s = state({ freePaid = 1 })
+		local other = state({ freePaid = 2 })
+		other.id = "s2"
+		expect(#SeasonTrackLogic.claimedBetween(def, s, other)):toBe(0)
+		expect(#SeasonTrackLogic.claimedBetween(def, nil, s)):toBe(0)
+		expect(#SeasonTrackLogic.claimedBetween(def, s, s)):toBe(0)
+	end)
+
+	it("has no next item once a track is fully claimed", function()
+		local view = SeasonTrackLogic.view(def, state({ freeWins = 12, freePaid = 2 }), text)
+		expect(view.free.nextAt):toBe(nil)
+		expect(view.free.rows[2].status):toBe("Claimed")
+	end)
+
+	it("lines the tracks up as tiers, fewest wins first", function()
+		local columns = SeasonTrackLogic.columns(SeasonTrackLogic.view(def, state({}), text))
+		expect(#columns):toBe(4)
+		local wins = {}
+		for _, c in columns do
+			table.insert(wins, c.wins)
+		end
+		expect(table.concat(wins, ",")):toBe("0,3,5,10")
+		expect(columns[1].free):toBe(nil)
+		expect((columns[1].premium :: any).icon):toBe("gem")
+		expect(columns[2].premium):toBe(nil)
+		expect((columns[2].free :: any).text):toBe("100 coins")
+	end)
+
+	it("shares a column when both tracks pay at the same count", function()
+		local same: SeasonTrackLogic.SeasonDef = {
+			id = "s1",
+			displayName = "Season 1",
+			passKey = "s1-pass",
+			free = { { wins = 5, grant = { kind = "Currency", amount = 1 } } },
+			premium = {
+				{ wins = 5, grant = { kind = "Currency", amount = 2 } },
+				{ wins = 5, grant = { kind = "Currency", amount = 3 } },
+			},
+		}
+		local columns = SeasonTrackLogic.columns(SeasonTrackLogic.view(same, state({}), text))
+		expect(#columns):toBe(2)
+		expect((columns[1].premium :: any).text):toBe("2 coins")
+		expect((columns[1].free :: any).text):toBe("1 coins")
+		expect((columns[2].premium :: any).text):toBe("3 coins")
+		expect(columns[2].free):toBe(nil)
+	end)
+
+	it("marks pass items reached before the pass is bought", function()
+		local view = SeasonTrackLogic.view(def, state({ premiumWins = 6 }), text)
+		expect(view.premium.rows[2].reached):toBe(true)
+		expect(view.premium.rows[2].status):toBe("Locked")
+	end)
+
+	it("opens on the first tier with something unclaimed", function()
+		local columns = SeasonTrackLogic.columns(SeasonTrackLogic.view(def, state({}), text))
+		expect(SeasonTrackLogic.focusColumn(columns)):toBe(1) -- the locked pass item at 0
+		local bought = SeasonTrackLogic.view(def, state({ passSeen = true, premiumPaid = 2, freePaid = 1 }), text)
+		expect(SeasonTrackLogic.focusColumn(SeasonTrackLogic.columns(bought))):toBe(4)
+		local done = SeasonTrackLogic.view(def, state({ passSeen = true, premiumPaid = 2, freePaid = 2 }), text)
+		expect(SeasonTrackLogic.focusColumn(SeasonTrackLogic.columns(done))):toBe(4)
+	end)
+
+	it("words the time left", function()
+		expect(SeasonTrackLogic.timeLeftText(10 * 86400)):toBe("10 days left")
+		expect(SeasonTrackLogic.timeLeftText(86400 + 5)):toBe("1 day left")
+		expect(SeasonTrackLogic.timeLeftText(5 * 3600)):toBe("5h left")
+		expect(SeasonTrackLogic.timeLeftText(120)):toBe("Ends soon")
+	end)
+end)
+
+describe("StoreScreenLogic coin offers (rewards step 6)", function()
+	local offer: StoreScreenLogic.Item = {
+		key = "sprint-boost-coins",
+		kind = "CoinOffer",
+		enabled = true,
+		displayName = "Sprint Boost",
+		robuxPrice = 0,
+		coinPrice = 150,
+		sortOrder = 1,
+		imageAssetId = 1,
+		grants = { { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 1 } },
+	}
+
+	it("is buyable only when the player has the coins", function()
+		expect(StoreScreenLogic.itemState(offer, state({ currency = 150 }))):toBe("Buyable")
+		expect(StoreScreenLogic.itemState(offer, state({ currency = 149 }))):toBe("TooFewCoins")
+	end)
+
+	it("files under the power-ups tab", function()
+		expect(StoreScreenLogic.categoryOf(offer)):toBe("PowerUps")
+	end)
+
+	it("goes straight to Succeeded on Granted, with no prompt", function()
+		local f = StoreScreenLogic.step(StoreScreenLogic.idle(), { type = "Tap", key = offer.key, state = state() }, 0)
+		f = StoreScreenLogic.step(f, { type = "Result", key = offer.key, status = "Granted", message = "" }, 0.2)
+		expect(f.phase):toBe("Succeeded")
+	end)
+
+	it("explains a refusal for too few coins", function()
+		local f = StoreScreenLogic.step(StoreScreenLogic.idle(), { type = "Tap", key = offer.key, state = state() }, 0)
+		f = StoreScreenLogic.step(f, { type = "Result", key = offer.key, status = "NotEnoughCoins", message = "" }, 0.2)
+		expect(f.phase):toBe("Failed")
+		expect(f.message):toBe("You don't have enough coins for that yet.")
+	end)
+end)
+
+describe("BoardLogic.prizes", function()
+	local daily = {
+		{ maxRank = 1, currency = 75 },
+		{ maxRank = 3, currency = 50 },
+		{ maxRank = 10, currency = 25, cosmeticId = "crown" },
+	}
+
+	it("turns bands into place ranges with their coins", function()
+		local p = BoardLogic.prizes("Daily", daily)
+		expect(#p.chips):toBe(3)
+		expect(p.chips[1].places):toBe("#1")
+		expect(p.chips[1].coins):toBe("75")
+		expect(p.chips[2].places):toBe("#2-3")
+		expect(p.chips[3].places):toBe("#4-10")
+		expect(p.chips[3].item):toBe(true)
+		expect(p.chips[1].item):toBe(false)
+	end)
+
+	it("says how many places pay, and when", function()
+		expect(BoardLogic.prizes("Daily", daily).note):toBe("Paid to the top 10 when the day ends.")
+		expect(BoardLogic.prizes("Weekly", daily).note):toBe("Paid to the top 10 when the week ends.")
+	end)
+
+	it("never pays the all-time board, even if handed bands", function()
+		local p = BoardLogic.prizes("AllTime", daily)
+		expect(#p.chips):toBe(0)
+		expect(p.note):toBe("No prizes here. Being on it is the prize.")
+	end)
+
+	it("treats a period with no bands as unpaid", function()
+		expect(#BoardLogic.prizes("Weekly", nil).chips):toBe(0)
+		expect(#BoardLogic.prizes("Weekly", {}).chips):toBe(0)
+	end)
+end)
+
+describe("BoardLogic.wall", function()
+	local function payload(count: number, status: string?): BoardLogic.Payload
+		local entries = {}
+		for i = 1, count do
+			table.insert(entries, { rank = i, userId = i, bestStreak = 100 - i, displayName = "P" .. i })
+		end
+		return { entries = entries, status = status or "Fresh" }
+	end
+
+	it("skips a part whose Period isn't a tab", function()
+		expect(BoardLogic.wall("Monthly", payload(3), 1)):toBe(nil)
+	end)
+
+	it("says Loading before any broadcast", function()
+		local wall = BoardLogic.wall("Daily", nil, 1) :: BoardLogic.Wall
+		expect(wall.message):toBe("Loading…")
+		expect(#wall.rows):toBe(0)
+	end)
+
+	it("uses the tab's empty copy for an empty board", function()
+		local wall = BoardLogic.wall("Weekly", payload(0, "Empty"), 1) :: BoardLogic.Wall
+		expect(wall.message):toBe("A new week, an empty board")
+	end)
+
+	it("caps at the top WALL_ROWS and marks the viewer", function()
+		local wall = BoardLogic.wall("AllTime", payload(40), 3) :: BoardLogic.Wall
+		expect(#wall.rows):toBe(BoardLogic.WALL_ROWS)
+		expect(wall.rows[1].rank):toBe("#1")
+		expect(wall.rows[1].streak):toBe("99")
+		expect(wall.rows[3].isViewer):toBe(true)
+		expect(wall.rows[2].isViewer):toBe(false)
+		expect(wall.message):toBe(nil)
+	end)
+
+	it("carries the stale flag", function()
+		expect((BoardLogic.wall("Daily", payload(2, "Stale"), 1) :: BoardLogic.Wall).stale):toBe(true)
+	end)
+end)
+
+describe("ResultsLogic practice recaps", function()
+	local function practiceRecap(reason: string, streak: number): ResultsLogic.Recap
+		return {
+			roundId = "r",
+			reason = reason,
+			streakBefore = streak,
+			streakAfter = streak,
+			bestStreakBefore = streak,
+			bestStreakAfter = streak,
+			reward = nil,
+			practice = true,
+		}
+	end
+
+	it("calls a practice loss safe rather than dead", function()
+		local change = ResultsLogic.streakChange(practiceRecap("StudioLoss", 4))
+		expect(change.kind):toBe("Practice")
+		expect(ResultsLogic.streakHeadline(change)):toBe("Practice match - your 4-win streak is safe")
+	end)
+
+	it("says nothing was at stake from a zero streak", function()
+		local change = ResultsLogic.streakChange(practiceRecap("QualifiedWin", 0))
+		expect(ResultsLogic.streakHeadline(change)):toBe("Practice match - nothing at stake")
 	end)
 end)

@@ -6,13 +6,23 @@
 --
 -- Two sources, and they're trusted differently:
 --   * RoundRecap (server, targeted, on entering Results): reason,
---     streak before/after, bounty, streak credit. Authoritative.
+--     streak before/after, win reward, streak credit. Authoritative.
 --   * RaceTally (counted by the client from broadcasts it already got:
 --     TaskProgress, TaskQualificationResult, its own PowerUpUseResult).
 --     Display-only - a modified client lying to itself about how many
 --     power-ups it used changes nothing anywhere else.
 
 local ResultsLogic = {}
+
+-- The server's win reward (ProgressionService's RoundRecap), already
+-- granted by the time this arrives. The same shape as
+-- PayoutLogic.Payout, which words it.
+export type RecapReward = {
+	currency: number,
+	rung: number,
+	drop: { kind: string, id: string, rarity: string, duplicate: boolean }?,
+	dropAmount: number?,
+}
 
 export type Recap = {
 	roundId: string,
@@ -21,10 +31,10 @@ export type Recap = {
 	streakAfter: number,
 	bestStreakBefore: number,
 	bestStreakAfter: number,
-	bounty: { streakTier: number, outcomeTag: string }?,
-	streakCredited: boolean,
-	npcSeatCount: number,
-	npcSeatThreshold: number,
+	reward: RecapReward?, -- what this win paid; nil on a loss
+	-- A practice match on a private server (design-decisions.md Q7):
+	-- nothing was at stake, so the streak never moved.
+	practice: boolean?,
 }
 
 export type RaceTally = {
@@ -70,35 +80,24 @@ end
 -- ===== the streak change ===================================================
 
 export type StreakKind =
-	"Up" -- a credited win
-	| "Held" -- a win that earned no streak credit (NPC-heavy round)
+	"Up" -- a win: every win adds to the streak (design-decisions.md Q5)
 	| "Died" -- a loss that ended a streak worth naming
 	| "None" -- a loss from zero: nothing was lost
+	| "Practice" -- a practice match: nothing was at stake, win or lose
 
 export type StreakChange = {
 	kind: StreakKind,
 	before: number,
 	after: number,
 	newBest: boolean,
-	-- "Held" only: the specific reason, per threat-model.md §8 - never a
-	-- vague "no change".
-	note: string?,
 }
 
 function ResultsLogic.streakChange(recap: Recap): StreakChange
 	local kind: StreakKind
-	local note: string? = nil
-	if recap.streakAfter > recap.streakBefore then
+	if recap.practice == true then
+		kind = "Practice"
+	elseif recap.streakAfter > recap.streakBefore then
 		kind = "Up"
-	elseif ResultsLogic.isWin(recap.reason) then
-		kind = "Held"
-		if not recap.streakCredited then
-			note = string.format(
-				"%d of the seats this round were bots (the limit is %d), so the win doesn't add to your streak. Queue again for a fuller lobby.",
-				recap.npcSeatCount,
-				recap.npcSeatThreshold
-			)
-		end
 	elseif recap.streakBefore > 0 then
 		kind = "Died"
 	else
@@ -109,7 +108,6 @@ function ResultsLogic.streakChange(recap: Recap): StreakChange
 		before = recap.streakBefore,
 		after = recap.streakAfter,
 		newBest = recap.bestStreakAfter > recap.bestStreakBefore,
-		note = note,
 	}
 end
 
@@ -121,17 +119,19 @@ function ResultsLogic.streakHeadline(change: StreakChange): string
 		return if change.newBest
 			then string.format("Streak %d - a new best", change.after)
 			else string.format("Streak %d", change.after)
-	elseif change.kind == "Held" then
-		return string.format("Streak holds at %d", change.after)
 	elseif change.kind == "Died" then
 		return string.format("Your %d-win streak ends here", change.before)
+	elseif change.kind == "Practice" then
+		return if change.before > 0
+			then string.format("Practice match - your %d-win streak is safe", change.before)
+			else "Practice match - nothing at stake"
 	end
 	return "No streak on the line this time"
 end
 
 -- ===== sequencing ===========================================================
 
-export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Streak"
+export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Drop" | "Streak"
 
 export type Beat = { id: BeatId, at: number }
 
@@ -144,7 +144,8 @@ ResultsLogic.STREAK_PAUSE = 0.9
 -- The recap's beats in order, each with its start time from when the
 -- screen opens. The streak is always last - P6-6's one sequencing rule.
 -- Finale appears only for someone who reached the Studio, Rewards only
--- for someone who has a bounty to show, Streak only when there is a
+-- for a win that paid something, Drop only when that win also dropped
+-- an item (its own card, for its icon), Streak only when there is a
 -- recap at all (a spectator has no streak change this round).
 --
 -- Reduced motion keeps the SAME order and timing. Reduced motion is
@@ -157,8 +158,12 @@ function ResultsLogic.beats(recap: Recap?): { Beat }
 		if ResultsLogic.finaleLine(recap.reason) ~= nil then
 			table.insert(ids, "Finale")
 		end
-		if recap.bounty ~= nil and ResultsLogic.isWin(recap.reason) then
+		local reward = recap.reward
+		if reward ~= nil and ResultsLogic.isWin(recap.reason) then
 			table.insert(ids, "Rewards")
+			if reward.drop ~= nil then
+				table.insert(ids, "Drop")
+			end
 		end
 		table.insert(ids, "Streak")
 	end

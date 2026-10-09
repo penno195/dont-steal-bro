@@ -34,11 +34,14 @@ export type Props = {
 	anchorPoint: Vector2?,
 }
 
+-- The number's colour. The arc is the same except calm, where it's the
+-- gold rim (UI art pass) and the number stays white.
 local URGENCY_COLOR: { [ComponentLogic.Urgency]: string } = {
 	calm = "ink",
 	warning = "warning",
 	critical = "danger",
 }
+local CALM_ARC = "rim"
 
 -- Opaque on the first half of the gradient, transparent on the second,
 -- with a hard edge between.
@@ -60,6 +63,9 @@ local function CountdownRing(props: Props): Frame
 	end)
 	local color = function(): Color3
 		return Theme.color[URGENCY_COLOR[urgency() :: ComponentLogic.Urgency]]
+	end
+	local arcColor = function(): Color3
+		return if urgency() == "calm" then Theme.color[CALM_ARC] else color()
 	end
 	-- Snap, don't spring: a ring that lags the number looks wrong, and
 	-- the caller already updates it every frame.
@@ -99,7 +105,7 @@ local function CountdownRing(props: Props): Frame
 					ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 					BorderStrokePosition = Enum.BorderStrokePosition.Inner,
 					Thickness = thickness,
-					Color = color,
+					Color = arcColor,
 					create("UIGradient")({
 						Transparency = HALF_MASK,
 						Rotation = function()
@@ -120,18 +126,29 @@ local function CountdownRing(props: Props): Frame
 		Position = props.position or UDim2.new(),
 		AnchorPoint = props.anchorPoint or Vector2.zero,
 		create("UIScale")({ Scale = pulse }),
-		-- Track: the full ring, faint, so the empty part still reads as
-		-- "time that's gone" rather than nothing.
+		-- The lip under the disc (Tokens.lip), as on every raised surface.
+		create("Frame")({
+			Name = "Lip",
+			ZIndex = 0,
+			Position = UDim2.fromOffset(0, Theme.lip.small),
+			Size = UDim2.fromScale(1, 1),
+			BackgroundColor3 = Theme.fill.panel.lip,
+			Base.corner(Theme.radius.pill),
+		}),
+		-- Track: the full ring, dark, so the empty part still reads as
+		-- "time that's gone" rather than nothing; the disc inside is the
+		-- stage-panel gradient.
 		create("Frame")({
 			Name = "Track",
 			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Theme.color.surface,
+			BackgroundColor3 = Color3.new(1, 1, 1),
 			Base.corner(Theme.radius.pill),
+			create("UIGradient")({ Rotation = 90, Color = Theme.fill.panel.gradient }),
 			create("UIStroke")({
 				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 				BorderStrokePosition = Enum.BorderStrokePosition.Inner,
 				Thickness = thickness,
-				Color = Theme.color.line,
+				Color = Theme.color.background,
 			}),
 		}),
 		half("right"),

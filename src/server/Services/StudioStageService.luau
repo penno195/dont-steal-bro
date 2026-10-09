@@ -206,6 +206,10 @@ local function moveTo(racer: Participants.Participant, target: CFrame, hold: boo
 	if hold then
 		root.Anchored = true
 		table.insert(anchoredRoots, root)
+	elseif player ~= nil then
+		-- Unanchoring can leave the rig with a nearby client
+		-- (MapLoaderService.release); hand it back to its own.
+		root:SetNetworkOwner(player)
 	end
 end
 
@@ -320,6 +324,10 @@ local function endStaging()
 	for _, root in anchoredRoots do
 		if root.Parent ~= nil then
 			root.Anchored = false
+			local player = Players:GetPlayerFromCharacter(root.Parent)
+			if player ~= nil then
+				root:SetNetworkOwner(player)
+			end
 		end
 	end
 	anchoredRoots = {}

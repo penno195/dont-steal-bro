@@ -10,13 +10,15 @@
 --
 -- Every hub server, every tick (GameConfig.matchmaking.formationTickSeconds):
 --
---   1. Reads the oldest page of the shared queue (one GetRangeAsync).
+--   1. Tries to hold the formation lease. The holder reads the oldest
+--      page of the shared queue (one GetRangeAsync); everyone else reads
+--      the summary the holder published, or the page if it is stale.
 --   2. For entries it OWNS (entry.jobId == this server): acts on any
 --      claim. If the group record exists it departs the player. If it
 --      never appears it reverts the claim. See MatchmakingLogic's header
 --      for why this is the only place a player is committed to a group.
---   3. Tries to hold the formation lease. The holder alone runs
---      selectGroups on the page and claims members.
+--   3. The lease holder alone runs selectGroups on the page, claims
+--      members, and publishes the resulting summary.
 --   4. Sends each of its own queued players their QueueState.
 --
 -- The lease is an EFFICIENCY measure: it stops ten servers fighting
@@ -51,6 +53,7 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Net = require(ReplicatedStorage.Shared.Net)
 local MatchmakingLogic = require(ServerScriptService.Server.MatchmakingLogic)
+local TeleportLogic = require(ServerScriptService.Server.TeleportLogic)
 
 type Entry = MatchmakingLogic.Entry
 type GroupRecord = MatchmakingLogic.GroupRecord
@@ -70,6 +73,10 @@ type Ticket = {
 	-- The claim token this server last saw on the entry, and when (by
 	-- its own os.clock). This is what "stale" is measured against.
 	claimSeen: { groupId: string, at: number }?,
+	-- A practice ticket (design-decisions.md Q7): queued locally in
+	-- practiceEntries, never in MemoryStore. Every ticket on a private
+	-- hub is one; on a public hub, the Practice button's are.
+	practice: boolean,
 }
 
 local config = GameConfig.matchmaking
@@ -104,6 +111,16 @@ end)
 local active = false
 local tickets: { [Player]: Ticket } = {}
 local consecutiveFailures = 0
+
+-- design-decisions.md Q7, the practice-match case: a practice queue is
+-- local to its hub server. Its players never get a MemoryStore queue
+-- entry, so no other server can see or claim them, and the server forms
+-- its own groups from these local entries, keeping parties whole
+-- (PartyService). Only the group record goes to MemoryStore, because the
+-- match server reads it from there. On a private hub (a player's own
+-- server, or a reserved practice lobby) every queue is practice.
+local practiceHub = TeleportLogic.isPracticeHub(game.PrivateServerId)
+local practiceEntries: { [Player]: Entry } = {}
 
 local function now(): number
 	return DateTime.now().UnixTimestampMillis / 1000
@@ -264,19 +281,19 @@ end
 
 -- ===== forming a group (lease holder only) ================================
 
-local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
+local function formGroup(group: MatchmakingLogic.FormedGroup): string?
 	-- Reserve BEFORE claiming: if it fails nobody has been touched, and if
 	-- a claim fails later the reserved server is simply never used (it
 	-- doesn't start until someone teleports to it). The yield happens
 	-- before `started`, so it doesn't eat into the commit deadline.
 	local destination: MatchmakingLogic.Destination? = nil
 	if destinationProvider == nil and destinationRequired then
-		return false
+		return nil
 	end
 	if destinationProvider ~= nil then
 		destination = destinationProvider()
 		if destination == nil then
-			return false
+			return nil
 		end
 	end
 	local groupId = if destination then destination.groupId else HttpService:GenerateGUID(false)
@@ -312,7 +329,7 @@ local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
 		end)
 		if ok then
 			task.spawn(recordRecentOpponents, record)
-			return true
+			return groupId
 		end
 	end
 
@@ -324,7 +341,7 @@ local function formGroup(group: MatchmakingLogic.FormedGroup): boolean
 			return MatchmakingLogic.release(current, groupId)
 		end, config.entryTtlSeconds)
 	end
-	return false
+	return nil
 end
 
 -- ===== acting on our own players' entries =================================
@@ -416,11 +433,13 @@ end
 
 local UNAVAILABLE_MESSAGE = "Matchmaking is having trouble. You're still in line - hang tight."
 
-local function broadcastStatus(entries: { Entry }?, pageWasFull: boolean)
-	local unavailable = consecutiveFailures >= config.unavailableAfterFailures
+-- `practice`: which tickets `entries` describe - the global page's
+-- ranked ones, or this server's practice queue.
+local function broadcastStatus(entries: { Entry }?, pageWasFull: boolean, practice: boolean)
+	local unavailable = not practice and consecutiveFailures >= config.unavailableAfterFailures
 	local stamp = now()
 	for player, ticket in tickets do
-		if ticket.status == "Waiting" then
+		if ticket.status == "Waiting" and ticket.practice == practice then
 			if unavailable or entries == nil then
 				if unavailable then
 					sendState(player, { status = "Unavailable", message = UNAVAILABLE_MESSAGE })
@@ -433,6 +452,7 @@ local function broadcastStatus(entries: { Entry }?, pageWasFull: boolean)
 					queueSize = status.queueSize,
 					queueSizeIsLowerBound = status.queueSizeIsLowerBound,
 					estimatedWaitSeconds = status.estimatedWaitSeconds,
+					practice = practice,
 				})
 			end
 		end
@@ -441,30 +461,161 @@ end
 
 -- ===== the loops ==========================================================
 
+-- ===== the queue summary (matchmaking.md, partition ceiling) ==============
+--
+-- The page read costs one unit per entry on the queue's one partition,
+-- which capped hub servers × queue length at ~1,000. So the lease holder
+-- alone reads it and publishes a summary into metaMap (hash-map keys
+-- spread across partitions); every other server reads one shard for 1
+-- unit. A stale or missing summary (lease handover, a stalled holder)
+-- sends a server back to the page for that tick, so nothing waits on it.
+
+local function readSummary(): ({ Entry }?, boolean)
+	local shard = math.random(1, config.summaryShardCount)
+	local ok, raw = pcall(function()
+		return metaMap:GetAsync(MatchmakingLogic.summaryShardKey(shard))
+	end)
+	if not ok then
+		return nil, false
+	end
+	local summary = MatchmakingLogic.decodeSummary(raw)
+	if
+		summary == nil or not MatchmakingLogic.isSummaryFresh(summary.publishedAt, now(), config.summaryStaleSeconds)
+	then
+		return nil, false
+	end
+	return summary.entries, summary.pageWasFull
+end
+
+local function publishSummary(entries: { Entry }, pageWasFull: boolean)
+	local value = MatchmakingLogic.encodeSummary(entries, pageWasFull, now())
+	for shard = 1, config.summaryShardCount do
+		-- A shard that fails stays old and goes stale; its readers fall
+		-- back to the page, so no retry here.
+		pcall(function()
+			metaMap:SetAsync(MatchmakingLogic.summaryShardKey(shard), value, config.summaryTtlSeconds)
+		end)
+	end
+end
+
 local function tick()
-	local entries, pageWasFull = readPage()
+	-- The lease is held even with the kill switch on: the holder still
+	-- publishes the summary everyone else reads.
+	local holdsLease = tryHoldLease()
+	local entries: { Entry }?, pageWasFull = nil, false
+	if not holdsLease then
+		entries, pageWasFull = readSummary()
+	end
+	if entries == nil then
+		entries, pageWasFull = readPage()
+	end
 	if entries == nil then
 		consecutiveFailures += 1
-		broadcastStatus(nil, false)
+		broadcastStatus(nil, false, false)
 		return
 	end
 	consecutiveFailures = 0
+	local page = entries :: { Entry }
 
 	local pending: PendingDepartures = {}
-	for _, entry in entries do
+	for _, entry in page do
 		handleOwnEntry(entry, pending)
 	end
 	dispatch(pending)
 
-	-- P8-5 kill switch: no new groups form, but owned entries above are
-	-- still serviced, so a group formed before the switch still departs.
-	if Loader.get("LiveConfig").flags().matchmakingEnabled and tryHoldLease() then
-		for _, group in MatchmakingLogic.selectGroups(entries, now(), logicConfig) do
-			formGroup(group)
+	if holdsLease then
+		-- P8-5 kill switch: no new groups form, but owned entries above are
+		-- still serviced, so a group formed before the switch still departs.
+		if Loader.get("LiveConfig").flags().matchmakingEnabled then
+			for _, group in MatchmakingLogic.selectGroups(page, now(), logicConfig) do
+				local groupId = formGroup(group)
+				if groupId ~= nil then
+					local userIds: { number } = {}
+					for _, member in group.members do
+						table.insert(userIds, member.userId)
+					end
+					page = MatchmakingLogic.markClaimed(page, userIds, groupId)
+				end
+			end
 		end
+		publishSummary(page, pageWasFull)
 	end
 
-	broadcastStatus(entries, pageWasFull)
+	broadcastStatus(page, pageWasFull, false)
+end
+
+-- ===== the practice hub's own queue =======================================
+
+-- formGroup's practice twin. No claims to make: the local entries are
+-- this server's alone, so writing the group record is the whole commit.
+-- On failure nobody is touched, and the next tick tries again.
+local function formPracticeGroup(group: MatchmakingLogic.FormedGroup): GroupRecord?
+	local destination: MatchmakingLogic.Destination? = nil
+	if destinationProvider == nil and destinationRequired then
+		return nil
+	end
+	if destinationProvider ~= nil then
+		destination = destinationProvider()
+		if destination == nil then
+			return nil
+		end
+	end
+	local groupId = if destination then destination.groupId else HttpService:GenerateGUID(false)
+	local ballot = (Loader.get("VoteService") :: any).drawBallot(group.members) :: MatchmakingLogic.Ballot
+	local record = MatchmakingLogic.newGroupRecord(
+		groupId,
+		group.members,
+		group.npcSlots,
+		now(),
+		myJobId,
+		destination,
+		ballot,
+		{ returnAccessCode = if destination then destination.returnAccessCode else nil }
+	)
+	local ok = pcall(function()
+		groupMap:SetAsync(groupId, record, config.groupRecordTtlSeconds)
+	end)
+	return if ok then record else nil
+end
+
+-- Parties travel whole: the practice selector groups entries by this.
+local function partyUnitOf(userId: number): string
+	return (Loader.get("PartyService") :: any).unitOf(userId)
+end
+
+local function practiceTick()
+	local entries: { Entry } = {}
+	for player, entry in practiceEntries do
+		local ticket = tickets[player]
+		if ticket ~= nil and ticket.status == "Waiting" then
+			table.insert(entries, entry)
+		end
+	end
+	if Loader.get("LiveConfig").flags().matchmakingEnabled then
+		local group =
+			MatchmakingLogic.selectPracticeGroup(entries, now(), #Players:GetPlayers(), logicConfig, partyUnitOf)
+		if group ~= nil then
+			local record = formPracticeGroup(group)
+			if record ~= nil then
+				local players: { Player } = {}
+				for _, member in group.members do
+					local player = Players:GetPlayerByUserId(member.userId)
+					local ticket = if player then tickets[player] else nil
+					if player ~= nil and ticket ~= nil then
+						ticket.status = "Departing"
+						practiceEntries[player] = nil
+						table.insert(players, player)
+					end
+				end
+				dispatch({ [record.groupId] = { group = record, players = players } })
+				entries = {}
+				for _, entry in practiceEntries do
+					table.insert(entries, entry)
+				end
+			end
+		end
+	end
+	broadcastStatus(entries, false, true)
 end
 
 local function writeFreshEntry(player: Player, ticket: Ticket): boolean
@@ -491,7 +642,7 @@ end
 local function refreshOwnEntries()
 	local pending: PendingDepartures = {}
 	for player, ticket in tickets do
-		if ticket.status == "Waiting" then
+		if ticket.status == "Waiting" and not ticket.practice then
 			local ok, _, observed = casEntry(player.UserId, function(current: Entry?): Entry?
 				return MatchmakingLogic.refresh(current, myJobId)
 			end, config.entryTtlSeconds)
@@ -511,9 +662,70 @@ end
 
 -- ===== intents ============================================================
 
+-- The practice queue (design-decisions.md Q7). Nothing to write: the
+-- entries live here only. No avoid list (the rematch cooldown doesn't
+-- apply) and no streak (nothing reads it, and a practice match never
+-- touches it). The leader queues the whole party at once, with one
+-- enqueuedAt, so the selector sees them as one unit. A requeue after a
+-- failed teleport (`preservedEnqueuedAt`) puts back only that player.
+local function joinPractice(player: Player, preservedEnqueuedAt: number?, message: string?)
+	local PartyService = Loader.get("PartyService") :: any
+	local DataService = Loader.get("DataService") :: any
+	local members: { Player } = { player }
+	if preservedEnqueuedAt == nil then
+		if not PartyService.isLeader(player) then
+			sendState(player, { status = "Unavailable", message = "Your party leader starts the practice queue." })
+			return
+		end
+		members = {}
+		for _, userId in PartyService.membersOf(player) do
+			local member = Players:GetPlayerByUserId(userId)
+			if member == nil or tickets[member] ~= nil or not DataService.isLoaded(member) then
+				sendState(player, {
+					status = "Unavailable",
+					message = "Someone in your party is already queued or still loading.",
+				})
+				return
+			end
+			table.insert(members, member)
+		end
+	end
+
+	local enqueuedAt = preservedEnqueuedAt or now()
+	for _, member in members do
+		tickets[member] = { status = "Waiting", enqueuedAt = enqueuedAt, claimSeen = nil, practice = true }
+		practiceEntries[member] = MatchmakingLogic.newEntry(member.UserId, myJobId, enqueuedAt, 0, {}, {})
+		sendState(member, { status = "Waiting", message = message, practice = true })
+	end
+end
+
+local leaveQueue: (player: Player, fromIntent: boolean) -> ()
+
+-- Drops these players' practice tickets that haven't departed yet: their
+-- party changed, so the unit that queued no longer exists. Anyone now in
+-- a party also leaves the ranked queue, which is solo only.
+local function cancelPractice(players: { Player }, message: string?)
+	local PartyService = Loader.get("PartyService") :: any
+	for _, player in players do
+		local ticket = tickets[player]
+		if ticket == nil or ticket.status == "Departing" then
+			continue
+		end
+		if ticket.practice then
+			tickets[player] = nil
+			practiceEntries[player] = nil
+			sendState(player, { status = "Idle", message = message })
+		elseif #PartyService.membersOf(player) > 1 then
+			leaveQueue(player, false)
+			sendState(player, { status = "Idle", message = "You joined a party, so you've left the ranked queue." })
+		end
+	end
+end
+
 -- `message` explains a requeue (P5-2's failed teleport) and rides on the
 -- Joining and Waiting states so the client can show why they're back.
-local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: string?)
+-- `practice`: the Practice button. Forced on a private hub.
+local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: string?, practice: boolean?)
 	if not active then
 		sendState(player, { status = "Unavailable", message = "Matchmaking isn't available on this server." })
 		return
@@ -533,8 +745,24 @@ local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: 
 		return
 	end
 
-	local ticket: Ticket = { status = "Joining", enqueuedAt = preservedEnqueuedAt or now(), claimSeen = nil }
+	if practiceHub or practice == true then
+		joinPractice(player, preservedEnqueuedAt, message)
+		return
+	end
+	-- Ranked is solo (design-decisions.md Q7 condition 2): parties are
+	-- safe only where nothing is at stake.
+	if #(Loader.get("PartyService") :: any).membersOf(player) > 1 then
+		sendState(player, {
+			status = "Unavailable",
+			message = "Parties play Practice only. Leave your party to play ranked.",
+		})
+		return
+	end
+
+	local ticket: Ticket =
+		{ status = "Joining", enqueuedAt = preservedEnqueuedAt or now(), claimSeen = nil, practice = false }
 	tickets[player] = ticket
+
 	sendState(player, { status = "Joining", message = message })
 
 	local ok = writeFreshEntry(player, ticket)
@@ -548,9 +776,14 @@ local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: 
 	end
 	ticket.status = "Waiting"
 	sendState(player, { status = "Waiting", message = message })
+	-- A requeue after a failed teleport carries its old enqueuedAt and is
+	-- the same attempt, not a new Matchmaking funnel session.
+	if preservedEnqueuedAt == nil then
+		Loader.get("Telemetry").userQueued(player)
+	end
 end
 
-local function leaveQueue(player: Player, fromIntent: boolean)
+function leaveQueue(player: Player, fromIntent: boolean)
 	local ticket = tickets[player]
 	if ticket == nil then
 		if fromIntent then
@@ -565,6 +798,22 @@ local function leaveQueue(player: Player, fromIntent: boolean)
 		return
 	end
 	tickets[player] = nil
+	if ticket.practice then
+		practiceEntries[player] = nil
+		-- The party queued as one, so it leaves as one.
+		local others: { Player } = {}
+		for _, userId in (Loader.get("PartyService") :: any).membersOf(player) do
+			local member = Players:GetPlayerByUserId(userId)
+			if member ~= nil and member ~= player then
+				table.insert(others, member)
+			end
+		end
+		cancelPractice(others, "A party member left the queue.")
+		if fromIntent then
+			sendState(player, { status = "Idle" })
+		end
+		return
+	end
 	local userId = player.UserId
 	task.spawn(function()
 		casEntry(userId, function(current: Entry?): Entry?
@@ -590,11 +839,13 @@ end
 -- needn't pass it.
 local function requeue(player: Player, enqueuedAt: number?, message: string?)
 	local ticket = tickets[player]
+	local practice = false
 	if ticket ~= nil and ticket.status == "Departing" then
 		enqueuedAt = enqueuedAt or ticket.enqueuedAt
+		practice = ticket.practice
 		tickets[player] = nil
 	end
-	task.spawn(joinQueue, player, enqueuedAt, message)
+	task.spawn(joinQueue, player, enqueuedAt, message, practice)
 end
 
 local function isQueued(player: Player): boolean
@@ -622,7 +873,7 @@ end
 
 local MatchmakingService: Loader.Service = {
 	name = "MatchmakingService",
-	dependencies = { "NetGuard", "ConfigValidator", "DataService", "LiveConfig" },
+	dependencies = { "NetGuard", "ConfigValidator", "DataService", "LiveConfig", "Telemetry" },
 
 	setDepartureHandler = setDepartureHandler,
 	setDestinationProvider = setDestinationProvider,
@@ -630,6 +881,18 @@ local MatchmakingService: Loader.Service = {
 	isQueued = isQueued,
 	isDeparting = isDeparting,
 	notify = notify,
+
+	cancelPractice = cancelPractice,
+
+	-- design-decisions.md Q7: this hub's matches are practice matches.
+	isPracticeHub = function(): boolean
+		return practiceHub
+	end,
+
+	-- This server is a hub that runs the queue (and so parties).
+	isActive = function(): boolean
+		return active
+	end,
 }
 
 function MatchmakingService:init()
@@ -645,10 +908,14 @@ function MatchmakingService:init()
 		warn("MatchmakingService: MemoryStore unavailable, queue disabled - " .. tostring(memoryStoreErr))
 		active = false
 	end
+	-- QueueController reads this to say the queue here is practice.
+	if active and practiceHub then
+		workspace:SetAttribute("PracticeServer", true)
+	end
 
 	local NetGuard = Loader.get("NetGuard") :: any
-	NetGuard.on("QueueJoinIntent", function(player: Player, _payload: any)
-		task.spawn(joinQueue, player, nil)
+	NetGuard.on("QueueJoinIntent", function(player: Player, payload: any)
+		task.spawn(joinQueue, player, nil, nil, payload.mode == "Practice")
 	end)
 	NetGuard.on("QueueLeaveIntent", function(player: Player, _payload: any)
 		leaveQueue(player, true)
@@ -661,6 +928,28 @@ end
 
 function MatchmakingService:start()
 	if not active then
+		return
+	end
+
+	-- The practice queue runs on every hub, on its own loop: it never
+	-- touches the queue's MemoryStore structures, so the ranked loop's
+	-- backoff isn't its concern, and its reservation never delays a
+	-- ranked tick.
+	task.spawn(function()
+		while true do
+			local ok, err = pcall(function(): any
+				practiceTick()
+				return nil
+			end)
+			if not ok then
+				warn("MatchmakingService: practice tick errored: " .. tostring(err))
+			end
+			task.wait(config.formationTickSeconds)
+		end
+	end)
+
+	-- A private hub has no ranked queue at all.
+	if practiceHub then
 		return
 	end
 
@@ -702,7 +991,10 @@ function MatchmakingService:start()
 	-- this, and the TTL covers it.
 	game:BindToClose(function()
 		local remaining = 0
-		for player in tickets do
+		for player, ticket in tickets do
+			if ticket.practice then
+				continue -- never in MemoryStore
+			end
 			remaining += 1
 			local userId = player.UserId
 			task.spawn(function()

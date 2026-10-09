@@ -24,6 +24,8 @@ local STEP = 4
 local SELF = 1
 
 local TITLES = { "Code Playback", "Pressure Valve", "Fuse Rewire", "Vent Purge", "Code Playback", "Pressure Valve" }
+-- Cycles the compass through a floor up, level and a floor down.
+local LEVELS: { HudLogic.Level } = { "above", "level", "below" }
 
 -- One scene per step. `mine` is the preview player's task count against
 -- a fixed field of rivals on 5, 4, 3, 3, 1: it walks from out, to on
@@ -97,11 +99,13 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 			)
 		end
 		slots(list)
-		objective(
-			if scene.mine < #TITLES
-				then table.freeze({ bearing = (step * 45) % 360 - 180, distance = 12 + step * 7 })
-				else nil
-		)
+		objective(if scene.mine < #TITLES
+			then table.freeze({
+				bearing = (step * 45) % 360 - 180,
+				distance = 12 + step * 7,
+				level = LEVELS[step % #LEVELS + 1],
+			})
+			else nil)
 	end
 
 	local store: RaceHUD.Store = {
@@ -115,6 +119,9 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 		selected = selected,
 		aiming = aiming,
 		pending = pending,
+		note = function()
+			return nil
+		end,
 		effects = effects,
 		objective = objective,
 		select = function(index: number)

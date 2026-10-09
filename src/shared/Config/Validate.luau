@@ -150,6 +150,28 @@ local POWERUP_TARGETS: { PowerUpTarget } = { "Self", "Aimed", "Area", "Nearest" 
 local POWERUP_RARITIES: { PowerUpRarity } = { "Common", "Uncommon", "Rare" }
 local POWERUP_DESCRIPTION_MAX = 48
 
+-- How a thrown item's landing looks (ThrowController draws each one).
+-- The orb in flight keeps the role colour, so "an attack is coming"
+-- reads the same for every item; the impact says WHICH item hit.
+export type PowerUpImpactStyle = "Frost" | "Flash" | "Shockwave" | "Glitch"
+export type PowerUpImpact = {
+	style: PowerUpImpactStyle,
+	rgb: { number }, -- 0-255 RGB triple, so this stays free of Color3
+}
+
+local POWERUP_IMPACT_STYLES: { PowerUpImpactStyle } = { "Frost", "Flash", "Shockwave", "Glitch" }
+
+-- How a debuffed racer looks while it lasts, to everyone (themselves
+-- included), in place of a word over the head. "Ragdoll" is the one
+-- with physics: the server swaps the rig's joints (server/Ragdoll.luau)
+-- so every client sees the same flop. Listed strongest first - a racer
+-- under two shows the earlier one.
+export type PowerUpVictimLook = "Frozen" | "Ragdoll" | "Blinded"
+
+-- Plain strings: StatusEffects passes it to PowerUpLogic.lookFor.
+local POWERUP_VICTIM_LOOKS: { string } = { "Frozen", "Ragdoll", "Blinded" }
+Validate.POWERUP_VICTIM_LOOKS = POWERUP_VICTIM_LOOKS
+
 -- Two acquisition paths per powerups.md's intro. `robuxPrice` is only
 -- ever a convenience purchase, never exclusive - design-decisions.md Q8:
 -- "every purchasable item is also earnable for free through normal
@@ -197,6 +219,12 @@ export type PowerUpDef = {
 	-- GameConfig.powerUpThrow's shunt; this scales it for this item
 	-- (Push/Trip's whole point is the shove). nil = 1. Only on thrown items.
 	shuntScale: number?,
+	-- A thrown item's own landing effect and colour. nil = the plain
+	-- role-coloured blast. Only on thrown items.
+	impact: PowerUpImpact?,
+	-- How the victim looks while this debuff is on them. nil = just the
+	-- word over their head. Only on Debuffs.
+	victimLook: PowerUpVictimLook?,
 	acquisition: PowerUpAcquisition,
 }
 
@@ -239,7 +267,8 @@ export type TitleDef = {
 -- WHY THERE IS NO `robuxPrice`/`currency` FIELD HERE, even though a
 -- cosmetic is a purchasable thing: P4-5 already owns pricing entirely -
 -- a cosmetic is sold by a StoreItemDef whose `grants` names this item's
--- `id` (see FounderPass.luau, VictoryEmotePass.luau). Duplicating a price
+-- `id`, or unlocked on a season track (see Seasons/Season1.luau).
+-- Duplicating a price
 -- here would be a second source of truth for the same number, and the
 -- two would eventually disagree. `rarity` stays here rather than on the
 -- store entry because it's a property of the ITEM regardless of which
@@ -251,8 +280,9 @@ export type TitleDef = {
 --
 -- WHY "Reveal" AND "Projectile" HAVE NO COLOUR FIELD, unlike every other
 -- visual category: their colour already MEANS something. A thrown
--- power-up is tinted by its role (PowerUpLogic.ROLE_RGB) so a victim can
--- read what's coming at them, and a Steal/Share reveal is coloured by the
+-- power-up is tinted by its role (PowerUpLogic.ROLE_RGB) in flight and by
+-- its own PowerUpDef.impact on landing, so a victim can read what's
+-- coming at them and what hit them, and a Steal/Share reveal is coloured by the
 -- outcome. A cosmetic that could repaint either would sell confusion, so
 -- those two skins only ever change shape and texture - the renderer keeps
 -- supplying the colour. The type has nowhere to put one, by design.
@@ -266,6 +296,8 @@ export type CosmeticCategory =
 	| "StreakFlair"
 	| "Nameplate"
 	| "CallingCard"
+	| "Hat"
+	| "BackItem"
 
 local COSMETIC_CATEGORIES: { CosmeticCategory } = {
 	"Skin",
@@ -277,6 +309,8 @@ local COSMETIC_CATEGORIES: { CosmeticCategory } = {
 	"StreakFlair",
 	"Nameplate",
 	"CallingCard",
+	"Hat",
+	"BackItem",
 }
 
 export type CosmeticDef = {
@@ -346,9 +380,30 @@ export type CosmeticDef = {
 	-- when your sabotage lands on them.
 	cardImageAssetId: number?,
 
+	-- Categories "Hat" and "BackItem": a mesh worn on the head or back,
+	-- two separate slots so a player can wear one of each. While worn it
+	-- hides the player's own avatar accessories at the same spot, and
+	-- unequipping puts them back (design-decisions.md, "wearable
+	-- cosmetics", 2026-10-09). `wearScale` multiplies the mesh's own
+	-- size; `wearOffset` (studs) and `wearRotation` (degrees) are
+	-- {x, y, z} from the attachment point, nil = {0, 0, 0}. Plain number
+	-- arrays, not CFrame/Vector3, for the same Lune-purity reason the
+	-- colour fields are strings.
+	wearMeshAssetId: number?,
+	wearTextureAssetId: number?,
+	wearScale: number?,
+	wearOffset: { number }?,
+	wearRotation: { number }?,
+
 	-- Store UI thumbnail (P6-6's item grid). Optional: falls back to
 	-- whatever the category's own primary asset id would render as.
 	previewIconAssetId: number?,
+
+	-- Whether a win can drop this (design-decisions.md Q1, applied
+	-- 2026-10-02). Opt-in, so founder, paid-only and limited cosmetics
+	-- stay out of the win pool unless their own file says otherwise.
+	-- Disabled cosmetics never drop, whatever this says.
+	winDrop: boolean?,
 }
 
 -- ===== StoreItemDef: P4-5 ================================================
@@ -366,11 +421,28 @@ export type CosmeticDef = {
 -- `assetId = 0` means "not created on the Roblox side yet." That's a
 -- legal state for a DISABLED entry and an error for an enabled one -
 -- exactly the stance MapDef.enabled takes against ServerStorage.Maps.
-export type StoreProductKind = "GamePass" | "DeveloperProduct"
-export type StoreGrantKind = "Currency" | "PowerUpStock" | "Cosmetic" | "Title"
+-- CoinOffer (rewards step 6): bought with earned coins, not Robux. No
+-- Roblox asset (assetId and robuxPrice are 0), priced by `coinPrice`, and
+-- it may only grant power-up stock (user decision, 2026-10-02), with one
+-- named exception: a paid Navigation round (design-decisions.md Q8,
+-- "Navigation"), so every free player can switch it on in any round.
+export type StoreProductKind = "GamePass" | "DeveloperProduct" | "CoinOffer"
+export type StoreGrantKind =
+	"Currency"
+	| "PowerUpStock"
+	| "Cosmetic"
+	| "Title"
+	| "NavigationRound"
+	| "StreakBuyBack"
+	| "SeasonPass"
+-- What a perk pass unlocks for good. Only a GamePass carries one.
+export type StorePerk = "UnlimitedNavigation"
 
-local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct" }
-local STORE_GRANT_KINDS: { StoreGrantKind } = { "Currency", "PowerUpStock", "Cosmetic", "Title" }
+local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct", "CoinOffer" }
+local STORE_GRANT_KINDS: { StoreGrantKind } =
+	{ "Currency", "PowerUpStock", "Cosmetic", "Title", "NavigationRound", "StreakBuyBack", "SeasonPass" }
+-- Plain strings: a one-member list of literals won't widen for inSet.
+local STORE_PERKS: { string } = { "UnlimitedNavigation" }
 
 -- A single thing a purchase hands over. One flat type with optional
 -- fields rather than a tagged union, because Luau doesn't narrow a union
@@ -379,10 +451,16 @@ local STORE_GRANT_KINDS: { StoreGrantKind } = { "Currency", "PowerUpStock", "Cos
 -- StoreLogic.applyGrants reads only the field its own branch needs.
 export type StoreGrant = {
 	kind: StoreGrantKind,
-	amount: number?, -- Currency: how much. PowerUpStock: how many.
+	amount: number?, -- Currency: how much. PowerUpStock, NavigationRound: how many.
 	powerUpId: string?, -- PowerUpStock: which power-up, cross-checked against the PowerUps registry
 	cosmeticId: string?, -- Cosmetic: which item, cross-checked against the Cosmetics registry (P4-6)
 	titleId: string?, -- Title: which title, cross-checked against the Titles registry
+	-- StreakBuyBack: the range of lost streaks this price tier saves
+	-- (design-decisions.md Q7, "buying back a streak"). `maxStreak` nil
+	-- is the top tier, "this many or more". Validate.run checks that the
+	-- enabled tiers cover every streak from 1 up with no gap or overlap.
+	minStreak: number?,
+	maxStreak: number?,
 }
 
 export type StoreItemDef = {
@@ -393,8 +471,81 @@ export type StoreItemDef = {
 	displayName: string,
 	description: string,
 	robuxPrice: number, -- DISPLAY ONLY - see checkStoreItem for why a grant never reads this
+	coinPrice: number?, -- CoinOffer only: what it costs in coins, deducted server-side
 	sortOrder: number,
+	-- The store card's and preview panel's picture (next-stages 14d):
+	-- a 512x512 full-colour image, drawn untinted. Source art is
+	-- assets/store/<key>.png (scripts/make-store-icons.ps1), the same file
+	-- a Robux product uses as its Creator Dashboard icon. 0 = not uploaded
+	-- yet, legal only while the entry is disabled. Which tab an item sits
+	-- in is NOT a field: StoreScreenLogic.categoryOf derives it from
+	-- `grants`, so a tab can never disagree with what the item contains.
+	imageAssetId: number,
+	-- A DeveloperProduct grants at least one thing. A GamePass grants
+	-- nothing here: it is either a season pass, unlocking that season's
+	-- premium track (SeasonDef below), or a perk pass (`perk`).
 	grants: { StoreGrant },
+	-- A GamePass only: what owning it unlocks for good, instead of a
+	-- season's track. Read live from pass ownership, never stored, so
+	-- it can't be granted by anything but a real purchase. A perk pass
+	-- is Robux-only, so a CoinOffer must sell the same thing per round
+	-- (Q8; Validate.run checks it).
+	perk: StorePerk?,
+
+	-- Sales and limited editions (design-decisions.md Q1, "the featured
+	-- plinths" and "limited cosmetics", 2026-10-09). Times are UTC,
+	-- written "YYYY-MM-DD HH:MM": fixed width, so two compare correctly
+	-- as strings. Outside [onSaleFrom, onSaleUntil) the item isn't sold
+	-- or shown; nil = no limit on that side. A cosmetic is only ever sold
+	-- as a limited edition, so a Cosmetic grant needs `onSaleUntil`.
+	onSaleFrom: string?,
+	onSaleUntil: string?,
+	-- The struck-through "was" price, in the item's own currency. It must
+	-- be above coinPrice (CoinOffer) or robuxPrice (Robux). A Robux
+	-- item's real price lives on the Creator Dashboard, so the client
+	-- shows this only when the live price really is lower (StoreOffers).
+	wasPrice: number?,
+	-- Another item's `key` that isn't sold while this one is: the Season
+	-- Pass launch offer replaces the full-price pass until it ends.
+	replaces: string?,
+	-- Which hub plinth (HubStorePodium Slot, 1-3) shows this item while
+	-- it's on sale. Two enabled items may share a slot only if their
+	-- sale windows don't overlap.
+	featuredSlot: number?,
+}
+
+-- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
+-- One file per season in src/shared/Config/Seasons/ (design-decisions.md
+-- Q1's 2026-09-30 revision, applied 2026-10-02). A season is one calendar
+-- month, UTC (user decision, 2026-10-09; Season 1 alone runs from launch
+-- to the end of November), and seasons replace each other,
+-- so no two windows may overlap. It has two tracks of items unlocked at
+-- win counts, both counting every win in the window:
+--   * `free` pays everyone (a retention tool, so it's the less generous
+--     of the two);
+--   * `premium` pays once `passKey` is bought for this season, and then
+--     pays everything already reached at once.
+-- Track items are track-only forever: a cosmetic on a track never drops,
+-- is never sold, and appears on no other track or leaderboard band.
+-- A power-up on a track must be freelyEarnable (Q8).
+export type SeasonGrantKind = "Currency" | "PowerUpStock" | "Cosmetic"
+
+local SEASON_GRANT_KINDS: { SeasonGrantKind } = { "Currency", "PowerUpStock", "Cosmetic" }
+
+export type SeasonTrackItem = {
+	wins: number, -- 0 = granted as soon as the track starts counting
+	grant: StoreGrant, -- Title isn't allowed here; see SEASON_GRANT_KINDS
+}
+
+export type SeasonDef = {
+	id: string,
+	enabled: boolean,
+	displayName: string,
+	startsOn: string, -- "YYYY-MM-DD", 00:00 UTC, inclusive; normally the 1st
+	endsOn: string, -- the 1st of a later month, 00:00 UTC, exclusive
+	passKey: string, -- the Store DeveloperProduct (a SeasonPass grant) that unlocks `premium`
+	free: { SeasonTrackItem }, -- ascending `wins`
+	premium: { SeasonTrackItem }, -- ascending `wins`
 }
 
 -- ===== StoreConfig: P4-5 =================================================
@@ -438,6 +589,7 @@ export type TelemetryConfig = {
 	batchSize: number,
 	flushIntervalSeconds: number,
 	perMinuteLimit: number, -- 0 = no limit
+	studioEcho: boolean, -- Studio only: print each event, since Studio can't send them
 }
 
 -- ===== LiveOpsConfig: P8-5 ===============================================
@@ -486,6 +638,15 @@ export type MatchmakingConfig = {
 	backoffBaseSeconds: number,
 	backoffCapSeconds: number,
 	unavailableAfterFailures: number,
+	summaryShardCount: number, -- copies of the lease holder's queue summary
+	summaryStaleSeconds: number, -- past this, servers read the page themselves
+	summaryTtlSeconds: number,
+	-- design-decisions.md Q7, the practice-match case: lobby id -> its
+	-- access code, so a reserved practice lobby can send its next group
+	-- home to itself.
+	practiceLobbyMapName: string,
+	practiceLobbyTtlSeconds: number,
+	partyInviteTtlSeconds: number, -- PartyLogic: how long an invite waits
 }
 
 -- ===== TeleportConfig: P5-2 ==============================================
@@ -548,22 +709,46 @@ export type StudioTestConfig = {
 	startDelaySeconds: number,
 }
 
--- ===== GameConfig: round/player counts, Studio timers, bounty tiers ====
+-- ===== GameConfig: round/player counts, Studio timers, win rewards =====
 -- Studio phase timers are locked exactly by architecture.md §6's network
 -- trace (Intro +5s, Negotiate +20s - 45s until 2026-09-25 - Choose
--- +15s, Reveal +1s). Bounty
--- tiers are payoff-table.md §3's table verbatim (VU = the internal
--- balancing currency that doc explains is never shown to a player - see
--- its §1 for why L > M > S > 0 must hold at every tier). Fields with no
--- locked value anywhere in docs/ yet are marked PLACEHOLDER, the same
--- stance perf-budget.md and threat-model.md take on their own
--- unverified figures - not a guess presented as fact.
-export type BountyTier = {
-	tier: number, -- 1-5, ascending
-	minStreak: number, -- payoff-table.md §3's streak-range floor for this tier
-	soleStealerVU: number, -- L
-	loneSharerVU: number, -- M
-	allShareVU: number, -- S
+-- +15s, Reveal +1s). Fields with no locked value anywhere in docs/ yet
+-- are marked PLACEHOLDER, the same stance perf-budget.md and
+-- threat-model.md take on their own unverified figures - not a guess
+-- presented as fact.
+
+-- What a win pays: design-decisions.md Q1's 2026-09-30 revision and its
+-- 2026-10-02 applied case. A "rung" is how many title-ladder rungs the
+-- winner's streak reaches AFTER this win (0-21; RewardLogic.rungFor).
+-- Every number is PLACEHOLDER until playtest. Replaced the VU
+-- bountyTiers (rewards-roadmap.md step 2c).
+export type WinCurrencyConfig = {
+	-- The base for each outcome tier. Validate keeps soleStealer >
+	-- loneSharer > allShare > 0, the ordering bountyTiers had, so Steal
+	-- and Share both stay live choices (payoff-table.md §1).
+	soleStealer: number,
+	loneSharer: number,
+	allShare: number,
+	perRungBonus: number, -- paid = floor(base * (1 + perRungBonus * rung))
+}
+
+export type DropRarityWeight = {
+	weight: number, -- relative weight at rung 0
+	perRungGrowth: number, -- weight * (1 + perRungGrowth * rung); higher on rarer tiers so they catch up
+}
+
+export type WinDropConfig = {
+	baseChance: number, -- chance of any drop at rung 0, 0-1
+	perRungChance: number, -- added per rung
+	maxChance: number, -- cap, 0-1
+	rarityWeights: { Common: DropRarityWeight, Uncommon: DropRarityWeight, Rare: DropRarityWeight },
+	powerUpAmount: number, -- loadout stock granted by a power-up drop
+	duplicateCurrency: PowerUpRarityWeights, -- paid instead of a cosmetic the winner already owns
+}
+
+export type WinRewardsConfig = {
+	currency: WinCurrencyConfig,
+	drop: WinDropConfig,
 }
 
 export type StudioTimers = {
@@ -598,11 +783,10 @@ export type GameConfig = {
 	tasksPerPlayer: number, -- cross-checked against every MapDef.taskStationCount
 	qualificationFloorPercent: number, -- design-decisions.md Q2: 0.5
 	streakLossWeight: number, -- payoff-table.md §3's c0; Closs(n) = streakLossWeight * n
-	npcSeatStreakCreditThreshold: number, -- PLACEHOLDER: threat-model.md §8, playtest-tuned
 	raceDurationSeconds: number, -- PLACEHOLDER: no locked value in docs/ yet
 	studioTimers: StudioTimers,
 	roundTimers: RoundTimers,
-	bountyTiers: { BountyTier },
+	winRewards: WinRewardsConfig,
 
 	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
 	-- loadout (StoreService) starts in these slots; field pickups fill
@@ -724,6 +908,8 @@ export type LeaderboardConfig = {
 	refreshMaxSeconds: number,
 	staleAfterSeconds: number,
 	nameCacheTtlSeconds: number,
+	nameLookupsPerMinute: number, -- A5: per-server cap on resolved ids
+	nameFailureRetrySeconds: number,
 	maxWriteAttempts: number,
 	backoffBaseSeconds: number,
 	backoffCapSeconds: number,
@@ -731,8 +917,31 @@ export type LeaderboardConfig = {
 	-- P4-4: daily/weekly boards.
 	snapshotStoreName: string,
 	periodGraceSeconds: number,
-	rewardTopN: number,
+	-- leaderboard-scale.md §9: the shared copy of each period board.
+	periodShare: LeaderboardPeriodShare,
+	-- Rewards-roadmap step 4: period kind -> bands of places.
+	-- Structurally LeaderboardPayoutLogic.PayoutTable.
+	payouts: { [string]: { LeaderboardPayoutBand } },
 }
+
+export type LeaderboardPeriodShare = {
+	mapName: string,
+	shardCount: number,
+	republishAfterSeconds: number,
+	lockSeconds: number,
+	shardTtlSeconds: number,
+}
+
+export type LeaderboardPayoutBand = {
+	maxRank: number,
+	currency: number,
+	cosmeticId: string?,
+}
+
+-- The period kinds LeaderboardService rolls over. The all-time board
+-- never pays (design-decisions.md Q1, applied 2026-10-02), so it is not
+-- a valid key.
+local PAYOUT_KINDS: { [string]: true } = { Daily = true, Weekly = true }
 
 -- ===== NPCBrainConfig: P3-6 ==============================================
 -- The utility AI's weights. A score is assembled as
@@ -1212,6 +1421,56 @@ function Validate.checkPowerUp(fileName: string, def: PowerUpDef, issues: { Issu
 			issue(issues, "PowerUp", fileName, "shuntScale", "must be between 0 and 5")
 		end
 	end
+	local victimLook = def.victimLook
+	if victimLook ~= nil then
+		if def.kind ~= "Debuff" then
+			issue(issues, "PowerUp", fileName, "victimLook", "only a Debuff has a victim look")
+		end
+		if not inSet(victimLook, POWERUP_VICTIM_LOOKS) then
+			issue(
+				issues,
+				"PowerUp",
+				fileName,
+				"victimLook",
+				string.format(
+					"expected one of [%s], got %s",
+					table.concat(POWERUP_VICTIM_LOOKS, ", "),
+					tostring(victimLook)
+				)
+			)
+		end
+	end
+	local impact = def.impact
+	if impact ~= nil then
+		if def.target ~= "Aimed" and def.target ~= "Nearest" then
+			issue(issues, "PowerUp", fileName, "impact", "only a thrown (Aimed/Nearest) item has an impact")
+		end
+		if not inSet(impact.style, POWERUP_IMPACT_STYLES) then
+			issue(
+				issues,
+				"PowerUp",
+				fileName,
+				"impact.style",
+				string.format(
+					"expected one of [%s], got %s",
+					table.concat(POWERUP_IMPACT_STYLES, ", "),
+					tostring(impact.style)
+				)
+			)
+		end
+		local rgb = impact.rgb
+		local rgbOk = type(rgb) == "table" and #rgb == 3
+		if rgbOk then
+			for _, channel in rgb do
+				if type(channel) ~= "number" or channel < 0 or channel > 255 then
+					rgbOk = false
+				end
+			end
+		end
+		if not rgbOk then
+			issue(issues, "PowerUp", fileName, "impact.rgb", "must be three numbers from 0 to 255")
+		end
+	end
 
 	-- design-decisions.md Q8: a Robux price is only ever a convenience
 	-- purchase. A power-up with no free acquisition path fails boot,
@@ -1358,7 +1617,51 @@ function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: 
 		checkColorHex(issues, fileName, "nameplateColorHex", def.nameplateColorHex)
 	elseif def.category == "CallingCard" then
 		checkAssetId(issues, fileName, "cardImageAssetId", def.cardImageAssetId, def.enabled)
+	elseif def.category == "Hat" or def.category == "BackItem" then
+		checkAssetId(issues, fileName, "wearMeshAssetId", def.wearMeshAssetId, def.enabled)
+		checkAssetId(issues, fileName, "wearTextureAssetId", def.wearTextureAssetId, def.enabled)
+		if type(def.wearScale) ~= "number" or def.wearScale <= 0 then
+			issue(issues, "Cosmetic", fileName, "wearScale", "must be a positive number")
+		end
+		for _, field in { "wearOffset", "wearRotation" } do
+			local value = (def :: any)[field]
+			if value == nil then
+				continue
+			end
+			local ok = type(value) == "table" and #value == 3
+			if ok then
+				for _, n in value do
+					ok = ok and type(n) == "number"
+				end
+			end
+			if not ok then
+				issue(issues, "Cosmetic", fileName, field, "expected {x, y, z} numbers, or nil for {0, 0, 0}")
+			end
+		end
 	end
+end
+
+-- How many HubStorePodium plinths the hub has (hub-spec.md: exactly 3).
+local FEATURED_SLOTS = 3
+
+-- "YYYY-MM-DD HH:MM" naming a real UTC date and time. Fixed width, so
+-- two valid ones compare correctly as strings; StoreOffers.parseUtcTime
+-- turns one into os.time() at runtime.
+local function isUtcTime(text: any): boolean
+	if type(text) ~= "string" then
+		return false
+	end
+	local ys, ms, ds, hs, mins = string.match(text, "^(%d%d%d%d)%-(%d%d)%-(%d%d) (%d%d):(%d%d)$")
+	if ys == nil then
+		return false
+	end
+	local y, m, d = tonumber(ys) :: number, tonumber(ms) :: number, tonumber(ds) :: number
+	if m < 1 or m > 12 or d < 1 or (tonumber(hs) :: number) > 23 or (tonumber(mins) :: number) > 59 then
+		return false
+	end
+	local leap = (y % 4 == 0 and y % 100 ~= 0) or y % 400 == 0
+	local maxDay = ({ 31, if leap then 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 })[m]
+	return d <= maxDay
 end
 
 -- P4-5. Per-item store checks. The cross-registry half (a PowerUpStock
@@ -1408,7 +1711,9 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 			"assetId",
 			string.format("expected a non-negative integer, got %s", tostring(def.assetId))
 		)
-	elseif def.enabled and def.assetId == 0 then
+	elseif def.kind == "CoinOffer" and def.assetId ~= 0 then
+		issue(issues, "Store", fileName, "assetId", "a CoinOffer has no Roblox asset - set assetId = 0")
+	elseif def.enabled and def.assetId == 0 and def.kind ~= "CoinOffer" then
 		-- The MapDef.enabled stance, applied to monetisation: an entry
 		-- may be written and validated before its Roblox asset exists,
 		-- but it may not be SOLD before then. An enabled product with no
@@ -1433,13 +1738,160 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		)
 	end
 
-	if type(def.grants) ~= "table" or #def.grants == 0 then
+	if type(def.imageAssetId) ~= "number" or def.imageAssetId < 0 or def.imageAssetId % 1 ~= 0 then
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"imageAssetId",
+			string.format("expected a non-negative integer, got %s", tostring(def.imageAssetId))
+		)
+	elseif def.enabled and def.imageAssetId == 0 then
+		-- An enabled item with no picture would sit in the grid as a
+		-- blank card next to ones that have art.
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"imageAssetId",
+			"enabled = true but imageAssetId is 0 - upload assets/store/<key>.png and paste its id here, or set enabled = false"
+		)
+	end
+
+	if def.kind == "CoinOffer" then
+		local price = def.coinPrice
+		if type(price) ~= "number" or price <= 0 or price % 1 ~= 0 then
+			issue(issues, "Store", fileName, "coinPrice", "a CoinOffer needs a positive integer coinPrice")
+		end
+		if def.robuxPrice ~= 0 then
+			issue(issues, "Store", fileName, "robuxPrice", "a CoinOffer is bought with coins - set robuxPrice = 0")
+		end
+	elseif def.coinPrice ~= nil then
+		issue(issues, "Store", fileName, "coinPrice", "only a CoinOffer has a coinPrice")
+	end
+
+	for _, field in { "onSaleFrom", "onSaleUntil" } do
+		local value = (def :: any)[field]
+		if value ~= nil and not isUtcTime(value) then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				field,
+				string.format('expected "YYYY-MM-DD HH:MM" (UTC), got %s', tostring(value))
+			)
+		end
+	end
+	if isUtcTime(def.onSaleFrom) and isUtcTime(def.onSaleUntil) and def.onSaleUntil <= def.onSaleFrom then
+		issue(issues, "Store", fileName, "onSaleUntil", "must be after onSaleFrom")
+	end
+
+	if def.wasPrice ~= nil then
+		local own = if def.kind == "CoinOffer" then def.coinPrice else def.robuxPrice
+		if type(def.wasPrice) ~= "number" or def.wasPrice % 1 ~= 0 then
+			issue(issues, "Store", fileName, "wasPrice", "expected a whole number")
+		elseif type(own) == "number" and def.wasPrice <= own then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"wasPrice",
+				string.format("must be above the item's own price (%d) - it's the struck-through price", own)
+			)
+		end
+	end
+
+	if def.replaces ~= nil and (not isNonEmptyString(def.replaces) or def.replaces == def.key) then
+		issue(issues, "Store", fileName, "replaces", "must be another store item's key")
+	end
+
+	if
+		def.featuredSlot ~= nil
+		and (
+			type(def.featuredSlot) ~= "number"
+			or def.featuredSlot % 1 ~= 0
+			or def.featuredSlot < 1
+			or def.featuredSlot > FEATURED_SLOTS
+		)
+	then
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"featuredSlot",
+			string.format("expected a plinth slot from 1 to %d, got %s", FEATURED_SLOTS, tostring(def.featuredSlot))
+		)
+	end
+
+	if def.perk ~= nil then
+		if not inSet(def.perk, STORE_PERKS) then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"perk",
+				string.format("expected one of %s, got %s", table.concat(STORE_PERKS, "/"), tostring(def.perk))
+			)
+		end
+		if def.kind ~= "GamePass" then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"perk",
+				"only a GamePass unlocks a perk - a product or coin offer is spent"
+			)
+		end
+	end
+
+	if type(def.grants) ~= "table" then
+		issue(issues, "Store", fileName, "grants", "grants must be a list")
+		return
+	end
+
+	-- A Roblox game pass is owned forever, so the only kind left is a
+	-- perk pass, which unlocks its `perk`. A season's pass is a
+	-- DeveloperProduct with a SeasonPass grant, bought again each month
+	-- (user decision, 2026-10-09).
+	if def.kind == "GamePass" then
+		if #def.grants > 0 or def.perk == nil then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"grants",
+				"a GamePass grants nothing and needs a `perk` - a season pass is a DeveloperProduct with a SeasonPass grant"
+			)
+		end
+		return
+	end
+
+	if #def.grants == 0 then
 		issue(issues, "Store", fileName, "grants", "a product must grant at least one thing")
 		return
 	end
 
 	for index, grant in def.grants do
 		local field = string.format("grants[%d]", index)
+
+		-- Coins buy power-up stock (user decision, 2026-10-02): no titles
+		-- or currency, and never anything random. Named exceptions: a
+		-- Navigation round (Q8, "Navigation") and a limited cosmetic
+		-- ("limited cosmetics", 2026-10-09).
+		if
+			def.kind == "CoinOffer"
+			and grant.kind ~= "PowerUpStock"
+			and grant.kind ~= "NavigationRound"
+			and grant.kind ~= "Cosmetic"
+		then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				field,
+				"a CoinOffer may only grant PowerUpStock, NavigationRound or a limited Cosmetic"
+			)
+		end
 
 		if not inSet(grant.kind, STORE_GRANT_KINDS) then
 			issue(
@@ -1450,27 +1902,6 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 				string.format("expected one of %s, got %s", table.concat(STORE_GRANT_KINDS, "/"), tostring(grant.kind))
 			)
 			continue
-		end
-
-		-- P4-5 frames game passes as PERMANENT cosmetics and developer
-		-- products as consumables, and the split is enforced rather than
-		-- assumed. A pass that grants a consumable is one of two bugs
-		-- and there is no way to tell which from the config: either a
-		-- one-shot purchase the player can never repeat, or - if its
-		-- grants are re-applied on every join the way a pass's
-		-- permanent unlocks must be - an infinite free tap on currency
-		-- or power-up stock. Refusing the shape closes both.
-		if def.kind == "GamePass" and (grant.kind == "Currency" or grant.kind == "PowerUpStock") then
-			issue(
-				issues,
-				"Store",
-				fileName,
-				field,
-				string.format(
-					"a GamePass cannot grant %s - a pass is permanent and its grants re-apply on every join, so a consumable grant here is either a one-shot purchase or an infinite tap. Sell consumables as a DeveloperProduct.",
-					grant.kind
-				)
-			)
 		end
 
 		if grant.kind == "Currency" then
@@ -1488,12 +1919,173 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 			if not isNonEmptyString(grant.cosmeticId) then
 				issue(issues, "Store", fileName, field, "a Cosmetic grant needs a `cosmeticId`")
 			end
+			-- A sold cosmetic is a limited edition: on sale until a date,
+			-- then never again ("limited cosmetics", 2026-10-09).
+			if def.onSaleUntil == nil then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					field,
+					"a cosmetic is only sold as a limited edition - set onSaleUntil"
+				)
+			end
 		elseif grant.kind == "Title" then
 			if not isNonEmptyString(grant.titleId) then
 				issue(issues, "Store", fileName, field, "a Title grant needs a `titleId`")
 			end
+		elseif grant.kind == "NavigationRound" then
+			if type(grant.amount) ~= "number" or (grant.amount :: number) <= 0 or (grant.amount :: number) % 1 ~= 0 then
+				issue(issues, "Store", fileName, field, "a NavigationRound grant needs a positive integer `amount`")
+			end
+		elseif grant.kind == "StreakBuyBack" then
+			-- Robux only, and alone: a buy-back can come to nothing (Q7,
+			-- "buying back a streak"), and a product that also paid out
+			-- something else would make that half-refund a design choice.
+			if def.kind ~= "DeveloperProduct" or #def.grants ~= 1 then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					field,
+					"a StreakBuyBack grant must be the only grant of a DeveloperProduct"
+				)
+			end
+			local min, max = grant.minStreak, grant.maxStreak
+			if type(min) ~= "number" or min < 1 or min % 1 ~= 0 then
+				issue(issues, "Store", fileName, field, "a StreakBuyBack grant needs a positive integer `minStreak`")
+			elseif max ~= nil and (type(max) ~= "number" or max < min or max % 1 ~= 0) then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					field,
+					"`maxStreak` must be an integer no lower than `minStreak`, or nil for the top tier"
+				)
+			end
+		elseif grant.kind == "SeasonPass" then
+			-- Robux only, and alone: it unlocks whichever season is live
+			-- when the receipt lands, so it can't be priced in coins or
+			-- bundled with things that would pay out regardless.
+			if def.kind ~= "DeveloperProduct" or #def.grants ~= 1 then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					field,
+					"a SeasonPass grant must be the only grant of a DeveloperProduct"
+				)
+			end
 		end
 	end
+end
+
+-- "YYYY-MM-DD" that names a real calendar date. Two valid dates compare
+-- correctly as strings, which is all the window checks below need;
+-- SeasonLogic.parseUtcDate turns them into os.time() at runtime.
+local function isCalendarDate(text: any): boolean
+	if type(text) ~= "string" then
+		return false
+	end
+	local ys, ms, ds = string.match(text, "^(%d%d%d%d)%-(%d%d)%-(%d%d)$")
+	if ys == nil then
+		return false
+	end
+	local y, m, d = tonumber(ys) :: number, tonumber(ms) :: number, tonumber(ds) :: number
+	if m < 1 or m > 12 or d < 1 then
+		return false
+	end
+	local leap = (y % 4 == 0 and y % 100 ~= 0) or y % 400 == 0
+	local maxDay = ({ 31, if leap then 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 })[m]
+	return d <= maxDay
+end
+
+local function checkSeasonTrack(fileName: string, trackName: string, track: any, issues: { Issue })
+	if type(track) ~= "table" then
+		issue(issues, "Season", fileName, trackName, "expected a list of track items")
+		return
+	end
+	local lastWins = -1
+	for index, item in track do
+		local field = string.format("%s[%d]", trackName, index)
+		if type(item) ~= "table" then
+			issue(issues, "Season", fileName, field, "expected a { wins, grant } table")
+			continue
+		end
+		if type(item.wins) ~= "number" or item.wins < 0 or item.wins % 1 ~= 0 then
+			issue(issues, "Season", fileName, field .. ".wins", "expected a non-negative integer")
+		elseif item.wins < lastWins then
+			-- SeasonLogic pays a track strictly in list order, so an
+			-- out-of-order item would wait behind a higher one.
+			issue(issues, "Season", fileName, field .. ".wins", "items must be listed in ascending `wins`")
+		else
+			lastWins = item.wins
+		end
+
+		local grant = item.grant
+		if type(grant) ~= "table" or not inSet(grant.kind, SEASON_GRANT_KINDS) then
+			issue(
+				issues,
+				"Season",
+				fileName,
+				field .. ".grant",
+				string.format("expected a grant of kind %s", table.concat(SEASON_GRANT_KINDS, "/"))
+			)
+			continue
+		end
+		local amountOk = type(grant.amount) == "number" and grant.amount > 0 and grant.amount % 1 == 0
+		if grant.kind == "Currency" and not amountOk then
+			issue(issues, "Season", fileName, field .. ".grant", "a Currency grant needs a positive integer `amount`")
+		elseif grant.kind == "PowerUpStock" and (not amountOk or not isNonEmptyString(grant.powerUpId)) then
+			issue(
+				issues,
+				"Season",
+				fileName,
+				field .. ".grant",
+				"a PowerUpStock grant needs a `powerUpId` and a positive integer `amount`"
+			)
+		elseif grant.kind == "Cosmetic" and not isNonEmptyString(grant.cosmeticId) then
+			issue(issues, "Season", fileName, field .. ".grant", "a Cosmetic grant needs a `cosmeticId`")
+		end
+	end
+end
+
+function Validate.checkSeason(fileName: string, def: SeasonDef, issues: { Issue })
+	if not isNonEmptyString(def.id) then
+		issue(issues, "Season", fileName, "id", "id must be a non-empty string")
+	end
+	if not isNonEmptyString(def.displayName) then
+		issue(issues, "Season", fileName, "displayName", "displayName must be a non-empty string")
+	end
+	if type(def.enabled) ~= "boolean" then
+		issue(issues, "Season", fileName, "enabled", "enabled must be a boolean")
+	end
+	if not isNonEmptyString(def.passKey) then
+		issue(issues, "Season", fileName, "passKey", "passKey must name a Store DeveloperProduct")
+	end
+
+	local startsOk = isCalendarDate(def.startsOn)
+	local endsOk = isCalendarDate(def.endsOn)
+	if not startsOk then
+		issue(issues, "Season", fileName, "startsOn", 'expected a real date as "YYYY-MM-DD" (UTC)')
+	end
+	if not endsOk then
+		issue(issues, "Season", fileName, "endsOn", 'expected a real date as "YYYY-MM-DD" (UTC)')
+	end
+	-- Seasons are calendar months (user decision, 2026-10-09), but Season 1
+	-- runs long, from launch to the end of November (user decision, same
+	-- day). So the rule is only: a season ends on the 1st of a month, after
+	-- it starts. A normal season is then the 1st to the next 1st.
+	if startsOk and endsOk then
+		if string.sub(def.endsOn, 9, 10) ~= "01" then
+			issue(issues, "Season", fileName, "endsOn", "a season ends on the 1st of a month")
+		elseif def.endsOn <= def.startsOn then
+			issue(issues, "Season", fileName, "endsOn", "a season ends after it starts")
+		end
+	end
+
+	checkSeasonTrack(fileName, "free", def.free, issues)
+	checkSeasonTrack(fileName, "premium", def.premium, issues)
 end
 
 -- P3-5. Split out of checkGameConfig purely for length - it's called
@@ -1868,6 +2460,29 @@ local function checkLeaderboardConfig(leaderboard: LeaderboardConfig, issues: { 
 	if leaderboard.nameCacheTtlSeconds <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.nameCacheTtlSeconds", "must be positive")
 	end
+	-- Below topCount, a fresh server could never fill even one board's
+	-- names in its first minute.
+	if leaderboard.nameLookupsPerMinute < leaderboard.topCount then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard.nameLookupsPerMinute",
+			string.format("must be at least topCount (%s)", tostring(leaderboard.topCount))
+		)
+	end
+	if
+		leaderboard.nameFailureRetrySeconds <= 0
+		or leaderboard.nameFailureRetrySeconds > leaderboard.nameCacheTtlSeconds
+	then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"leaderboard.nameFailureRetrySeconds",
+			"must be positive and no longer than nameCacheTtlSeconds"
+		)
+	end
 	if leaderboard.maxWriteAttempts < 1 then
 		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.maxWriteAttempts", "must be at least 1")
 	end
@@ -1890,8 +2505,138 @@ local function checkLeaderboardConfig(leaderboard: LeaderboardConfig, issues: { 
 	if leaderboard.periodGraceSeconds <= 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.periodGraceSeconds", "must be positive")
 	end
-	if leaderboard.rewardTopN < 1 then
-		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.rewardTopN", "must be at least 1")
+
+	-- The shared period-board copy. The order matters: a lock outliving
+	-- the republish age would let a copy go stale with nobody allowed to
+	-- replace it, and a copy expiring before it is due for replacement
+	-- would blank the board between publishes. And staleness must not
+	-- be reached by a copy that is merely awaiting its republish.
+	local share = leaderboard.periodShare
+	if type(share) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.periodShare", "must be a table")
+	else
+		if not isNonEmptyString(share.mapName) then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.mapName",
+				"must be a non-empty string"
+			)
+		end
+		if share.shardCount < 1 or share.shardCount ~= math.floor(share.shardCount) then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.shardCount",
+				"must be a whole number, at least 1"
+			)
+		end
+		if share.lockSeconds <= 0 or share.lockSeconds > share.republishAfterSeconds then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.lockSeconds",
+				"must be positive and no greater than republishAfterSeconds"
+			)
+		end
+		if share.republishAfterSeconds + leaderboard.refreshMaxSeconds >= leaderboard.staleAfterSeconds then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.republishAfterSeconds",
+				"plus refreshMaxSeconds must stay under staleAfterSeconds - a copy awaiting republish must not read as stale"
+			)
+		end
+		if share.shardTtlSeconds <= share.republishAfterSeconds + leaderboard.refreshMaxSeconds then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"leaderboard.periodShare.shardTtlSeconds",
+				"must exceed republishAfterSeconds + refreshMaxSeconds, or the board blanks between publishes"
+			)
+		end
+	end
+	local payouts = leaderboard.payouts
+	if type(payouts) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "leaderboard.payouts", "must be a table of period kinds")
+	else
+		for kind, bands in payouts do
+			local path = "leaderboard.payouts." .. tostring(kind)
+			if not PAYOUT_KINDS[kind] then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					path,
+					"must be Daily or Weekly - the all-time board never pays (design-decisions.md Q1)"
+				)
+				continue
+			end
+			if type(bands) ~= "table" or #bands == 0 then
+				issue(issues, "GameConfig", "GameConfig.luau", path, "must list at least one band")
+				continue
+			end
+			local previousMax = 0
+			for i, band in bands do
+				local bandPath = string.format("%s[%d]", path, i)
+				local maxRank = band.maxRank
+				if type(maxRank) ~= "number" or maxRank ~= math.floor(maxRank) or maxRank <= previousMax then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath .. ".maxRank",
+						"must be a whole number above the previous band's maxRank"
+					)
+				elseif maxRank > leaderboard.topCount then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath .. ".maxRank",
+						string.format(
+							"must not exceed topCount (%d): only that many places are read",
+							leaderboard.topCount
+						)
+					)
+				else
+					previousMax = maxRank
+				end
+				local currency = band.currency
+				if type(currency) ~= "number" or currency < 0 or currency ~= math.floor(currency) then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath .. ".currency",
+						"must be a whole number, 0 or more"
+					)
+				end
+				if band.cosmeticId ~= nil and not isNonEmptyString(band.cosmeticId) then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath .. ".cosmeticId",
+						"must be a non-empty string"
+					)
+				end
+				if currency == 0 and band.cosmeticId == nil then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						bandPath,
+						"pays nothing - give it currency or a cosmeticId"
+					)
+				end
+			end
+		end
 	end
 
 	local budget = leaderboard.budget
@@ -2027,7 +2772,7 @@ local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number
 		return
 	end
 
-	for _, field in { "queueMapName", "groupMapName", "recentMapName", "metaMapName" } do
+	for _, field in { "queueMapName", "groupMapName", "recentMapName", "metaMapName", "practiceLobbyMapName" } do
 		if not isNonEmptyString((mm :: any)[field]) then
 			bad(field, "must be a non-empty string")
 		end
@@ -2103,6 +2848,27 @@ local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number
 	end
 	if mm.unavailableAfterFailures < 1 then
 		bad("unavailableAfterFailures", "must be at least 1")
+	end
+
+	-- The queue summary. Under two ticks, one slow publish would send
+	-- every hub server back to reading the page; and a TTL under the
+	-- staleness window would drop a summary that is still usable.
+	if mm.summaryShardCount < 1 or mm.summaryShardCount ~= math.floor(mm.summaryShardCount) then
+		bad("summaryShardCount", "must be a whole number, at least 1")
+	end
+	if mm.summaryStaleSeconds < 2 * mm.formationTickSeconds then
+		bad("summaryStaleSeconds", "must be at least two formation ticks")
+	end
+	if mm.summaryTtlSeconds < mm.summaryStaleSeconds then
+		bad("summaryTtlSeconds", "must not be below summaryStaleSeconds")
+	end
+	-- A lobby lives as long as its group keeps playing; under an hour
+	-- would strand a group that takes a long break between matches.
+	if type(mm.practiceLobbyTtlSeconds) ~= "number" or mm.practiceLobbyTtlSeconds < 3600 then
+		bad("practiceLobbyTtlSeconds", "must be at least 3600")
+	end
+	if type(mm.partyInviteTtlSeconds) ~= "number" or mm.partyInviteTtlSeconds < 5 or mm.partyInviteTtlSeconds > 300 then
+		bad("partyInviteTtlSeconds", "must be from 5 to 300 seconds")
 	end
 end
 
@@ -2530,6 +3296,9 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		if type(telemetry.enabled) ~= "boolean" then
 			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.enabled", "must be a boolean")
 		end
+		if type(telemetry.studioEcho) ~= "boolean" then
+			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.studioEcho", "must be a boolean")
+		end
 		if telemetry.batchSize < 1 then
 			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.batchSize", "must be at least 1")
 		end
@@ -2648,67 +3417,85 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		issue(issues, "GameConfig", "GameConfig.luau", "studioTimers.newPlayerFinales", "must not be negative")
 	end
 
-	if #config.bountyTiers == 0 then
-		issue(issues, "GameConfig", "GameConfig.luau", "bountyTiers", "must declare at least one tier")
-	end
-
-	-- P3-2 found this the hard way: ProfileLogic.resolveBountyTier errors
-	-- loudly when no tier covers a given streak, and a brand-new
-	-- qualifier's streak really can be 0 (their first-ever win, before
-	-- currentStreak has incremented at all) - so the lowest tier's own
-	-- floor must reach down to 0, not just "the lowest streak anyone
-	-- expects to see."
-	local coversZero = false
-	for _, tier in config.bountyTiers do
-		if tier.minStreak <= 0 then
-			coversZero = true
-		end
-	end
-	if #config.bountyTiers > 0 and not coversZero then
+	-- The central invariant the P1-4 task asked for by name, carried over
+	-- from the retired bountyTiers (design-decisions.md Q1, applied
+	-- 2026-10-02): sole stealer > lone sharer > all share > 0.
+	-- payoff-table.md §1's asymmetric payoff shape is what keeps Steal
+	-- and Share both live options. All three bases share one per-rung
+	-- multiplier, so the ordering carries up the ladder.
+	local winCurrency = config.winRewards.currency
+	if
+		not (
+			winCurrency.soleStealer > winCurrency.loneSharer
+			and winCurrency.loneSharer > winCurrency.allShare
+			and winCurrency.allShare > 0
+		)
+	then
 		issue(
 			issues,
 			"GameConfig",
 			"GameConfig.luau",
-			"bountyTiers",
-			"no tier's minStreak is <= 0 - a streak-0 qualifier (a first-ever win) would have no covering tier"
+			"winRewards.currency",
+			string.format(
+				"ordering broken: expected soleStealer (%s) > loneSharer (%s) > allShare (%s) > 0",
+				tostring(winCurrency.soleStealer),
+				tostring(winCurrency.loneSharer),
+				tostring(winCurrency.allShare)
+			)
 		)
 	end
+	if winCurrency.perRungBonus < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.currency.perRungBonus", "must not be negative")
+	end
 
-	local previousMinStreak: number? = nil
-	for _, tier in config.bountyTiers do
-		local label = string.format("bountyTiers[tier=%s]", tostring(tier.tier))
-
-		-- The central invariant the P1-4 task asks for by name: sole-
-		-- stealer bounty > lone-sharer bounty > all-share bounty > 0,
-		-- checked at every tier (payoff-table.md §1's asymmetric payoff
-		-- shape is what keeps Steal and Share both live options).
-		if
-			not (tier.soleStealerVU > tier.loneSharerVU and tier.loneSharerVU > tier.allShareVU and tier.allShareVU > 0)
-		then
+	local drop = config.winRewards.drop
+	for _, field in { "baseChance", "maxChance" } do
+		local value = (drop :: any)[field] :: number
+		if value < 0 or value > 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop." .. field, "must be between 0 and 1")
+		end
+	end
+	if drop.baseChance > drop.maxChance then
+		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop.baseChance", "must not exceed maxChance")
+	end
+	if drop.perRungChance < 0 then
+		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop.perRungChance", "must not be negative")
+	end
+	local totalWeight = 0
+	for _, rarity in { "Common", "Uncommon", "Rare" } do
+		local entry = (drop.rarityWeights :: any)[rarity] :: DropRarityWeight
+		local label = "winRewards.drop.rarityWeights." .. rarity
+		if entry.weight < 0 or entry.perRungGrowth < 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", label, "weight and perRungGrowth must not be negative")
+		end
+		totalWeight += entry.weight
+		if ((drop.duplicateCurrency :: any)[rarity] :: number) <= 0 then
 			issue(
 				issues,
 				"GameConfig",
 				"GameConfig.luau",
-				label,
-				string.format(
-					"bounty ordering broken: expected soleStealer (%s) > loneSharer (%s) > allShare (%s) > 0",
-					tostring(tier.soleStealerVU),
-					tostring(tier.loneSharerVU),
-					tostring(tier.allShareVU)
-				)
+				"winRewards.drop.duplicateCurrency." .. rarity,
+				"must be positive - a duplicate cosmetic must still pay something"
 			)
 		end
-
-		if previousMinStreak ~= nil and tier.minStreak <= previousMinStreak then
-			issue(
-				issues,
-				"GameConfig",
-				"GameConfig.luau",
-				label,
-				"bountyTiers must be sorted by strictly ascending minStreak"
-			)
-		end
-		previousMinStreak = tier.minStreak
+	end
+	if totalWeight <= 0 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"winRewards.drop.rarityWeights",
+			"at least one rarity needs a positive weight"
+		)
+	end
+	if drop.powerUpAmount < 1 or drop.powerUpAmount % 1 ~= 0 then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"winRewards.drop.powerUpAmount",
+			"must be a whole number, at least 1"
+		)
 	end
 end
 
@@ -2767,6 +3554,10 @@ export type RegistryInput = {
 	-- carry a placeholder name, because wave 2/3 maps are lit when they
 	-- are built.
 	lightingPresets: { { fileName: string, def: LightingPresetDef } }?,
+
+	-- Rewards step 5. Optional for the same reason - none passed is "no
+	-- seasons", and then every GamePass is left unchecked against them.
+	seasons: { { fileName: string, def: SeasonDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -2804,6 +3595,35 @@ function Validate.run(input: RegistryInput): { Issue }
 	checkDuplicateIds("PowerUp", input.powerUps :: any, issues)
 	checkDuplicateIds("Title", input.titles :: any, issues)
 	checkDuplicateIds("Cosmetic", (cosmetics or {}) :: any, issues)
+
+	-- A leaderboard band's limited item must be a real cosmetic. The
+	-- field can only hold a cosmetic id, which is what keeps leaderboard
+	-- prizes cosmetic only (Q8). Unchecked when no cosmetics registry is
+	-- passed at all, the same as a store product's Cosmetic grant.
+	local leaderboard = input.gameConfig.leaderboard
+	if cosmetics ~= nil and leaderboard ~= nil and type(leaderboard.payouts) == "table" then
+		local cosmeticIds: { [string]: true } = {}
+		for _, entry in cosmetics do
+			cosmeticIds[entry.def.id] = true
+		end
+		for kind, bands in leaderboard.payouts do
+			if type(bands) ~= "table" then
+				continue
+			end
+			for i, band in bands do
+				local cosmeticId = band.cosmeticId
+				if type(cosmeticId) == "string" and not cosmeticIds[cosmeticId] then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						string.format("leaderboard.payouts.%s[%d].cosmeticId", tostring(kind), i),
+						string.format("%q is not a cosmetic id", cosmeticId)
+					)
+				end
+			end
+		end
+	end
 
 	-- A training dummy can only throw something that lands on someone
 	-- else: an Aimed item, or an Area one dropped at its feet.
@@ -3082,8 +3902,7 @@ function Validate.run(input: RegistryInput): { Issue }
 						elseif entry.def.enabled and not cosmetic.enabled then
 							-- Only checked when the PRODUCT itself is
 							-- enabled - a disabled product forward-
-							-- referencing a not-yet-built cosmetic
-							-- (FounderPass.luau, VictoryEmotePass.luau) is
+							-- referencing a not-yet-built cosmetic is
 							-- the same legitimate bootstrap state
 							-- checkStoreItem's own "enabled = true but
 							-- assetId is 0" check allows for a disabled
@@ -3109,6 +3928,376 @@ function Validate.run(input: RegistryInput): { Issue }
 							field,
 							string.format("references unregistered title id %q", tostring(grant.titleId))
 						)
+					end
+				end
+			end
+		end
+
+		-- ===== Sales and limited cosmetics (Q1, 2026-10-09) =============
+		-- Drop and leaderboard cosmetics are never sold (track items are
+		-- caught by the season checks below), and a sold cosmetic is a
+		-- limited edition (checkStoreItem). `replaces` names a real item,
+		-- and no plinth shows two enabled items at once.
+		local leaderboardCosmetic: { [string]: boolean } = {}
+		if leaderboard ~= nil and type(leaderboard.payouts) == "table" then
+			for _, bands in leaderboard.payouts do
+				if type(bands) == "table" then
+					for _, band in bands do
+						if type(band.cosmeticId) == "string" then
+							leaderboardCosmetic[band.cosmeticId] = true
+						end
+					end
+				end
+			end
+		end
+		local bySlot: { [number]: { { fileName: string, def: StoreItemDef } } } = {}
+		for _, entry in store do
+			local def = entry.def
+			if type(def.grants) == "table" then
+				for index, grant in def.grants do
+					if type(grant) ~= "table" or grant.kind ~= "Cosmetic" or type(grant.cosmeticId) ~= "string" then
+						continue
+					end
+					local id = grant.cosmeticId :: string
+					local cosmetic = if cosmeticAt ~= nil then cosmeticAt[id] else nil
+					local why = if cosmetic ~= nil and cosmetic.winDrop == true
+						then "a win drop (winDrop = true)"
+						elseif leaderboardCosmetic[id] then "a leaderboard prize"
+						else nil
+					if why ~= nil then
+						issue(
+							issues,
+							"Store",
+							entry.fileName,
+							string.format("grants[%d]", index),
+							string.format("cosmetic %q is %s, and those are never sold", id, why)
+						)
+					end
+				end
+			end
+			if type(def.replaces) == "string" and def.replaces ~= def.key and storeKeyAt[def.replaces] == nil then
+				issue(
+					issues,
+					"Store",
+					entry.fileName,
+					"replaces",
+					string.format("%q is not a store item's key", def.replaces)
+				)
+			end
+			if def.enabled and type(def.featuredSlot) == "number" then
+				local list: { { fileName: string, def: StoreItemDef } } = bySlot[def.featuredSlot] or {}
+				for _, other in list do
+					local a, b = def, other.def
+					local aFrom, aUntil = a.onSaleFrom or "", a.onSaleUntil or "~"
+					local bFrom, bUntil = b.onSaleFrom or "", b.onSaleUntil or "~"
+					if aFrom < bUntil and bFrom < aUntil then
+						issue(
+							issues,
+							"Store",
+							entry.fileName,
+							"featuredSlot",
+							string.format(
+								"plinth %d also shows %s while this is on sale - give them separate slots or sale windows",
+								def.featuredSlot,
+								other.fileName
+							)
+						)
+					end
+				end
+				table.insert(list, entry)
+				bySlot[def.featuredSlot] = list
+			end
+		end
+	end
+
+	-- ===== Navigation (design-decisions.md Q8, "Navigation") ============
+	-- Robux may only buy the convenience of never paying again. So while
+	-- anything sells Navigation for Robux (a round, or the unlimited
+	-- pass), an enabled CoinOffer must sell a round too. And a perk is
+	-- unlocked by one pass at most, so ownership has one answer.
+	if store ~= nil then
+		local soldForRobux: string? = nil
+		local soldForCoins = false
+		local passForPerk: { [string]: string } = {}
+		for _, entry in store do
+			local def = entry.def
+			local sellsRound = false
+			if type(def.grants) == "table" then
+				for _, grant in def.grants do
+					if type(grant) == "table" and grant.kind == "NavigationRound" then
+						sellsRound = true
+					end
+				end
+			end
+			if def.enabled and def.kind == "CoinOffer" and sellsRound then
+				soldForCoins = true
+			elseif def.enabled and (sellsRound or def.perk == "UnlimitedNavigation") then
+				soldForRobux = soldForRobux or entry.fileName
+			end
+			if def.kind == "GamePass" and type(def.perk) == "string" then
+				local existing = passForPerk[def.perk]
+				if existing ~= nil then
+					issue(
+						issues,
+						"Store",
+						entry.fileName,
+						"perk",
+						string.format("%s already unlocks %q - one pass per perk", existing, def.perk)
+					)
+				else
+					passForPerk[def.perk] = entry.fileName
+				end
+			end
+		end
+		if soldForRobux ~= nil and not soldForCoins then
+			issue(
+				issues,
+				"Store",
+				soldForRobux,
+				"enabled",
+				"sells Navigation for Robux, but no enabled CoinOffer sells a NavigationRound - Q8 needs a coin path"
+			)
+		end
+	end
+
+	-- ===== streak buy-back (design-decisions.md Q7) =====================
+	-- Every lost streak has exactly one price. So the enabled tiers,
+	-- sorted, run from 1 with no gap or overlap and end open-ended. None
+	-- enabled is fine: the offer simply never appears.
+	if store ~= nil then
+		local tiers: { { min: number, max: number?, fileName: string } } = {}
+		for _, entry in store do
+			local def = entry.def
+			if not def.enabled or type(def.grants) ~= "table" then
+				continue
+			end
+			for _, grant in def.grants do
+				if type(grant) == "table" and grant.kind == "StreakBuyBack" and type(grant.minStreak) == "number" then
+					table.insert(tiers, { min = grant.minStreak, max = grant.maxStreak, fileName = entry.fileName })
+				end
+			end
+		end
+		table.sort(tiers, function(a, b)
+			return a.min < b.min
+		end)
+		local nextMin = 1
+		for index, tier in tiers do
+			if tier.min ~= nextMin then
+				issue(
+					issues,
+					"Store",
+					tier.fileName,
+					"grants",
+					string.format(
+						"streak buy-back tiers must run on from %d with no gap or overlap, but this one starts at %d",
+						nextMin,
+						tier.min
+					)
+				)
+			end
+			local isLast = index == #tiers
+			if tier.max == nil and not isLast then
+				issue(
+					issues,
+					"Store",
+					tier.fileName,
+					"grants",
+					"only the highest buy-back tier may leave `maxStreak` open"
+				)
+			elseif tier.max ~= nil and isLast then
+				issue(
+					issues,
+					"Store",
+					tier.fileName,
+					"grants",
+					"the highest buy-back tier needs `maxStreak = nil`, or longer streaks have no price"
+				)
+			end
+			nextMin = (tier.max or tier.min) + 1
+		end
+	end
+
+	-- ===== rewards step 5's season cross-checks =========================
+	local seasons = input.seasons
+	if seasons ~= nil then
+		for _, entry in seasons do
+			Validate.checkSeason(entry.fileName, entry.def, issues)
+		end
+		checkDuplicateIds("Season", seasons :: any, issues)
+
+		-- Seasons replace each other, so no two windows overlap. Valid
+		-- dates compare correctly as strings.
+		local ordered = table.clone(seasons)
+		table.sort(ordered, function(a, b)
+			return tostring(a.def.startsOn) < tostring(b.def.startsOn)
+		end)
+		for i = 2, #ordered do
+			local before, after = ordered[i - 1], ordered[i]
+			if
+				isCalendarDate(before.def.endsOn)
+				and isCalendarDate(after.def.startsOn)
+				and after.def.startsOn < before.def.endsOn
+			then
+				issue(
+					issues,
+					"Season",
+					after.fileName,
+					"startsOn",
+					string.format(
+						"overlaps %s, which ends %s - seasons run one at a time",
+						before.fileName,
+						before.def.endsOn
+					)
+				)
+			end
+		end
+
+		-- Each season's pass is a DeveloperProduct whose one grant is
+		-- SeasonPass. One product may serve every season: it's bought
+		-- again each month, and the purchase unlocks whichever season is
+		-- live (user decision, 2026-10-09).
+		if store ~= nil then
+			local seasonPassByKey: { [string]: StoreItemDef } = {}
+			for _, entry in store do
+				local grants = entry.def.grants
+				if entry.def.kind == "DeveloperProduct" and type(grants) == "table" then
+					for _, grant in grants do
+						if grant.kind == "SeasonPass" then
+							seasonPassByKey[entry.def.key] = entry.def
+						end
+					end
+				end
+			end
+			for _, entry in seasons do
+				local key = entry.def.passKey
+				if type(key) == "string" and seasonPassByKey[key] == nil then
+					issue(
+						issues,
+						"Season",
+						entry.fileName,
+						"passKey",
+						string.format("%q is not a SeasonPass DeveloperProduct in Config/Store/", key)
+					)
+				end
+			end
+		end
+
+		local powerUpById: { [string]: PowerUpDef } = {}
+		for _, entry in input.powerUps do
+			powerUpById[entry.def.id] = entry.def
+		end
+		local cosmeticById: { [string]: CosmeticDef }? = nil
+		if cosmetics ~= nil then
+			local byId: { [string]: CosmeticDef } = {}
+			for _, entry in cosmetics do
+				byId[entry.def.id] = entry.def
+			end
+			cosmeticById = byId
+		end
+
+		-- Where else a cosmetic is handed out, for "track-only forever".
+		local elsewhere: { [string]: string } = {}
+		if store ~= nil then
+			for _, entry in store do
+				if type(entry.def.grants) == "table" then
+					for _, grant in entry.def.grants do
+						if grant.kind == "Cosmetic" and type(grant.cosmeticId) == "string" then
+							elsewhere[grant.cosmeticId] = "sold by " .. entry.fileName
+						end
+					end
+				end
+			end
+		end
+		if leaderboard ~= nil and type(leaderboard.payouts) == "table" then
+			for kind, bands in leaderboard.payouts do
+				if type(bands) == "table" then
+					for _, band in bands do
+						if type(band.cosmeticId) == "string" then
+							elsewhere[band.cosmeticId] = string.format("paid by the %s leaderboard", tostring(kind))
+						end
+					end
+				end
+			end
+		end
+
+		for _, entry in seasons do
+			for _, trackName in { "free", "premium" } do
+				local track = (entry.def :: any)[trackName]
+				if type(track) ~= "table" then
+					continue
+				end
+				for index, item in track do
+					local grant = if type(item) == "table" then item.grant else nil
+					if type(grant) ~= "table" then
+						continue
+					end
+					local field = string.format("%s[%d].grant", trackName, index)
+
+					if grant.kind == "PowerUpStock" then
+						local powerUp = powerUpById[grant.powerUpId or ""]
+						if powerUp == nil then
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format("references unregistered power-up id %q", tostring(grant.powerUpId))
+							)
+						elseif not (powerUp.acquisition.freelyEarnable and powerUp.acquisition.loadoutEligible) then
+							-- Q8: a power-up on a track (premium is paid
+							-- for) must also be earnable free, and stock
+							-- only means anything if it fits a loadout.
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format(
+									"power-up %q must be freelyEarnable and loadoutEligible to sit on a track (design-decisions.md Q8)",
+									powerUp.id
+								)
+							)
+						end
+					elseif grant.kind == "Cosmetic" and cosmeticById ~= nil and type(grant.cosmeticId) == "string" then
+						local id = grant.cosmeticId :: string
+						local cosmetic = cosmeticById[id]
+						if cosmetic == nil then
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format("references unregistered cosmetic id %q", id)
+							)
+							continue
+						end
+						-- Track-only forever (Q1, applied 2026-10-02).
+						local where = elsewhere[id]
+						if cosmetic.winDrop == true then
+							where = "a win drop (winDrop = true)"
+						end
+						if where ~= nil then
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format("cosmetic %q is also %s - a track item is track-only forever", id, where)
+							)
+						end
+						elsewhere[id] = string.format("on %s's %s track", entry.fileName, trackName)
+						if entry.def.enabled == true and not cosmetic.enabled then
+							issue(
+								issues,
+								"Season",
+								entry.fileName,
+								field,
+								string.format(
+									"cosmetic %q is not enabled - it has no Roblox asset yet, so this ENABLED season would grant something invisible",
+									id
+								)
+							)
+						end
 					end
 				end
 			end

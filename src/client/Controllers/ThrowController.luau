@@ -44,9 +44,20 @@ local SHOVE_SECONDS = 0.15
 local RECOIL_SECONDS = 0.1
 local PROJECTILE_SIZE = 1.1
 
+-- An item's own landing (PowerUpDef.impact); nil = the plain blast.
+type Impact = { style: string, color: Color3 }
+
 local roleById: { [string]: string } = {}
+local impactById: { [string]: Impact } = {}
 for _, entry in PowerUps do
 	roleById[entry.def.id] = entry.def.role
+	local impact = entry.def.impact
+	if impact ~= nil then
+		impactById[entry.def.id] = {
+			style = impact.style,
+			color = Color3.fromRGB(impact.rgb[1], impact.rgb[2], impact.rgb[3]),
+		}
+	end
 end
 
 type ProjectileSkin = { meshAssetId: number, explosionTextureAssetId: number }
@@ -194,54 +205,212 @@ local function skinBurst(position: Vector3, color: Color3, textureAssetId: numbe
 	end)
 end
 
-local function explode(position: Vector3, color: Color3, skin: ProjectileSkin?)
-	local config = GameConfig.powerUpThrow
-	local radius = config.explosionRadiusStuds
+-- A throwaway effect part: anchored, untouchable, shadowless.
+local function fxPart(name: string, shape: Enum.PartType, material: Enum.Material, color: Color3): Part
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Shape = shape
+	part.Material = material
+	part.Color = color
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	return part
+end
+
+-- Tweens `instance` to `goals` and destroys `owner` (default: itself)
+-- when done.
+local function tweenAway(instance: Instance, seconds: number, goals: { [string]: any }, owner: Instance?)
+	local tween =
+		TweenService:Create(instance, TweenInfo.new(seconds, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), goals)
+	tween.Completed:Once(function()
+		(owner or instance):Destroy()
+	end)
+	tween:Play()
+end
+
+local function randomDirection(): Vector3
+	local d = Vector3.new(math.random() - 0.5, math.random() - 0.5, math.random() - 0.5)
+	return if d.Magnitude > 1e-3 then d.Unit else Vector3.yAxis
+end
+
+-- A one-shot spray of the default particle, from its own throwaway part.
+type BurstOptions = {
+	count: number,
+	speed: NumberRange,
+	lifetime: number,
+	size: number,
+	lightEmission: number,
+	acceleration: Vector3?,
+}
+
+local function particleBurst(position: Vector3, color: Color3, options: BurstOptions)
+	local holder = fxPart("ThrowImpactBurst", Enum.PartType.Block, Enum.Material.SmoothPlastic, color)
+	holder.Transparency = 1
+	holder.Size = Vector3.one * 0.2
+	holder.Position = position
+	local emitter = Instance.new("ParticleEmitter")
+	emitter.Color = ColorSequence.new(color)
+	emitter.LightEmission = options.lightEmission
+	emitter.Rate = 0
+	emitter.Lifetime = NumberRange.new(options.lifetime * 0.6, options.lifetime)
+	emitter.Speed = options.speed
+	emitter.SpreadAngle = Vector2.new(180, 180)
+	emitter.Size = NumberSequence.new(options.size, options.size * 0.2)
+	emitter.Transparency = NumberSequence.new(0, 1)
+	emitter.Acceleration = options.acceleration or Vector3.zero
+	emitter.RotSpeed = NumberRange.new(-180, 180)
+	emitter.Parent = holder
+	holder.Parent = folder()
+	emitter:Emit(options.count)
+	task.delay(options.lifetime, function()
+		holder:Destroy()
+	end)
+end
+
+-- The swelling coloured ball every impact shares - under reduced motion
+-- it only fades, in place, and is the whole effect.
+local function shell(position: Vector3, color: Color3, radius: number, reduced: boolean, material: Enum.Material?)
+	local ball = fxPart("ThrowBlast", Enum.PartType.Ball, material or Enum.Material.Neon, color)
+	ball.Transparency = 0.25
+	ball.Size = Vector3.one * (if reduced then radius * 1.2 else 1)
+	ball.Position = position
+	ball.Parent = folder()
+	if reduced then
+		tweenAway(ball, 0.3, { Transparency = 1 })
+	else
+		tweenAway(ball, 0.3, { Size = Vector3.one * radius * 2, Transparency = 1 })
+	end
+end
+
+-- The stock blast, purely visual: no pressure, breaks no joints.
+local function stockBlast(position: Vector3, radius: number)
+	local blast = Instance.new("Explosion")
+	blast.BlastPressure = 0
+	blast.BlastRadius = radius
+	blast.DestroyJointRadiusPercent = 0
+	blast.ExplosionType = Enum.ExplosionType.NoCraters
+	blast.Position = position
+	blast.Parent = folder()
+end
+
+-- One drawer per PowerUpImpactStyle (Validate.luau). Each runs on top
+-- of the shared shell, and only when motion isn't reduced.
+local IMPACTS: { [string]: (position: Vector3, color: Color3, radius: number) -> () } = {
+	-- Ice shards flung out and a slow fall of frost. No stock blast: fire
+	-- is the wrong read for a freeze.
+	Frost = function(position, color, radius)
+		for _ = 1, 8 do
+			local shard = fxPart("ThrowFrostShard", Enum.PartType.Block, Enum.Material.Ice, color)
+			shard.Size = Vector3.new(0.35, 0.35, 1.2 + math.random() * 0.8)
+			shard.Transparency = 0.15
+			local direction = randomDirection()
+			shard.CFrame = CFrame.lookAt(position, position + direction)
+			shard.Parent = folder()
+			local landing = position + direction * radius * (0.8 + math.random() * 0.5)
+			tweenAway(shard, 0.45, {
+				CFrame = CFrame.lookAt(landing, landing + direction) * CFrame.Angles(0, 0, math.random() * math.pi),
+				Transparency = 1,
+			})
+		end
+		particleBurst(position, Color3.new(1, 1, 1):Lerp(color, 0.4), {
+			count = 18,
+			speed = NumberRange.new(radius * 0.5, radius * 1.5),
+			lifetime = 0.9,
+			size = 0.5,
+			lightEmission = 0.4,
+			acceleration = Vector3.new(0, -6, 0),
+		})
+	end,
+
+	-- A blinding flash that hangs for a beat, then dark smoke.
+	Flash = function(position, color, radius)
+		local flash = fxPart("ThrowFlash", Enum.PartType.Ball, Enum.Material.Neon, color)
+		flash.Size = Vector3.one * radius * 2.4
+		flash.Transparency = 0
+		flash.Position = position
+		flash.Parent = folder()
+		local light = Instance.new("PointLight")
+		light.Color = color
+		light.Range = radius * 4
+		light.Brightness = 8
+		light.Parent = flash
+		tweenAway(light, 0.4, { Brightness = 0 }, flash)
+		TweenService:Create(flash, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Transparency = 1,
+		}):Play()
+		particleBurst(position, Color3.fromRGB(40, 40, 45), {
+			count = 14,
+			speed = NumberRange.new(radius * 0.3, radius),
+			lifetime = 1,
+			size = 2,
+			lightEmission = 0,
+		})
+	end,
+
+	-- The stock blast plus a flat ring racing out along the ground.
+	Shockwave = function(position, color, radius)
+		stockBlast(position, radius)
+		local ring = fxPart("ThrowShockwave", Enum.PartType.Cylinder, Enum.Material.Neon, color)
+		ring.Transparency = 0.2
+		ring.Size = Vector3.new(0.3, 1, 1)
+		-- A Cylinder's axis is X; roll it upright so it lies flat.
+		local flat = CFrame.new(position - Vector3.new(0, 1.5, 0)) * CFrame.Angles(0, 0, math.pi / 2)
+		ring.CFrame = flat
+		ring.Parent = folder()
+		tweenAway(ring, 0.4, { Size = Vector3.new(0.1, radius * 5, radius * 5), Transparency = 1 })
+		particleBurst(position, color, {
+			count = 16,
+			speed = NumberRange.new(radius * 2, radius * 3),
+			lifetime = 0.35,
+			size = 0.6,
+			lightEmission = 0.8,
+		})
+	end,
+
+	-- Pixel cubes that jitter between spots, then blink out.
+	Glitch = function(position, color, radius)
+		for _ = 1, 10 do
+			local cube = fxPart("ThrowGlitchCube", Enum.PartType.Block, Enum.Material.Neon, color)
+			cube.Size = Vector3.one * (0.3 + math.random() * 0.5)
+			cube.Position = position + randomDirection() * math.random() * radius
+			cube.Parent = folder()
+			for step = 1, 4 do
+				task.delay(step * 0.08, function()
+					if cube.Parent ~= nil then
+						cube.Position = position + randomDirection() * math.random() * radius * 1.3
+						cube.Transparency = step / 5
+					end
+				end)
+			end
+			task.delay(0.4, function()
+				cube:Destroy()
+			end)
+		end
+	end,
+}
+
+local function explode(position: Vector3, color: Color3, impact: Impact?, skin: ProjectileSkin?)
+	local radius = GameConfig.powerUpThrow.explosionRadiusStuds
 	local reduced = Env.reducedMotion()
+	local impactColor = if impact ~= nil then impact.color else color
+	local draw = if impact ~= nil then IMPACTS[impact.style] else nil
 
 	if not reduced then
-		-- The stock blast, purely visual: no pressure, breaks no joints.
-		local blast = Instance.new("Explosion")
-		blast.BlastPressure = 0
-		blast.BlastRadius = radius
-		blast.DestroyJointRadiusPercent = 0
-		blast.ExplosionType = Enum.ExplosionType.NoCraters
-		blast.Position = position
-		blast.Parent = folder()
+		if draw ~= nil then
+			draw(position, impactColor, radius)
+		else
+			stockBlast(position, radius)
+		end
 		if skin ~= nil then
-			skinBurst(position, color, skin.explosionTextureAssetId, radius)
+			skinBurst(position, impactColor, skin.explosionTextureAssetId, radius)
 		end
 	end
 
-	-- A role-coloured shell that swells and fades - under reduced motion
-	-- it only fades, in place.
-	local shell = Instance.new("Part")
-	shell.Name = "ThrowBlast"
-	shell.Shape = Enum.PartType.Ball
-	shell.Material = Enum.Material.Neon
-	shell.Color = color
-	shell.Anchored = true
-	shell.CanCollide = false
-	shell.CanQuery = false
-	shell.CanTouch = false
-	shell.CastShadow = false
-	shell.Transparency = 0.25
-	local startSize = if reduced then radius * 1.2 else 1
-	shell.Size = Vector3.one * startSize
-	shell.Position = position
-	shell.Parent = folder()
-	local tween = TweenService:Create(
-		shell,
-		TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Size = Vector3.one * radius * 2, Transparency = 1 }
-	)
-	if reduced then
-		tween = TweenService:Create(shell, TweenInfo.new(0.3), { Transparency = 1 })
-	end
-	tween.Completed:Once(function()
-		shell:Destroy()
-	end)
-	tween:Play()
+	local material = if impact ~= nil and impact.style == "Frost" then Enum.Material.Ice else nil
+	shell(position, impactColor, radius, reduced, material)
 end
 
 -- PROJECTILE ---------------------------------------------------------
@@ -325,6 +494,7 @@ local function onThrown(payload: any)
 		return
 	end
 	local color = roleColor(powerUpId)
+	local impact = impactById[powerUpId]
 	local skin = if type(payload.projectileSkinId) == "string" then skinById[payload.projectileSkinId] else nil
 
 	-- The thrower's own kick.
@@ -343,7 +513,7 @@ local function onThrown(payload: any)
 	end
 
 	if flight <= 0 then
-		explode(targetRoot.Position, color, skin)
+		explode(targetRoot.Position, color, impact, skin)
 		return
 	end
 
@@ -366,7 +536,7 @@ local function onThrown(payload: any)
 				connection:Disconnect()
 			end
 			orb:Destroy()
-			explode(lastTarget, color, skin)
+			explode(lastTarget, color, impact, skin)
 			return
 		end
 		local p = ThrowLogic.arcPoint(from, vec3(lastTarget), alpha, GameConfig.powerUpThrow.arcHeightStuds)

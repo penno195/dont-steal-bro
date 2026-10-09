@@ -11,8 +11,11 @@
 --     ever {playerId}.
 --   - everyone's choices from DecisionReveal, the first and only packet
 --     that carries them.
---   - its own streak before/after from DecisionPersonalResult, which the
---     server fires to this player alone, after the reveal.
+--   - its own stakes (what each outcome would pay it, and its drop
+--     chance) from DecisionStakes, targeted, at the Studio's start.
+--   - its own streak before/after, and a win's payout, from
+--     DecisionPersonalResult, which the server fires to this player
+--     alone, after the reveal.
 -- Nothing is written to an Attribute, a ValueObject or anything else
 -- that replicates; it's all Lua locals and Vide sources.
 --
@@ -35,10 +38,13 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
+local ParticipantIds = require(ReplicatedStorage.Shared.ParticipantIds)
 local DecisionLogic = require(script.Parent.Parent.UI.DecisionLogic)
 local DecisionStudio = require(script.Parent.Parent.UI.Screens.DecisionStudio)
+local DropNames = require(script.Parent.Parent.UI.DropNames)
 local FinaleLoading = require(script.Parent.Parent.UI.Screens.FinaleLoading)
 local InputLock = require(script.Parent.Parent.UI.InputLock)
+local PayoutLogic = require(script.Parent.Parent.UI.PayoutLogic)
 local NPCBubbleController = require(script.Parent.NPCBubbleController)
 local StudioChatController = require(script.Parent.StudioChatController)
 local UIScaleController = require(script.Parent.UIScaleController)
@@ -64,6 +70,8 @@ local talk: DecisionStudio.Settable<{ [number]: DecisionStudio.Talk }> = source(
 local acked = source(false)
 local reveal = source(nil :: DecisionLogic.Reveal?)
 local personal = source(nil :: DecisionLogic.Personal?)
+local payout = source(nil :: PayoutLogic.Payout?)
+local stakes = source(nil :: PayoutLogic.Stakes?)
 local chat = source(nil :: DecisionLogic.Rect?)
 local keyboard = source(nil :: number?)
 
@@ -79,7 +87,7 @@ local ids: { number } = {}
 local leftIds: { [number]: boolean } = {}
 
 local function nameOf(id: number): string
-	if id < 0 then
+	if ParticipantIds.isNPC(id) then
 		return NPCBubbleController.getNPCName(id) or "Finalist"
 	end
 	local player = Players:GetPlayerByUserId(id)
@@ -103,7 +111,7 @@ local function rebuildSeats()
 				id = id,
 				name = nameOf(id),
 				isSelf = id == selfId,
-				isNPC = id < 0,
+				isNPC = ParticipantIds.isNPC(id),
 				left = leftIds[id] == true,
 			})
 		)
@@ -185,6 +193,8 @@ local function resetStudio()
 	acked(false)
 	reveal(nil)
 	personal(nil)
+	payout(nil)
+	stakes(nil)
 	confirm(DecisionLogic.OPEN)
 end
 
@@ -232,6 +242,9 @@ local store: DecisionStudio.Store = {
 	acked = acked,
 	reveal = reveal,
 	personal = personal,
+	payout = payout,
+	stakes = stakes,
+	nameOf = DropNames,
 	chat = chat,
 	keyboard = keyboard,
 	waiting = function(): string?
@@ -639,8 +652,15 @@ function DecisionStudioController:init()
 		end
 	end)
 
+	-- Your own stakes, right after DecisionParticipants (whose reset
+	-- cleared the last round's). Q1's 2026-10-08 case.
+	Net.onClientEvent("DecisionStakes", function(payload: any)
+		stakes(PayoutLogic.parseStakes(payload))
+	end)
+
 	Net.onClientEvent("DecisionPersonalResult", function(payload: any)
 		personal(DecisionLogic.parsePersonal(payload))
+		payout(if type(payload) == "table" then PayoutLogic.parse(payload.reward) else nil)
 	end)
 end
 

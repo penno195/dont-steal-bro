@@ -215,6 +215,73 @@ function LeaderboardLogic.displayNameFor(resolved: string?, userId: number): str
 	return string.format("Player %d", userId)
 end
 
+-- ===== the name cache (leaderboard-scale.md A5) ========================
+--
+-- UserService:GetUserInfosByUserIdsAsync is reported to allow ~250
+-- results a minute (its reference page gives no figure), and a fresh
+-- server can want 100 per board at once. So lookups are drawn from a
+-- per-minute allowance (a BudgetState with softCeiling unused), top
+-- ranks first; whatever does not fit waits for the next refresh. Each
+-- entry carries when it is next due rather than when it was resolved,
+-- so success, a deleted account and a failure can be due at different
+-- times.
+
+export type NameEntry = {
+	name: string?, -- nil: never resolved, or the account is gone
+	dueAt: number, -- look it up again from this time on
+}
+
+export type NameOutcome = "Resolved" | "Missing" | "Failed"
+
+-- `userIds` in rank order. Returns the ids to look up now: due or never
+-- seen, de-duplicated, at most `allowance` of them.
+function LeaderboardLogic.namesToLookUp(
+	userIds: { number },
+	cache: { [number]: NameEntry },
+	now: number,
+	allowance: number
+): { number }
+	local wanted: { number } = {}
+	local taken: { [number]: boolean } = {}
+	for _, userId in userIds do
+		if #wanted >= allowance then
+			break
+		end
+		local cached = cache[userId]
+		if not taken[userId] and (cached == nil or now >= cached.dueAt) then
+			taken[userId] = true
+			table.insert(wanted, userId)
+		end
+	end
+	return wanted
+end
+
+-- The new cache entry after a lookup. "Missing" is a deleted account:
+-- absent from a successful response, so it is not retried any sooner
+-- than a real name. "Failed" is the call itself erroring (a 429, an
+-- outage): retried soon, and a name already known is kept meanwhile
+-- rather than swapped for a placeholder.
+function LeaderboardLogic.nameAfterLookup(
+	previous: NameEntry?,
+	outcome: NameOutcome,
+	name: string?,
+	now: number,
+	ttlSeconds: number,
+	retrySeconds: number
+): NameEntry
+	if outcome == "Resolved" then
+		return { name = name, dueAt = now + ttlSeconds }
+	elseif outcome == "Missing" then
+		return { name = nil, dueAt = now + ttlSeconds }
+	end
+	return { name = if previous then previous.name else nil, dueAt = now + retrySeconds }
+end
+
+-- How many requests are left in the current window.
+function LeaderboardLogic.remaining(state: BudgetState, limits: BudgetLimits): number
+	return math.max(0, limits.perWindow - state.spent)
+end
+
 -- Sorts descending by streak, breaking ties by ascending userId so the
 -- order is total and identical on every server. OrderedDataStore
 -- already returns sorted pages, but ties come back in an unspecified
@@ -253,6 +320,101 @@ function LeaderboardLogic.dedupe(entries: { Entry }): { Entry }
 		table.insert(result, bestById[userId])
 	end
 	return result
+end
+
+-- May this server send the boards to its clients right now?
+-- design-decisions.md Q7 condition 1: streaks show in the "hub and
+-- post-match leaderboard only". The boards carry user ids and streaks,
+-- and an exploiter reads every payload whether or not the menu opens,
+-- so the gate is what the server sends, not what the client shows. A
+-- match server's pre-round lobby is not the hub (see StreakTagLogic):
+-- its players are the ones about to race. So a match server sends only
+-- from Results on; the hub, in WaitingForPlayers for good, always may.
+function LeaderboardLogic.mayBroadcast(roundState: string, isHub: boolean): boolean
+	if roundState == "Results" or roundState == "Cleanup" then
+		return true
+	end
+	return isHub and roundState == "WaitingForPlayers"
+end
+
+-- ===== the shared period-board copy (leaderboard-scale.md §9) ==========
+--
+-- A sorted map's GetRangeAsync costs one MemoryStore unit per row, and
+-- each sorted map sits on one partition, so every server reading the
+-- top 100 itself caps a period board at ~450 servers. Instead one
+-- server at a time reads the sorted map and publishes the rendered
+-- board, names included, as one hash-map value copied into a few shard
+-- keys. Everyone else reads a single shard: 1 unit, not 100.
+--
+-- The value is compact on purpose (32 KB cap, A8): 100 rows of
+-- {userId, streak, name} is ~4 KB. `v` lets a format change be told
+-- apart from a corrupt value; both decode to nil.
+
+export type Published = {
+	publishedAt: number, -- os.time(), so every server agrees on its age
+	entries: { Entry },
+}
+
+local PUBLISHED_VERSION = 1
+
+function LeaderboardLogic.encodePublished(entries: { Entry }, publishedAt: number): any
+	local rows: { { any } } = {}
+	for _, entry in entries do
+		local row: { any } = { entry.userId, entry.bestStreak, entry.displayName }
+		table.insert(rows, row)
+	end
+	return { v = PUBLISHED_VERSION, at = publishedAt, rows = rows }
+end
+
+-- nil for anything that is not a well-formed current-version value. A
+-- bad row drops the whole value rather than showing a board with holes:
+-- the caller then republishes, which repairs it.
+function LeaderboardLogic.decodePublished(value: any): Published?
+	if type(value) ~= "table" or value.v ~= PUBLISHED_VERSION then
+		return nil
+	end
+	if type(value.at) ~= "number" or type(value.rows) ~= "table" then
+		return nil
+	end
+	local entries: { Entry } = {}
+	for _, row in value.rows do
+		if type(row) ~= "table" then
+			return nil
+		end
+		local userId, streak, name = row[1], row[2], row[3]
+		if type(userId) ~= "number" or type(streak) ~= "number" or type(name) ~= "string" then
+			return nil
+		end
+		table.insert(entries, { userId = userId, bestStreak = streak, displayName = name })
+	end
+	return { publishedAt = value.at, entries = entries }
+end
+
+-- Is the shared copy recent enough that nobody should republish it? A
+-- copy dated in the future (another server's clock ahead of ours) counts
+-- as fresh: republishing would not fix a clock.
+function LeaderboardLogic.isPublishedFresh(
+	publishedAt: number,
+	nowSeconds: number,
+	republishAfterSeconds: number
+): boolean
+	return nowSeconds - publishedAt < republishAfterSeconds
+end
+
+-- Which shard this read uses, 1..shardCount, from a roll in [0, 1).
+function LeaderboardLogic.pickShard(shardCount: number, roll: number): number
+	local count = math.max(1, math.floor(shardCount))
+	return math.clamp(math.floor(math.clamp(roll, 0, 1) * count) + 1, 1, count)
+end
+
+-- Hash-map keys (128-character cap, A8). The period key is in every key,
+-- so a rollover moves everyone to fresh keys and the old ones expire.
+function LeaderboardLogic.publishedShardKey(kind: string, periodKey: string, shard: number): string
+	return string.format("%s|%s|%d", kind, periodKey, shard)
+end
+
+function LeaderboardLogic.publishLockKey(kind: string, periodKey: string): string
+	return string.format("lock|%s|%s", kind, periodKey)
 end
 
 return LeaderboardLogic

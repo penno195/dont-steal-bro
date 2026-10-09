@@ -46,6 +46,17 @@ local StatusEffectResolver = require(ReplicatedStorage.Shared.StatusEffectResolv
 local StatusEffectDefs = require(ServerScriptService.Server.Services.StatusEffectDefs)
 local Participants = require(ServerScriptService.Server.Participants)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
+local Ragdoll = require(ServerScriptService.Server.Ragdoll)
+local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
+
+-- Effect id -> its power-up's victim look (an effect's id is its
+-- power-up's id). Read once: config is static.
+local lookById: { [string]: string } = {}
+for _, entry in PowerUps do
+	if entry.def.victimLook ~= nil then
+		lookById[entry.def.id] = entry.def.victimLook
+	end
+end
 
 -- Roblox defaults - PLACEHOLDER, same stance every unverified number in
 -- this repo takes (see GameConfig.luau): no locked baseline movement
@@ -170,6 +181,7 @@ local function replicate(racerId: number, state: RacerState)
 	-- Movement alone can't tell a Slow Field from a Sprint Boost, and
 	-- EffectLabelController labels only the slow. Still no durations.
 	local slowed = false
+	local effectIds = {}
 	for _, effect in state.activeEffects do
 		if not seenCategories[effect.def.category] then
 			seenCategories[effect.def.category] = true
@@ -178,8 +190,19 @@ local function replicate(racerId: number, state: RacerState)
 		if effect.def.category == "Movement" and effect.def.kind == "Debuff" then
 			slowed = true
 		end
+		table.insert(effectIds, effect.def.id)
 	end
-	Net.fireAllClients("StatusEffectsVisual", { playerId = racerId, categories = categories, slowed = slowed })
+	-- The victim look (PowerUpDef.victimLook): drawn by every client, and
+	-- for a Ragdoll also done to the rig here, so all of them see it.
+	local look = PowerUpLogic.lookFor(effectIds, lookById, Validate.POWERUP_VICTIM_LOOKS)
+	local character = if participant ~= nil then participant.character else nil
+	if character ~= nil then
+		Ragdoll.set(character, look == "Ragdoll")
+	end
+	Net.fireAllClients(
+		"StatusEffectsVisual",
+		{ playerId = racerId, categories = categories, slowed = slowed, look = look }
+	)
 end
 
 -- The one place `recomputeAndApply` is ever skipped is a racer with no
@@ -340,6 +363,27 @@ local ZONE_EXIT_LINGER = 0.3
 local ZONE_COLOR = Color3.fromRGB(235, 70, 70)
 local ZONE_THICKNESS = 0.3
 
+-- Tells `victim` a rival's item was used on them (the HUD's "X used Y on
+-- you" toast). `landed` false means it reached them but did nothing (a
+-- ward, immunity, no task to scramble): they still hear who tried. Also
+-- PowerUpService's path for targeted items. `shunt` rides along only on
+-- a landed throw.
+local function notifyUsedOn(
+	victim: Player,
+	caster: Participants.Participant,
+	powerUpId: string,
+	landed: boolean,
+	shunt: any?
+)
+	Net.fireClient("PowerUpHitYou", victim, {
+		powerUpId = powerUpId,
+		casterName = caster.displayName,
+		landed = landed,
+		shunt = if landed then shunt else nil,
+		callingCardId = (Loader.get("CosmeticService") :: any).equippedIdFor(caster.player, "CallingCard"),
+	})
+end
+
 type Zone = {
 	casterId: number,
 	def: StatusEffectResolver.EffectDef,
@@ -349,6 +393,9 @@ type Zone = {
 	part: BasePart,
 	-- racer id -> the effect instance this zone placed on them.
 	placed: { [number]: string },
+	powerUpId: string,
+	-- Humans already told "X used Slow Field on you", once per zone.
+	notified: { [number]: boolean },
 }
 
 local zones: { Zone } = {}
@@ -409,6 +456,16 @@ local function tickZone(zone: Zone, t: number)
 				local applied, _, placedId = applyEffect(racer.id, timed, zone.casterId, false)
 				if applied and placedId ~= nil then
 					zone.placed[racer.id] = placedId
+				end
+				-- Every item used on a player names its caster, a zone
+				-- included, even when a ward stopped it (powerups.md, user
+				-- decision 2026-10-03). Once per zone, not per retry tick.
+				if racer.player ~= nil and not zone.notified[racer.id] then
+					zone.notified[racer.id] = true
+					local caster = Participants.get(zone.casterId)
+					if caster ~= nil then
+						notifyUsedOn(racer.player, caster, zone.powerUpId, applied)
+					end
 				end
 			end
 		elseif effect ~= nil and effect.expiresAt > t + ZONE_EXIT_LINGER then
@@ -495,6 +552,8 @@ local function dropZone(caster: Participants.Participant, powerUpDef: Validate.P
 		endsAt = now() + EffectContext.effectDuration(powerUpDef.durationSeconds),
 		part = zonePart(floor, radius),
 		placed = {},
+		powerUpId = powerUpDef.id,
+		notified = {},
 	})
 	runZones()
 	return true, "zone dropped"
@@ -604,6 +663,20 @@ local StatusEffects: Loader.Service = {
 	baseJumpPower = BASE_JUMP_POWER,
 
 	applyEffectFor = applyEffectFor,
+	notifyUsedOn = notifyUsedOn,
+
+	-- True when `powerUpId` is a hard-control effect and `targetId` is in
+	-- rule 1's post-effect immunity window, so it would be refused.
+	-- PowerUpService asks before spending the caster's item, and again on
+	-- impact, so firing into the window never costs the item.
+	isImmuneTo = function(targetId: number, powerUpId: string): boolean
+		local effectDef = StatusEffectDefs[powerUpId]
+		if effectDef == nil or effectDef.category ~= "HardControl" then
+			return false
+		end
+		pruneExpired(targetId)
+		return StatusEffectResolver.inImmunityWindow(ensureState(targetId).hardControlHistory, now())
+	end,
 
 	-- P3-5: NPCService calls this when a bot's rig is despawned or
 	-- replaced, the same way a human's respawn clears theirs below.

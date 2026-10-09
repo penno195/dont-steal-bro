@@ -237,7 +237,7 @@ end
 
 -- Walks `path` into `roots`. Returns the table holding the leaf and the
 -- leaf's key, or nil if any step is missing. An all-digit segment
--- indexes an array ("game.bountyTiers.2.soleStealerVU").
+-- indexes an array ("game.npc.appearance.hair.2").
 local function locate(roots: Roots, path: string): ({ [any]: any }?, any)
 	local segments = splitPath(path)
 	local node: any = roots

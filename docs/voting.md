@@ -171,8 +171,9 @@ screen, built for one thumb in portrait:
 
 ## Studio verification
 
-With `hubPlaceId = 0`, MemoryStore enabled, and at least two
-(preferably four or more) MapDef files enabled:
+In Studio on the Hub place (or any place while `hubPlaceId = 0`),
+with MemoryStore enabled and at least two (preferably four or more)
+MapDef files enabled:
 
 1. Six players join. A board with 4 maps appears within a tick of
    `MatchFound`. Tapping moves your blue border, and the counts and

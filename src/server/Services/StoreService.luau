@@ -72,10 +72,13 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local StoreCatalogue = require(ReplicatedStorage.Shared.Config.Store)
+local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 local CosmeticLogic = require(ServerScriptService.Server.CosmeticLogic)
+local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
+local Signal = require(ReplicatedStorage.Packages.Signal)
 
 type StoreItemDef = Validate.StoreItemDef
 
@@ -136,11 +139,87 @@ export type GrantRecord = {
 local grantLog: { GrantRecord } = {}
 local GRANT_LOG_LIMIT = 200
 
+-- Fires (player, def) once a purchase has landed: a receipt confirmed
+-- saved, a coin offer paid, or a pass newly seen owned. NavigationService
+-- listens, so a round bought from the toggle switches on by itself.
+local purchaseLanded = Signal.new()
+
 local function now(): number
 	return os.clock()
 end
 
 -- ===== replication ========================================================
+
+-- The season running now, or nil. Seasons don't overlap (Validate), so
+-- there's at most one.
+local function liveSeason(nowUtc: number): SeasonLogic.Season?
+	for _, entry in Seasons do
+		local season = SeasonLogic.fromDef(entry.def :: any)
+		if season ~= nil and SeasonLogic.isLive(season, nowUtc) then
+			return season
+		end
+	end
+	return nil
+end
+
+-- Why the season pass can't be bought now, or nil when it can: there's
+-- a live season and this profile doesn't hold its pass yet. Checked
+-- before the prompt and again on the receipt. A blocked receipt is
+-- declined, never consumed, so a double purchase stays with Roblox and
+-- unlocks next month's season when it's re-offered then.
+local function seasonPassBlocked(seasonProgress: { [string]: any }): ("NoSeason" | "AlreadyOwned")?
+	local season = liveSeason(os.time())
+	if season == nil then
+		return "NoSeason"
+	end
+	if SeasonLogic.hasPass(seasonProgress[season.id]) then
+		return "AlreadyOwned"
+	end
+	return nil
+end
+
+-- The store's Season tab (rewards-roadmap.md step 5b): the live season
+-- and this player's own progress on it. The tab reads the track items
+-- from config by `id`. Time left is sent as a duration, so a client
+-- clock that's off doesn't move the end.
+local function seasonState(player: Player, DataService: any): { [string]: any }?
+	local nowUtc = os.time()
+	local season = liveSeason(nowUtc)
+	if season == nil then
+		return nil
+	end
+	local progress = DataService.getSeasonProgress(player, season.id)
+	return {
+		id = season.id,
+		secondsLeft = season.endsAt - nowUtc,
+		passSeen = SeasonLogic.hasPass(progress),
+		freeWins = if progress then progress.freeWins else 0,
+		premiumWins = if progress then progress.premiumWins else 0,
+		freePaid = if progress then progress.freePaid else 0,
+		premiumPaid = if progress then progress.premiumPaid else 0,
+	}
+end
+
+-- The product that buys back this player's open streak offer, if it may
+-- be shown now and an enabled tier prices it (design-decisions.md Q7,
+-- "buying back a streak"). The server always picks the tier: the
+-- client only ever asks to buy the key this hands it.
+local function buyBackFor(player: Player): (StoreItemDef?, number?)
+	local offer = (Loader.get("DataService") :: any).getBuyBackOffer(player)
+	local RoundService = Loader.get("RoundService") :: any
+	if not StoreLogic.mayShowBuyBack(offer, RoundService.getRoundId(), RoundService.getState()) then
+		return nil, nil
+	end
+	local streak = offer.streak :: number
+	for _, def in byAssetId do
+		for _, grant in def.grants do
+			if StoreLogic.buyBackCovers(grant :: any, streak) then
+				return def, streak
+			end
+		end
+	end
+	return nil, nil
+end
 
 -- A player's own store state, to that player only. Never
 -- fireAllClients: this is a private inventory (see Net.luau's own note
@@ -163,14 +242,31 @@ local function pushState(player: Player)
 		end
 	end
 
+	local buyBackDef, buyBackStreak = buyBackFor(player)
+
 	Net.fireClient("StoreState", player, {
+		-- The open streak buy-back offer, or nil. Your own streak, to you
+		-- only, and never before your round's reveal (buyBackFor).
+		buyBack = if buyBackDef ~= nil
+			then { key = buyBackDef.key, streak = buyBackStreak, robuxPrice = buyBackDef.robuxPrice }
+			else nil,
 		currency = DataService.getCurrency(player),
 		powerUpStock = DataService.getPowerUpStock(player),
 		loadout = DataService.getLoadout(player),
+		lastLoadout = DataService.getLastLoadout(player),
+		-- The Locker's Titles tab. The player's own titles, to them only:
+		-- Q7 condition 1 is about OTHER players seeing them, and this
+		-- remote is targeted. `wornTitle` is what TitleService resolves
+		-- (their pick, else their highest rung).
+		unlockedTitles = DataService.getUnlockedTitles(player),
+		equippedTitle = DataService.getEquippedTitle(player),
+		wornTitle = (Loader.get("TitleService") :: any).getWornTitleId(player.UserId),
 		ownedCosmetics = DataService.getOwnedCosmetics(player),
 		equipped = DataService.getEquipped(player),
 		ownedPasses = ownedPasses,
+		navigationRounds = DataService.getNavigationRounds(player),
 		loadoutSlots = GameConfig.store.loadoutSlots,
+		season = seasonState(player, DataService),
 	})
 end
 
@@ -204,14 +300,44 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 		powerUpStock = data.powerUpStock,
 		ownedCosmetics = data.ownedCosmetics,
 		unlockedTitles = data.unlockedTitles,
+		navigationRounds = data.navigationRounds,
+		currentStreak = data.currentStreak,
+		buyBackOffer = data.buyBackOffer,
 	}
 
-	local after, changes = StoreLogic.applyGrants(before, def.grants :: any)
+	-- The season pass unlocks the live season's premium track; what its
+	-- wins already reached waits on the pass screen to be claimed. The
+	-- receipt handler has already checked a pass can be bought
+	-- (seasonPassBlocked), so `bought` is false only on a bug.
+	local grants = table.clone(def.grants) :: { any }
+	local seasonLines: { string } = {}
+	if StoreLogic.grantsSeasonPass(def.grants :: any) then
+		local nowUtc = os.time()
+		local season = liveSeason(nowUtc)
+		if season ~= nil then
+			local progress, bought = SeasonLogic.buyPass(data.seasonProgress[season.id], season, nowUtc)
+			if bought then
+				data.seasonProgress[season.id] = progress
+				table.insert(seasonLines, string.format("season pass for %s", season.id))
+			end
+		end
+	end
+
+	local after, changes = StoreLogic.applyGrants(before, grants)
+	table.move(changes, 1, #changes, #seasonLines + 1, seasonLines)
+	changes = seasonLines
 
 	data.currency = after.currency
 	data.powerUpStock = after.powerUpStock
 	data.ownedCosmetics = after.ownedCosmetics
 	data.unlockedTitles = after.unlockedTitles
+	data.navigationRounds = after.navigationRounds or data.navigationRounds
+	-- A streak buy-back (design-decisions.md Q7). The one streak change
+	-- outside ProgressionService's writer: it restores a streak the
+	-- writer already recorded losing, and only through a paid receipt,
+	-- audited by recordGrant's line like every other grant.
+	data.currentStreak = after.currentStreak or data.currentStreak
+	data.buyBackOffer = after.buyBackOffer
 
 	if purchaseId ~= nil then
 		-- The line that makes the whole thing safe. Written next to the
@@ -445,6 +571,21 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 	end
 
 	local product = def :: StoreItemDef
+	if StoreLogic.grantsSeasonPass(product.grants :: any) then
+		local blocked = seasonPassBlocked(data.seasonProgress)
+		if blocked ~= nil then
+			warn(
+				string.format(
+					"StoreService: season pass receipt %s for %s (%d) can't apply now (%s) - declining so Roblox re-offers it",
+					purchaseKey,
+					player.Name,
+					userId,
+					blocked
+				)
+			)
+			return notYet
+		end
+	end
 	local changes = applyProductTo(data, product, purchaseKey)
 
 	if not waitForSave(handle, purchaseKey) then
@@ -466,6 +607,17 @@ local function processReceipt(receiptInfo: { [string]: any }): Enum.ProductPurch
 
 	recordGrant(player, product, purchaseKey, changes)
 	pushState(player)
+	-- A bought-back streak shows on the Hub's counter straight away.
+	-- A no-op on a match server.
+	if StoreLogic.grantsStreakBuyBack(product.grants :: any) then
+		(Loader.get("StreakTagService") :: any).broadcast()
+	end
+	purchaseLanded:Fire(player, product)
+	-- What Roblox actually charged, from the receipt, not the config's
+	-- display price.
+	local spent = receiptInfo.CurrencySpent
+	local robux = if type(spent) == "number" then spent else nil
+	Loader.get("Telemetry").purchaseCompleted(player, product.key, product.kind, robux)
 	return granted
 end
 
@@ -531,13 +683,42 @@ local function ownsPass(player: Player, gamePassId: number): boolean
 	return owned == true
 end
 
--- A pass is permanent, so its grants are re-applied on every join and
--- on every purchase. That is safe by construction rather than by
--- bookkeeping: a pass may only grant Cosmetic or Title
--- (Validate.checkStoreItem refuses anything else), and both of those
--- are set-insertions that do nothing the second time
--- (StoreLogic.applyGrants). There is no receipt and no PurchaseId
--- involved, because there is nothing to consume.
+-- Grants season track items into a profile's data, one audit line each.
+-- The caller writes the progress entry whose `*Paid` counts these items
+-- moved, in the same mutation, which is what keeps paying idempotent.
+local function grantSeasonItems(player: Player, data: any, seasonId: string, paid: { SeasonLogic.Paid })
+	local grants = {}
+	for _, item in paid do
+		table.insert(grants, item.grant)
+		print(
+			string.format(
+				"StoreService: %s (%d) %s",
+				player.Name,
+				player.UserId,
+				SeasonLogic.describePaid(seasonId, item)
+			)
+		)
+	end
+	local granted = StoreLogic.applyGrants({
+		currency = data.currency,
+		powerUpStock = data.powerUpStock,
+		ownedCosmetics = data.ownedCosmetics,
+		unlockedTitles = data.unlockedTitles,
+		navigationRounds = data.navigationRounds,
+	}, grants :: any)
+	data.currency = granted.currency
+	data.powerUpStock = granted.powerUpStock
+	data.ownedCosmetics = granted.ownedCosmetics
+	data.unlockedTitles = granted.unlockedTitles
+	data.navigationRounds = granted.navigationRounds or data.navigationRounds
+end
+
+-- On join and on a pass purchase, each season is synced
+-- (SeasonLogic.sync): a live season starts being tracked, and an ENDED
+-- one grants whatever was reached but never claimed (user decision
+-- 2026-10-09). Live items are claimed from the pass screen instead
+-- (handleSeasonClaim). Buying the season pass is a receipt
+-- (applyProductTo), not a pass sighting, since 2026-10-09.
 local function syncPasses(player: Player)
 	local getHandle = receiptHandleFor
 	if getHandle == nil then
@@ -553,36 +734,102 @@ local function syncPasses(player: Player)
 	end
 
 	local anyChange = false
+	local nowUtc = os.time()
 
-	for _, entry in StoreCatalogue do
-		local def = entry.def :: StoreItemDef
-		if def.kind ~= "GamePass" or not def.enabled or def.assetId <= 0 then
+	for _, entry in Seasons do
+		local season = SeasonLogic.fromDef(entry.def :: any)
+		if season == nil then
 			continue
 		end
-		if not ownsPass(player, def.assetId) then
+		local before = data.seasonProgress[season.id]
+		local after, paid = SeasonLogic.sync(before, season, nowUtc)
+		if after == nil or after == before then
 			continue
 		end
-
-		local changes = applyProductTo(data, def, nil)
-		local realChange = false
-		for _, line in changes do
-			if
-				string.find(line, "already owned", 1, true) == nil
-				and string.find(line, "already unlocked", 1, true) == nil
-			then
-				realChange = true
-				break
-			end
-		end
-		if realChange then
-			recordGrant(player, def, nil, changes)
-			anyChange = true
-		end
+		grantSeasonItems(player, data, season.id, paid)
+		data.seasonProgress[season.id] = after
+		anyChange = true
 	end
 
 	if anyChange then
 		handle.save()
 	end
+end
+
+-- A Claim or Claim All on the pass screen (SeasonClaimIntent). The
+-- client only names a tile; SeasonLogic.claim pays nothing the live
+-- season, this player's wins and their pass don't cover, so a forged or
+-- repeated claim is a no-op.
+local function handleSeasonClaim(player: Player, track: SeasonLogic.Track?, upTo: number?)
+	local getHandle = receiptHandleFor
+	if getHandle == nil then
+		return
+	end
+	local handle = getHandle(player)
+	if handle == nil then
+		return
+	end
+	local data = handle.getData()
+	if data == nil then
+		return
+	end
+	local nowUtc = os.time()
+	local season = liveSeason(nowUtc)
+	if season == nil then
+		return
+	end
+	local after, paid = SeasonLogic.claim(data.seasonProgress[season.id], season, nowUtc, track, upTo)
+	if #paid == 0 then
+		return
+	end
+	grantSeasonItems(player, data, season.id, paid)
+	data.seasonProgress[season.id] = after
+	handle.save()
+	pushState(player)
+end
+
+-- ===== coin offers (rewards-roadmap.md step 6) ============================
+
+-- Coins buy a specific power-up at a fixed price (design-decisions.md Q1;
+-- coins buy power-up stock only, user decision 2026-10-02). Entirely
+-- server-side: the price comes from config by key, the balance from the
+-- profile, and the deduction and the grant land in one mutation
+-- (StoreLogic.buyWithCoins), saved straight away like a receipt.
+local function buyWithCoins(player: Player, def: StoreItemDef)
+	local getHandle = receiptHandleFor
+	local handle = if getHandle then getHandle(player) else nil
+	local data = if handle then handle.getData() else nil
+	if handle == nil or data == nil or not handle.isActive() then
+		sendPurchaseResult(player, def.key, "Unavailable", "Your data isn't loaded yet. Try again in a moment.")
+		return
+	end
+
+	local after, changes, reason = StoreLogic.buyWithCoins({
+		currency = data.currency,
+		powerUpStock = data.powerUpStock,
+		ownedCosmetics = data.ownedCosmetics,
+		unlockedTitles = data.unlockedTitles,
+		navigationRounds = data.navigationRounds,
+	}, def.coinPrice or 0, def.grants :: any)
+	if after == nil then
+		local message = if reason == "not enough coins"
+			then "You don't have enough coins for that yet."
+			else "That item isn't available right now."
+		sendPurchaseResult(player, def.key, "NotEnoughCoins", message)
+		return
+	end
+
+	data.currency = after.currency
+	data.powerUpStock = after.powerUpStock
+	data.ownedCosmetics = after.ownedCosmetics
+	data.unlockedTitles = after.unlockedTitles
+	data.navigationRounds = after.navigationRounds or data.navigationRounds
+	handle.save()
+	recordGrant(player, def, nil, changes)
+	sendPurchaseResult(player, def.key, "Granted", "")
+	pushState(player)
+	purchaseLanded:Fire(player, def)
+	Loader.get("Telemetry").purchaseCompleted(player, def.key, def.kind, nil)
 end
 
 -- ===== the purchase prompt flow ===========================================
@@ -599,8 +846,8 @@ local function handlePurchaseIntent(player: Player, key: string)
 	-- design switch, `assetId > 0` is whether the thing exists on
 	-- Roblox at all. ConfigValidator refuses the combination
 	-- "enabled with no id" at boot, so reaching this branch means the
-	-- entry is deliberately off.
-	if not def.enabled or def.assetId <= 0 then
+	-- entry is deliberately off. A CoinOffer has no Roblox asset at all.
+	if not def.enabled or (def.assetId <= 0 and def.kind ~= "CoinOffer") then
 		sendPurchaseResult(player, key, "Unavailable", "That item is not available right now.")
 		return
 	end
@@ -611,9 +858,47 @@ local function handlePurchaseIntent(player: Player, key: string)
 		return
 	end
 
+	-- A Navigation round is sold only from the in-match toggle (Q8,
+	-- "Navigation", 2026-10-08), so only to a racer mid-race.
+	if
+		StoreLogic.grantsNavigationRound(def.grants :: any) and not Loader.get("NavigationService").canBuyRound(player)
+	then
+		sendPurchaseResult(player, key, "Unavailable", "Navigation is bought from its button during a race.")
+		return
+	end
+
+	-- A streak buy-back is sold only against the player's own open
+	-- offer, and only in the tier that prices it (Q7, "buying back a
+	-- streak"). A receipt that gets past this anyway buys nothing.
+	if StoreLogic.grantsStreakBuyBack(def.grants :: any) and buyBackFor(player) ~= def then
+		sendPurchaseResult(player, key, "Unavailable", "There's no streak to save right now.")
+		return
+	end
+
+	if def.kind == "CoinOffer" then
+		buyWithCoins(player, def)
+		return
+	end
+
 	if def.kind == "GamePass" and ownsPass(player, def.assetId) then
 		sendPurchaseResult(player, key, "AlreadyOwned", "You already own this.")
 		return
+	end
+
+	-- The season pass sells only while a season runs, once per season.
+	if StoreLogic.grantsSeasonPass(def.grants :: any) then
+		local DataService = Loader.get("DataService") :: any
+		local season = liveSeason(os.time())
+		local blocked = seasonPassBlocked(
+			if season ~= nil then { [season.id] = DataService.getSeasonProgress(player, season.id) } else {}
+		)
+		if blocked == "NoSeason" then
+			sendPurchaseResult(player, key, "Unavailable", "No season is running right now.")
+			return
+		elseif blocked == "AlreadyOwned" then
+			sendPurchaseResult(player, key, "AlreadyOwned", "You already have this season's pass.")
+			return
+		end
 	end
 
 	-- Everything past this point is Roblox's. The prompt is opened; the
@@ -727,6 +1012,31 @@ local function handleLoadoutIntent(player: Player, slotIndex: number, powerUpId:
 	pushState(player)
 end
 
+-- The loadout can be changed until the teleport begins, the queue
+-- countdown included (design-decisions.md Q8, "the Locker and choosing a
+-- loadout"). Once a player is Departing, the hub is about to release
+-- their profile to the match server, so an edit then is refused rather
+-- than racing that handover. Always false on a match server.
+local function loadoutLocked(player: Player): boolean
+	return (Loader.get("MatchmakingService") :: any).isDeparting(player)
+end
+
+-- "Same as last round" (the queue strip). Replaces the loadout with last
+-- round's picks that still have stock. Selecting spends nothing, as above.
+local function handleLoadoutRepeatIntent(player: Player)
+	local DataService = Loader.get("DataService") :: any
+
+	local stock = DataService.getPowerUpStock(player) :: { [string]: number }
+	local placed = StoreLogic.repeatLoadout(
+		DataService.getLastLoadout(player),
+		stock,
+		loadoutEligible,
+		GameConfig.store.loadoutSlots
+	)
+	DataService.setLoadoutAndStock(player, placed, stock)
+	pushState(player)
+end
+
 -- Spends the player's stored loadout and hands back what they take into
 -- the round. THE ONLY PLACE STOCK IS DECREMENTED.
 --
@@ -746,8 +1056,11 @@ local function consumeLoadoutFor(player: Player): { string }
 
 	-- The loadout is cleared as it is spent: these were consumables, and
 	-- leaving the selection in place would re-arm it silently from
-	-- whatever stock is left next round.
-	DataService.setLoadoutAndStock(player, {}, remaining)
+	-- whatever stock is left next round. What was picked is kept as
+	-- lastLoadout, for the queue strip's "Same as last round", which
+	-- re-arms it only when the player taps it.
+	local picked = table.move(loadout, 1, math.min(#loadout, GameConfig.store.loadoutSlots), 1, {})
+	DataService.setLoadoutAndStock(player, {}, remaining, picked)
 
 	print(
 		string.format(
@@ -813,10 +1126,27 @@ end
 
 local StoreService: Loader.Service = {
 	name = "StoreService",
-	dependencies = { "NetGuard", "ConfigValidator", "DataService", "CosmeticService", "LiveConfig" },
+	dependencies = { "NetGuard", "ConfigValidator", "DataService", "CosmeticService", "LiveConfig", "Telemetry" },
 
 	ownsPass = ownsPass,
 	consumeLoadoutFor = consumeLoadoutFor,
+
+	-- Whether this player owns the enabled pass that unlocks `perk`.
+	-- Live (cached) ownership, never a profile field, so nothing but a
+	-- real purchase can make it true.
+	ownsPerk = function(player: Player, perk: Validate.StorePerk): boolean
+		for _, entry in StoreCatalogue do
+			local def = entry.def :: StoreItemDef
+			if def.kind == "GamePass" and def.perk == perk and def.enabled then
+				return ownsPass(player, def.assetId)
+			end
+		end
+		return false
+	end,
+
+	onGranted = function(callback: (player: Player, def: StoreItemDef) -> ())
+		return purchaseLanded:Connect(callback)
+	end,
 
 	-- Studio only, and no remote reaches it - see its own comment.
 	debugSimulateReceipt = debugSimulateReceipt,
@@ -844,8 +1174,22 @@ function StoreService:init()
 		handleEquipIntent(player, payload.slot, payload.itemId)
 	end)
 
+	NetGuard.on("SeasonClaimIntent", function(player: Player, payload: any)
+		handleSeasonClaim(player, payload.track, payload.upTo)
+	end)
+
 	NetGuard.on("StoreLoadoutIntent", function(player: Player, payload: any)
+		if loadoutLocked(player) then
+			return
+		end
 		handleLoadoutIntent(player, payload.slotIndex, payload.powerUpId)
+	end)
+
+	NetGuard.on("StoreLoadoutRepeatIntent", function(player: Player)
+		if loadoutLocked(player) then
+			return
+		end
+		handleLoadoutRepeatIntent(player)
 	end)
 
 	-- "This can only be done once by one server-side script" (Roblox's
@@ -889,13 +1233,28 @@ function StoreService:init()
 				end
 				lastPassSyncAt[player] = now()
 				local perPlayer = ownership[player]
+				-- The signal is spoofable, so a purchase is only logged
+				-- for a pass this server had seen unowned and Roblox now
+				-- says is owned.
+				local knownUnowned: { [number]: boolean } = {}
 				if perPlayer ~= nil then
 					for passId in pending :: { [number]: boolean } do
+						local cached = perPlayer[passId]
+						knownUnowned[passId] = cached ~= nil and not cached.owned
 						perPlayer[passId] = nil
 					end
 				end
 				syncPasses(player)
 				pushState(player)
+				for passId in knownUnowned do
+					local def = byAssetId[passId]
+					if knownUnowned[passId] and def ~= nil and ownsPass(player, passId) then
+						-- A pass has no receipt, so its value is the
+						-- configured price.
+						Loader.get("Telemetry").purchaseCompleted(player, def.key, def.kind, def.robuxPrice)
+						purchaseLanded:Fire(player, def)
+					end
+				end
 			end)
 		end
 	)

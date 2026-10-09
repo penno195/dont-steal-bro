@@ -4,7 +4,7 @@
 -- store is adding one file next to this one - no service edit, no
 -- registration list, nothing here to touch (Ground Rule 2).
 --
--- EVERY ENTRY SHIPS `enabled = false` AND `assetId = 0` until somebody
+-- A ROBUX ENTRY SHIPS `enabled = false` AND `assetId = 0` until somebody
 -- creates the matching pass or developer product in the Creator
 -- Dashboard and pastes its id in. That isn't a placeholder in the usual
 -- sense - it's the safe half of a two-step: the catalogue, its grants

@@ -153,9 +153,18 @@ TestRunner.describe("PeriodKeys.boundsFor", function()
 end)
 
 TestRunner.describe("PeriodKeys.liveExpirySeconds", function()
-	TestRunner.it("covers the rest of the period plus the grace margin", function()
+	TestRunner.it("covers the rest of the period, one more period, and the grace margin", function()
 		local noon = utc(2026, 9, 22, 12)
-		TestRunner.expect(PeriodKeys.liveExpirySeconds("Daily", noon, 3600)):toBe(12 * 3600 + 3600)
+		TestRunner.expect(PeriodKeys.liveExpirySeconds("Daily", noon, 3600)):toBe(12 * 3600 + 24 * 3600 + 3600)
+	end)
+
+	TestRunner.it("keeps a finished period readable until the next one ends", function()
+		-- Written in Tuesday's last second, it must outlive Wednesday, so
+		-- a server first booting late on Wednesday can still catch
+		-- Tuesday up.
+		local lastSecond = utc(2026, 9, 23) - 1
+		local expiresAt = lastSecond + PeriodKeys.liveExpirySeconds("Daily", lastSecond, 600)
+		assert(expiresAt > utc(2026, 9, 24), "entry expired before the catch-up window closed")
 	end)
 
 	TestRunner.it("shrinks as the period runs down, so entries expire together", function()
@@ -178,6 +187,25 @@ TestRunner.describe("PeriodKeys.liveExpirySeconds", function()
 			PeriodKeys.liveExpirySeconds("Weekly", monday, 600) > PeriodKeys.liveExpirySeconds("Daily", monday, 600),
 			"a weekly period should outlive a daily one"
 		)
+	end)
+end)
+
+TestRunner.describe("PeriodKeys.previousKeyFor", function()
+	TestRunner.it("gives yesterday at any time today", function()
+		TestRunner.expect(PeriodKeys.previousKeyFor("Daily", utc(2026, 9, 22))):toBe("2026-09-21")
+		TestRunner.expect(PeriodKeys.previousKeyFor("Daily", utc(2026, 9, 22, 23))):toBe("2026-09-21")
+	end)
+
+	TestRunner.it("crosses a month and a year", function()
+		TestRunner.expect(PeriodKeys.previousKeyFor("Daily", utc(2026, 10, 1, 3))):toBe("2026-09-30")
+		TestRunner.expect(PeriodKeys.previousKeyFor("Daily", utc(2027, 1, 1, 3))):toBe("2026-12-31")
+	end)
+
+	TestRunner.it("gives last ISO week, including the 53rd", function()
+		-- 2026-09-23 is in W39.
+		TestRunner.expect(PeriodKeys.previousKeyFor("Weekly", utc(2026, 9, 23))):toBe("2026-W38")
+		-- 2027-01-05 is in 2027-W01; the week before is 2026's 53rd.
+		TestRunner.expect(PeriodKeys.previousKeyFor("Weekly", utc(2027, 1, 5))):toBe("2026-W53")
 	end)
 end)
 

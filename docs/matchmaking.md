@@ -31,6 +31,7 @@ wrapper). Config: `GameConfig.matchmaking`.
 | HashMap `MatchGroups_v1` | groupId (GUID) | `GroupRecord` (members, npcSlots; P5-3 adds ballot, votes, result) — **the commit point** | `groupRecordTtlSeconds` |
 | HashMap `RecentOpponents_v1` | userId | recent co-players + expiry | `rematchCooldownSeconds` |
 | HashMap `MatchmakingMeta_v1` | `formationLease` | `{ holder = jobId }` | `leaseTtlSeconds` |
+| HashMap `MatchmakingMeta_v1` | `queueSummary` 1..N | the lease holder's queue summary: owner, state, claim token, enqueuedAt per entry | `summaryTtlSeconds` |
 | HashMap `RecentMaps_v1` (P5-3, `GameConfig.vote`) | userId | last few maps played, newest first | `vote.recentMapsTtlSeconds` |
 
 ## Why a player can't be double-booked
@@ -154,8 +155,37 @@ here, the same way `leaderboard-scale.md` does for DataStores.
 | Memory | 64 KB + 1.2 KB × CCU | Entries are ~200 B plus the avoid list |
 | Value size | 32 KB | Avoid list capped at `recentOpponentsCap` |
 | Expiration | ≤ 3,888,000 s | Checked in validation |
-| `GetRangeAsync` max count | **assumed 200** | `queuePageSize` cap in validation |
-| **Per-partition limits** | **not read** — the guide links a separate page | One SortedMap may sit on one partition, which would cap total throughput regardless of CCU |
+| `GetRangeAsync` max count | **assumed 200**; still undocumented (2026-10-04) | `queuePageSize` cap in validation |
+| **Per-partition limits** | **Read 2026-10-04:** every sorted map sits on **one** partition; Roblox estimates ~30,000 units/min per partition | **The queue's real ceiling.** See below |
+
+Rows 1–6 re-checked against current docs on 2026-10-04 and still
+correct.
+
+**The partition ceiling.** Every hub server reads the queue page every
+tick: up to `min(queue length, 200)` units, 30 times a minute. The
+queue map's one partition caps the total, so
+`hub servers × average queue length ≲ 1,000`. For example, 10 hub
+servers with 100 players waiting already reach it, whatever the CCU.
+That arrives well before the experience quota does. The fix is the
+budget sketch's third lever, now required rather than optional: only
+the lease holder reads the full page, and it publishes each queued
+player's position and status in one small summary value (sharded if
+needed) that other servers read for 1 unit.
+
+**Built 2026-10-04.** Each tick, every hub server tries the lease. The
+holder reads the page, forms groups, marks the members it just claimed,
+and writes the summary into `summaryShardCount` (4) keys of
+`MatchmakingMeta_v1`. Every other server reads one random shard: 1 unit.
+The summary leaves out avoid lists, streaks and recent maps, because only
+the holder forms groups and it reads the real page. A summary older
+than `summaryStaleSeconds` (10s) or that fails to decode sends that
+server back to the page for that tick. That covers a lease handover (up
+to `leaseTtlSeconds`) and a holder that stalls, at the old cost, only
+while it lasts. Queue-partition load is now about 30 page reads/min ×
+queue length from the one holder (≤ 6,000 units/min), plus claims and
+refreshes, whatever the number of hub servers. The lease is now taken
+with the kill switch on too, so the summary keeps flowing. Claim
+discovery is no slower: the summary carries the claims made in the tick that published it.
 
 **Semantics this relies on**, also to verify:
 - A transform returning `nil` **cancels** the update. The sorted-map
@@ -183,8 +213,10 @@ first levers are:
 
 ## Studio verification
 
-The service runs in Studio when `hubPlaceId = 0`. MemoryStore needs
-the place published, with Studio API access enabled.
+The service runs on the Hub place (`hubPlaceId`, Studio included: a
+Studio playtest of the published Hub file has its place id), or in any
+Studio place while `hubPlaceId = 0`. MemoryStore needs the place
+published, with Studio API access enabled.
 
 1. Run "Clients and Servers" with 6 players and have all of them press
    Join. One group forms within about one tick. The warning log shows

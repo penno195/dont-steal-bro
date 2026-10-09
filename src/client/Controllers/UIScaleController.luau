@@ -47,6 +47,8 @@ local GALLERY_ATTRIBUTE = "UIComponentGallery"
 local RACE_HUD_ATTRIBUTE = "UIRaceHUDPreview"
 -- Same, for the Decision Studio (P6-5, docs/decision-studio.md).
 local STUDIO_ATTRIBUTE = "UIDecisionStudioPreview"
+-- Same, for the store's Season tab on fake progress (next-stages.md 1a).
+local SEASON_PASS_ATTRIBUTE = "UISeasonPassPreview"
 
 type Observable<T> = {
 	get: () -> T,
@@ -278,6 +280,7 @@ function UIScaleController:start()
 		[GALLERY_ATTRIBUTE] = screens.ComponentGallery,
 		[RACE_HUD_ATTRIBUTE] = screens.RaceHUDPreview,
 		[STUDIO_ATTRIBUTE] = screens.DecisionStudioPreview,
+		[SEASON_PASS_ATTRIBUTE] = screens.SeasonPassPreview,
 	}
 	for attribute, module in debugScreens do
 		local unmount: (() -> ())? = nil

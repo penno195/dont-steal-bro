@@ -82,7 +82,7 @@ local function burst(racerId: number, item: RevealItem, isSteal: boolean)
 	end)
 end
 
-type Card = { index: number, racerId: number, item: RevealItem, isSteal: boolean }
+type Card = { index: number, seats: number, racerId: number, item: RevealItem, isSteal: boolean }
 
 -- Every card on THIS screen whose finalist wears an enabled Reveal item,
 -- by its position in this screen's reveal order.
@@ -98,7 +98,10 @@ local function cardsFor(payload: any, reveal: DecisionLogic.Reveal): { Card }
 		local item = if itemId ~= nil then revealDefs[itemId] else nil
 		local choice = reveal.choices[racerId]
 		if item ~= nil and choice ~= nil then
-			table.insert(cards, { index = index, racerId = racerId, item = item, isSteal = choice == "Steal" })
+			table.insert(
+				cards,
+				{ index = index, seats = #seatIds, racerId = racerId, item = item, isSteal = choice == "Steal" }
+			)
 		end
 	end
 	return cards
@@ -111,7 +114,7 @@ local function onReveal(payload: any)
 	end
 	local token = roundToken
 	for _, card in cardsFor(payload, reveal) do
-		local delay = reveal.revealAt + DecisionLogic.cardTurnAt(card.index) - Clock.now()
+		local delay = reveal.revealAt + DecisionLogic.cardTurnAt(card.index, card.seats) - Clock.now()
 		if delay >= -LATE_TOLERANCE then
 			task.delay(math.max(0, delay), function()
 				if token == roundToken then

@@ -16,11 +16,13 @@ local PushTrip: Validate.PowerUpDef = {
 	kind = "Debuff",
 	role = "Attack",
 	target = "Aimed",
-	durationSeconds = 1,
+	durationSeconds = 2, -- was 1; design-decisions.md §12
 	cooldownSeconds = 7,
 	rarity = "Common",
 	hardControl = true,
 	shuntScale = 2, -- the shove IS this item; the other throws only nudge
+	impact = { style = "Shockwave", rgb = { 255, 140, 40 } }, -- orange blast ring
+	victimLook = "Ragdoll", -- knocked flat, limbs loose
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

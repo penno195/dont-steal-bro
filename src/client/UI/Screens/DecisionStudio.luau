@@ -46,6 +46,7 @@ local Feel = require(script.Parent.Parent.Components.Feel)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
 local Layout = require(script.Parent.Parent.Layout)
 local PayoffExplainer = require(script.Parent.PayoffExplainer)
+local PayoutLogic = require(script.Parent.Parent.PayoutLogic)
 local Theme = require(script.Parent.Parent.Theme)
 
 local create = vide.create
@@ -92,6 +93,14 @@ export type Store = {
 	acked: () -> boolean, -- the server has echoed our own lock
 	reveal: () -> DecisionLogic.Reveal?,
 	personal: () -> DecisionLogic.Personal?,
+	-- Your own win's payout (rewards-roadmap.md step 3), from the same
+	-- targeted packet as `personal`; nil on a loss or while watching.
+	-- Never another finalist's (user decision, Q7's 2026-10-02 case).
+	payout: (() -> PayoutLogic.Payout?)?,
+	nameOf: PayoutLogic.NameOf?, -- a drop's display name, from config
+	-- Your own stakes, on the hold buttons from the intro on
+	-- (DecisionStakes, Q1's 2026-10-08 case). nil shows the plain face.
+	stakes: (() -> PayoutLogic.Stakes?)?,
 	chat: () -> DecisionLogic.Rect?, -- Roblox's chat window, screen pixels
 	keyboard: (() -> number?)?, -- on-screen keyboard's top edge, screen pixels; nil when closed
 	-- The ready-up notice (DecisionLogic.waitingNotice); nil hides it.
@@ -124,9 +133,13 @@ local HEAD_W = 76
 local INFO_W = 44 -- the (i) beside the title
 local SEAT_CHIP_H = 26 -- a seat's revealed choice, under the name
 local STAGE_CARD = Vector2.new(260, 180) -- the big card in the middle at the reveal
+local RAIL_W = 112 -- the menu's store/boards/settings rail down the right edge, sideways
 local CHOICE_W = 150
 local CHOICE_H = 132
 local HOLD_CHIP_H = 30
+local STAKES_COINS_H = 32 -- the face once your stakes arrive: 26 + 32 + 14 + 14 + 24 + 4 gaps fits CHOICE_H
+local STAKES_LINE_H = 14
+local STAKES_CHIP_H = 24
 local CHAT_W = 320 -- the chat line between the buttons, landscape
 local EDGE = Theme.spacing.lg -- buttons' distance from the screen edges
 local CHAT_MAX_FRACTION = 0.3
@@ -225,10 +238,20 @@ local function face(choice: Choice, size: Vector2, textStyle: string): Frame
 	local style = decisionStyle(choice)
 	local badge = math.min(size.X, size.Y) * 0.42
 	local diamond = style.shape == "Diamond"
+	local raisedFill = if choice == "Steal" then Theme.fill.steal else Theme.fill.share
+	local ink = Theme.color[style.on]
 	return create("Frame")({
 		Name = "Face" .. choice,
 		Size = UDim2.fromOffset(size.X, size.Y),
-		BackgroundColor3 = Theme.color[style.color],
+		-- The UIGradient tints white: the hold buttons' gradient and rim.
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		create("UIGradient")({ Rotation = 90, Color = raisedFill.gradient }),
+		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = raisedFill.rim,
+			Thickness = 2,
+		}),
 		-- A pill reads as a chip when small; the big reveal card would be an
 		-- oval, so large faces get a rounded rectangle.
 		Base.corner(if diamond then Theme.radius.sm elseif size.Y >= 100 then Theme.radius.lg else Theme.radius.pill),
@@ -266,8 +289,8 @@ local function face(choice: Choice, size: Vector2, textStyle: string): Frame
 			LayoutOrder = 2,
 			Size = UDim2.new(1, -Theme.spacing.sm, 0, Theme.type[textStyle].size + Theme.spacing.xxs),
 			Text = style.label,
-			TextColor3 = Theme.color[style.on],
-		}),
+			TextColor3 = ink,
+		}, Theme.takesOutline(ink)),
 	}) :: Frame
 end
 
@@ -357,14 +380,13 @@ local function seatCard(
 		Name = "Seat",
 		LayoutOrder = index,
 		Size = UDim2.fromOffset(SEAT_W, SEAT_H),
-		BackgroundColor3 = Theme.elevation[2].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.md),
-		create("UIStroke")({
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Thickness = function()
-				return if seat().isSelf or verdict() ~= nil then 2 else 1
+		Base.stage({
+			thickness = function()
+				return if seat().isSelf or verdict() ~= nil then 3 else 1
 			end,
-			Color = function()
+			rim = function()
 				local v = verdict()
 				if v == "WINS" then
 					return Theme.color.success
@@ -384,8 +406,14 @@ local function seatCard(
 				return headshot(seat().id)
 			end,
 			Base.corner(Theme.radius.pill),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.color.rim,
+				Thickness = 2,
+			}),
 		}),
-		Base.text("label", {
+		Base.text("button", {
 			Name = "Name",
 			Position = UDim2.fromOffset(Theme.spacing.xs, AVATAR + Theme.spacing.sm + Theme.spacing.xxs),
 			Size = UDim2.new(1, -2 * Theme.spacing.xs, 0, Theme.type.label.size),
@@ -439,7 +467,7 @@ end
 
 -- One card at a time in the middle of the screen, in this screen's own
 -- order (DecisionLogic.revealOrder): it comes up face down under the
--- finalist's name, holds for TIMING.suspense, then turns. After the
+-- finalist's name, holds for DecisionLogic.suspenseFor, then turns. After the
 -- last card the outcome line takes its place until the result panel.
 -- Both faces are built up front, as everywhere else here, so nothing
 -- outcome-specific is created at the dramatic moment.
@@ -497,14 +525,14 @@ local function revealStage(
 	local back = create("Frame")({
 		Name = "Back",
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Theme.color.surfaceRaised,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.lg),
-		create("UIStroke")({ ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = Theme.color.line, Thickness = 2 }),
+		Base.stage({ thickness = 4 }),
 		Base.text("display", {
 			Name = "Mystery",
 			Size = UDim2.fromScale(1, 1),
 			Text = "?",
-			TextColor3 = Theme.color.inkMuted,
+			TextColor3 = Theme.color.rim,
 		}),
 		Parent = holder,
 	}) :: Frame
@@ -610,23 +638,92 @@ local function holdHint(choice: Choice): string
 	return "HOLD"
 end
 
--- The hold button's face: both choices the same shape and size, told
--- apart by colour, icon, word and side of the screen.
-local function holdFace(choice: Choice): Frame
-	local style = decisionStyle(choice)
-	local fill, ink = Theme.color[style.color], Theme.color[style.on]
-	local icon = Icons.view(style.icon, 36, ink)
+-- One icon + text line of the stakes: the coins, then the drop chance.
+local function stakesLine(
+	name: string,
+	order: number,
+	iconKey: string,
+	height: number,
+	textStyle: string,
+	ink: Color3,
+	text: () -> string,
+	shown: () -> boolean,
+	outlined: boolean
+): Frame
+	local icon = Icons.view(iconKey, height - Theme.spacing.xxs, ink)
 	icon.LayoutOrder = 1
 	return create("Frame")({
-		Name = "Face" .. choice,
+		Name = name,
+		LayoutOrder = order,
+		Size = UDim2.new(1, 0, 0, height),
+		BackgroundTransparency = 1,
+		Visible = shown,
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, Theme.spacing.xs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		icon :: any,
+		Base.text(textStyle, {
+			Name = "Text",
+			LayoutOrder = 2,
+			AutomaticSize = Enum.AutomaticSize.X,
+			TextScaled = false,
+			TextWrapped = false,
+			TextSize = Theme.type[textStyle].size,
+			Size = UDim2.fromOffset(0, height),
+			Text = text,
+			TextColor3 = ink,
+		}, outlined),
+	}) :: Frame
+end
+
+-- The hold button's face: both choices the same shape and size, told
+-- apart by colour, icon, word and side of the screen. Once your stakes
+-- arrive, the icon gives way to them: what this choice pays you in
+-- large type, when it pays, and your item-drop chance (design-decisions
+-- Q1's 2026-10-08 case). Both buttons show the drop: either win rolls it.
+-- UI art pass: a raised gradient surface on a lip (Theme.fill.steal /
+-- share, built around the owner's two hexes) that sinks while held.
+local function holdFace(choice: Choice, store: Store): Frame
+	local style = decisionStyle(choice)
+	local fill, ink = Theme.color[style.color], Theme.color[style.on]
+	local raisedFill = if choice == "Steal" then Theme.fill.steal else Theme.fill.share
+	local outlined = Theme.takesOutline(ink)
+	local held = derive(function()
+		local c = store.confirm()
+		return c.state == "Holding" and c.choice == choice
+	end)
+	local stakesSource = store.stakes
+	local stakes = derive(function(): PayoutLogic.Stakes?
+		return if stakesSource then stakesSource() else nil
+	end)
+	local hasStakes = derive(function()
+		return stakes() ~= nil
+	end)
+	local copy = derive(function(): PayoutLogic.StakesCopy?
+		local s = stakes()
+		return if s then PayoutLogic.stakesCopy(s, choice) else nil
+	end)
+	local icon = Icons.view(style.icon, 36, ink)
+	icon.LayoutOrder = 1
+	effect(function()
+		icon.Visible = not hasStakes()
+	end)
+	local content = create("Frame")({
+		Name = "Content",
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = fill,
-		Base.corner(Theme.radius.lg),
+		BackgroundTransparency = 1,
+		ZIndex = 3,
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, Theme.spacing.xs),
+			Padding = function()
+				return UDim.new(0, if hasStakes() then Theme.spacing.xxs else Theme.spacing.xs)
+			end,
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
 		icon :: any,
@@ -636,11 +733,35 @@ local function holdFace(choice: Choice): Frame
 			Size = UDim2.new(1, -Theme.spacing.sm, 0, Theme.type.title.size + Theme.spacing.xxs),
 			Text = style.label,
 			TextColor3 = ink,
+		}, outlined),
+		stakesLine("Coins", 3, "coin", STAKES_COINS_H, "headline", ink, function()
+			local c = copy()
+			return if c then c.amount else ""
+		end, hasStakes, outlined),
+		Base.text("caption", {
+			Name = "When",
+			LayoutOrder = 4,
+			Size = UDim2.new(1, -Theme.spacing.sm, 0, STAKES_LINE_H),
+			Text = function()
+				local c = copy()
+				return if c then c.caption else ""
+			end,
+			TextColor3 = ink,
+			Visible = hasStakes,
 		}),
+		stakesLine("Drop", 5, "gift", STAKES_LINE_H, "caption", ink, function()
+			local s = stakes()
+			return if s then PayoutLogic.dropChanceLine(s) else ""
+		end, hasStakes, outlined),
 		create("Frame")({
 			Name = "HoldChip",
-			LayoutOrder = 3,
-			Size = UDim2.fromOffset(CHOICE_W - 2 * Theme.spacing.lg, HOLD_CHIP_H),
+			LayoutOrder = 6,
+			Size = function()
+				return UDim2.fromOffset(
+					CHOICE_W - 2 * Theme.spacing.lg,
+					if hasStakes() then STAKES_CHIP_H else HOLD_CHIP_H
+				)
+			end,
 			BackgroundColor3 = ink,
 			BackgroundTransparency = 0.1,
 			Base.corner(Theme.radius.pill),
@@ -654,6 +775,28 @@ local function holdFace(choice: Choice): Frame
 			}),
 		}),
 	}) :: Frame
+
+	local holder = create("Frame")({
+		Name = "Face" .. choice,
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+	}) :: Frame
+	for _, part in
+		Base.raised({
+			fill = function()
+				return raisedFill
+			end,
+			lip = Theme.lip.button,
+			radius = Theme.radius.lg,
+			rimThickness = 3,
+			gloss = true,
+			sunk = held,
+			children = { content },
+		})
+	do
+		part.Parent = holder
+	end
+	return holder
 end
 
 local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, order: number): Frame
@@ -674,7 +817,7 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 		hb:Disconnect()
 	end)
 
-	local faceFrame = holdFace(choice)
+	local faceFrame = holdFace(choice, store)
 	faceFrame.ZIndex = 1
 	local button = create("TextButton")({
 		Name = "Hold" .. choice,
@@ -688,12 +831,15 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 		faceFrame,
 		-- The fill rises from the bottom while held: progress you can see
 		-- without reading, and a second cue that this is a hold, not a tap.
+		-- Held, the face has sunk onto its lip (holdFace), so the surface
+		-- is the bottom CHOICE_H - lip: the fill rises over that.
 		create("Frame")({
 			Name = "Fill",
 			AnchorPoint = Vector2.new(0, 1),
 			Position = UDim2.fromScale(0, 1),
 			Size = function()
-				return UDim2.fromScale(1, fraction())
+				local f = fraction()
+				return UDim2.new(1, 0, f, -Theme.lip.button * f)
 			end,
 			BackgroundColor3 = Theme.color.focus,
 			BackgroundTransparency = 0.6,
@@ -790,9 +936,10 @@ local function lockedCard(store: Store, order: number): Frame
 		Name = "Locked",
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(COLUMN, 88),
-		BackgroundColor3 = Theme.elevation[3].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.md),
-		create("UIStroke")({ Color = Theme.color.success, Thickness = 2 }),
+		-- Green rim: locked in, whichever way.
+		Base.stage({ rim = Theme.color.success, thickness = 3 }),
 		Base.padding(Theme.spacing.sm),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
@@ -841,17 +988,65 @@ end
 
 local TONE_COLOR: { [DecisionLogic.Tone]: string } = { win = "success", loss = "danger", neutral = "line" }
 
+local DROP_ICON = 24
+
+-- A winner's drop under the coins: its icon, then "Rare drop: 2x
+-- Freeze". Built once per drop (it only ever arrives once a round), so
+-- the icon, which Icons.view takes as a key, is fixed for the row.
+local function dropRow(drop: PayoutLogic.Drop, payout: () -> PayoutLogic.Payout?, store: Store): Frame
+	local key = PayoutLogic.dropIcon(drop)
+	local icon = C.Icons.view(if C.Icons.has(key) then key else "gem", DROP_ICON, Theme.color.brand)
+	icon.LayoutOrder = 1
+	return create("Frame")({
+		Name = "Drop",
+		LayoutOrder = 3,
+		Size = UDim2.new(1, 0, 0, DROP_ICON),
+		BackgroundTransparency = 1,
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, Theme.spacing.xs),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		icon,
+		Base.text("label", {
+			Name = "Text",
+			LayoutOrder = 2,
+			-- Sized to its text so the row centres as one piece.
+			TextScaled = false,
+			TextWrapped = false,
+			TextSize = Theme.type.label.size,
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, DROP_ICON),
+			Text = function()
+				local p = payout()
+				local line = if p then PayoutLogic.dropLine(p, store.nameOf) else nil
+				return if line then string.format("%s: %s", PayoutLogic.dropLabel(drop), line) else ""
+			end,
+		}),
+	}) :: Frame
+end
+
 local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, order: number): Frame
+	local payoutSource = store.payout
+	local function payout(): PayoutLogic.Payout?
+		return if payoutSource then payoutSource() else nil
+	end
+	local drops = derive(function(): { PayoutLogic.Drop }
+		local p = payout()
+		return if p and p.drop then { p.drop } else {}
+	end)
 	return create("Frame")({
 		Name = "Result",
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(COLUMN, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = Theme.elevation[3].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.md),
-		create("UIStroke")({
-			Thickness = 2,
-			Color = function()
+		Base.stage({
+			thickness = 3,
+			rim = function()
 				local c = copy()
 				return Theme.color[if c then TONE_COLOR[c.tone] else "line"]
 			end,
@@ -876,8 +1071,14 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 			Name = "Bounty",
 			LayoutOrder = 2,
 			Size = UDim2.new(1, 0, 0, Theme.type.title.size + Theme.spacing.xxs),
+			-- A winner's own coins once the payout lands (rewards step
+			-- 3); the prize word until then, and for everyone else.
 			Text = function()
 				local c = copy()
+				local p = payout()
+				if c and c.tone == "win" and p then
+					return PayoutLogic.coinsLine(p)
+				end
 				return if c then c.detail else ""
 			end,
 			TextColor3 = function()
@@ -888,9 +1089,12 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 		-- The streak line: for a loser, the number that just died. Same
 		-- size and weight as the bounty line - not hidden in a caption,
 		-- not blown up into a headline.
+		indexes(drops, function(drop: () -> PayoutLogic.Drop)
+			return dropRow(drop(), payout, store)
+		end) :: any,
 		Base.text("title", {
 			Name = "Streak",
-			LayoutOrder = 3,
+			LayoutOrder = 4,
 			Size = UDim2.new(1, 0, 0, Theme.type.title.size + Theme.spacing.xxs),
 			Text = function()
 				local c = copy()
@@ -902,7 +1106,7 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 			end,
 			TextColor3 = Theme.color.inkMuted,
 		}),
-		C.Button({ label = "Continue", onActivate = store.dismiss, variant = "primary", layoutOrder = 4, order = 1 }),
+		C.Button({ label = "Continue", onActivate = store.dismiss, variant = "primary", layoutOrder = 5, order = 1 }),
 	}) :: Frame
 end
 
@@ -940,11 +1144,18 @@ local function chatBox(store: Store, order: number): Frame
 		TextSize = Theme.type.body.size,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		BackgroundColor3 = Theme.color.surfaceRaised,
+		-- A dark well, not a panel: it's where you type (UI art pass).
+		BackgroundColor3 = Theme.color.background,
 		LayoutOrder = 1,
 		Size = UDim2.fromOffset(CHAT_W - SEND_W - Theme.spacing.sm, CHAT_H),
 		Base.corner(Theme.radius.md),
 		Base.padding(Theme.spacing.sm),
+		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = Theme.color.line,
+			Thickness = 2,
+		}),
 	}) :: TextBox
 
 	local function submit()
@@ -1214,11 +1425,12 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			Name = "Waiting",
 			LayoutOrder = 3,
 			Size = UDim2.fromOffset(COLUMN, NOTICE_H),
-			BackgroundColor3 = Theme.color.surfaceRaised,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
 			Visible = function()
 				return waitingText() ~= nil
 			end,
 			Base.corner(Theme.radius.pill),
+			Base.stage(),
 			Base.padding(Theme.spacing.sm),
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Horizontal,
@@ -1252,9 +1464,9 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 		cleanup(controller.attachScale(info))
 
 		-- The reveal itself, big in the middle of the screen.
+		-- Placed with the corners below (DecisionLogic.revealStageX).
 		local centre = revealStage(store, step, order, banner)
 		centre.AnchorPoint = Vector2.new(0.5, 0.5)
-		centre.Position = UDim2.fromScale(0.5, 0.45)
 		centre.Parent = gui
 		cleanup(controller.attachScale(centre))
 		effect(function()
@@ -1379,6 +1591,18 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			local edge = EDGE * scale
 			info.AnchorPoint = if portrait() then Vector2.new(0.5, 0) else Vector2.new(0, 0)
 			info.Position = if portrait() then UDim2.new(0.5, 0, 0, top()) else UDim2.fromOffset(edge, top())
+			if portrait() then
+				centre.Position = UDim2.fromScale(0.5, 0.45)
+			else
+				local x = DecisionLogic.revealStageX(
+					guiRect().width,
+					edge + COLUMN * scale,
+					STAGE_CARD.X / 2 * scale,
+					GAP * scale,
+					RAIL_W * scale
+				)
+				centre.Position = UDim2.new(0, x, 0.45, 0)
+			end
 			stealButton.AnchorPoint = Vector2.new(0, 1)
 			stealButton.Position = UDim2.new(0, edge, 1, -(edge + margin))
 			shareButton.AnchorPoint = Vector2.new(1, 1)

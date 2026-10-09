@@ -286,6 +286,7 @@ local function onVoteIntent(player: Player, payload: { mapId: string })
 	if ok and written ~= nil and sessions[session.groupId] == session and not session.done then
 		session.record = written
 		sendBoard(session) -- instant feedback, without waiting for the next poll
+		Loader.get("Telemetry").mapVoted(player, payload.mapId)
 	elseif refusal ~= nil and refusal ~= "Unchanged" and refusal ~= "Locked" then
 		-- A hand-rolled client, or a stale board: nothing to show the player.
 		warn(string.format("VoteService: vote from %d refused (%s)", player.UserId, refusal))
@@ -296,7 +297,7 @@ end
 
 local VoteService: Loader.Service = {
 	name = "VoteService",
-	dependencies = { "NetGuard", "ConfigValidator", "LiveConfig" },
+	dependencies = { "NetGuard", "ConfigValidator", "LiveConfig", "Telemetry" },
 
 	-- The former's ballot for a group about to be claimed. Never yields.
 	drawBallot = function(members: { Entry }): MatchmakingLogic.Ballot

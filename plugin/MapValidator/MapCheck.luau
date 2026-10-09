@@ -1189,11 +1189,38 @@ end
 
 -- ----- Performance -----------------------------------------------------------
 
+-- map-kit-spec.md §3 step 3: thin wall/arch-like meshes are exempt from
+-- "must be Box", because a Box collider fills their openings (an archway
+-- becomes an invisible wall). Thinnest edge <= 3 with the other two
+-- >= 5, or a name containing arch/frame/door. Keep in step with
+-- scripts/sanitise-pack.luau.
+local WALL_MAX_THICKNESS = 3
+local WALL_MIN_SPAN = 5
+local WALL_NAME_HINTS = { "arch", "frame", "door" }
+
+local function isWallLike(node: Node): boolean
+	local box = node.box
+	if box then
+		local dims = { box.size.x, box.size.y, box.size.z }
+		table.sort(dims)
+		if dims[1] <= WALL_MAX_THICKNESS and dims[2] >= WALL_MIN_SPAN then
+			return true
+		end
+	end
+	local name = string.lower(string.match(node.path, "[^.]+$") or node.path)
+	for _, hint in WALL_NAME_HINTS do
+		if string.find(name, hint, 1, true) then
+			return true
+		end
+	end
+	return false
+end
+
 local function checkPerformance(c: Collector, snapshot: MapSnapshot, budget: Budget)
 	local parts, meshParts = 0, 0
 	local meshes, textures = {}, {}
 	local meshCount, textureCount = 0, 0
-	local unanchored, stray, decorQuery, preciseMesh, softMesh = {}, {}, {}, {}, {}
+	local unanchored, stray, decorQuery, preciseMesh, softMesh, wallMesh = {}, {}, {}, {}, {}, {}
 
 	for _, node in snapshot.nodes do
 		if node.meshId and node.meshId ~= "" and not meshes[node.meshId] then
@@ -1232,7 +1259,13 @@ local function checkPerformance(c: Collector, snapshot: MapSnapshot, budget: Bud
 			table.insert(decorQuery, node)
 		end
 		if node.canCollide and node.collisionFidelity then
-			if node.collisionFidelity == "PreciseConvexDecomposition" then
+			if isWallLike(node) then
+				-- Box is allowed too (a plain wall panel has no opening);
+				-- Precise is listed so a human can check the openings.
+				if node.collisionFidelity == "PreciseConvexDecomposition" then
+					table.insert(wallMesh, node)
+				end
+			elseif node.collisionFidelity == "PreciseConvexDecomposition" then
 				table.insert(preciseMesh, node)
 			elseif node.collisionFidelity ~= "Box" then
 				table.insert(softMesh, node)
@@ -1298,6 +1331,15 @@ local function checkPerformance(c: Collector, snapshot: MapSnapshot, budget: Bud
 	end
 	if #softMesh > 0 then
 		c:add("warning", "Performance", "collision-not-box", "Collidable meshes not on CollisionFidelity Box", softMesh)
+	end
+	if #wallMesh > 0 then
+		c:add(
+			"info",
+			"Performance",
+			"wall-precise-collision",
+			"Wall/arch-like meshes on PreciseConvexDecomposition (expected; check openings are walkable)",
+			wallMesh
+		)
 	end
 end
 

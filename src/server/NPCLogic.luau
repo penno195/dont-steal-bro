@@ -410,21 +410,6 @@ function NPCLogic.isUsernameCollisionProof(name: string): boolean
 	return string.match(name, "[^%w_]") ~= nil
 end
 
--- ===== leaderboard credit ===================================================
-
--- threat-model.md §8 promotes architecture.md's "consider reduced or
--- zero streak credit when more than N seats are NPCs" to a REQUIRED
--- launch mitigation: "no streak credit above a defined NPC-seat
--- threshold. Exact N is a playtest tuning call, but some threshold must
--- ship day one." This is that check, as one pure predicate, so P4-1's
--- ProgressionService can gate on it without re-deriving the rule.
---
--- `npcSeatCount > threshold` (strictly greater - "more than N"), against
--- GameConfig.npcSeatStreakCreditThreshold.
-function NPCLogic.earnsStreakCredit(npcSeatCount: number, threshold: number): boolean
-	return npcSeatCount <= threshold
-end
-
 -- ===== appearance ============================================================
 
 -- The pools GameConfig.npc.appearance lists (Validate.NPCAppearance's

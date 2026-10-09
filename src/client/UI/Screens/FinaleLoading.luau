@@ -9,7 +9,7 @@
 -- table (one tile each, from DecisionLogic.rewardTiles, so it can't
 -- disagree with the resolver), the one-line lesson, and a spinner that
 -- becomes a "Got it" button once the Intro starts (2026-09-28).
--- Words only for the prizes, never VU (payoff-table.md).
+-- Words only for the prizes, never amounts (DecisionLogic.prizeFor).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -18,9 +18,11 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
+local Layout = require(script.Parent.Parent.Layout)
 local Theme = require(script.Parent.Parent.Theme)
 
 local create = vide.create
+local source = vide.source
 local derive = vide.derive
 local indexes = vide.indexes
 local cleanup = vide.cleanup
@@ -38,20 +40,40 @@ export type Store = {
 
 local COLUMN = 344
 local TILE_W = (COLUMN - Theme.spacing.sm) / 2
+-- Sideways the four tiles go in one row: a phone held sideways is only
+-- ~420 reference px tall, and the 2x2 grid pushed "Got it" off the
+-- bottom (playtest 2026-10-04). The rest of the card stays COLUMN wide.
+local WIDE = 4 * TILE_W + 3 * Theme.spacing.sm
 local TILE_H = 88
 local ICON = 32
 local CHIP_H = 32
 local SPINNER = 24
 local BUTTON_H = 48
 
--- Stand-in glyphs until RewardTables (design-decisions.md Q1) gives the
--- packages real art. Tinted so the tiers read at a glance.
-local PRIZE_ICON: { [string]: { icon: string, color: string } } = {
-	Big = { icon = "trophy", color = "warning" },
-	Medium = { icon = "gem", color = "brand" },
-	Small = { icon = "star", color = "ink" },
-	Nothing = { icon = "close", color = "inkMuted" },
-}
+-- Every prize is coins now (design-decisions.md Q1's 2026-10-02 case),
+-- so a tier is a pile of coin icons: three, two, one, or a cross for
+-- nothing (rewards-roadmap.md step 3). How many coins is the tier, never
+-- an amount: this card is up before lock-in, where Q7 allows words only.
+local PRIZE_COINS: { [string]: number } = { Big = 3, Medium = 2, Small = 1 }
+local COIN = 20
+local COIN_STEP = (ICON - COIN) / 2 -- three coins fill the icon square
+
+local function coinPile(count: number): Instance
+	local coins = {}
+	for i = 1, count do
+		local coin = Icons.view("coin", COIN, Theme.color.warning)
+		-- Bottom-left to top-right, so the pile grows up and across.
+		coin.Position = UDim2.fromOffset((i - 1) * COIN_STEP, (3 - i) * COIN_STEP)
+		coin.ZIndex = i
+		table.insert(coins, coin)
+	end
+	return create("Frame")({
+		Name = "Coins",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(ICON, ICON),
+		coins,
+	})
+end
 
 local FinaleLoading = {}
 
@@ -71,10 +93,14 @@ local function tile(entry: () -> DecisionLogic.RewardTile, order: number): Frame
 	end
 	-- Icons.view takes a key, not a source, so the icon is switched per
 	-- prize (the tile list only changes if the seat count does).
-	local views: { [string]: () -> Instance } = {}
-	for prize, style in PRIZE_ICON do
+	local views: { [string]: () -> Instance } = {
+		Nothing = function()
+			return Icons.view("close", ICON, Theme.color.inkMuted)
+		end,
+	}
+	for prize, count in PRIZE_COINS do
 		views[prize] = function()
-			return Icons.view(style.icon, ICON, Theme.color[style.color])
+			return coinPile(count)
 		end
 	end
 	local prize = derive(function(): string
@@ -84,7 +110,8 @@ local function tile(entry: () -> DecisionLogic.RewardTile, order: number): Frame
 		Name = "Reward",
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(TILE_W, TILE_H),
-		BackgroundColor3 = Theme.elevation[2].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
+		Base.stage(),
 		BackgroundTransparency = function()
 			return if nothing() then 0.5 else 0
 		end,
@@ -157,12 +184,22 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 			end
 			return false
 		end)
+		local orientation =
+			source(Layout.orientationOf(controller.getUsableRect().width, controller.getUsableRect().height))
+		cleanup(controller.observeUsableRect(function(rect: Layout.Rect)
+			orientation(Layout.orientationOf(rect.width, rect.height))
+		end))
+		local width = derive(function()
+			return if orientation() == "Portrait" then COLUMN else WIDE
+		end)
 
 		local column = create("Frame")({
 			Name = "Column",
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
-			Size = UDim2.fromOffset(COLUMN, 0),
+			Size = function()
+				return UDim2.fromOffset(width(), 0)
+			end,
 			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundTransparency = 1,
 			list(Enum.FillDirection.Vertical, Theme.spacing.md),
@@ -202,15 +239,14 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 						Name = "Chip",
 						LayoutOrder = i,
 						Size = UDim2.fromOffset((COLUMN - 2 * Theme.spacing.xs) / 3, CHIP_H),
-						BackgroundColor3 = Theme.color.surfaceRaised,
+						BackgroundColor3 = Base.STAGE_BACKGROUND,
 						Base.corner(Theme.radius.pill),
-						create("UIStroke")({
-							ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-							Color = function()
+						Base.stage({
+							rim = function()
 								return if isSelf() then Theme.color.brand else Theme.color.line
 							end,
-							Thickness = function()
-								return if isSelf() then 2 else 1
+							thickness = function()
+								return if isSelf() then 3 else 1
 							end,
 						}),
 						Base.text("caption", {
@@ -235,7 +271,9 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				Name = "Rewards",
 				LayoutOrder = 5,
 				BackgroundTransparency = 1,
-				Size = UDim2.fromOffset(COLUMN, 0),
+				Size = function()
+					return UDim2.fromOffset(width(), 0)
+				end,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				create("UIGridLayout")({
 					CellSize = UDim2.fromOffset(TILE_W, TILE_H),
@@ -304,8 +342,38 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				}),
 			}),
 		}) :: Frame
-		column.Parent = gui
+		-- Fit to height: whatever the layout, a screen too short for the
+		-- card shrinks it rather than cutting off "Got it". A GuiObject
+		-- honours one UIScale and the column's is the global one, so the
+		-- fit goes on a full-screen holder, which scales about its centre.
+		local holder = create("Frame")({
+			Name = "Fit",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Parent = gui,
+		})
+		local fit = create("UIScale")({ Parent = holder }) :: UIScale
+		column.Parent = holder
 		cleanup(controller.attachScale(column))
+		local function refit()
+			local natural = column.AbsoluteSize.Y / math.max(fit.Scale, 0.01)
+			local room = gui.AbsoluteSize.Y - 2 * Theme.spacing.sm
+			local scale = if natural > 0 then math.clamp(room / natural, 0.5, 1) else 1
+			if math.abs(fit.Scale - scale) > 0.005 then
+				fit.Scale = scale
+			end
+		end
+		for _, signal in
+			{
+				column:GetPropertyChangedSignal("AbsoluteSize"),
+				gui:GetPropertyChangedSignal("AbsoluteSize"),
+			}
+		do
+			cleanup(signal:Connect(refit))
+		end
+		refit()
 	end)
 
 	return function()

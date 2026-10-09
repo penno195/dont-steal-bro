@@ -17,11 +17,16 @@ so these could not be checked the same way.
 
 | # | Assumption | Why it matters here | Status |
 |---|---|---|---|
-| A1 | Per-server request budgets are a formula of the form `base + perPlayer × playerCount`, replenished per minute, **and separate per request type** | The whole soft-ceiling policy assumes reads and writes draw on budgets that behave independently | **VERIFY** |
-| A2 | `GetSortedAsync` has its own, much smaller budget than ordinary reads | The poll interval was chosen to sit far under it | **VERIFY** |
-| A3 | There is a per-key write cooldown (order of seconds) | We never write the same key twice quickly, so this should be unreachable — but confirm the figure | **VERIFY** |
-| A4 | There are universe-wide throughput ceilings (bytes/min, requests/min) distinct from per-server budgets | **This is the one the analysis below concludes you hit first** | **VERIFY — highest priority** |
-| A5 | `UserService:GetUserInfosByUserIdsAsync` has its own rate limit, separate from DataStore | The name cache is sized against a guess | **VERIFY** |
+| A1 | Per-server request budgets are a formula of the form `base + perPlayer × playerCount`, replenished per minute, **and separate per request type** | The whole soft-ceiling policy assumes reads and writes draw on budgets that behave independently | **Confirmed 2026-10-04.** Separate per type, per minute. Ordered store: Read 60 + 40n, Write 30 + 5n, List 5 + 2n. `budget.perWindow = 60` sits at the Read floor, so it is conservative |
+| A2 | `GetSortedAsync` has its own, much smaller budget than ordinary reads | The poll interval was chosen to sit far under it | **Confirmed.** It draws on List: 5 + 2n per server. One call per 60–120s is far under it |
+| A3 | There is a per-key write cooldown (order of seconds) | We never write the same key twice quickly, so this should be unreachable — but confirm the figure | **Corrected.** The docs now give per-key throughput, not a cooldown: 4 MB/min write, 25 MB/min read. Unreachable with ~100 B entries |
+| A4 | There are universe-wide throughput ceilings (bytes/min, requests/min) distinct from per-server budgets | **This is the one the analysis below concludes you hit first** | **Confirmed, but not the first limit.** Experience-wide ordered-store limits are List 300 + 2 × CCU and Write 300 + 20 × CCU per minute. At 20,000 CCU, §3's ~2,200 `GetSortedAsync`/min is ~5% of the 40,300 List allowance. The first limit is MemoryStore (§9, A7) |
+| A5 | `UserService:GetUserInfosByUserIdsAsync` has its own rate limit, separate from DataStore | The name cache is sized against a guess | **Partly confirmed.** The method's reference page gives no figure. A secondary source says 250 results per minute, with HTTP 429 above that. A fresh server resolving the all-time, daily and weekly boards asks for up to 300 ids in its first minute, and a failure caches placeholders for 30 minutes (half `nameCacheTtlSeconds`). **Mitigated 2026-10-04:** lookups are capped at `nameLookupsPerMinute` (200) per server, shared by all boards, top ranks first; the rest wait for a later refresh. A failed call retries after `nameFailureRetrySeconds` (120s) and keeps any name already known. Period boards now take names from the shared copy (§9). Still assumes the limit is per server |
+
+Checked against create.roblox.com on 2026-10-04: *Data store error
+codes and limits*, *Memory stores* and its *best practices* and
+*sorted map* guides, and the `MarketplaceService` and `UserService`
+references.
 
 `GameConfig.leaderboard.budget` is deliberately config, so a corrected
 figure is an edit rather than a code change. And the service consults
@@ -212,10 +217,14 @@ a different map). Measuring from now means every entry in a period
 expires at roughly the same wall-clock moment regardless of when it was
 written.
 
-The grace margin (1h) exists so the rollover can still read the finished
-period's final standings. It is deliberately small: the **snapshot** is
-the durable copy, so the live map has no reason to outlive it by more
-than one read.
+After the period ends, an entry lives **one full extra period** plus a
+1h grace margin. Until 2026-10-04 it was the 1h margin alone, which was
+only enough for a server that was running at the boundary to read the
+finished standings. The extra period is what the boot-time catch-up
+(§8) reads: a server that boots any time in the next period can still
+snapshot and pay the one before. The cost is that MemoryStore holds up
+to two periods of entries at once (one entry per player who scored),
+which is small next to the quota.
 
 ## 8. Rollover, and the double-award guard
 
@@ -229,6 +238,19 @@ booting at 3am hasn't witnessed midnight, and treating `nil` as a
 rollover would have every new server re-processing a period that ended
 hours ago.
 
+**The catch-up (added 2026-10-04, next-stages step 13).** The rollover
+only fires on a server that was running at the boundary. At low player
+counts there may be none, and then nobody paid the period, silently. So
+once per boot, after its first random delay, each server looks at the
+period **before** the one it booted into. It `GetAsync`s that period's
+snapshot. If there is none, it runs the ordinary rollover for that
+period. If the read fails, it skips and leaves it to the next boot. Two
+servers booting together both see "no snapshot". The guard below then
+picks one of them, as at midnight. This costs one snapshot read per kind
+per server boot, plus one rollover per period that nobody witnessed.
+Only one period back is covered. With no server at all for a whole
+period, the older standings have expired and are not paid.
+
 **The guard against two servers awarding the same period** is the
 snapshot write itself, not a separate lock:
 
@@ -238,7 +260,10 @@ snapshot write itself, not a separate lock:
 3. `UpdateAsync` returns what the transform returned. A server compares
    it against what it tried to write — if they match, it created the
    snapshot; if not, someone else did.
-4. **Only the creator fires the reward hook.**
+4. **Only the creator fires the reward hook.** LeaderboardPayoutService
+   receives it and queues each paid rank on the winner's profile with
+   `ProfileStore:MessageAsync` (two `UpdateAsync` calls on the player
+   store per payout, so at most 20 per daily or weekly rollover).
 
 There is no window, because the read and the write are one operation. A
 separate MemoryStore lock would also work, but it would be a second
@@ -250,17 +275,53 @@ protects.
 
 | # | Assumption | Status |
 |---|---|---|
-| A6 | MemoryStore has a per-server request budget *and* a universe-wide quota scaling with player count | **VERIFY** |
-| A7 | SortedMap `GetRangeAsync` is charged as a single request regardless of `count` | **VERIFY** — if it is charged per item, a 100-row read costs 100× what this design assumes |
-| A8 | MemoryStore item size and per-map item-count ceilings are comfortably above 100 entries | **VERIFY** |
-| A9 | `UpdateAsync` on a SortedMap is atomic under contention across servers | **VERIFY** — the write-on-improvement guarantee depends on it |
+| A6 | MemoryStore has a per-server request budget *and* a universe-wide quota scaling with player count | **Corrected 2026-10-04.** No per-server budget. The quota is experience-wide, 1000 + 120 × CCU request units per minute. There is also a per-partition limit, and **every sorted map sits on a single partition** (Roblox estimates ~30,000 units/min per partition; a safeguard, not a published quota) |
+| A7 | SortedMap `GetRangeAsync` is charged as a single request regardless of `count` | **Wrong.** It costs one request unit per item returned (1 if empty). A full 100-row read is 100 units |
+| A8 | MemoryStore item size and per-map item-count ceilings are comfortably above 100 entries | **Confirmed.** 32 KB per value, 128-character keys and sort keys, 1,000,000 items and 100 MB per map. No maximum `count` for `GetRangeAsync` is documented |
+| A9 | `UpdateAsync` on a SortedMap is atomic under contention across servers | **Confirmed.** On contention it retries the transform until it succeeds, the transform returns nil, or a retry cap is hit (then a conflict error) |
 
-**A7 is the one that would change the design.** The period boards add two
-`GetRangeAsync` calls per refresh cycle per server. At 20,000 CCU that is
-~74 reads/sec universe-wide on top of P4-3's ~37 — still small *if* a
-range read is one request, and a different conversation entirely if it
-isn't.
+**A7 was wrong, and it changes the design.** Every server, Hub and
+Match alike, reads both period boards every 60–120s
+(`startPolling` is unconditional). That is 2 × 100 units per ~90s,
+about 67 units/min per board per server. Each board is one sorted map,
+so one partition:
 
-The mitigation if A6 or A7 bite is the same one §3 already recommends
-for the all-time board: elect one server per period to refresh and
-publish, and have everyone else read the published copy.
+- **Per-partition: the first limit.** ~30,000 / 67 ≈ 450 servers per
+  board, roughly **2,500–3,000 CCU** at 6 seats per server. Past that,
+  period-board reads get throttled.
+- **Experience quota: fine on its own.** Both boards together cost about
+  22 × CCU units/min against 1000 + 120 × CCU, ~18%. But they share it
+  with matchmaking (`matchmaking.md`), whose queue map has the same
+  single-partition problem.
+
+The fix is the one §3 already recommends for the all-time board, now
+needed before any launch past a few thousand CCU. One elected server per
+board reads the sorted map and publishes the rendered top 100 as one
+value, sharded across a few hash-map keys (the best-practices guide's
+remedy for a hot key). Everyone else reads one shard: 1 unit, not 100.
+
+**Built 2026-10-04** (`refreshPeriodBoardShared` in `LeaderboardService`,
+pure parts in `LeaderboardLogic`, tuning in
+`GameConfig.leaderboard.periodShare`). Each poll reads one random shard
+of the hash map `PeriodBoardsPublished_v1`: 1 unit. A copy older than
+`republishAfterSeconds` (60s), or a missing one, sends the reader for
+the publish lock, a hash-map `UpdateAsync` that only the first server
+since the lock expired wins (`lockSeconds`, 30s). The winner reads the
+sorted map (100 units), resolves the names and writes the board into
+all 4 shards. Readers get names from the copy, so they make no name
+lookups for period boards (helps A5). Rollover and catch-up still read
+the sorted map directly, because they need the final standings.
+
+New cost per board: about 100 units/min on the sorted map's partition
+in total, however many servers there are, plus 1 unit per server per
+poll spread over 4 hash keys. At 20,000 CCU that is ~555 reads/min per
+shard key, far under the ~30,000/min partition guide. What players see:
+a period board can be up to ~3 minutes old (republish age plus one poll
+interval), under `staleAfterSeconds`. A server that boots when no copy
+exists and loses the lock shows "Loading" until its next poll. That
+only happens at a period's start or after every server has been gone
+for 15 minutes.
+
+Since built: the matchmaking queue summary (`matchmaking.md`). Still open: the
+all-time board's OrderedDataStore reads (§3, not needed until well past
+launch scale). A5 is mitigated (§0).

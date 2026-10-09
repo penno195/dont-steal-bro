@@ -26,6 +26,7 @@ local RunService = game:GetService("RunService")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local ResultsLogic = require(script.Parent.Parent.ResultsLogic)
+local PayoutLogic = require(script.Parent.Parent.PayoutLogic)
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
 local MenuShell = require(script.Parent.MenuShell)
@@ -50,15 +51,16 @@ export type Store = {
 	tally: () -> ResultsLogic.RaceTally,
 	close: () -> (),
 	now: (() -> number)?, -- clock override for a preview; default os.clock
+	nameOf: PayoutLogic.NameOf?, -- a drop's display name, from config
 }
 
 type CardStyle = { icon: string, color: string }
 
 local STREAK_STYLE: { [string]: CardStyle } = {
 	Up = { icon = "flame", color = "success" },
-	Held = { icon = "lock", color = "warning" },
 	Died = { icon = "down", color = "danger" },
 	None = { icon = "info", color = "inkMuted" },
+	Practice = { icon = "shield", color = "inkMuted" },
 }
 
 local LABELS: { [string]: string } = {
@@ -66,15 +68,17 @@ local LABELS: { [string]: string } = {
 	Tasks = "Tasks completed",
 	PowerUps = "Power-ups used",
 	Finale = "Decision Studio",
-	Rewards = "Bounty",
+	Rewards = "Coins",
 }
 
+-- The Drop card has neither: its label is the rarity and its icon the
+-- item's own (PayoutLogic.dropLabel / dropIcon).
 local ICONS: { [string]: string } = {
 	Placement = "trophy",
 	Tasks = "check",
 	PowerUps = "bolt",
 	Finale = "star",
-	Rewards = "gem",
+	Rewards = "coin",
 }
 
 -- Slides up and fades in when `shown` turns true; just appears under
@@ -97,8 +101,16 @@ local function reveal(shown: () -> boolean, height: number, order: number, child
 				return UDim2.fromOffset(0, t() * SLIDE)
 			end,
 			GroupTransparency = t,
-			BackgroundColor3 = Theme.color.surface,
+			-- Flat, not Base.stage: a UIGradient on a CanvasGroup tints
+			-- everything in it, text included. The stage colour and gold rim.
+			BackgroundColor3 = Theme.fill.panel.top,
 			Base.corner(Theme.radius.md),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.fill.panel.rim,
+				Thickness = 2,
+			}),
 			create("UIPadding")({
 				PaddingLeft = UDim.new(0, Theme.spacing.md),
 				PaddingRight = UDim.new(0, Theme.spacing.md),
@@ -108,8 +120,16 @@ local function reveal(shown: () -> boolean, height: number, order: number, child
 	}) :: Frame
 end
 
-local function statCard(id: string, value: () -> string, shown: () -> boolean, order: number): Frame
-	local icon = C.Icons.view(ICONS[id], 28, Theme.color.inkMuted)
+-- `iconKey` and `label` override ICONS/LABELS, for the Drop card.
+local function statCard(
+	id: string,
+	value: () -> string,
+	shown: () -> boolean,
+	order: number,
+	iconKey: string?,
+	label: string?
+): Frame
+	local icon = C.Icons.view(iconKey or ICONS[id], 28, Theme.color.inkMuted)
 	icon.AnchorPoint = Vector2.new(0, 0.5)
 	icon.Position = UDim2.fromScale(0, 0.5)
 	return reveal(shown, CARD_H, order, {
@@ -118,7 +138,7 @@ local function statCard(id: string, value: () -> string, shown: () -> boolean, o
 			Name = "Label",
 			Position = UDim2.fromOffset(40, Theme.spacing.sm),
 			Size = UDim2.new(1, -40, 0, Theme.type.caption.size + Theme.spacing.xs),
-			Text = LABELS[id],
+			Text = label or LABELS[id],
 			TextColor3 = Theme.color.inkMuted,
 			TextXAlignment = Enum.TextXAlignment.Left,
 		}),
@@ -153,12 +173,10 @@ local function streakCard(store: Store, timedOut: () -> boolean, shown: () -> bo
 	local note = derive(function(): string
 		local c = change()
 		if c then
-			if c.note then
-				return c.note
-			end
 			return if c.newBest
 				then "Your best ever."
 				elseif c.kind == "Died" then "Back to zero. Next round starts a new one."
+				elseif c.kind == "Practice" then "Private server: no streak, coins or stats change here."
 				else ""
 		end
 		return if timedOut() then "It's saved on the server. It'll show next time you open your profile." else ""
@@ -273,20 +291,29 @@ local function body(store: Store, height: () -> number): { Instance }
 		local recap = store.recap()
 		return (if recap then ResultsLogic.finaleLine(recap.reason) else nil) or ""
 	end)
-	local reward = derive(function(): string
+	-- The win's payout (rewards-roadmap.md step 3), worded by the same
+	-- PayoutLogic as the Decision Studio's reveal.
+	local payout = derive(function(): PayoutLogic.Payout?
 		local recap = store.recap()
-		local bounty = recap and recap.bounty
-		return if bounty then string.format("Tier %d, carried into your next finale", bounty.streakTier) else ""
+		return if recap then PayoutLogic.parse(recap.reward) else nil
+	end)
+	local reward = derive(function(): string
+		local p = payout()
+		return if p then PayoutLogic.coinsLine(p) else ""
+	end)
+	local drops = derive(function(): { PayoutLogic.Drop }
+		local p = payout()
+		return if p and p.drop then { p.drop } else {}
 	end)
 
 	local cards = create("ScrollingFrame")({
 		Name = "Recap",
 		Size = function()
-			return UDim2.fromOffset(MenuShell.INNER, height())
+			return UDim2.fromOffset(MenuShell.INNER + MenuShell.SCROLLBAR, height())
 		end,
 		BackgroundTransparency = 1,
 		BorderSizePixel = 0,
-		ScrollBarThickness = 4,
+		ScrollBarThickness = MenuShell.SCROLLBAR,
 		ScrollingDirection = Enum.ScrollingDirection.Y,
 		AutomaticCanvasSize = Enum.AutomaticSize.Y,
 		CanvasSize = UDim2.new(),
@@ -307,12 +334,21 @@ local function body(store: Store, height: () -> number): { Instance }
 		end, isShown("PowerUps"), 3),
 		statCard("Finale", finale, isShown("Finale"), 4),
 		statCard("Rewards", reward, isShown("Rewards"), 5),
+		-- Built once per drop, since its icon is a key (Icons.view).
+		indexes(drops, function(drop: () -> PayoutLogic.Drop)
+			local d = drop()
+			local key = PayoutLogic.dropIcon(d)
+			return statCard("Drop", function()
+				local p = payout()
+				return (if p then PayoutLogic.dropLine(p, store.nameOf) else nil) or ""
+			end, isShown("Drop"), 6, if C.Icons.has(key) then key else "gem", PayoutLogic.dropLabel(d))
+		end) :: any,
 		indexes(
 			derive(function()
 				return if streakDue() then { true } else {}
 			end),
 			function()
-				return streakCard(store, timedOut, isShown("Streak"), 6)
+				return streakCard(store, timedOut, isShown("Streak"), 7)
 			end
 		) :: any,
 	}) :: ScrollingFrame

@@ -389,3 +389,171 @@ TestRunner.describe("MatchmakingLogic.backoffSeconds", function()
 		TestRunner.expect(MatchmakingLogic.backoffSeconds(10, 2, 30)):toBe(30)
 	end)
 end)
+
+TestRunner.describe("MatchmakingLogic queue summary (matchmaking.md, partition ceiling)", function()
+	local function mixedPage(): { Entry }
+		local page = { entry(1, nil, "jobA"), entry(2, nil, "jobB"), entry(3, nil, "jobA") }
+		page[2] = MatchmakingLogic.claim(page[2], "group-1") :: Entry
+		return page
+	end
+
+	TestRunner.it("round-trips owners, states, tokens and enqueue times", function()
+		local page = mixedPage()
+		local decoded = MatchmakingLogic.decodeSummary(MatchmakingLogic.encodeSummary(page, true, NOW))
+		TestRunner.expect(decoded ~= nil):toBe(true)
+		local summary = decoded :: MatchmakingLogic.Summary
+		TestRunner.expect(summary.publishedAt):toBe(NOW)
+		TestRunner.expect(summary.pageWasFull):toBe(true)
+		TestRunner.expect(#summary.entries):toBe(3)
+		for i, original in page do
+			local got = summary.entries[i]
+			TestRunner.expect(got.userId):toBe(original.userId)
+			TestRunner.expect(got.jobId):toBe(original.jobId)
+			TestRunner.expect(got.enqueuedAt):toBe(original.enqueuedAt)
+			TestRunner.expect(got.state):toBe(original.state)
+			TestRunner.expect(got.groupId):toBe(original.groupId)
+		end
+	end)
+
+	TestRunner.it("lists each owner server once", function()
+		local raw = MatchmakingLogic.encodeSummary(mixedPage(), false, NOW)
+		TestRunner.expect(#raw.jobs):toBe(2)
+	end)
+
+	TestRunner.it("gives the same positions and waits as the page it came from", function()
+		local page = queue(9)
+		local summary =
+			MatchmakingLogic.decodeSummary(MatchmakingLogic.encodeSummary(page, false, NOW)) :: MatchmakingLogic.Summary
+		local fromPage = MatchmakingLogic.queueStatus(page, 8, NOW, CONFIG, false)
+		local fromSummary = MatchmakingLogic.queueStatus(summary.entries, 8, NOW, CONFIG, summary.pageWasFull)
+		TestRunner.expect(fromSummary.position):toBe(fromPage.position)
+		TestRunner.expect(fromSummary.queueSize):toBe(fromPage.queueSize)
+		TestRunner.expect(fromSummary.estimatedWaitSeconds):toBe(fromPage.estimatedWaitSeconds)
+	end)
+
+	TestRunner.it("refuses the whole summary over one bad row", function()
+		local raw = MatchmakingLogic.encodeSummary(mixedPage(), false, NOW)
+		raw.rows[2][5] = nil -- a Claimed row without its token
+		TestRunner.expect(MatchmakingLogic.decodeSummary(raw)):toBe(nil)
+		local badJob = MatchmakingLogic.encodeSummary(mixedPage(), false, NOW)
+		badJob.rows[1][2] = 9
+		TestRunner.expect(MatchmakingLogic.decodeSummary(badJob)):toBe(nil)
+	end)
+
+	TestRunner.it("refuses missing and foreign-version values", function()
+		TestRunner.expect(MatchmakingLogic.decodeSummary(nil)):toBe(nil)
+		TestRunner.expect(MatchmakingLogic.decodeSummary({ v = 2, at = NOW, full = false, jobs = {}, rows = {} }))
+			:toBe(nil)
+		TestRunner.expect(MatchmakingLogic.decodeSummary({ v = 1, at = NOW, jobs = {}, rows = {} })):toBe(nil)
+	end)
+
+	TestRunner.it("goes stale after staleSeconds, and not before", function()
+		TestRunner.expect(MatchmakingLogic.isSummaryFresh(NOW, NOW + 9, 10)):toBe(true)
+		TestRunner.expect(MatchmakingLogic.isSummaryFresh(NOW, NOW + 10, 10)):toBe(false)
+		TestRunner.expect(MatchmakingLogic.isSummaryFresh(NOW + 5, NOW, 10)):toBe(true)
+	end)
+
+	TestRunner.it("marks this tick's claims, leaving everyone else and non-Waiting entries alone", function()
+		local page = mixedPage()
+		local marked = MatchmakingLogic.markClaimed(page, { 1, 2 }, "group-2")
+		TestRunner.expect(marked[1].state):toBe("Claimed")
+		TestRunner.expect(marked[1].groupId):toBe("group-2")
+		TestRunner.expect(marked[2].groupId):toBe("group-1") -- already claimed by another group
+		TestRunner.expect(marked[3].state):toBe("Waiting")
+		TestRunner.expect(page[1].state):toBe("Waiting") -- the input is not mutated
+	end)
+end)
+
+TestRunner.describe("MatchmakingLogic practice groups", function()
+	TestRunner.it("waits while friends on the server are still to queue", function()
+		TestRunner.expect(MatchmakingLogic.selectPracticeGroup(queue(2), NOW, 4, CONFIG)):toBe(nil)
+	end)
+
+	TestRunner.it("forms at once when everyone on the server has queued, NPCs fill the rest", function()
+		local group = MatchmakingLogic.selectPracticeGroup(queue(3), NOW, 3, CONFIG)
+		TestRunner.expect(group and #group.members):toBe(3)
+		TestRunner.expect(group and group.npcSlots):toBe(3)
+		TestRunner.expect(group and group.partial):toBe(true)
+	end)
+
+	TestRunner.it("forms after the partial-group timer even if someone never queues", function()
+		local group = MatchmakingLogic.selectPracticeGroup(queue(2, 61), NOW, 5, CONFIG)
+		TestRunner.expect(group and #group.members):toBe(2)
+	end)
+
+	TestRunner.it("takes the oldest six when more are waiting", function()
+		local group = MatchmakingLogic.selectPracticeGroup(queue(8), NOW, 10, CONFIG)
+		TestRunner.expect(group and #group.members):toBe(6)
+		TestRunner.expect(group and group.npcSlots):toBe(0)
+		TestRunner.expect(group and group.members[1].userId):toBe(1)
+	end)
+
+	TestRunner.it("ignores the rematch cooldown: friends chose each other", function()
+		local entries = queue(2)
+		entries[1].avoid = { { u = 2, t = NOW + 600 } }
+		local group = MatchmakingLogic.selectPracticeGroup(entries, NOW, 2, CONFIG)
+		TestRunner.expect(group and #group.members):toBe(2)
+	end)
+
+	TestRunner.it("forms nothing from an empty queue", function()
+		TestRunner.expect(MatchmakingLogic.selectPracticeGroup({}, NOW, 0, CONFIG)):toBe(nil)
+	end)
+
+	TestRunner.it("round-trips the practice flag and return code; ranked records carry neither", function()
+		local practice = MatchmakingLogic.newGroupRecord("G", queue(2), 4, NOW, "jobA", nil, nil, {
+			returnAccessCode = "lobby-code",
+		})
+		local decoded = MatchmakingLogic.decodeGroup(practice) :: MatchmakingLogic.GroupRecord
+		TestRunner.expect(decoded.practice):toBe(true)
+		TestRunner.expect(decoded.returnAccessCode):toBe("lobby-code")
+
+		local ranked =
+			MatchmakingLogic.decodeGroup(MatchmakingLogic.newGroupRecord("H", queue(2), 4, NOW, "jobA")) :: MatchmakingLogic.GroupRecord
+		TestRunner.expect(ranked.practice):toBe(nil)
+		TestRunner.expect(ranked.returnAccessCode):toBe(nil)
+
+		local forged = table.clone(practice) :: any
+		forged.practice = "yes"
+		TestRunner.expect((MatchmakingLogic.decodeGroup(forged) :: MatchmakingLogic.GroupRecord).practice):toBe(nil)
+	end)
+end)
+
+TestRunner.describe("MatchmakingLogic practice parties", function()
+	local function unitOf(parties: { [number]: string }): (number) -> string
+		return function(userId: number): string
+			return parties[userId] or tostring(userId)
+		end
+	end
+
+	TestRunner.it("never splits a party across matches", function()
+		-- 1-4 solo, then a party of 3 (5, 6, 7): only 2 seats are left
+		-- after the solos, so the party waits and doesn't take them.
+		local entries = queue(7)
+		local group =
+			MatchmakingLogic.selectPracticeGroup(entries, NOW, 20, CONFIG, unitOf({ [5] = "p", [6] = "p", [7] = "p" }))
+		TestRunner.expect(group):toBe(nil) -- 4 seated, not full, nobody's waited out yet
+
+		local later = MatchmakingLogic.selectPracticeGroup(
+			queue(7, 61),
+			NOW,
+			20,
+			CONFIG,
+			unitOf({ [5] = "p", [6] = "p", [7] = "p" })
+		)
+		TestRunner.expect(later and #later.members):toBe(4)
+		TestRunner.expect(later and later.npcSlots):toBe(2)
+	end)
+
+	TestRunner.it("seats a party ahead of later solos when it's older", function()
+		local group = MatchmakingLogic.selectPracticeGroup(
+			queue(8),
+			NOW,
+			8,
+			CONFIG,
+			unitOf({ [1] = "p", [2] = "p", [3] = "p" })
+		) :: MatchmakingLogic.FormedGroup
+		TestRunner.expect(#group.members):toBe(6)
+		TestRunner.expect(group.members[1].userId):toBe(1)
+		TestRunner.expect(group.members[3].userId):toBe(3)
+	end)
+end)

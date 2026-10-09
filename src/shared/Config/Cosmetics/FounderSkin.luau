@@ -1,5 +1,5 @@
 --!strict
--- A full outfit swap: the "Skin" half of FounderPass.luau's grant.
+-- A full outfit swap, on Season 1's premium track (Seasons/Season1.luau).
 -- Cosmetic only - CosmeticService applies it as a Shirt/Pants pair, which
 -- is the cheapest possible reskin (two Instances, no extra meshes) and
 -- fits the mobile instance-count budget trivially.
@@ -14,9 +14,10 @@ local FounderSkin: Validate.CosmeticDef = {
 	description = "The outfit worn by the founders. Cosmetic only.",
 	rarity = "Rare",
 	sortOrder = 10,
-	enabled = false, -- PLACEHOLDER: no Roblox asset id yet, see below
-	shirtAssetId = 0,
-	pantsAssetId = 0,
+	enabled = true,
+	shirtAssetId = 99470555666548,
+	pantsAssetId = 129608190082628,
+	previewIconAssetId = 100937989803769,
 }
 
 return FounderSkin

@@ -277,6 +277,21 @@ function HudLogic.bearing(lookX: number, lookZ: number, toX: number, toZ: number
 	return if degrees <= -180 then 180 else degrees
 end
 
+-- Which way up the objective is, from `rise` (its height above you, in
+-- studs). Within `band` either way it's on your floor; past that, it's
+-- a floor up or down. The compass alone can't say so, because it only
+-- points across the ground.
+export type Level = "above" | "level" | "below"
+
+function HudLogic.level(rise: number, band: number): Level
+	if rise > band then
+		return "above"
+	elseif rise < -band then
+		return "below"
+	end
+	return "level"
+end
+
 -- POWER-UP SLOTS -------------------------------------------------------
 
 -- The mobile slot gesture (powerups.md "Inventory and aiming"), from a

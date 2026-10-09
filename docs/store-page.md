@@ -16,7 +16,7 @@ has at launch:
 - **Robux** can buy power-ups, but every one of them can also be earned
   for free, and loadouts are capped at 3 (design decision 8). The copy
   must never suggest that paying wins, and it says so outright.
-- **Titles** go from *Got One* (streak 1) to *Touch Grass* (streak 120) and
+- **Titles** go from *Got One* (streak 1) to *Touch Grass* (streak 50) and
   are never taken away. Streaks reset on any loss (decision 7).
 
 Numbers marked **verify** are platform facts I couldn't confirm from an
