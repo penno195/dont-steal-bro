@@ -197,6 +197,40 @@ function SeasonTrackLogic.columns(view: View): { Column }
 	return columns
 end
 
+-- Until the items have pictures (next-stages.md 1a), a reward shows an
+-- icon for its grant's kind (a Components/Icons key).
+local KIND_ICON: { [string]: string } = {
+	Currency = "coin",
+	PowerUpStock = "bolt",
+	Cosmetic = "gem",
+	Title = "trophy",
+}
+
+function SeasonTrackLogic.iconFor(kind: string): string
+	return KIND_ICON[kind] or "star"
+end
+
+export type Reward = { premium: boolean, grant: Grant }
+
+-- What a claim just paid, for the pop-up: the items whose list position
+-- moved past `before`'s paid counts in `after`, premium first. Both
+-- states must be the same season - a new month starts its counts over,
+-- and only a claim moves them while a season is live (an ended season
+-- grants its leftovers on join, when no season state is sent).
+function SeasonTrackLogic.claimedBetween(def: SeasonDef, before: SeasonState?, after: SeasonState?): { Reward }
+	local rewards: { Reward } = {}
+	if before == nil or after == nil or before.id ~= after.id or after.id ~= def.id then
+		return rewards
+	end
+	for index = before.premiumPaid + 1, math.min(after.premiumPaid, #def.premium) do
+		table.insert(rewards, { premium = true, grant = def.premium[index].grant })
+	end
+	for index = before.freePaid + 1, math.min(after.freePaid, #def.free) do
+		table.insert(rewards, { premium = false, grant = def.free[index].grant })
+	end
+	return rewards
+end
+
 -- The column the strip opens scrolled to: the first tier with something
 -- to claim, else the first still holding an item not yet claimed, else
 -- the last.

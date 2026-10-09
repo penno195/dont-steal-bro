@@ -57,6 +57,7 @@ local DropNames = require(script.Parent.Parent.UI.DropNames)
 local ResultsScreen = require(script.Parent.Parent.UI.Screens.Results)
 local SettingsScreen = require(script.Parent.Parent.UI.Screens.Settings)
 local StoreScreen = require(script.Parent.Parent.UI.Screens.Store)
+local ClaimPopup = require(script.Parent.Parent.UI.Screens.ClaimPopup)
 local DecisionStudioController = require(script.Parent.DecisionStudioController)
 local SettingsController = require(script.Parent.SettingsController)
 local UIScaleController = require(script.Parent.UIScaleController)
@@ -493,6 +494,27 @@ function MenuController:init()
 
 	-- Store.
 	Net.onClientEvent("StoreState", function(payload: any)
+		-- A season-pass claim lands as higher paid counts: celebrate what
+		-- it paid with the pop-up and its sound.
+		local before = storeState()
+		local beforeSeason = if before then before.season else nil
+		local afterSeason = if type(payload) == "table" then payload.season else nil
+		local def = if type(afterSeason) == "table" then seasonDefs[afterSeason.id] else nil
+		if def ~= nil then
+			local rewards = SeasonTrackLogic.claimedBetween(def, beforeSeason :: any, afterSeason)
+			if #rewards > 0 then
+				local shown: { ClaimPopup.Reward } = {}
+				for _, reward in rewards do
+					table.insert(shown, {
+						premium = reward.premium,
+						text = grantText(reward.grant :: any),
+						kind = reward.grant.kind,
+					})
+				end
+				ClaimPopup.open(shown)
+				Loader.get("AudioController").play("SeasonClaim")
+			end
+		end
 		storeState(payload)
 		stepFlow({ type = "State", state = payload })
 	end)

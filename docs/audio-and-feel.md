@@ -32,6 +32,7 @@ that arc:
 |---|---|---|---|---|
 | HubAmbience | no round / `WaitingForPlayers` | Music bed | — | — |
 | QueueReady | `QueueState` enters `MatchFound` | SFX | 80 | 0.5 |
+| SeasonClaim | season-pass rewards claimed (the claim pop-up opens) | SFX | 80 | 0.4 |
 | RaceBed | `Loading`–`Qualified` | Music bed (map's `musicTrackId`, else fallback) | — | — |
 | RaceTension | stem over RaceBed, 0 → 1 between 60 s and 20 s left | Music | — | — |
 | TimerTick | once a second in the last 10 s | SFX | 60 | — |
@@ -203,6 +204,7 @@ swap one, change its `assetId` in `AudioLogic.CUES`.
 | RaceTension | 9043365842 APM "HEARTBEAT 02 96BPM": no key, so it sits on any bed | 9043366464 APM "TICK TOCK 06 120BPM" (would compete with TimerTick) |
 | StudioBed | 1843943906 APM "Tension Repeat Drones 40" | 9112795463 PSE "Hollow Rumble 1" (drone loop) |
 | QueueReady | 15675043410 Roblox_UI_Tonal_Stinger | 1840084286 APM "Musical Doorbell (d)" |
+| SeasonClaim | 1846251701 APM "Fortune Fun 'Win'" (Sonoton gameshow, 4 s) | 1846251729 APM "Fortune Fun Logo" (3 s) |
 | TimerTick | 9114212929 PSE "Dvd Player Button 13" (hard click) | 15675032796 Roblox_UI_Small_Click |
 | TaskStart | 15675059323 Roblox_UI_Bright_Click | — |
 | TaskSuccess | 9048770070 APM "Seven Leaf Clover - Hit3" (mallets) | 15675016548 Roblox_UI_Piano_Hello |

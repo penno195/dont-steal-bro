@@ -515,15 +515,6 @@ local INDICATOR_H = 6
 local INDICATOR_ROW = INDICATOR_H + 2 * Theme.spacing.xs
 local ARROW = 40
 
--- Until the items have pictures (next-stages.md 1a), a tile shows its
--- grant's kind.
-local KIND_ICON: { [string]: string } = {
-	Currency = "coin",
-	PowerUpStock = "bolt",
-	Cosmetic = "gem",
-	Title = "trophy",
-}
-
 -- Stands in for an empty slot (a tier only the other row pays at), so a
 -- hidden tile's bindings never read nil.
 local EMPTY_ROW: SeasonTrackLogic.Row =
@@ -629,7 +620,7 @@ local function tile(
 		Claimed = withRim(base, Theme.color.success),
 	}
 	local itemIcon = derive(function()
-		return KIND_ICON[row().kind] or "star"
+		return SeasonTrackLogic.iconFor(row().kind)
 	end)
 	local cornerIcon = derive(function()
 		return status().icon or "none"

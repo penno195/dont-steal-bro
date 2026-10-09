@@ -15,7 +15,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
+local Loader = require(ReplicatedStorage.Shared.Loader)
 local Season1 = require(ReplicatedStorage.Shared.Config.Seasons.Season1)
+local ClaimPopup = require(script.Parent.ClaimPopup)
 local SeasonPass = require(ReplicatedStorage.Shared.Config.Store.SeasonPass)
 local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
 local StoreScreenLogic = require(script.Parent.Parent.StoreScreenLogic)
@@ -112,6 +114,23 @@ function SeasonPassPreview.mount(controller: any): () -> ()
 		end
 		local after = table.clone(s)
 		after.season = season
+		-- The pop-up and its sound, as MenuController shows them for a
+		-- real claim.
+		local rewards = SeasonTrackLogic.claimedBetween(def, s.season :: any, season)
+		if #rewards > 0 then
+			local shown: { ClaimPopup.Reward } = {}
+			for _, reward in rewards do
+				table.insert(shown, {
+					premium = reward.premium,
+					text = grantText(reward.grant :: any),
+					kind = reward.grant.kind,
+				})
+			end
+			ClaimPopup.open(shown)
+			-- Debug screen: reaches the controller directly, which shipping
+			-- UI modules don't.
+			Loader.get("AudioController").play("SeasonClaim")
+		end
 		state(after)
 	end
 

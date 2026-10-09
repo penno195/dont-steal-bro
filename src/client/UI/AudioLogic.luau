@@ -120,6 +120,19 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 1,
 		duck = { level = 0.5, attack = 0.05, hold = 0.6, release = 0.4 },
 	}),
+	-- Season-pass rewards claimed (the claim pop-up): a game-show "win"
+	-- flourish, to match the Game Show art direction. Shorter and lighter
+	-- than the round's Win stinger, which it must never be mistaken for.
+	SeasonClaim = cue({
+		assetId = "rbxassetid://1846251701", -- APM "Fortune Fun 'Win'" (Sonoton, 4 s)
+		category = "SFX",
+		volume = 0.8,
+		looped = false,
+		spatial = false,
+		priority = 80,
+		cooldown = 0.5,
+		duck = { level = 0.4, attack = 0.05, hold = 1.5, release = 0.8 },
+	}),
 
 	-- Race.
 	TimerTick = cue({
