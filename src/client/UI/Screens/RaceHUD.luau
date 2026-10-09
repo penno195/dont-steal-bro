@@ -152,7 +152,14 @@ local PILL = 72
 local GAP = Theme.spacing.sm
 local TOP_WIDTH = 2 * PILL + RING + 2 * GAP
 local TOP_MARGIN = 4 -- px from the top bar (or the screen top, when lifted into the bar)
-local NAV = Theme.touch.minTargetPoints -- the Navigation toggle; a spacer of the same width balances it
+-- The Navigation tab, docked to the compass's right edge: NAV wide, a
+-- touch shorter than the card so it reads as a drawer pulled out of it.
+-- A spacer balances it on the left.
+local NAV = Theme.touch.minTargetPoints
+local NAV_INSET = 6 -- px shorter than the card, top and bottom
+local NAV_SEAM = 2 -- px the tab runs under the card's rim, so the rims join
+local NAV_SOCKET = 14 -- the status light's housing
+local NAV_LIGHT = 8
 local CHIP = 36
 local TASK_WIDTH = 150
 local TASK_ROW = 18
@@ -480,7 +487,7 @@ local function taskRow(entry: () -> TaskRow, index: number): Frame
 				return if done() then Theme.color.success else Theme.color.ink
 			end
 		),
-		Base.text("caption", {
+		Base.text("label", {
 			Name = "Title",
 			LayoutOrder = 2,
 			Size = UDim2.new(1, -(TASK_ROW + Theme.spacing.xs), 1, 0),
@@ -551,7 +558,7 @@ local function powerUpSlot(
 				BorderStrokePosition = Enum.BorderStrokePosition.Inner,
 				Color = Theme.color.warning,
 			}),
-			Base.text("caption", {
+			Base.text("label", {
 				Name = "Label",
 				Size = UDim2.fromScale(1, 1),
 				Text = "PRACTICE",
@@ -619,7 +626,7 @@ local function powerUpSlot(
 		}),
 		icon,
 		practiceTag,
-		Base.text("caption", {
+		Base.text("label", {
 			Name = "Name",
 			AnchorPoint = Vector2.new(0.5, 1),
 			Position = UDim2.new(0.5, 0, 1, -Theme.spacing.xxs),
@@ -631,7 +638,7 @@ local function powerUpSlot(
 				return slot().name or ""
 			end,
 		}),
-		Base.text("caption", {
+		Base.text("label", {
 			Name = "Number",
 			Position = UDim2.fromOffset(Theme.spacing.xxs, 0),
 			Size = UDim2.fromOffset(SLOT_LABEL, SLOT_LABEL),
@@ -898,7 +905,7 @@ local function powerUpPanel(store: Store, position: () -> UDim2, slotCount: numb
 			}),
 			bin,
 		}),
-		Base.text("caption", {
+		Base.text("label", {
 			Name = "Keys",
 			LayoutOrder = 2,
 			Size = UDim2.fromOffset(width, SLOT_LABEL),
@@ -1102,60 +1109,121 @@ local RaceHUD = {}
 
 -- `controller` is UIScaleController (passed in, as the debug screens
 -- do). Returns unmount.
--- The Navigation toggle, right of the compass (design-decisions.md Q8,
--- "Navigation"). Lit green while the path line is up; dimmed while the
--- server hasn't answered. Whether a tap spends a round or opens the buy
--- sheet is the server's call, not this button's.
-local function navigationToggle(state: () -> string?, press: () -> ()): TextButton
+-- The Navigation toggle (design-decisions.md Q8, "Navigation"): a tab
+-- docked to the compass's right edge, since it toggles the compass's
+-- own path line. Its light is green while the path line is up; the tab
+-- dims while the server hasn't answered. Whether a tap spends a round or
+-- opens the buy sheet is the server's call, not this button's.
+--
+-- The card is see-through, so the tab can't simply tuck under it. It
+-- sits in a clip instead, its rounded left end cut off: a square edge
+-- that butts onto the card's rim.
+local function navigationToggle(state: () -> string?, press: () -> ()): Frame
 	local lit = function(): boolean
 		return state() == "On"
 	end
-	local button = create("TextButton")({
+	local hidden = Theme.radius.md.Offset + 2 -- the clipped end: corner and rim
+	return create("Frame")({
 		Name = "Navigation",
-		LayoutOrder = 4,
-		Size = UDim2.fromOffset(NAV, RING),
-		Text = "",
-		AutoButtonColor = false,
-		Selectable = false,
+		ZIndex = 1,
+		Position = UDim2.fromOffset(PILL - NAV_SEAM, NAV_INSET),
+		Size = UDim2.fromOffset(NAV + NAV_SEAM, RING - 2 * NAV_INSET),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
 		Visible = function()
 			return state() ~= nil
 		end,
-		BackgroundColor3 = Base.STAGE_BACKGROUND,
-		BackgroundTransparency = function()
-			return if state() == "Waiting" then 0.5 else 0.15
+		create("TextButton")({
+			Name = "Tab",
+			Position = UDim2.fromOffset(-hidden, 0),
+			Size = UDim2.new(1, hidden, 1, 0),
+			Text = "",
+			AutoButtonColor = false,
+			Selectable = false,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
+			BackgroundTransparency = function()
+				return if state() == "Waiting" then 0.5 else 0.15
+			end,
+			Base.corner(Theme.radius.md),
+			Base.stage(),
+			create("Frame")({
+				Name = "Face",
+				Position = UDim2.fromOffset(hidden + NAV_SEAM, 0),
+				Size = UDim2.new(1, -(hidden + NAV_SEAM), 1, 0),
+				BackgroundTransparency = 1,
+				create("UIListLayout")({
+					FillDirection = Enum.FillDirection.Vertical,
+					HorizontalAlignment = Enum.HorizontalAlignment.Center,
+					VerticalAlignment = Enum.VerticalAlignment.Center,
+					Padding = UDim.new(0, Theme.spacing.xxs),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+				Base.text("label", {
+					Name = "Label",
+					LayoutOrder = 1,
+					Size = UDim2.new(1, 0, 0, 14),
+					Text = "NAV",
+					TextColor3 = function(): Color3
+						return if lit() then Theme.color.ink else Theme.color.inkMuted
+					end,
+				}),
+				-- A recessed socket with the light set in it, glowing when on.
+				create("Frame")({
+					Name = "Socket",
+					LayoutOrder = 2,
+					Size = UDim2.fromOffset(NAV_SOCKET, NAV_SOCKET),
+					BackgroundColor3 = Color3.new(0, 0, 0),
+					BackgroundTransparency = 0.45,
+					Base.corner(UDim.new(0.5, 0)),
+					create("Frame")({
+						Name = "Light",
+						AnchorPoint = Vector2.new(0.5, 0.5),
+						Position = UDim2.fromScale(0.5, 0.5),
+						Size = UDim2.fromOffset(NAV_LIGHT, NAV_LIGHT),
+						BackgroundColor3 = function(): Color3
+							return if lit() then Theme.color.success else Theme.color.inkMuted
+						end,
+						BackgroundTransparency = function()
+							return if lit() then 0 else 0.7
+						end,
+						Base.corner(UDim.new(0.5, 0)),
+						create("UIStroke")({
+							Color = Theme.color.success,
+							Thickness = 3,
+							Transparency = function()
+								return if lit() then 0.55 else 1
+							end,
+						}),
+					}),
+				}),
+			}),
+			Activated = press,
+		}),
+	}) :: Frame
+end
+
+-- The compass with the Navigation tab docked to its right edge. The
+-- card sits above the tab, so its rim covers the seam.
+local function objectiveGroup(
+	objective: () -> Objective?,
+	allDone: () -> boolean,
+	navState: () -> string?,
+	navShown: () -> boolean,
+	press: () -> ()
+): Frame
+	local compass = objectiveCard(objective, allDone)
+	compass.LayoutOrder = 0
+	compass.ZIndex = 2
+	return create("Frame")({
+		Name = "ObjectiveGroup",
+		LayoutOrder = 3,
+		BackgroundTransparency = 1,
+		Size = function()
+			return UDim2.fromOffset(if navShown() then PILL + NAV else PILL, RING)
 		end,
-		Base.corner(Theme.radius.md),
-		-- The stage panel, tinted green while navigation is on.
-		create("UIGradient")({
-			Rotation = 90,
-			Color = function(): ColorSequence
-				local top, bottom = Theme.fill.panel.top, Theme.fill.panel.bottom
-				return if lit()
-					then ColorSequence.new(top:Lerp(Theme.color.success, 0.35), bottom:Lerp(Theme.color.success, 0.35))
-					else ColorSequence.new(top, bottom)
-			end,
-		}),
-		create("UIStroke")({
-			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Color = function(): Color3
-				return if lit() then Theme.color.success else Theme.fill.panel.rim
-			end,
-			Thickness = function()
-				return if lit() then 3 else 2
-			end,
-		}),
-		Base.text("label", {
-			Name = "Label",
-			Size = UDim2.fromScale(1, 1),
-			Text = "NAV",
-			TextColor3 = function(): Color3
-				return if lit() then Theme.color.success else Theme.color.ink
-			end,
-		}),
-		Activated = press,
-	}) :: TextButton
-	return button
+		compass :: Instance,
+		navigationToggle(navState, press) :: Instance,
+	}) :: Frame
 end
 
 function RaceHUD.mount(controller: any, store: Store): () -> ()
@@ -1233,8 +1301,8 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 		local function placeTop()
 			local camera = Workspace.CurrentCamera
 			local inset = GuiService.TopbarInset
-			-- The Navigation toggle and its spacer stick out either side.
-			local width = if navShown() then TOP_WIDTH + 2 * (NAV + GAP) else TOP_WIDTH
+			-- The Navigation tab and its spacer stick out either side.
+			local width = if navShown() then TOP_WIDTH + 2 * NAV else TOP_WIDTH
 			local half = width * controller.getScale() / 2
 			local centre = if camera ~= nil then camera.ViewportSize.X / 2 else 0
 			local fits = inset.Height > 0 and centre - half >= inset.Min.X and centre + half <= inset.Max.X
@@ -1269,16 +1337,16 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			row(1, RING, {
 				placementCard(standing),
 				C.CountdownRing({ secondsLeft = secondsLeft, total = store.raceSeconds, size = RING, layoutOrder = 2 }),
-				-- Balances the toggle, so the countdown stays centred.
+				-- Balances the tab, so the countdown stays centred. The tab
+				-- has no gap before it; the spacer's GAP comes off its width.
 				create("Frame")({
 					Name = "NavigationSpacer",
 					LayoutOrder = 0,
-					Size = UDim2.fromOffset(NAV, RING),
+					Size = UDim2.fromOffset(NAV - GAP, RING),
 					BackgroundTransparency = 1,
 					Visible = navShown,
 				}),
-				objectiveCard(store.objective, allDone),
-				navigationToggle(navState, store.pressNavigation or function() end),
+				objectiveGroup(store.objective, allDone, navState, navShown, store.pressNavigation or function() end),
 			}),
 			compactTasks,
 			row(3, CHIP, {

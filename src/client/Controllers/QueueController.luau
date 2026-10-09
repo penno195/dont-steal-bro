@@ -56,6 +56,8 @@ local indexes = vide.indexes
 
 local CARD_WIDTH = 208 -- reference px
 local STRIP_TILE = 40 -- reference px
+-- How far the status panel tucks under the button below it.
+local STATUS_TUCK = 10 -- reference px
 
 local powerUpIds: { string } = {}
 for _, entry in PowerUps do
@@ -298,6 +300,9 @@ local function mountCard()
 			local b = buttons()
 			return joining() and (b.play or b.practice)
 		end
+		local hasButton = function(): boolean
+			return mainButton() or view().action == "Leave"
+		end
 		local practiceBeside = function(): boolean
 			local b = buttons()
 			return joining() and b.play and b.practice
@@ -328,64 +333,107 @@ local function mountCard()
 			show(function()
 				return view().action == "Leave" and MenuController.storeState() ~= nil
 			end, loadoutStrip) :: any,
-			show(hasText, function()
-				return C.Panel({
-					name = "Status",
-					elevation = 2,
-					size = UDim2.fromScale(1, 0),
-					automaticSize = Enum.AutomaticSize.Y,
-					padding = Theme.spacing.md,
-					gap = Theme.spacing.xs,
-					layoutOrder = 1,
-					children = {
-						Base.text("label", {
-							Name = "Headline",
-							LayoutOrder = 1,
-							Size = UDim2.new(1, 0, 0, Theme.type.label.size + Theme.spacing.xs),
-							Text = function()
-								return view().headline or ""
-							end,
-							Visible = function()
-								return view().headline ~= nil
-							end,
-							TextColor3 = function()
-								return TONE_INK[view().tone]
-							end,
-						}),
-						Base.text("body", {
-							Name = "Detail",
-							LayoutOrder = 2,
-							Size = UDim2.new(1, 0, 0, 2 * Theme.type.body.size + Theme.spacing.xs),
-							Text = function()
-								return detail() or ""
-							end,
-							Visible = function()
-								return detail() ~= nil
-							end,
-							TextColor3 = Theme.color.inkMuted,
-						}),
-					} :: { Instance },
-				}) :: any
-			end) :: any,
-			-- Two buttons rather than one relabelled: Button's variant is
-			-- fixed at build time, and Play should read as THE action.
-			show(mainButton, function()
-				return C.Button({
-					label = function(): string
-						return if buttons().play then "Play" else "Practice"
-					end,
-					icon = "bolt",
-					variant = "primary",
-					width = CARD_WIDTH,
-					loading = function()
-						return view().busy
-					end,
-					onActivate = function()
-						onTap(not buttons().play)
-					end,
-					layoutOrder = 2,
-				}) :: any
-			end) :: any,
+			-- The status panel and the button it's about, the panel tucked
+			-- under the button's top edge so they read as one piece.
+			create("Frame")({
+				Name = "Stack",
+				LayoutOrder = 1,
+				Size = UDim2.fromOffset(CARD_WIDTH, 0),
+				AutomaticSize = Enum.AutomaticSize.Y,
+				BackgroundTransparency = 1,
+				create("UIListLayout")({
+					FillDirection = Enum.FillDirection.Vertical,
+					HorizontalAlignment = Enum.HorizontalAlignment.Left,
+					Padding = UDim.new(0, -STATUS_TUCK),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+				show(hasText, function()
+					local panel = C.Panel({
+						name = "Status",
+						elevation = 2,
+						size = UDim2.fromScale(1, 0),
+						automaticSize = Enum.AutomaticSize.Y,
+						padding = Theme.spacing.md,
+						gap = Theme.spacing.xs,
+						layoutOrder = 1,
+						children = {
+							Base.text("label", {
+								Name = "Headline",
+								LayoutOrder = 1,
+								Size = UDim2.new(1, 0, 0, Theme.type.label.size + Theme.spacing.xs),
+								Text = function()
+									return view().headline or ""
+								end,
+								Visible = function()
+									return view().headline ~= nil
+								end,
+								TextColor3 = function()
+									return TONE_INK[view().tone]
+								end,
+							}),
+							Base.text("body", {
+								Name = "Detail",
+								LayoutOrder = 2,
+								Size = UDim2.new(1, 0, 0, 2 * Theme.type.body.size + Theme.spacing.xs),
+								Text = function()
+									return detail() or ""
+								end,
+								Visible = function()
+									return detail() ~= nil
+								end,
+								TextColor3 = Theme.color.inkMuted,
+							}),
+							-- The strip the button below covers.
+							create("Frame")({
+								Name = "Tuck",
+								LayoutOrder = 3,
+								Size = UDim2.fromOffset(0, STATUS_TUCK),
+								BackgroundTransparency = 1,
+								Visible = hasButton,
+							}),
+						} :: { Instance },
+					}) :: Frame
+					panel.ZIndex = 1
+					return panel
+				end) :: any,
+				-- Two buttons rather than one relabelled: Button's variant is
+				-- fixed at build time, and Play should read as THE action.
+				show(mainButton, function()
+					local button = C.Button({
+						label = function(): string
+							return if buttons().play then "Play" else "Practice"
+						end,
+						icon = "bolt",
+						variant = "primary",
+						width = CARD_WIDTH,
+						loading = function()
+							return view().busy
+						end,
+						onActivate = function()
+							onTap(not buttons().play)
+						end,
+						layoutOrder = 2,
+					}) :: GuiObject
+					button.ZIndex = 2
+					return button
+				end) :: any,
+				show(function()
+					return view().action == "Leave"
+				end, function()
+					local button = C.Button({
+						label = "Leave queue",
+						variant = "secondary",
+						width = CARD_WIDTH,
+						loading = function()
+							return view().busy
+						end,
+						onActivate = onTap,
+						layoutOrder = 3,
+					}) :: GuiObject
+					button.ZIndex = 2
+					return button
+				end) :: any,
+			}),
 			-- Practice (when Play is the main button) and the party panel.
 			-- Gone once the match is committed, like every other button.
 			show(function()
@@ -424,20 +472,6 @@ local function mountCard()
 						onActivate = PartyController.openPanel,
 						layoutOrder = 2,
 					}),
-				}) :: any
-			end) :: any,
-			show(function()
-				return view().action == "Leave"
-			end, function()
-				return C.Button({
-					label = "Leave queue",
-					variant = "secondary",
-					width = CARD_WIDTH,
-					loading = function()
-						return view().busy
-					end,
-					onActivate = onTap,
-					layoutOrder = 2,
 				}) :: any
 			end) :: any,
 			Parent = gui,
