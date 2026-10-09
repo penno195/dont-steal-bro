@@ -250,7 +250,7 @@ return TaskViewBase.define({
 								BackgroundColor3 = AMP_COLORS[amps[id]] or Theme.color.line,
 								Base.corner(Theme.radius.sm),
 								create("UIStroke")({ Color = WIRE_OUTLINE, Thickness = 1.5 }),
-								Base.text("label", {
+								TaskArt.label("label", {
 									Size = UDim2.fromScale(1, 1),
 									Text = ampText(id),
 									TextColor3 = WIRE_OUTLINE,

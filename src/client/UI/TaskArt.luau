@@ -54,6 +54,20 @@ end)
 type Colour = Color3 | () -> Color3
 type Number = number | () -> number
 
+-- Lettering on the art (PUMP, SEAL, 10A): one line, fitted to its box
+-- with no floor. The art scales as a whole (a view's fit UIScale), and
+-- Base.text's style floor stopped the text shrinking with it, so on a
+-- phone "PUMP" wrapped mid-word and showed as "PU".
+function TaskArt.label(styleName: string, props: { [any]: any }, outline: boolean?): TextLabel
+	props.TextWrapped = false
+	local label = Base.text(styleName, props, outline)
+	local constraint = label:FindFirstChildOfClass("UITextSizeConstraint")
+	if constraint then
+		constraint.MinTextSize = 1
+	end
+	return label
+end
+
 -- A round lamp: dark bezel, glass tinted `colour`.
 function TaskArt.lamp(props: { name: string?, size: number, colour: Colour, [any]: any }): ImageLabel
 	return create("ImageLabel")({
@@ -199,7 +213,7 @@ function TaskArt.button(
 					return if dim() then dimColour elseif down() then pressedColour else colour
 				end,
 				Size = UDim2.fromScale(1, 1),
-				Base.text(opts.textStyle or "headline", {
+				TaskArt.label(opts.textStyle or "headline", {
 					Name = "Label",
 					AnchorPoint = Vector2.new(0.5, 0.5),
 					-- The face sits above an 8%-deep lip; sink with it.

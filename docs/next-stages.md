@@ -73,8 +73,14 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     area whenever that fits the content bigger (~0.72 vs 0.43 on an
     iPhone for Vent Purge), so every target grows with it (the purge
     button ~87 pt). Wide squat views (Breaker) stay stacked.*
-  - [ ] Text cut off in task art: Pressure Valve's pump button shows
+  - [x] Text cut off in task art: Pressure Valve's pump button shows
     "PU" for "PUMP". Check every TaskArt button label at phone size.
+    *Done 2026-10-09, checked in Studio Play (PUMP whole at 0.3x), not
+    yet on a phone. Art labels were TextScaled with the style's floor
+    (22 px headline), so once the art scaled down "PUMP" wrapped
+    mid-word. New TaskArt.label: one line, no floor, scales with the
+    art; used by TaskArt.button (SEAL, SYNC, keypad), PUMP, Fuse amps
+    and Breaker numbers.*
 - [x] **2. Studio pass on features never checked in Studio.** Season tab
   (enable a season with placeholder items), buying with coins, Slow
   Field zone, discard bin, left-click aim, and a two-player test of the

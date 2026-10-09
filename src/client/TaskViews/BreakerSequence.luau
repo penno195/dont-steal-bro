@@ -199,7 +199,7 @@ return TaskViewBase.define({
 							return UDim2.fromOffset(KEY_SIZE.X / 2, if isOn() then LEVER_ON_Y else LEVER_OFF_Y)
 						end, Theme.motion.fast),
 					}),
-					Base.text("label", {
+					TaskArt.label("label", {
 						Name = "Number",
 						AnchorPoint = Vector2.new(0.5, 0.5),
 						Position = UDim2.fromOffset(KEY_SIZE.X / 2, 113.5),
