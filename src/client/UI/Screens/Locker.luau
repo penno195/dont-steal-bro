@@ -40,7 +40,7 @@ local indexes = vide.indexes
 local switch = vide.switch
 local show = vide.show
 
-local TAB_H = 48
+local TAB_H = Theme.touch.primaryHeight -- C.TabBar's height (TabBar.luau HEIGHT)
 local SLOT_H = 72
 local SLOT_ICON = 32
 local CARD_H = 64

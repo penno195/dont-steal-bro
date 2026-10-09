@@ -113,17 +113,28 @@ local function Button(props: Props): TextButton
 								PaddingBottom = UDim.new(0, Theme.spacing.xs),
 							})
 							else Base.padding(Theme.spacing.md),
-						create("UIListLayout")({
-							FillDirection = Enum.FillDirection.Horizontal,
-							HorizontalAlignment = Enum.HorizontalAlignment.Center,
-							VerticalAlignment = Enum.VerticalAlignment.Center,
-							Padding = UDim.new(0, Theme.spacing.sm),
-							SortOrder = Enum.SortOrder.LayoutOrder,
-						}),
-						(if props.icon then Icons.view(props.icon, Theme.spacing.xl, ink) else nil) :: any,
+						-- The icon pins to the left; the label is centred on the
+						-- WHOLE button, inset the icon's width on both sides so
+						-- the two never meet. Laid out side by side, the label
+						-- centred in what the icon left and sat visibly right of
+						-- the button's middle (Locker's Close, 2026-10-09).
+						(if props.icon
+							then (function()
+								local icon = Icons.view(props.icon, Theme.spacing.xl, ink)
+								icon.AnchorPoint = Vector2.new(0, 0.5)
+								icon.Position = UDim2.fromScale(0, 0.5)
+								return icon
+							end)()
+							else nil) :: any,
 						Base.text("button", {
-							LayoutOrder = 2,
-							Size = UDim2.new(1, if props.icon then -(Theme.spacing.xl + Theme.spacing.sm) else 0, 1, 0),
+							AnchorPoint = Vector2.new(0.5, 0.5),
+							Position = UDim2.fromScale(0.5, 0.5),
+							Size = UDim2.new(
+								1,
+								if props.icon then -2 * (Theme.spacing.xl + Theme.spacing.sm) else 0,
+								1,
+								0
+							),
 							Text = props.label,
 							TextColor3 = ink,
 						}, outlined),

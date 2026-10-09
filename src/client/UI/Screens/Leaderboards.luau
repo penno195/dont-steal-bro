@@ -41,7 +41,7 @@ local switch = vide.switch
 local indexes = vide.indexes
 local cleanup = vide.cleanup
 
-local TAB_H = 48
+local TAB_H = Theme.touch.primaryHeight -- C.TabBar's height (TabBar.luau HEIGHT)
 local ROW_H = 56 -- PlayerRow's height
 local GAP = Theme.spacing.xs
 local OVERSCAN = 4

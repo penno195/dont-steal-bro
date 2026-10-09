@@ -38,9 +38,17 @@ export type Props = {
 	layoutOrder: number?,
 }
 
-local HEIGHT = Theme.touch.iconButton + Theme.spacing.xs -- 48
+-- 56, the primary-button height: an icon stacked over a label had ~1 px
+-- to spare at 48 and the icon sat against the key's top (Locker,
+-- 2026-10-09).
+-- Store, Locker and Leaderboards lay out below it from the same token.
+local HEIGHT = Theme.touch.primaryHeight
 -- The gap between the bar's rim and the gold key.
 local INSET = Theme.spacing.xs
+-- The key's corners run parallel to the bar's: its radius is the bar's
+-- less the gap between them. Any other radius and the two curves visibly
+-- don't match at the ends.
+local KEY_RADIUS = UDim.new(0, Theme.radius.lg.Offset - INSET)
 
 -- The icon sits ABOVE the label (the mockup's tab), so the label gets the
 -- tab's whole width: beside it, five tabs left "Season" 44 px and it
@@ -123,7 +131,7 @@ local function TabBar(props: Props): Frame
 					return Theme.fill.primary
 				end,
 				lip = Theme.lip.small,
-				radius = Theme.radius.md,
+				radius = KEY_RADIUS,
 				gloss = true,
 			}),
 		}),
@@ -150,7 +158,7 @@ local function TabBar(props: Props): Frame
 		local button = Base.interactive({
 			name = "Tab" .. i,
 			size = Vector2.new(tabWidth, HEIGHT),
-			radius = Theme.radius.md,
+			radius = KEY_RADIUS,
 			onActivate = function()
 				props.onSelect(i)
 			end,
@@ -158,14 +166,17 @@ local function TabBar(props: Props): Frame
 			layoutOrder = i,
 			visual = function(state, _focused)
 				return {
+					-- The hover highlight is the key's shape, where the key
+					-- would sit, not the whole tab cell (a hard square).
 					create("Frame")({
 						Name = "Overlay",
-						Size = UDim2.fromScale(1, 1),
+						Position = UDim2.fromOffset(INSET, INSET),
+						Size = UDim2.new(1, -2 * INSET, 1, -(2 * INSET + Theme.lip.small)),
 						BackgroundColor3 = Color3.new(1, 1, 1),
 						BackgroundTransparency = function()
 							return ComponentLogic.variantStyle("ghost", state()).overlayTransparency
 						end,
-						Base.corner(Theme.radius.md),
+						Base.corner(KEY_RADIUS),
 					}),
 					create("Frame")({
 						Name = "Content",
