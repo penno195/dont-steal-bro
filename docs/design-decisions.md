@@ -764,6 +764,10 @@ two hard-control items feeling different.
 post-effect immunity, diminishing returns and the 15s rolling cap still
 bound the worst case, now reached in fewer hits.
 
+**Revision (2026-10-09, user decision):** Freeze 3.5s → **4.5s**, Blind
+4s → **4.5s**, after a playtest. Push/Trip stays at 2s. Freeze now
+uses 4.5s of the 15s rolling cap per full hit.
+
 ### Applied case: firing into the immunity window (2026-10-09, user decision)
 
 **Decision:** a hard-control item (Freeze, Push/Trip) aimed at someone

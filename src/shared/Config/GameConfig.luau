@@ -497,7 +497,7 @@ local GameConfig: Validate.GameConfig = {
 	-- except these. All PLACEHOLDER, to tune in playtest: the aim is fun
 	-- for a few seconds, never annoying for long.
 	practice = {
-		durationScale = 0.5, -- a 3.5s Freeze lands as 1.75s
+		durationScale = 0.5, -- a 4.5s Freeze lands as 2.25s
 		maxEffectSeconds = 2, -- nothing lasts longer than this, whatever the item
 		maxActiveEffects = 1, -- one effect per player at a time
 		itemSpawnRarities = { "Common", "Uncommon", "Rare" }, -- so every tier shows up to try
