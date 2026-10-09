@@ -27,10 +27,14 @@ local selfId = Players.LocalPlayer.UserId
 local ICE = Color3.fromRGB(150, 215, 255)
 local INK = Color3.fromRGB(25, 20, 35)
 
-type Shown = { look: string, clear: () -> () }
+type Shown = { look: string, clear: () -> (), gone: RBXScriptConnection }
 
--- Weak keys: a rig that's gone takes its entry with it.
-local shown: { [Model]: Shown } = setmetatable({}, { __mode = "k" }) :: any
+-- STRONG keys, dropped when the rig is destroyed (setLook). This was a
+-- weak-keyed table: but an Instance's Lua handle can be collected while
+-- the Instance lives on, taking the entry with it, so the end of a
+-- freeze found nothing to clear and the ice block stayed welded to a
+-- practice dummy for good (playtest, 2026-10-09).
+local shown: { [Model]: Shown } = {}
 
 local fxFolder: Folder? = nil
 
@@ -202,10 +206,20 @@ local function setLook(character: Model, look: string?, isSelf: boolean)
 	end
 	if current ~= nil then
 		shown[character] = nil
+		current.gone:Disconnect()
 		current.clear()
 	end
 	if look ~= nil then
-		shown[character] = { look = look, clear = draw(character, look, isSelf) }
+		local clear = draw(character, look, isSelf)
+		-- A rig destroyed mid-look (a respawn, a leaver) takes its look
+		-- and its entry with it.
+		local gone = character.Destroying:Once(function()
+			if shown[character] ~= nil then
+				shown[character] = nil
+				clear()
+			end
+		end)
+		shown[character] = { look = look, clear = clear, gone = gone }
 	end
 end
 

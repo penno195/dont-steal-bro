@@ -24,10 +24,16 @@ type Saved = {
 	motors: { Motor6D },
 	added: { Instance },
 	collide: { [BasePart]: boolean },
+	gone: RBXScriptConnection?,
 }
 
--- Weak keys: a rig removed mid-ragdoll (respawn, round end) just drops out.
-local saved: { [Model]: Saved } = setmetatable({}, { __mode = "k" }) :: any
+-- STRONG keys; a rig destroyed mid-ragdoll (respawn, round end) drops
+-- out through its Destroying signal. Not weak keys: an Instance's Lua
+-- handle can be collected while the Instance lives on, so a weak entry
+-- could vanish mid-ragdoll and leave a long-lived rig (a practice dummy)
+-- limp for good, its joints never restored (VictimLookController had
+-- the same bug with the ice block, 2026-10-09).
+local saved: { [Model]: Saved } = {}
 
 local Ragdoll = {}
 
@@ -82,6 +88,9 @@ local function ragdoll(character: Model)
 			part1.CanCollide = true
 		end
 	end
+	entry.gone = character.Destroying:Once(function()
+		saved[character] = nil
+	end)
 	saved[character] = entry
 	-- The bot case: the server owns the rig, so it owns the state too.
 	local root = character:FindFirstChild("HumanoidRootPart")
@@ -95,6 +104,9 @@ local function standUp(character: Model)
 	saved[character] = nil
 	if entry == nil then
 		return
+	end
+	if entry.gone ~= nil then
+		entry.gone:Disconnect()
 	end
 	for _, instance in entry.added do
 		instance:Destroy()
