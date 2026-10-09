@@ -380,15 +380,13 @@ local function seatCard(
 		Name = "Seat",
 		LayoutOrder = index,
 		Size = UDim2.fromOffset(SEAT_W, SEAT_H),
-		BackgroundColor3 = Theme.elevation[2].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.md),
-		create("UIStroke")({
-			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Thickness = function()
-				return if seat().isSelf or verdict() ~= nil then 2 else 1
+		Base.stage({
+			thickness = function()
+				return if seat().isSelf or verdict() ~= nil then 3 else 1
 			end,
-			Color = function()
+			rim = function()
 				local v = verdict()
 				if v == "WINS" then
 					return Theme.color.success
@@ -408,8 +406,14 @@ local function seatCard(
 				return headshot(seat().id)
 			end,
 			Base.corner(Theme.radius.pill),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.color.rim,
+				Thickness = 2,
+			}),
 		}),
-		Base.text("label", {
+		Base.text("button", {
 			Name = "Name",
 			Position = UDim2.fromOffset(Theme.spacing.xs, AVATAR + Theme.spacing.sm + Theme.spacing.xxs),
 			Size = UDim2.new(1, -2 * Theme.spacing.xs, 0, Theme.type.label.size),
@@ -521,14 +525,14 @@ local function revealStage(
 	local back = create("Frame")({
 		Name = "Back",
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Theme.color.surfaceRaised,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.lg),
-		create("UIStroke")({ ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Color = Theme.color.line, Thickness = 2 }),
+		Base.stage({ thickness = 4 }),
 		Base.text("display", {
 			Name = "Mystery",
 			Size = UDim2.fromScale(1, 1),
 			Text = "?",
-			TextColor3 = Theme.color.inkMuted,
+			TextColor3 = Theme.color.rim,
 		}),
 		Parent = holder,
 	}) :: Frame
@@ -932,9 +936,10 @@ local function lockedCard(store: Store, order: number): Frame
 		Name = "Locked",
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(COLUMN, 88),
-		BackgroundColor3 = Theme.elevation[3].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.md),
-		create("UIStroke")({ Color = Theme.color.success, Thickness = 2 }),
+		-- Green rim: locked in, whichever way.
+		Base.stage({ rim = Theme.color.success, thickness = 3 }),
 		Base.padding(Theme.spacing.sm),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
@@ -1037,12 +1042,11 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(COLUMN, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = Theme.elevation[3].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.md),
-		create("UIStroke")({
-			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-			Thickness = 2,
-			Color = function()
+		Base.stage({
+			thickness = 3,
+			rim = function()
 				local c = copy()
 				return Theme.color[if c then TONE_COLOR[c.tone] else "line"]
 			end,
@@ -1140,11 +1144,18 @@ local function chatBox(store: Store, order: number): Frame
 		TextSize = Theme.type.body.size,
 		TextXAlignment = Enum.TextXAlignment.Left,
 		TextTruncate = Enum.TextTruncate.AtEnd,
-		BackgroundColor3 = Theme.color.surfaceRaised,
+		-- A dark well, not a panel: it's where you type (UI art pass).
+		BackgroundColor3 = Theme.color.background,
 		LayoutOrder = 1,
 		Size = UDim2.fromOffset(CHAT_W - SEND_W - Theme.spacing.sm, CHAT_H),
 		Base.corner(Theme.radius.md),
 		Base.padding(Theme.spacing.sm),
+		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = Theme.color.line,
+			Thickness = 2,
+		}),
 	}) :: TextBox
 
 	local function submit()
@@ -1414,11 +1425,12 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			Name = "Waiting",
 			LayoutOrder = 3,
 			Size = UDim2.fromOffset(COLUMN, NOTICE_H),
-			BackgroundColor3 = Theme.color.surfaceRaised,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
 			Visible = function()
 				return waitingText() ~= nil
 			end,
 			Base.corner(Theme.radius.pill),
+			Base.stage(),
 			Base.padding(Theme.spacing.sm),
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Horizontal,

@@ -290,6 +290,38 @@ function Base.interactive(props: InteractiveProps): TextButton
 	}) :: TextButton
 end
 
+export type StageProps = {
+	-- Rim colour; default the gold panel rim.
+	rim: (Color3 | Source<Color3>)?,
+	-- Rim thickness in reference px; default 2.
+	thickness: (number | Source<number>)?,
+	-- The gradient; default the stage panel's (Tokens.fill.panel).
+	gradient: ColorSequence?,
+}
+
+-- The UI art pass's stage-panel surface for a plain Frame: a vertical
+-- UIGradient and an inner rim stroke, as children. The UIGradient TINTS,
+-- so the Frame's BackgroundColor3 must be Base.STAGE_BACKGROUND (white);
+-- any other colour comes out murky.
+-- Typed `any`: Vide takes a nested child array, but a props table whose
+-- other children are Instances would refuse a `{ Instance }` among them.
+function Base.stage(props: StageProps?): any
+	local p: StageProps = props or {}
+	return {
+		create("UIGradient")({ Rotation = 90, Color = p.gradient or Theme.fill.panel.gradient }),
+		create("UIStroke")({
+			Name = "Rim",
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			Color = p.rim or Theme.fill.panel.rim,
+			Thickness = p.thickness or 2,
+		}),
+	}
+end
+
+-- The background a Base.stage Frame takes.
+Base.STAGE_BACKGROUND = Color3.new(1, 1, 1)
+
 export type RaisedProps = {
 	fill: Source<Theme.Fill>,
 	-- Lip depth (Theme.lip). The surface is that much shorter than the

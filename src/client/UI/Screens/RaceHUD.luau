@@ -246,15 +246,12 @@ local function card(name: string, order: number, size: UDim2, children: { any })
 		Name = name,
 		LayoutOrder = order,
 		Size = size,
-		BackgroundColor3 = Theme.color.surface,
+		-- The stage panel (UI art pass), lit from above so a card reads as
+		-- raised, not a hole; a touch see-through over the map.
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = 0.15,
 		Base.corner(Theme.radius.md),
-		-- Lit from above, so a card reads as a raised panel, not a hole.
-		create("UIGradient")({
-			Color = ColorSequence.new(Theme.color.surfaceRaised, Theme.color.surface),
-			Rotation = 90,
-		}),
-		create("UIStroke")({ Color = Theme.color.line, Transparency = 0.6, Thickness = 1 }),
+		Base.stage(),
 		Base.padding(Theme.spacing.xs),
 	}
 	for _, child in children do
@@ -407,9 +404,8 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 	local stroke = panel:FindFirstChildOfClass("UIStroke") :: UIStroke
 	effect(function()
 		local plain = level() == "level" or allDone()
-		stroke.Color = if plain then Theme.color.line else tint()
-		stroke.Transparency = if plain then 0.6 else 0
-		stroke.Thickness = if plain then 1 else 2
+		stroke.Color = if plain then Theme.fill.panel.rim else tint()
+		stroke.Thickness = if plain then 2 else 3
 	end)
 	return panel
 end
@@ -424,7 +420,7 @@ local function effectChip(entry: () -> HudLogic.Effect, now: () -> number): Fram
 	return create("Frame")({
 		Name = "Effect",
 		Size = UDim2.fromOffset(CHIP + 24, CHIP),
-		BackgroundColor3 = Theme.color.surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = 0.15,
 		-- Shape as well as colour: a buff is a pill, a debuff is square.
 		create("UICorner")({
@@ -432,7 +428,7 @@ local function effectChip(entry: () -> HudLogic.Effect, now: () -> number): Fram
 				return if buff() then Theme.radius.pill else Theme.radius.sm
 			end,
 		}),
-		create("UIStroke")({ Color = ink, Thickness = 2 }),
+		Base.stage({ rim = ink }),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -591,16 +587,23 @@ local function powerUpSlot(
 		Text = "",
 		AutoButtonColor = false,
 		Selectable = false, -- L1/R1 select on a gamepad; the stick is steering
-		-- Mostly surface, so the caption stays readable; enough role
-		-- colour to tell Attack from Defence from Utility at a glance.
-		BackgroundColor3 = function(): Color3
-			local role = slot().roleColor
-			return if role then Theme.color.surface:Lerp(role, 0.45) else Theme.color.surface
-		end,
+		-- Mostly the stage gradient, so the caption stays readable; enough
+		-- role colour to tell Attack from Defence from Utility at a glance.
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = function()
 			return if store.pending() and isSelected() then 0.5 else 0.15
 		end,
 		Base.corner(Theme.radius.md),
+		create("UIGradient")({
+			Rotation = 90,
+			Color = function(): ColorSequence
+				local role = slot().roleColor
+				local top, bottom = Theme.fill.panel.top, Theme.fill.panel.bottom
+				return if role
+					then ColorSequence.new(top:Lerp(role, 0.45), bottom:Lerp(role, 0.45))
+					else ColorSequence.new(top, bottom)
+			end,
+		}),
 		create("UIStroke")({
 			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
@@ -611,10 +614,7 @@ local function powerUpSlot(
 				return if cancelling() then Theme.color.danger else Theme.color.warning
 			end,
 			Thickness = function()
-				return if isSelected() then 3 else 1
-			end,
-			Transparency = function()
-				return if isSelected() then 0 else 0.6
+				return if isSelected() then 3 else 2
 			end,
 		}),
 		icon,
@@ -722,15 +722,10 @@ local function slotNote(store: Store): Frame
 		Visible = function()
 			return store.note() ~= nil
 		end,
-		BackgroundColor3 = Theme.elevation[3].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = 0.1,
 		Base.corner(Theme.radius.md),
-		create("UIStroke")({
-			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-			Color = color,
-			Thickness = 2,
-		}),
+		Base.stage({ rim = color }),
 		create("UIPadding")({
 			PaddingLeft = UDim.new(0, Theme.spacing.sm),
 			PaddingRight = UDim.new(0, Theme.spacing.sm),
@@ -1125,23 +1120,29 @@ local function navigationToggle(state: () -> string?, press: () -> ()): TextButt
 		Visible = function()
 			return state() ~= nil
 		end,
-		BackgroundColor3 = function(): Color3
-			return if lit() then Theme.color.surface:Lerp(Theme.color.success, 0.35) else Theme.color.surface
-		end,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = function()
 			return if state() == "Waiting" then 0.5 else 0.15
 		end,
 		Base.corner(Theme.radius.md),
+		-- The stage panel, tinted green while navigation is on.
+		create("UIGradient")({
+			Rotation = 90,
+			Color = function(): ColorSequence
+				local top, bottom = Theme.fill.panel.top, Theme.fill.panel.bottom
+				return if lit()
+					then ColorSequence.new(top:Lerp(Theme.color.success, 0.35), bottom:Lerp(Theme.color.success, 0.35))
+					else ColorSequence.new(top, bottom)
+			end,
+		}),
 		create("UIStroke")({
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = function(): Color3
-				return if lit() then Theme.color.success else Theme.color.line
-			end,
-			Transparency = function()
-				return if lit() then 0 else 0.6
+				return if lit() then Theme.color.success else Theme.fill.panel.rim
 			end,
 			Thickness = function()
-				return if lit() then 2 else 1
+				return if lit() then 3 else 2
 			end,
 		}),
 		Base.text("label", {
@@ -1300,12 +1301,13 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			Position = UDim2.fromScale(0.01, 0.02),
 			Size = UDim2.fromOffset(TASK_WIDTH, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = Theme.color.surface,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
 			BackgroundTransparency = 0.25,
 			Visible = function()
 				return not portrait()
 			end,
 			Base.corner(Theme.radius.md),
+			Base.stage(),
 			Base.padding(Theme.spacing.sm),
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Vertical,
