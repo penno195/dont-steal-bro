@@ -56,6 +56,7 @@ same way. After changing the art, re-upload and paste the new id.
 | Config file | Name | Price (R$) | Description |
 |---|---|---|---|
 | `Season1Pass.luau` | Season 1 Pass | 199 | Unlock Season 1's premium track: founder cosmetics, coins and power-ups as you win. Only wins until the season ends count. |
+| *(Replaced 2026-10-09.)* | | | The monthly pass is now the `SeasonPass.luau` developer product (3717513986), bought again each month. Take this game pass off sale. |
 | `NavigationPass.luau` | Unlimited Navigation | 899 | Switch on Navigation in every round, for good. Shows a path to your nearest unfinished station. *(Added 2026-10-08.)* |
 
 Create the pass and put it **on sale** (a pass with no price can't be
@@ -84,7 +85,7 @@ both together.
 | `CurrencyLarge.luau` | 3716319109 | enabled |
 | `SprintBoostStock.luau` | 3716319307 | enabled |
 | `StarterLoadoutBundle.luau` | 3716319616 | enabled |
-| `Season1Pass.luau` | 2006972979 | on sale on Roblox, disabled in config |
+| `Season1Pass.luau` (removed) | 2006972979 | old game pass, replaced by the monthly developer product below; take off sale on Roblox |
 | `NavigationRound.luau` | 3717313833 | enabled |
 | `NavigationPass.luau` | 2021852267 | enabled |
 | `StreakBuyBack1.luau` | 3717322114 | enabled |
@@ -95,6 +96,7 @@ both together.
 | `StreakBuyBack6.luau` | 3717322985 | enabled |
 | `StreakBuyBack7.luau` | 3717323070 | enabled |
 | `StreakBuyBack8Plus.luau` | 3717323241 | enabled |
+| `SeasonPass.luau` | 3717513986 | enabled (2026-10-09); purchases refused while no season is live |
 
 Navigation's art is in `assets/store/navigation-round.png` and
 `navigation-pass.png` (the coin offer shares the round's image). Keep

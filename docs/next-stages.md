@@ -17,9 +17,9 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
   - [x] Rules: calendar-month seasons, both tracks count every season
     win (buying mid-month unlocks paid tiers already reached), one
     reusable `season-pass` developer product. *Done 2026-10-09.*
-  - [ ] Owner: create the "Season Pass" developer product in Creator
+  - [x] Owner: create the "Season Pass" developer product in Creator
     Hub, paste its id into `Store/SeasonPass.luau`, and take the old
-    Season 1 game pass (2006972979) off sale.
+    Season 1 game pass (2006972979) off sale. *Product 3717513986 created and wired 2026-10-09.*
   - [ ] Pass screen: tiers left to right, paid row on top (locked until
     bought), free row below, as in the owner's reference image.
   - [x] Wearable cosmetic type (hats, back items) with its renderer.
