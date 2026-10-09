@@ -42,20 +42,25 @@ local HEIGHT = Theme.touch.iconButton + Theme.spacing.xs -- 48
 -- The gap between the bar's rim and the gold key.
 local INSET = Theme.spacing.xs
 
+-- The icon sits ABOVE the label (the mockup's tab), so the label gets the
+-- tab's whole width: beside it, five tabs left "Season" 44 px and it
+-- broke into "SEASO / N" (Store, 2026-10-09).
+local ICON = Theme.spacing.lg
+local LABEL_H = Theme.spacing.lg + Theme.spacing.xxs -- 18
+
 -- A tab's label in the display face. Its outline only shows on the bare
 -- (muted) tabs: dark ink on the gold key can't take a dark outline.
-local function labelFor(tab: Tab, iconSize: number, ink: () -> Color3, isSelected: () -> boolean): TextLabel
+local function labelFor(tab: Tab, ink: () -> Color3, isSelected: () -> boolean): TextLabel
 	local label = Base.text("button", {
 		LayoutOrder = 2,
-		Size = UDim2.new(1, -(if tab.icon then iconSize + Theme.spacing.xs else 0) - Theme.spacing.sm, 0.6, 0),
+		Size = if tab.icon then UDim2.new(1, -Theme.spacing.sm, 0, LABEL_H) else UDim2.new(1, -Theme.spacing.sm, 1, 0),
 		Text = tab.label,
 		TextColor3 = ink,
-		-- Shrink, never wrap: the display face is wide, and five tabs with
-		-- icons broke "Season" into "SEASO / N" (Store, 2026-10-09).
+		-- Shrink to one line, never wrap (Base.text fits it).
 		TextWrapped = false,
 	})
-	-- Five tabs with icons leave ~43 px per label: let a long word drop
-	-- to the caption floor rather than clip at the button style's 14.
+	-- A long word on a narrow bar may drop to the caption floor rather
+	-- than clip at the button style's 14.
 	local fit = label:FindFirstChildOfClass("UITextSizeConstraint")
 	if fit then
 		fit.MinTextSize = Theme.type.caption.min
@@ -152,7 +157,6 @@ local function TabBar(props: Props): Frame
 			order = (props.order or 0) + i,
 			layoutOrder = i,
 			visual = function(state, _focused)
-				local iconSize = Theme.spacing.lg + Theme.spacing.xs
 				return {
 					create("Frame")({
 						Name = "Overlay",
@@ -167,15 +171,21 @@ local function TabBar(props: Props): Frame
 						Name = "Content",
 						Size = UDim2.fromScale(1, 1),
 						BackgroundTransparency = 1,
+						-- Centred on the gold key's surface, which sits INSET in
+						-- from the bar and a lip short of its bottom.
+						create("UIPadding")({
+							PaddingTop = UDim.new(0, INSET),
+							PaddingBottom = UDim.new(0, INSET + Theme.lip.small),
+						}),
 						create("UIListLayout")({
-							FillDirection = Enum.FillDirection.Horizontal,
+							FillDirection = Enum.FillDirection.Vertical,
 							HorizontalAlignment = Enum.HorizontalAlignment.Center,
 							VerticalAlignment = Enum.VerticalAlignment.Center,
-							Padding = UDim.new(0, Theme.spacing.xs),
+							Padding = UDim.new(0, Theme.spacing.xxs),
 							SortOrder = Enum.SortOrder.LayoutOrder,
 						}),
-						(if tab.icon then Icons.view(tab.icon, iconSize, ink) else nil) :: any,
-						labelFor(tab, iconSize, ink, isSelected),
+						(if tab.icon then Icons.view(tab.icon, ICON, ink) else nil) :: any,
+						labelFor(tab, ink, isSelected),
 					}),
 				}
 			end,

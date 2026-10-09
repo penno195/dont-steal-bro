@@ -27,6 +27,10 @@ local source = vide.source
 local cleanup = vide.cleanup
 
 local COLUMN = 360 - 2 * Theme.spacing.lg
+-- A section panel's content width (its default lg padding each side).
+-- Full-width components take this, not their own default: TaskCard and
+-- PlayerRow default to COLUMN and overhung the panel's rim.
+local INNER = COLUMN - 2 * Theme.spacing.lg
 
 local function caption(text: string, order: number): TextLabel
 	local label = Instance.new("TextLabel")
@@ -155,7 +159,7 @@ local function gallery(usableWidth: () -> number): Instance
 						return (t() * 0.8) % 6
 					end,
 					max = 5,
-					width = COLUMN - 2 * Theme.spacing.lg,
+					width = INNER,
 				}),
 				1
 			),
@@ -166,7 +170,7 @@ local function gallery(usableWidth: () -> number): Instance
 					value = 5,
 					max = 5,
 					color = "success",
-					width = COLUMN - 2 * Theme.spacing.lg,
+					width = INNER,
 				}),
 				2
 			),
@@ -209,6 +213,7 @@ local function gallery(usableWidth: () -> number): Instance
 					title = "Pressure Valve",
 					location = "Engine Room",
 					status = "todo",
+					width = INNER,
 					onActivate = noop,
 					order = 20,
 				}),
@@ -223,15 +228,27 @@ local function gallery(usableWidth: () -> number): Instance
 					progress = function()
 						return (t() * 0.1) % 1
 					end,
+					width = INNER,
 					onActivate = noop,
 					order = 21,
 				}),
 				2
 			),
-			cell("done", C.TaskCard({ title = "Code Playback", location = "Bridge", status = "done" }), 3),
+			cell(
+				"done",
+				C.TaskCard({ title = "Code Playback", location = "Bridge", status = "done", width = INNER }),
+				3
+			),
 			cell(
 				"locked (disabled)",
-				C.TaskCard({ title = "Final Vault", location = "???", status = "locked", onActivate = noop, order = 22 }),
+				C.TaskCard({
+					title = "Final Vault",
+					location = "???",
+					status = "locked",
+					width = INNER,
+					onActivate = noop,
+					order = 22,
+				}),
 				4
 			),
 		}),
@@ -246,6 +263,7 @@ local function gallery(usableWidth: () -> number): Instance
 					trailing = "12",
 					trailingIcon = "flame",
 					isLocalPlayer = true,
+					width = INNER,
 				}),
 				1
 			),
@@ -258,10 +276,11 @@ local function gallery(usableWidth: () -> number): Instance
 					rank = 2,
 					trailing = "3",
 					trailingIcon = "flame",
+					width = INNER,
 				}),
 				2
 			),
-			cell("no rank, no title", C.PlayerRow({ userId = 1, displayName = "Roblox" }), 3),
+			cell("no rank, no title", C.PlayerRow({ userId = 1, displayName = "Roblox", width = INNER }), 3),
 		}),
 		section("CurrencyPill and TabBar", 6, {
 			cell("pill · counts live", C.CurrencyPill({ amount = coins }), 1),
@@ -281,7 +300,7 @@ local function gallery(usableWidth: () -> number): Instance
 					selected = tab,
 					onSelect = tab,
 					order = 40,
-					width = COLUMN - 2 * Theme.spacing.lg,
+					width = INNER,
 				}),
 				3
 			),

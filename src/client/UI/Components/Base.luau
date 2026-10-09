@@ -52,6 +52,48 @@ function Base.padding(px: number): Instance
 	return create("UIPadding")({ PaddingTop = u, PaddingBottom = u, PaddingLeft = u, PaddingRight = u })
 end
 
+-- One-line text at the largest TextSize that fits its box, between the
+-- label's UITextSizeConstraint floor and `maxSize` - what TextScaled
+-- does, without wrapping. TextBounds is in the same scaled space as
+-- AbsoluteSize and updates as soon as TextSize is set, and width is
+-- linear in size, so one ratio step lands on the fit. Refits when the
+-- box, the text or the font (it loads async, changing TextBounds) does;
+-- a refit that lands on the current size sets nothing, so it settles.
+-- Past the floor, the caller's TextTruncate takes over.
+local function fitOneLine(label: TextLabel, maxSize: number)
+	local function fit()
+		local box, bounds = label.AbsoluteSize, label.TextBounds
+		if box.X <= 0 or bounds.X <= 0 or bounds.Y <= 0 then
+			return -- not laid out yet, or no text
+		end
+		local constraint = label:FindFirstChildOfClass("UITextSizeConstraint")
+		local floor = if constraint then constraint.MinTextSize else 1
+		local ratio = math.min(box.X / bounds.X, box.Y / bounds.Y)
+		local size = math.floor(label.TextSize * ratio)
+		-- Truncated text reports its truncated width, which always "fits":
+		-- without this a long name would creep up to maxSize, losing more
+		-- of itself to the ellipsis at every step.
+		if not label.TextFits then
+			size = math.min(size, label.TextSize - 1)
+		end
+		size = math.clamp(size, floor, maxSize)
+		if size ~= label.TextSize then
+			label.TextSize = size
+		end
+		-- Still truncated: step down to the floor now (TextFits updates
+		-- as soon as TextSize is set); the truncated width may not change,
+		-- so no TextBounds signal would come to finish it.
+		while not label.TextFits and label.TextSize > floor do
+			label.TextSize -= 1
+		end
+	end
+	label.TextSize = maxSize
+	label:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
+	label:GetPropertyChangedSignal("Text"):Connect(fit)
+	label:GetPropertyChangedSignal("TextBounds"):Connect(fit)
+	fit()
+end
+
 -- A themed label. TextScaled bounded by a UITextSizeConstraint
 -- (architecture.md §5.6): it fits its box, but never shrinks below the
 -- style's `min` or grows past its `size`. Box size comes from `props`.
@@ -85,12 +127,15 @@ function Base.text(styleName: string, props: { [any]: any }, outline: boolean?):
 		end
 	end
 	local label = create("TextLabel")(merged) :: TextLabel
-	-- Setting TextScaled turns TextWrapped back on, and Vide applies
-	-- properties in no fixed order, so a caller's `TextWrapped = false`
-	-- was silently lost (names wrapped mid-word instead of shrinking).
-	-- Re-apply it once TextScaled has been set.
-	if merged.TextWrapped == false then
+	-- TextScaled and TextWrapped are coupled in the engine: turning one
+	-- on turns the other on, turning one off turns the other off. Vide
+	-- sets properties in no fixed order, so `TextWrapped = false` came out
+	-- as wrapped-and-scaled (names broke mid-word: "SEASO / N") or as
+	-- neither (stuck at the default size). A caller asking for one line
+	-- gets it here, fitted by fitOneLine instead of TextScaled.
+	if merged.TextWrapped == false and merged.TextScaled == true then
 		label.TextWrapped = false
+		fitOneLine(label, style.size)
 	end
 	return label
 end
