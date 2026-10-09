@@ -4,12 +4,16 @@
 -- settings) sits in, so they agree on the parts a thumb learns once:
 --
 --   +--------------------------+
---   | Title          [trailing]|  header: what this is, plus one widget
---   |                          |          (the store's currency pill)
---   |          body            |  the screen's own content, given its
---   |                          |          height so it can size a list
---   | [        Close         ] |  footer: the way out, at the bottom
---   +--------------------------+           where one thumb reaches it
+--   | Title      [trailing] (X)|  header: what this is, one widget (the
+--   |                          |          store's currency pill), and
+--   |          body            |          the way out, the same X as a
+--   |                          |          task view's (user, 2026-10-09)
+--   +--------------------------+  body: the screen's own content, given
+--                                         its height so it can size a list
+--
+-- A screen whose way out is a next step rather than a close (Results'
+-- Continue) passes `closeLabel` and gets a full-width footer button
+-- instead of the X.
 --
 -- A single column COLUMN reference px wide under attachScale, as tall as
 -- the usable rect at the current scale, centred. Portrait fills the
@@ -59,6 +63,9 @@ MenuShell.SCROLLBAR = 4
 
 local HEADER_H = 56
 local FOOTER_H = Theme.touch.primaryHeight + 2 * Theme.spacing.md
+-- The task view's close-button art, a little smaller to sit inside the
+-- header rather than straddle a card corner.
+local CLOSE_SIZE = 48
 local CLOSE_ACTION = "MenuShellClose"
 
 -- How the body is laid out: `pane` is the width of one pane (the whole
@@ -83,7 +90,9 @@ export type Props = {
 	title: string | Base.Source<string>,
 	-- Builds the header's one widget, inside the screen's Vide scope.
 	trailing: (() -> Instance)?,
-	closeLabel: string?, -- default "Close"
+	-- A footer button with this label replaces the header's X (see the
+	-- top of this file). Default nil: the X.
+	closeLabel: string?,
 	onClose: () -> (),
 	-- Two panes side by side in landscape (see the header). Default false.
 	split: boolean?,
@@ -106,8 +115,9 @@ function MenuShell.mount(controller: any, props: Props): () -> ()
 		local columnHeight = derive(function()
 			return rect().height / math.max(Env.scale(), 0.01)
 		end)
+		local footerH = if props.closeLabel then FOOTER_H else Theme.spacing.md
 		local bodyHeight = derive(function()
-			return math.max(0, columnHeight() - HEADER_H - FOOTER_H)
+			return math.max(0, columnHeight() - HEADER_H - footerH)
 		end)
 		local startRect = rect()
 		local startScale = math.max(Env.scale(), 0.01)
@@ -150,11 +160,27 @@ function MenuShell.mount(controller: any, props: Props): () -> ()
 					Text = props.title,
 					TextXAlignment = Enum.TextXAlignment.Left,
 				}),
+				if props.closeLabel == nil
+					then C.IconButton({
+						icon = "close-button",
+						iconSize = CLOSE_SIZE,
+						label = "Close",
+						onActivate = props.onClose,
+						order = 1000, -- last in gamepad order: never the default focus
+						anchorPoint = Vector2.new(1, 0.5),
+						position = UDim2.fromScale(1, 0.5),
+					})
+					else nil,
 				if props.trailing
 					then create("Frame")({
 						Name = "Trailing",
 						AnchorPoint = Vector2.new(1, 0.5),
-						Position = UDim2.fromScale(1, 0.5),
+						Position = UDim2.new(
+							1,
+							if props.closeLabel == nil then -(CLOSE_SIZE + Theme.spacing.sm) else 0,
+							0.5,
+							0
+						),
 						Size = UDim2.fromScale(0.4, 1),
 						BackgroundTransparency = 1,
 						create("UIListLayout")({
@@ -178,23 +204,25 @@ function MenuShell.mount(controller: any, props: Props): () -> ()
 				props.body(bodyHeight, layout),
 			}),
 
-			create("Frame")({
-				Name = "Footer",
-				AnchorPoint = Vector2.new(0, 1),
-				Position = UDim2.fromScale(0, 1),
-				Size = UDim2.fromOffset(columnWidth, FOOTER_H),
-				BackgroundTransparency = 1,
-				C.Button({
-					label = props.closeLabel or "Close",
-					variant = "secondary",
-					icon = "back",
-					width = MenuShell.INNER,
-					onActivate = props.onClose,
-					order = 1000,
-					anchorPoint = Vector2.new(0.5, 0.5),
-					position = UDim2.fromScale(0.5, 0.5),
-				}),
-			}),
+			if props.closeLabel
+				then create("Frame")({
+					Name = "Footer",
+					AnchorPoint = Vector2.new(0, 1),
+					Position = UDim2.fromScale(0, 1),
+					Size = UDim2.fromOffset(columnWidth, FOOTER_H),
+					BackgroundTransparency = 1,
+					C.Button({
+						label = props.closeLabel,
+						variant = "secondary",
+						icon = "back",
+						width = MenuShell.INNER,
+						onActivate = props.onClose,
+						order = 1000,
+						anchorPoint = Vector2.new(0.5, 0.5),
+						position = UDim2.fromScale(0.5, 0.5),
+					}),
+				})
+				else nil,
 
 			Parent = gui,
 		}) :: Frame

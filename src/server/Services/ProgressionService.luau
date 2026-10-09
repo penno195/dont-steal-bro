@@ -93,10 +93,7 @@ type LedgerEntry = {
 -- (Validate), so in practice that's at most one. Returned as a step the
 -- progression writer runs inside its own mutation, so the count, the
 -- items it unlocks and the streak all land together.
-local function seasonStepFor(
-	player: Player,
-	roundId: string
-): (progress: { [string]: any }) -> ({ [string]: any }, { any })
+local function seasonStepFor(): (progress: { [string]: any }) -> ({ [string]: any }, { any })
 	return function(progress)
 		local now = os.time()
 		local updates: { [string]: any } = {}
@@ -106,20 +103,11 @@ local function seasonStepFor(
 			if season == nil then
 				continue
 			end
-			local after, paid = SeasonLogic.recordWin(progress[season.id], season, now)
+			-- The items a win reaches wait to be claimed on the pass screen
+			-- (StoreService's SeasonClaimIntent), so a win only counts.
+			local after = SeasonLogic.recordWin(progress[season.id], season, now)
 			if after ~= nil and after ~= progress[season.id] then
 				updates[season.id] = after
-			end
-			for _, item in paid do
-				table.insert(grants, item.grant)
-				print(
-					string.format(
-						"Progression: %s round=%s %s",
-						player.Name,
-						roundId,
-						SeasonLogic.describePaid(season.id, item)
-					)
-				)
 			end
 		end
 		return updates, grants
@@ -349,7 +337,7 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		return after
 	end
 	local rewardWrite = if rewardRecord ~= nil then { record = rewardRecord, grants = rewardGrants } else nil
-	local seasonStep = if ProgressionLogic.isWin(result.reason) then seasonStepFor(player, result.roundId) else nil
+	local seasonStep = if ProgressionLogic.isWin(result.reason) then seasonStepFor() else nil
 	local buyBackOffer = ProgressionLogic.buyBackOffer(result.roundId, before, result.reason)
 	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep)
 

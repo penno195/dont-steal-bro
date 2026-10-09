@@ -525,10 +525,75 @@ describe("SeasonTrackLogic", function()
 		expect(view.premium.rows[2].status):toBe("Next")
 	end)
 
+	it("offers reached, unclaimed items to claim", function()
+		local view = SeasonTrackLogic.view(def, state({ freeWins = 12, freePaid = 0 }), text)
+		expect(view.free.rows[1].status):toBe("Claimable")
+		expect(view.free.rows[2].status):toBe("Claimable")
+		expect(view.free.rows[2].index):toBe(2)
+		expect(view.free.claimable):toBe(2)
+	end)
+
+	it("offers nothing to claim on the pass row until it's bought", function()
+		local view = SeasonTrackLogic.view(def, state({ premiumWins = 6 }), text)
+		expect(view.premium.rows[1].status):toBe("Locked")
+		expect(view.premium.claimable):toBe(0)
+		local bought = SeasonTrackLogic.view(def, state({ passSeen = true, premiumWins = 6 }), text)
+		expect(bought.premium.rows[1].status):toBe("Claimable")
+		expect(bought.premium.claimable):toBe(2)
+	end)
+
 	it("has no next item once a track is fully claimed", function()
 		local view = SeasonTrackLogic.view(def, state({ freeWins = 12, freePaid = 2 }), text)
 		expect(view.free.nextAt):toBe(nil)
 		expect(view.free.rows[2].status):toBe("Claimed")
+	end)
+
+	it("lines the tracks up as tiers, fewest wins first", function()
+		local columns = SeasonTrackLogic.columns(SeasonTrackLogic.view(def, state({}), text))
+		expect(#columns):toBe(4)
+		local wins = {}
+		for _, c in columns do
+			table.insert(wins, c.wins)
+		end
+		expect(table.concat(wins, ",")):toBe("0,3,5,10")
+		expect(columns[1].free):toBe(nil)
+		expect((columns[1].premium :: any).kind):toBe("Cosmetic")
+		expect(columns[2].premium):toBe(nil)
+		expect((columns[2].free :: any).text):toBe("100 coins")
+	end)
+
+	it("shares a column when both tracks pay at the same count", function()
+		local same: SeasonTrackLogic.SeasonDef = {
+			id = "s1",
+			displayName = "Season 1",
+			passKey = "s1-pass",
+			free = { { wins = 5, grant = { kind = "Currency", amount = 1 } } },
+			premium = {
+				{ wins = 5, grant = { kind = "Currency", amount = 2 } },
+				{ wins = 5, grant = { kind = "Currency", amount = 3 } },
+			},
+		}
+		local columns = SeasonTrackLogic.columns(SeasonTrackLogic.view(same, state({}), text))
+		expect(#columns):toBe(2)
+		expect((columns[1].premium :: any).text):toBe("2 coins")
+		expect((columns[1].free :: any).text):toBe("1 coins")
+		expect((columns[2].premium :: any).text):toBe("3 coins")
+		expect(columns[2].free):toBe(nil)
+	end)
+
+	it("marks pass items reached before the pass is bought", function()
+		local view = SeasonTrackLogic.view(def, state({ premiumWins = 6 }), text)
+		expect(view.premium.rows[2].reached):toBe(true)
+		expect(view.premium.rows[2].status):toBe("Locked")
+	end)
+
+	it("opens on the first tier with something unclaimed", function()
+		local columns = SeasonTrackLogic.columns(SeasonTrackLogic.view(def, state({}), text))
+		expect(SeasonTrackLogic.focusColumn(columns)):toBe(1) -- the locked pass item at 0
+		local bought = SeasonTrackLogic.view(def, state({ passSeen = true, premiumPaid = 2, freePaid = 1 }), text)
+		expect(SeasonTrackLogic.focusColumn(SeasonTrackLogic.columns(bought))):toBe(4)
+		local done = SeasonTrackLogic.view(def, state({ passSeen = true, premiumPaid = 2, freePaid = 2 }), text)
+		expect(SeasonTrackLogic.focusColumn(SeasonTrackLogic.columns(done))):toBe(4)
 	end)
 
 	it("words the time left", function()

@@ -252,6 +252,9 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?)
 				end
 				return SeasonTrackLogic.view(def, season :: any, grantText :: any)
 			end,
+			claim = function(track: ("Free" | "Premium")?, upTo: number?)
+				Net.fireServer("SeasonClaimIntent", { track = track, upTo = upTo })
+			end,
 			passKeyOf = function(seasonId: string): string?
 				local def = seasonDefs[seasonId]
 				return if def then def.passKey else nil

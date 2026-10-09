@@ -1,7 +1,8 @@
 --!strict
 -- The pure half of the store's Season tab (rewards-roadmap.md step 5b):
 -- turns the live season's config and the player's own progress into rows
--- the screen draws. No Roblox API, no requires, so it runs under Lune
+-- the screen draws, and the rows into tier columns (next-stages.md 1a:
+-- tiers left to right, pass row on top, free row below). No Roblox API, no requires, so it runs under Lune
 -- (tests/MenuScreens.spec).
 --
 -- Progress arrives in StoreState, which is targeted at its owner only.
@@ -44,21 +45,33 @@ export type SeasonState = {
 	premiumPaid: number,
 }
 
-export type RowStatus = "Claimed" | "Next" | "Locked"
+-- Rewards wait to be claimed (user decision 2026-10-09): "Claimable" is
+-- reached and unlocked but not yet claimed, "Next" the first item the
+-- player's wins haven't reached yet.
+export type RowStatus = "Claimed" | "Claimable" | "Next" | "Locked"
 
 export type Row = {
+	-- The item's list position on its track: what a Claim names
+	-- (SeasonClaimIntent's `upTo`).
+	index: number,
 	wins: number,
 	text: string,
 	status: RowStatus,
+	-- The grant's kind, for the tile's icon until items have pictures.
+	kind: string,
+	-- This track's wins have reached the item. A reached pass item is
+	-- claimable as soon as the pass is bought.
+	reached: boolean,
 }
 
 export type TrackView = {
 	title: string,
 	wins: number,
-	-- The next unclaimed item's win count, for the progress bar; nil once
-	-- the whole track is claimed.
+	-- The first unreached item's win count; nil once every item is
+	-- reached.
 	nextAt: number?,
 	locked: boolean, -- premium without the pass
+	claimable: number, -- how many items a Claim All would pay now
 	rows: { Row },
 }
 
@@ -93,19 +106,33 @@ local function track(
 ): TrackView
 	local rows: { Row } = {}
 	local nextAt: number? = nil
+	local claimable = 0
 	for index, item in items do
+		local reached = wins >= item.wins
 		local status: RowStatus = "Locked"
 		if index <= paid then
 			status = "Claimed"
+		elseif reached then
+			if not locked then
+				status = "Claimable"
+				claimable += 1
+			end
 		elseif nextAt == nil then
 			nextAt = item.wins
 			if not locked then
 				status = "Next"
 			end
 		end
-		table.insert(rows, { wins = item.wins, text = grantText(item.grant), status = status })
+		table.insert(rows, {
+			index = index,
+			wins = item.wins,
+			text = grantText(item.grant),
+			status = status,
+			kind = item.grant.kind,
+			reached = reached,
+		})
 	end
-	return { title = title, wins = wins, nextAt = nextAt, locked = locked, rows = rows }
+	return { title = title, wins = wins, nextAt = nextAt, locked = locked, claimable = claimable, rows = rows }
 end
 
 function SeasonTrackLogic.view(def: SeasonDef, state: SeasonState, grantText: (Grant) -> string): View
@@ -123,6 +150,70 @@ function SeasonTrackLogic.view(def: SeasonDef, state: SeasonState, grantText: (G
 			grantText
 		),
 	}
+end
+
+-- One tier: a win count with each track's item there (nil = that row
+-- pays nothing at this count).
+export type Column = {
+	wins: number,
+	premium: Row?,
+	free: Row?,
+}
+
+-- The two tracks lined up as tiers, fewest wins first. Validate lets a
+-- track list two items at the same count, so the nth item at a count on
+-- one row shares a column with the nth at that count on the other.
+function SeasonTrackLogic.columns(view: View): { Column }
+	local byKey: { [string]: Column } = {}
+	local keys: { { wins: number, nth: number, key: string } } = {}
+	local function place(rows: { Row }, isPremium: boolean)
+		local seen: { [number]: number } = {}
+		for _, r in rows do
+			local nth = (seen[r.wins] or 0) + 1
+			seen[r.wins] = nth
+			local key = r.wins .. "#" .. nth
+			local column = byKey[key]
+			if column == nil then
+				column = { wins = r.wins }
+				byKey[key] = column
+				table.insert(keys, { wins = r.wins, nth = nth, key = key })
+			end
+			if isPremium then
+				column.premium = r
+			else
+				column.free = r
+			end
+		end
+	end
+	place(view.premium.rows, true)
+	place(view.free.rows, false)
+	table.sort(keys, function(a, b)
+		return if a.wins ~= b.wins then a.wins < b.wins else a.nth < b.nth
+	end)
+	local columns: { Column } = {}
+	for _, k in keys do
+		table.insert(columns, byKey[k.key])
+	end
+	return columns
+end
+
+-- The column the strip opens scrolled to: the first tier with something
+-- to claim, else the first still holding an item not yet claimed, else
+-- the last.
+function SeasonTrackLogic.focusColumn(columns: { Column }): number
+	for index, column in columns do
+		local p, f = column.premium, column.free
+		if (p and p.status == "Claimable") or (f and f.status == "Claimable") then
+			return index
+		end
+	end
+	for index, column in columns do
+		local p, f = column.premium, column.free
+		if (p and p.status ~= "Claimed") or (f and f.status ~= "Claimed") then
+			return index
+		end
+	end
+	return math.max(#columns, 1)
 end
 
 return SeasonTrackLogic

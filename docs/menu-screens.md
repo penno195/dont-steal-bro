@@ -7,7 +7,7 @@ them touches a remote.
 | File | Role | Tested |
 |---|---|---|
 | `UI/StoreScreenLogic.luau`, `UI/BoardLogic.luau`, `UI/ResultsLogic.luau`, `shared/SettingsLogic.luau` | Pure view logic: tabs, rarity, item state, purchase-flow reducer, board view and virtualisation maths, beat sequencing, settings bounds | Headless (`tests/MenuScreens.spec.luau`) |
-| `UI/Screens/MenuShell.luau` | The shared frame: title, body, Close at the bottom, B/Escape to close, a loading/empty/error message block | On device |
+| `UI/Screens/MenuShell.luau` | The shared frame: title, the X (or a Continue footer), body, B/Escape to close, a loading/empty/error message block | On device |
 | `UI/Screens/Store.luau`, `Leaderboards.luau`, `Results.luau`, `Settings.luau` | The four screens | On device |
 | `Controllers/MenuController.luau` | Remotes → sources, the purchase flow and its clock, the launcher, one-menu-at-a-time, auto-opening Results | On device |
 | `Controllers/SettingsController.luau` | Settings source, applies each setting, throttled `SettingsIntent` | On device |
@@ -28,8 +28,10 @@ them touches a remote.
 
 - **Layout.** Every screen is one column, 344 reference px wide and as tall
   as the usable rect, centred over an opaque backdrop. The primary action
-  sits at the bottom, where the thumb already is: Close/Continue, and on the
-  store the Buy button.
+  sits at the bottom, where the thumb already is: Results' Continue, and on
+  the store the Buy button. Every other screen closes with the task views'
+  X in the header's top-right corner (user decision 2026-10-09), which
+  gives the body back the old Close button's height.
 - **Landscape split (store).** The scale follows the short axis, so a
   landscape screen is always about 360 tall, too short for the store's
   tabs + grid + 212 px item panel in one column (the panel used to cover

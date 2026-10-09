@@ -171,6 +171,16 @@ Tokens.fill = table.freeze({
 	panel = table.freeze({ top = "#2B1858", bottom = "#170B33", lip = "#0B0420", rim = "#FFD23F", ink = "ink" }),
 	steal = table.freeze({ top = "#D63A3A", bottom = "#C62828", lip = "#5E0D0D", rim = "#FFB3B3", ink = "onSteal" }),
 	share = table.freeze({ top = "#8AF0AD", bottom = "#4ADE80", lip = "#146B36", rim = "#E2FFE9", ink = "onShare" }),
+	-- The season pass screen's two rows (the owner's reference): gold for
+	-- the paid row, blue for the free row.
+	seasonPaid = table.freeze({
+		top = "#FFC94A",
+		bottom = "#F08A1C",
+		lip = "#7A3A00",
+		rim = "#FFE58A",
+		ink = "onPrimary",
+	}),
+	seasonFree = table.freeze({ top = "#2A6AE0", bottom = "#173C9E", lip = "#0A1E5C", rim = "#8CC8FF", ink = "ink" }),
 })
 
 -- Lip depth in reference pixels: how far a button sinks when pressed.

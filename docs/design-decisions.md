@@ -179,6 +179,20 @@ Supersedes parts of "seasons and their tracks" above.
   the tracks. Models are made with AI mesh tools (Studio, Meshy) for
   now, to be redone in Blender later.
 
+*Applied (2026-10-09, user decision):* **claiming pass rewards.**
+Supersedes "pays automatically" wherever it appears above.
+- **Rewards wait to be claimed.** Reaching a tier (or buying the pass)
+  makes its item claimable; nothing is granted until the player taps
+  Claim on its tile, or **Claim All** in the pass panel. The server
+  checks every claim against the live season, the player's wins and the
+  pass. Items pay in list order, so claiming a tile also claims any
+  earlier tile on that row still waiting.
+- **Nothing reached is lost.** Whatever is reached but unclaimed when
+  the month ends is granted automatically on the player's next join.
+- **Menus close with an X** in the top-right corner, as task views do,
+  instead of a full-width Close button at the bottom: the pass needs the
+  height.
+
 *Applied (2026-10-02, user decision):* **what coins buy.**
 - **Power-up stock only**: one of each freely earnable power-up, at a
   fixed coin price (25 each, see "pricing" below). Not

@@ -1086,6 +1086,22 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: claim season-pass rewards (user decision
+	-- 2026-10-09: rewards wait to be claimed). `track` + `upTo` is a
+	-- tile's Claim button (that track up to that list position); no
+	-- track is Claim All. Only an intent: SeasonLogic.claim pays nothing
+	-- the player's wins and pass don't cover.
+	SeasonClaimIntent = {
+		name = "SeasonClaimIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			track = Net.optional(Net.stringEnum({ "Free", "Premium" })),
+			upTo = Net.optional(Net.number({ min = 1, max = 200, integer = true })),
+		}),
+		rateLimit = { capacity = 6, refillPerSecond = 1 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- Server -> client (targeted at the owner only, never
 	-- fireAllClients): this player's own store state - currency,
 	-- power-up stock, loadout, owned cosmetics, equipped slots, and

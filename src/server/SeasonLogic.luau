@@ -4,8 +4,12 @@
 --
 -- A season is one calendar month (UTC) and has two tracks, each a list
 -- of items unlocked at win counts. Both count every win inside the
--- window; the PREMIUM track only pays once the season's pass is bought,
--- and then pays everything already reached at once.
+-- window; the PREMIUM track only unlocks once the season's pass is
+-- bought, and then everything already reached on it is claimable.
+-- Nothing is granted until the player claims it from the pass screen
+-- (user decision 2026-10-09); whatever is reached but unclaimed when the
+-- season ends is granted by the first sync after it closes, so nobody
+-- loses what they earned.
 -- The pass is one reusable developer product, bought again each month:
 -- the profile records which season a purchase was for (`passSeenAt`).
 --
@@ -59,8 +63,10 @@ export type Progress = {
 	premiumPaid: number,
 }
 
+export type Track = "Free" | "Premium"
+
 export type Paid = {
-	track: "Free" | "Premium",
+	track: Track,
 	wins: number,
 	grant: Grant,
 }
@@ -149,17 +155,18 @@ local function copy(progress: Progress): Progress
 	}
 end
 
--- Pays every item from `paid + 1` onward whose win count has been
+-- Pays every item from `paid + 1` up to `upTo` whose win count has been
 -- reached, stopping at the first that hasn't. Returns the new paid count.
 local function settleTrack(
 	track: { TrackItem },
 	wins: number,
 	paid: number,
+	upTo: number,
 	trackName: "Free" | "Premium",
 	out: { Paid }
 ): number
 	local index = paid + 1
-	while index <= #track and track[index].wins <= wins do
+	while index <= math.min(#track, upTo) and track[index].wins <= wins do
 		local item = track[index]
 		table.insert(out, { track = trackName, wins = item.wins, grant = item.grant })
 		index += 1
@@ -170,22 +177,25 @@ end
 -- Premium counts every season win, so it settles against the same count.
 -- `math.max` keeps a pre-2026-10-09 profile, whose premium count could
 -- only be lower, from ever going backwards.
-local function settle(progress: Progress, season: Season, out: { Paid })
+local function settle(progress: Progress, season: Season, out: { Paid }, track: Track?, upTo: number?)
 	progress.premiumWins = math.max(progress.premiumWins, progress.freeWins)
-	progress.freePaid = settleTrack(season.free, progress.freeWins, progress.freePaid, "Free", out)
-	if progress.passSeenAt ~= nil then
-		progress.premiumPaid = settleTrack(season.premium, progress.premiumWins, progress.premiumPaid, "Premium", out)
+	local limit = upTo or math.huge
+	if track == nil or track == "Free" then
+		progress.freePaid = settleTrack(season.free, progress.freeWins, progress.freePaid, limit, "Free", out)
+	end
+	if (track == nil or track == "Premium") and progress.passSeenAt ~= nil then
+		progress.premiumPaid =
+			settleTrack(season.premium, progress.premiumWins, progress.premiumPaid, limit, "Premium", out)
 	end
 end
 
--- On join. Starts tracking a live season and pays anything now due - a
--- free 0-win item, or an item a config edit moved below the player's
--- count.
+-- On join. Starts tracking a live season, which grants nothing: items
+-- wait for the player to claim them. Once the season has ENDED it
+-- grants everything reached but never claimed (user decision
+-- 2026-10-09), which is how an unclaimed reward still arrives.
 --
 -- Returns nil when there is nothing to store: a season that hasn't
--- started, or one that ended before this player ever took part. An ended
--- season the player did take part in still settles, so nothing they
--- reached in the window is lost.
+-- started, or one that ended before this player ever took part.
 function SeasonLogic.sync(progress: Progress?, season: Season, now: number): (Progress?, { Paid })
 	local paid: { Paid } = {}
 	if now < season.startsAt then
@@ -195,43 +205,69 @@ function SeasonLogic.sync(progress: Progress?, season: Season, now: number): (Pr
 		return nil, paid
 	end
 	local after = if progress ~= nil then copy(progress) else SeasonLogic.newProgress()
-	settle(after, season, paid)
+	after.premiumWins = math.max(after.premiumWins, after.freeWins)
+	if not SeasonLogic.isLive(season, now) then
+		settle(after, season, paid)
+	end
 	return after, paid
 end
 
--- A pass purchase for this season. Unlocks the premium track and pays
--- every premium item the season's wins have already reached. `bought` is
--- false (and nothing changes) outside the window or when this season's
--- pass is already held; StoreService refuses those before prompting, so
--- reaching it means a receipt raced the check.
-function SeasonLogic.buyPass(progress: Progress?, season: Season, now: number): (Progress?, { Paid }, boolean)
-	local paid: { Paid } = {}
+-- A pass purchase for this season. Unlocks the premium track: every
+-- premium item the season's wins already reached becomes claimable.
+-- `bought` is false (and nothing changes) outside the window or when
+-- this season's pass is already held; StoreService refuses those before
+-- prompting, so reaching it means a receipt raced the check.
+function SeasonLogic.buyPass(progress: Progress?, season: Season, now: number): (Progress?, boolean)
 	if not SeasonLogic.isLive(season, now) or (progress ~= nil and progress.passSeenAt ~= nil) then
-		return progress, paid, false
+		return progress, false
 	end
 	local after = if progress ~= nil then copy(progress) else SeasonLogic.newProgress()
 	after.passSeenAt = now
-	settle(after, season, paid)
-	return after, paid, true
+	return after, true
+end
+
+-- A claim from the pass screen. `track` nil claims everything reached
+-- on both tracks (Claim All); otherwise that track's items up to and
+-- including list position `upTo`. Items pay strictly in list order, so
+-- claiming a later tile also claims any earlier one still waiting. Only
+-- while the season is live (after it ends, sync grants the rest), only
+-- reached items, and premium only with the pass: anything else pays
+-- nothing, and the client's claim is just an intent.
+function SeasonLogic.claim(
+	progress: Progress?,
+	season: Season,
+	now: number,
+	track: Track?,
+	upTo: number?
+): (Progress?, { Paid })
+	local paid: { Paid } = {}
+	if progress == nil or not SeasonLogic.isLive(season, now) then
+		return progress, paid
+	end
+	local after = copy(progress)
+	settle(after, season, paid, track, if track ~= nil then upTo or 0 else nil)
+	if #paid == 0 then
+		return progress, paid
+	end
+	return after, paid
 end
 
 function SeasonLogic.hasPass(progress: Progress?): boolean
 	return progress ~= nil and progress.passSeenAt ~= nil
 end
 
--- On a win. Counts it on both tracks, then pays anything now due. A win
--- outside the window changes nothing.
-function SeasonLogic.recordWin(progress: Progress?, season: Season, now: number): (Progress?, { Paid })
-	local paid: { Paid } = {}
+-- On a win. Counts it on both tracks; what it reaches waits to be
+-- claimed. A win outside the window changes nothing.
+function SeasonLogic.recordWin(progress: Progress?, season: Season, now: number): Progress?
 	if not SeasonLogic.isLive(season, now) then
-		return progress, paid
+		return progress
 	end
-
 	local after = if progress ~= nil then copy(progress) else SeasonLogic.newProgress()
 	after.freeWins += 1
-	settle(after, season, paid)
-	return after, paid
+	after.premiumWins = math.max(after.premiumWins, after.freeWins)
+	return after
 end
+
 -- "Season season-1 Free @3 wins: Currency 100" - one audit line per item.
 function SeasonLogic.describePaid(seasonId: string, item: Paid): string
 	local grant = item.grant

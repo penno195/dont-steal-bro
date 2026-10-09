@@ -305,9 +305,9 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 		buyBackOffer = data.buyBackOffer,
 	}
 
-	-- The season pass unlocks the live season's premium track and pays
-	-- every premium item its wins already reached, in this same mutation.
-	-- The receipt handler has already checked a pass can be bought
+	-- The season pass unlocks the live season's premium track; what its
+	-- wins already reached waits on the pass screen to be claimed. The
+	-- receipt handler has already checked a pass can be bought
 	-- (seasonPassBlocked), so `bought` is false only on a bug.
 	local grants = table.clone(def.grants) :: { any }
 	local seasonLines: { string } = {}
@@ -315,14 +315,10 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 		local nowUtc = os.time()
 		local season = liveSeason(nowUtc)
 		if season ~= nil then
-			local progress, paid, bought = SeasonLogic.buyPass(data.seasonProgress[season.id], season, nowUtc)
+			local progress, bought = SeasonLogic.buyPass(data.seasonProgress[season.id], season, nowUtc)
 			if bought then
 				data.seasonProgress[season.id] = progress
 				table.insert(seasonLines, string.format("season pass for %s", season.id))
-				for _, item in paid do
-					table.insert(grants, item.grant)
-					table.insert(seasonLines, SeasonLogic.describePaid(season.id, item))
-				end
 			end
 		end
 	end
@@ -687,14 +683,42 @@ local function ownsPass(player: Player, gamePassId: number): boolean
 	return owned == true
 end
 
+-- Grants season track items into a profile's data, one audit line each.
+-- The caller writes the progress entry whose `*Paid` counts these items
+-- moved, in the same mutation, which is what keeps paying idempotent.
+local function grantSeasonItems(player: Player, data: any, seasonId: string, paid: { SeasonLogic.Paid })
+	local grants = {}
+	for _, item in paid do
+		table.insert(grants, item.grant)
+		print(
+			string.format(
+				"StoreService: %s (%d) %s",
+				player.Name,
+				player.UserId,
+				SeasonLogic.describePaid(seasonId, item)
+			)
+		)
+	end
+	local granted = StoreLogic.applyGrants({
+		currency = data.currency,
+		powerUpStock = data.powerUpStock,
+		ownedCosmetics = data.ownedCosmetics,
+		unlockedTitles = data.unlockedTitles,
+		navigationRounds = data.navigationRounds,
+	}, grants :: any)
+	data.currency = granted.currency
+	data.powerUpStock = granted.powerUpStock
+	data.ownedCosmetics = granted.ownedCosmetics
+	data.unlockedTitles = granted.unlockedTitles
+	data.navigationRounds = granted.navigationRounds or data.navigationRounds
+end
+
 -- On join and on a pass purchase, each season is synced
--- (SeasonLogic.sync): a live season starts being tracked and any track
--- item now due is paid - one a config edit moved below the player's
--- count, say. Buying the season pass is a receipt (applyProductTo), not
--- a pass sighting, since 2026-10-09. Paying is idempotent through the
--- progress entry's `*Paid` counts, which are written in the same
--- mutation as the grants. A win's own track items are paid by the
--- progression writer instead (ProgressionService).
+-- (SeasonLogic.sync): a live season starts being tracked, and an ENDED
+-- one grants whatever was reached but never claimed (user decision
+-- 2026-10-09). Live items are claimed from the pass screen instead
+-- (handleSeasonClaim). Buying the season pass is a receipt
+-- (applyProductTo), not a pass sighting, since 2026-10-09.
 local function syncPasses(player: Player)
 	local getHandle = receiptHandleFor
 	if getHandle == nil then
@@ -722,30 +746,7 @@ local function syncPasses(player: Player)
 		if after == nil or after == before then
 			continue
 		end
-		local grants = {}
-		for _, item in paid do
-			table.insert(grants, item.grant)
-			print(
-				string.format(
-					"StoreService: %s (%d) %s",
-					player.Name,
-					player.UserId,
-					SeasonLogic.describePaid(season.id, item)
-				)
-			)
-		end
-		local granted = StoreLogic.applyGrants({
-			currency = data.currency,
-			powerUpStock = data.powerUpStock,
-			ownedCosmetics = data.ownedCosmetics,
-			unlockedTitles = data.unlockedTitles,
-			navigationRounds = data.navigationRounds,
-		}, grants :: any)
-		data.currency = granted.currency
-		data.powerUpStock = granted.powerUpStock
-		data.ownedCosmetics = granted.ownedCosmetics
-		data.unlockedTitles = granted.unlockedTitles
-		data.navigationRounds = granted.navigationRounds or data.navigationRounds
+		grantSeasonItems(player, data, season.id, paid)
 		data.seasonProgress[season.id] = after
 		anyChange = true
 	end
@@ -753,6 +754,38 @@ local function syncPasses(player: Player)
 	if anyChange then
 		handle.save()
 	end
+end
+
+-- A Claim or Claim All on the pass screen (SeasonClaimIntent). The
+-- client only names a tile; SeasonLogic.claim pays nothing the live
+-- season, this player's wins and their pass don't cover, so a forged or
+-- repeated claim is a no-op.
+local function handleSeasonClaim(player: Player, track: SeasonLogic.Track?, upTo: number?)
+	local getHandle = receiptHandleFor
+	if getHandle == nil then
+		return
+	end
+	local handle = getHandle(player)
+	if handle == nil then
+		return
+	end
+	local data = handle.getData()
+	if data == nil then
+		return
+	end
+	local nowUtc = os.time()
+	local season = liveSeason(nowUtc)
+	if season == nil then
+		return
+	end
+	local after, paid = SeasonLogic.claim(data.seasonProgress[season.id], season, nowUtc, track, upTo)
+	if #paid == 0 then
+		return
+	end
+	grantSeasonItems(player, data, season.id, paid)
+	data.seasonProgress[season.id] = after
+	handle.save()
+	pushState(player)
 end
 
 -- ===== coin offers (rewards-roadmap.md step 6) ============================
@@ -1139,6 +1172,10 @@ function StoreService:init()
 
 	NetGuard.on("StoreEquipIntent", function(player: Player, payload: any)
 		handleEquipIntent(player, payload.slot, payload.itemId)
+	end)
+
+	NetGuard.on("SeasonClaimIntent", function(player: Player, payload: any)
+		handleSeasonClaim(player, payload.track, payload.upTo)
 	end)
 
 	NetGuard.on("StoreLoadoutIntent", function(player: Player, payload: any)
