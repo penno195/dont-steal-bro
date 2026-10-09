@@ -50,12 +50,20 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     into the bar when taller than that room; it now drops to the
     bottom edge right of the thumbstick instead. Race HUD top row
     only lifts into the bar when it fits between Roblox's buttons.*
-  - [ ] Laboratory lighting is still wrong. Find what an earlier fix
+  - [x] Laboratory lighting is still wrong. Find what an earlier fix
     missed (its `LightingPresets` entry vs what's in the map) and check
     it in Studio Play, not just Edit. Lead: a Hub-place playtest on
     2026-10-09 warned that Lighting holds an Atmosphere (overrides every
     preset's fog) and Studio-authored Bloom/ColorCorrection/DepthOfField/
     SunRays that stack with presets. Check the Match place for the same.
+    *Done 2026-10-09, checked in Studio Play, not yet on a phone.
+    Match_Area's Lighting is clean (Sky only); the Atmosphere/effects
+    are in the Hub place, where no map plays. The real cause: the Lab
+    preset has shadows off, so the sun lights through the roof, and
+    its clock was 00:00, i.e. moonlight. The earlier fix raised
+    ambient, which barely shows. Now 14:00, exposure 0.2. Also found:
+    `LightingStyle`/`PrioritizeLightingQuality` can't be written at
+    runtime, so every preset's style is ignored (place = Soft).*
   - [ ] Task views too small on a phone: the cards feel small and
     fiddly. Size them from the screen (bigger share of the height in
     landscape), and grow touch targets to a thumb's size.

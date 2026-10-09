@@ -16,8 +16,10 @@ rule:
 - Every Workspace streaming property except `StreamingEnabled` is
   **non-scriptable** and has to be set in Studio.
 - `Lighting.Technology` is **deprecated and non-scriptable**. It is
-  superseded by `LightingStyle` + `PrioritizeLightingQuality`, which
-  scripts can write.
+  superseded by `LightingStyle` + `PrioritizeLightingQuality`. A game
+  script can NOT write either (needs PluginOrOpenCloud; seen in Studio
+  Play 2026-10-09): LightingService skips them with a warning, so the
+  place's own style (Soft in Match_Area) is what every map gets.
 - `Player:PinStreamingForInstance` appears in the pinned type
   definitions but has **no public documentation**, so nothing here relies
   on it.
@@ -100,7 +102,7 @@ the engine's:
 | School | Soft, 14:00 | on | 400→2000 (horizon) | none | none |
 | Factory | Realistic, 16:30 | on | 150→700 (dust haze) | warm tint, +0.1 contrast | none |
 | Museum | Soft, 12:00 | on | 500→2500 (horizon) | none | none |
-| Laboratory | Realistic, 00:00 | **off** | 140→500 (shaft depth) | cool tint, +0.15 contrast | **on** (0.4, threshold 1.2) |
+| Laboratory | Realistic, 14:00 | **off** | 140→500 (shaft depth) | cool tint, +0.15 contrast | **on** (0.4, threshold 1.2) |
 
 ### Cost of each effect on mobile
 
@@ -112,7 +114,7 @@ perf-budget §1.
 |---|---|---|
 | Fog | ~free: a blend in shading that already runs | Everywhere. Theme at no cost. |
 | Ambient / OutdoorAmbient / env scales | ~free: shading terms, no extra pass | Everywhere. |
-| `GlobalShadows` | **High**: an extra pass over shadow-casting geometry, which counts against the 180 draw-call budget | School, Factory, Museum each earn it through depth (courtyard, catwalks, dome light pool). The Lab is underground, so the sun adds nothing and shadows are dropped. |
+| `GlobalShadows` | **High**: an extra pass over shadow-casting geometry, which counts against the 180 draw-call budget | School, Factory, Museum each earn it through depth (courtyard, catwalks, dome light pool). The Lab drops them; with shadows off the sun lights through its roof, which is why its clock is midday (at 00:00 it read near-black). |
 | ColorCorrection | Low: one full-screen pass | Factory, Lab only, where the tint carries the theme. School and Museum gain nothing from it and drop it. |
 | Bloom | **Highest post effect**: several full-screen blur passes | Lab only. The glowing core is the hero landmark players navigate by. Factory's furnace uses Neon + a PointLight instead. |
 | Atmosphere | Medium; also overrides fog | Not used. |
