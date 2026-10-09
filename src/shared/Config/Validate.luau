@@ -491,6 +491,27 @@ export type StoreItemDef = {
 	-- is Robux-only, so a CoinOffer must sell the same thing per round
 	-- (Q8; Validate.run checks it).
 	perk: StorePerk?,
+
+	-- Sales and limited editions (design-decisions.md Q1, "the featured
+	-- plinths" and "limited cosmetics", 2026-10-09). Times are UTC,
+	-- written "YYYY-MM-DD HH:MM": fixed width, so two compare correctly
+	-- as strings. Outside [onSaleFrom, onSaleUntil) the item isn't sold
+	-- or shown; nil = no limit on that side. A cosmetic is only ever sold
+	-- as a limited edition, so a Cosmetic grant needs `onSaleUntil`.
+	onSaleFrom: string?,
+	onSaleUntil: string?,
+	-- The struck-through "was" price, in the item's own currency. It must
+	-- be above coinPrice (CoinOffer) or robuxPrice (Robux). A Robux
+	-- item's real price lives on the Creator Dashboard, so the client
+	-- shows this only when the live price really is lower (StoreOffers).
+	wasPrice: number?,
+	-- Another item's `key` that isn't sold while this one is: the Season
+	-- Pass launch offer replaces the full-price pass until it ends.
+	replaces: string?,
+	-- Which hub plinth (HubStorePodium Slot, 1-3) shows this item while
+	-- it's on sale. Two enabled items may share a slot only if their
+	-- sale windows don't overlap.
+	featuredSlot: number?,
 }
 
 -- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
@@ -1620,6 +1641,29 @@ function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: 
 	end
 end
 
+-- How many HubStorePodium plinths the hub has (hub-spec.md: exactly 3).
+local FEATURED_SLOTS = 3
+
+-- "YYYY-MM-DD HH:MM" naming a real UTC date and time. Fixed width, so
+-- two valid ones compare correctly as strings; StoreOffers.parseUtcTime
+-- turns one into os.time() at runtime.
+local function isUtcTime(text: any): boolean
+	if type(text) ~= "string" then
+		return false
+	end
+	local ys, ms, ds, hs, mins = string.match(text, "^(%d%d%d%d)%-(%d%d)%-(%d%d) (%d%d):(%d%d)$")
+	if ys == nil then
+		return false
+	end
+	local y, m, d = tonumber(ys) :: number, tonumber(ms) :: number, tonumber(ds) :: number
+	if m < 1 or m > 12 or d < 1 or (tonumber(hs) :: number) > 23 or (tonumber(mins) :: number) > 59 then
+		return false
+	end
+	local leap = (y % 4 == 0 and y % 100 ~= 0) or y % 400 == 0
+	local maxDay = ({ 31, if leap then 29 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 })[m]
+	return d <= maxDay
+end
+
 -- P4-5. Per-item store checks. The cross-registry half (a PowerUpStock
 -- grant naming a power-up that exists, is loadout-eligible, and has a
 -- free acquisition path per design-decisions.md Q8) needs the whole
@@ -1726,6 +1770,59 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		issue(issues, "Store", fileName, "coinPrice", "only a CoinOffer has a coinPrice")
 	end
 
+	for _, field in { "onSaleFrom", "onSaleUntil" } do
+		local value = (def :: any)[field]
+		if value ~= nil and not isUtcTime(value) then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				field,
+				string.format('expected "YYYY-MM-DD HH:MM" (UTC), got %s', tostring(value))
+			)
+		end
+	end
+	if isUtcTime(def.onSaleFrom) and isUtcTime(def.onSaleUntil) and def.onSaleUntil <= def.onSaleFrom then
+		issue(issues, "Store", fileName, "onSaleUntil", "must be after onSaleFrom")
+	end
+
+	if def.wasPrice ~= nil then
+		local own = if def.kind == "CoinOffer" then def.coinPrice else def.robuxPrice
+		if type(def.wasPrice) ~= "number" or def.wasPrice % 1 ~= 0 then
+			issue(issues, "Store", fileName, "wasPrice", "expected a whole number")
+		elseif type(own) == "number" and def.wasPrice <= own then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"wasPrice",
+				string.format("must be above the item's own price (%d) - it's the struck-through price", own)
+			)
+		end
+	end
+
+	if def.replaces ~= nil and (not isNonEmptyString(def.replaces) or def.replaces == def.key) then
+		issue(issues, "Store", fileName, "replaces", "must be another store item's key")
+	end
+
+	if
+		def.featuredSlot ~= nil
+		and (
+			type(def.featuredSlot) ~= "number"
+			or def.featuredSlot % 1 ~= 0
+			or def.featuredSlot < 1
+			or def.featuredSlot > FEATURED_SLOTS
+		)
+	then
+		issue(
+			issues,
+			"Store",
+			fileName,
+			"featuredSlot",
+			string.format("expected a plinth slot from 1 to %d, got %s", FEATURED_SLOTS, tostring(def.featuredSlot))
+		)
+	end
+
 	if def.perk ~= nil then
 		if not inSet(def.perk, STORE_PERKS) then
 			issue(
@@ -1777,11 +1874,23 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 	for index, grant in def.grants do
 		local field = string.format("grants[%d]", index)
 
-		-- Coins buy power-up stock only (user decision, 2026-10-02): no
-		-- cosmetics, titles or currency, and never anything random. The
-		-- one named exception is a Navigation round (Q8, "Navigation").
-		if def.kind == "CoinOffer" and grant.kind ~= "PowerUpStock" and grant.kind ~= "NavigationRound" then
-			issue(issues, "Store", fileName, field, "a CoinOffer may only grant PowerUpStock or NavigationRound")
+		-- Coins buy power-up stock (user decision, 2026-10-02): no titles
+		-- or currency, and never anything random. Named exceptions: a
+		-- Navigation round (Q8, "Navigation") and a limited cosmetic
+		-- ("limited cosmetics", 2026-10-09).
+		if
+			def.kind == "CoinOffer"
+			and grant.kind ~= "PowerUpStock"
+			and grant.kind ~= "NavigationRound"
+			and grant.kind ~= "Cosmetic"
+		then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				field,
+				"a CoinOffer may only grant PowerUpStock, NavigationRound or a limited Cosmetic"
+			)
 		end
 
 		if not inSet(grant.kind, STORE_GRANT_KINDS) then
@@ -1809,6 +1918,17 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 		elseif grant.kind == "Cosmetic" then
 			if not isNonEmptyString(grant.cosmeticId) then
 				issue(issues, "Store", fileName, field, "a Cosmetic grant needs a `cosmeticId`")
+			end
+			-- A sold cosmetic is a limited edition: on sale until a date,
+			-- then never again ("limited cosmetics", 2026-10-09).
+			if def.onSaleUntil == nil then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					field,
+					"a cosmetic is only sold as a limited edition - set onSaleUntil"
+				)
 			end
 		elseif grant.kind == "Title" then
 			if not isNonEmptyString(grant.titleId) then
@@ -3810,6 +3930,82 @@ function Validate.run(input: RegistryInput): { Issue }
 						)
 					end
 				end
+			end
+		end
+
+		-- ===== Sales and limited cosmetics (Q1, 2026-10-09) =============
+		-- Drop and leaderboard cosmetics are never sold (track items are
+		-- caught by the season checks below), and a sold cosmetic is a
+		-- limited edition (checkStoreItem). `replaces` names a real item,
+		-- and no plinth shows two enabled items at once.
+		local leaderboardCosmetic: { [string]: boolean } = {}
+		if leaderboard ~= nil and type(leaderboard.payouts) == "table" then
+			for _, bands in leaderboard.payouts do
+				if type(bands) == "table" then
+					for _, band in bands do
+						if type(band.cosmeticId) == "string" then
+							leaderboardCosmetic[band.cosmeticId] = true
+						end
+					end
+				end
+			end
+		end
+		local bySlot: { [number]: { { fileName: string, def: StoreItemDef } } } = {}
+		for _, entry in store do
+			local def = entry.def
+			if type(def.grants) == "table" then
+				for index, grant in def.grants do
+					if type(grant) ~= "table" or grant.kind ~= "Cosmetic" or type(grant.cosmeticId) ~= "string" then
+						continue
+					end
+					local id = grant.cosmeticId :: string
+					local cosmetic = if cosmeticAt ~= nil then cosmeticAt[id] else nil
+					local why = if cosmetic ~= nil and cosmetic.winDrop == true
+						then "a win drop (winDrop = true)"
+						elseif leaderboardCosmetic[id] then "a leaderboard prize"
+						else nil
+					if why ~= nil then
+						issue(
+							issues,
+							"Store",
+							entry.fileName,
+							string.format("grants[%d]", index),
+							string.format("cosmetic %q is %s, and those are never sold", id, why)
+						)
+					end
+				end
+			end
+			if type(def.replaces) == "string" and def.replaces ~= def.key and storeKeyAt[def.replaces] == nil then
+				issue(
+					issues,
+					"Store",
+					entry.fileName,
+					"replaces",
+					string.format("%q is not a store item's key", def.replaces)
+				)
+			end
+			if def.enabled and type(def.featuredSlot) == "number" then
+				local list: { { fileName: string, def: StoreItemDef } } = bySlot[def.featuredSlot] or {}
+				for _, other in list do
+					local a, b = def, other.def
+					local aFrom, aUntil = a.onSaleFrom or "", a.onSaleUntil or "~"
+					local bFrom, bUntil = b.onSaleFrom or "", b.onSaleUntil or "~"
+					if aFrom < bUntil and bFrom < aUntil then
+						issue(
+							issues,
+							"Store",
+							entry.fileName,
+							"featuredSlot",
+							string.format(
+								"plinth %d also shows %s while this is on sale - give them separate slots or sale windows",
+								def.featuredSlot,
+								other.fileName
+							)
+						)
+					end
+				end
+				table.insert(list, entry)
+				bySlot[def.featuredSlot] = list
 			end
 		end
 	end

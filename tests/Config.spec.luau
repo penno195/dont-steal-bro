@@ -1774,6 +1774,7 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 	TestRunner.it("accepts a product granting a registered, enabled cosmetic", function()
 		local product = validProduct("t")
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		local issues = Validate.run({
 			gameConfig = validGameConfig(),
 			maps = {},
@@ -1789,6 +1790,7 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 	TestRunner.it("refuses a grant of a cosmetic nobody registered, once a cosmetics registry is provided", function()
 		local product = validProduct("t")
 		product.grants = { { kind = "Cosmetic", cosmeticId = "not-a-cosmetic" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		local issues = Validate.run({
 			gameConfig = validGameConfig(),
 			maps = {},
@@ -1808,12 +1810,14 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 		-- predates P4-6 keeps working unchanged.
 		local product = validProduct("t")
 		product.grants = { { kind = "Cosmetic", cosmeticId = "whatever" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		TestRunner.expect(#runWithStore({ { fileName = "T.luau", def = product } })):toBe(0)
 	end)
 
 	TestRunner.it("refuses a grant of a cosmetic that exists but isn't enabled yet", function()
 		local product = validProduct("t")
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		local cosmetic = validCosmetic("skin-founder", "Skin")
 		cosmetic.enabled = false
 		cosmetic.shirtAssetId = 0
@@ -1837,6 +1841,7 @@ TestRunner.describe("Validate.run - cosmetic cross-registry checks (P4-6)", func
 		product.enabled = false
 		product.assetId = 0
 		product.grants = { { kind = "Cosmetic", cosmeticId = "skin-founder" } }
+		product.onSaleUntil = "2030-01-01 00:00"
 		local cosmetic = validCosmetic("skin-founder", "Skin")
 		cosmetic.enabled = false
 		cosmetic.shirtAssetId = 0
@@ -2739,5 +2744,110 @@ TestRunner.describe("Validate - streak buy-back tiers", function()
 
 	TestRunner.it("refuses a maxStreak below minStreak", function()
 		TestRunner.expect(#runWithStore(tiers(buyBackTier(3, 2))) > 0):toBeTruthy()
+	end)
+end)
+
+-- ===== Sales, limited cosmetics and plinths (Q1, 2026-10-09) =============
+
+local function runSelling(
+	store: { { fileName: string, def: Validate.StoreItemDef } },
+	cosmetic: Validate.CosmeticDef?,
+	config: Validate.GameConfig?
+): { Validate.Issue }
+	return Validate.run({
+		gameConfig = config or validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = { { fileName = "SprintBoost.luau", def = validPowerUp("sprint-boost") } },
+		titles = {},
+		store = store,
+		cosmetics = { { fileName = "Hat.luau", def = cosmetic or validCosmetic("hat-ltd", "Skin") } },
+	})
+end
+
+local function limitedHat(): Validate.StoreItemDef
+	local def = validProduct("hat-ltd")
+	def.grants = { { kind = "Cosmetic", cosmeticId = "hat-ltd" } }
+	def.onSaleUntil = "2026-12-01 00:00"
+	return def
+end
+
+TestRunner.describe("Validate - sales and limited cosmetics", function()
+	TestRunner.it("accepts a limited cosmetic sold for Robux", function()
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } })):toBe(0)
+	end)
+
+	TestRunner.it("accepts a limited cosmetic sold for coins", function()
+		local def = limitedHat()
+		def.kind = "CoinOffer"
+		def.assetId = 0
+		def.robuxPrice = 0
+		def.coinPrice = 150
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a cosmetic sold with no end date", function()
+		local def = limitedHat()
+		def.onSaleUntil = nil
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses selling a win-drop cosmetic", function()
+		local hat = validCosmetic("hat-ltd", "Skin")
+		hat.winDrop = true
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } }, hat) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses selling a leaderboard prize", function()
+		local config = validGameConfig()
+		config.leaderboard.payouts = { Weekly = { { maxRank = 1, currency = 100, cosmeticId = "hat-ltd" } } }
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } }, nil, config) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a malformed time or an end before the start", function()
+		local bad = limitedHat()
+		bad.onSaleUntil = "2026-12-01"
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = bad } }) > 0):toBeTruthy()
+		local backwards = limitedHat()
+		backwards.onSaleFrom = "2026-12-02 00:00"
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = backwards } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("needs wasPrice above the item's own price", function()
+		local def = validProduct("t")
+		def.wasPrice = 49 -- robuxPrice is 49
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+		def.wasPrice = 99
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("needs `replaces` to name another real item", function()
+		local def = validProduct("t")
+		def.replaces = "nope"
+		local full = validProduct("full")
+		full.assetId = 999
+		local both = { { fileName = "T.luau", def = def }, { fileName = "Full.luau", def = full } }
+		TestRunner.expect(#runSelling(both) > 0):toBeTruthy()
+		def.replaces = "full"
+		TestRunner.expect(#runSelling(both)):toBe(0)
+	end)
+
+	TestRunner.it("refuses two enabled items on one plinth at once, allows them back to back", function()
+		local a = validProduct("a")
+		a.featuredSlot = 1
+		a.onSaleUntil = "2026-11-01 00:00"
+		local b = validProduct("b")
+		b.assetId = 999
+		b.featuredSlot = 1
+		local both = { { fileName = "A.luau", def = a }, { fileName = "B.luau", def = b } }
+		TestRunner.expect(#runSelling(both) > 0):toBeTruthy()
+		b.onSaleFrom = "2026-11-01 00:00"
+		TestRunner.expect(#runSelling(both)):toBe(0)
+	end)
+
+	TestRunner.it("refuses a plinth slot the hub doesn't have", function()
+		local def = validProduct("t")
+		def.featuredSlot = 4
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
 end)

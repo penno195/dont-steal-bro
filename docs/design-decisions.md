@@ -257,6 +257,57 @@ step 7a). Every amount is still unconfirmed until a playtest.
   captioned with the lone-sharer amount** ("50 if both steal"). Steal is
   captioned "only if both share".
 
+*Applied (2026-10-09, user decision):* **the daily hunt.**
+- **One hidden pickup per player per UTC day**, at one of a set of
+  tagged spots (`HubDailyHuntSpot`) in the hotel's rooms and in
+  out-of-the-way corners of the grounds. The spot is picked from the
+  player's user id and the date, so friends get different spots.
+- **Only its owner sees it.** The client draws it; the server checks a
+  claim against today's spot for that player, their distance from it,
+  and the profile's last claim date, so it pays once a day.
+- **The reward is a 50/50 roll: one freely earnable power-up (Q8), or
+  25 coins** (a power-up's coin price). It doesn't grow with
+  consecutive days: the season pass's free track already rewards
+  coming back.
+- Mobile performance inside the hotel is unchecked (owner to test on a
+  phone); spots inside it may move or be cut after that.
+
+*Applied (2026-10-09, user decision):* **the featured plinths.**
+- **The three store plinths (`HubStorePodium`) each show one store
+  item.** Walking up opens the hub store on that item; every purchase
+  still goes through `StoreService`.
+- **The owner picks what's featured.** A listing stays until its end
+  date and time (UTC) or until the owner removes it; nothing rotates on
+  its own. Coins only buy power-up stock and Navigation (see "what
+  coins buy"), so cosmetics are never featured for sale.
+- **Sales are allowed.** A coin item's sale price is what the server
+  charges. A Robux item's real price is set on the Creator Dashboard,
+  so the plinth shows the live price from Roblox with the config price
+  struck through, and shows a sale tag only if the live price really is
+  lower.
+- **Launch offer: the Season Pass at 99 R$** (normally 199 R$), as a
+  second developer product with an end date in config. After that
+  date the server stops selling it and the 199 R$ product is offered
+  again, with no dashboard change needed on the day. Both products
+  grant the same pass and follow the same once-per-season rule.
+
+*Applied (2026-10-09, user decision):* **limited cosmetics.** Narrows
+"what coins buy" above.
+- **Pass, leaderboard and drop cosmetics are never sold.** Track and
+  leaderboard items stay exclusive, and drops stay drop-only.
+- **New cosmetics made to be sold can be, as limited editions:** each
+  is on sale until an end date (UTC), then never again; owners keep it.
+  It can be priced in coins, in Robux (its own developer product), or
+  both. Q8 covers power-ups only, so a Robux cosmetic is fine. Nothing
+  is limited by stock count.
+- **A community reward:** one limited cosmetic is free to players who
+  have joined the game's Roblox community (group). The server checks
+  membership itself. A Discord reward was rejected: Roblox's Community
+  Standards (checked 2026-10-09) allow no external links in an experience
+  except through Social Links, and checking Discord membership would mean
+  collecting the player's Discord account. Discord is linked only
+  through the experience's Social Links, and no reward is tied to it.
+
 ## 2. Round timer expires with <3 finished
 
 **Decision:** Rank finishers by task-completion percentage (tiebreak:
