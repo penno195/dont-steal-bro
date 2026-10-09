@@ -117,12 +117,12 @@ local function card(): TextButton
 		end,
 		Size = UDim2.fromOffset(CARD_WIDTH, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
-		BackgroundColor3 = Theme.elevation[3].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Visible = function()
 			return tip() ~= nil
 		end,
 		Base.corner(Theme.radius.lg),
-		create("UIStroke")({ Color = Theme.color.brand, Thickness = 2 }),
+		Base.stage({ rim = Theme.color.brand, thickness = 3 }),
 		Base.padding(CARD_PAD),
 		create("UIListLayout")({
 			Padding = UDim.new(0, Theme.spacing.xxs),

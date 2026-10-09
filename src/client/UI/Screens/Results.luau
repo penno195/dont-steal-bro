@@ -101,8 +101,16 @@ local function reveal(shown: () -> boolean, height: number, order: number, child
 				return UDim2.fromOffset(0, t() * SLIDE)
 			end,
 			GroupTransparency = t,
-			BackgroundColor3 = Theme.color.surface,
+			-- Flat, not Base.stage: a UIGradient on a CanvasGroup tints
+			-- everything in it, text included. The stage colour and gold rim.
+			BackgroundColor3 = Theme.fill.panel.top,
 			Base.corner(Theme.radius.md),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.fill.panel.rim,
+				Thickness = 2,
+			}),
 			create("UIPadding")({
 				PaddingLeft = UDim.new(0, Theme.spacing.md),
 				PaddingRight = UDim.new(0, Theme.spacing.md),

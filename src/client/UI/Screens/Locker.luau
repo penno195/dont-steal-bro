@@ -104,9 +104,10 @@ local function tileFill(state: () -> string, rarity: () -> string?, children: { 
 	local props: { [any]: any } = {
 		Name = "Fill",
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = function()
-			return if state() == "pressed" then Theme.color.surfaceRaised else Theme.color.surface
-		end,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
+		Base.stageGradient(function()
+			return state() == "pressed"
+		end),
 		Base.corner(Theme.radius.md),
 		create("UIStroke")({
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,

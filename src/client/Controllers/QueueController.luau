@@ -156,9 +156,9 @@ local function stripTile(tile: () -> LockerLogic.StripTile, index: number, offer
 		Name = "Tile" .. index,
 		LayoutOrder = index,
 		Size = UDim2.fromOffset(STRIP_TILE, STRIP_TILE),
-		BackgroundColor3 = Theme.color.surfaceRaised,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.sm),
-		create("UIStroke")({ BorderStrokePosition = Enum.BorderStrokePosition.Inner, Color = Theme.color.line }),
+		Base.stage({ rim = Theme.color.line, thickness = 1 }),
 		create("Frame")({
 			Name = "Icon",
 			AnchorPoint = Vector2.new(0.5, 0.5),

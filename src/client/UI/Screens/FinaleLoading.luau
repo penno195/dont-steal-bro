@@ -110,7 +110,8 @@ local function tile(entry: () -> DecisionLogic.RewardTile, order: number): Frame
 		Name = "Reward",
 		LayoutOrder = order,
 		Size = UDim2.fromOffset(TILE_W, TILE_H),
-		BackgroundColor3 = Theme.elevation[2].surface,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
+		Base.stage(),
 		BackgroundTransparency = function()
 			return if nothing() then 0.5 else 0
 		end,
@@ -238,16 +239,14 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 						Name = "Chip",
 						LayoutOrder = i,
 						Size = UDim2.fromOffset((COLUMN - 2 * Theme.spacing.xs) / 3, CHIP_H),
-						BackgroundColor3 = Theme.color.surfaceRaised,
+						BackgroundColor3 = Base.STAGE_BACKGROUND,
 						Base.corner(Theme.radius.pill),
-						create("UIStroke")({
-							BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-							ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-							Color = function()
+						Base.stage({
+							rim = function()
 								return if isSelf() then Theme.color.brand else Theme.color.line
 							end,
-							Thickness = function()
-								return if isSelf() then 2 else 1
+							thickness = function()
+								return if isSelf() then 3 else 1
 							end,
 						}),
 						Base.text("caption", {

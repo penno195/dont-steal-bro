@@ -84,7 +84,15 @@ function Base.text(styleName: string, props: { [any]: any }, outline: boolean?):
 			merged[k] = v
 		end
 	end
-	return create("TextLabel")(merged) :: TextLabel
+	local label = create("TextLabel")(merged) :: TextLabel
+	-- Setting TextScaled turns TextWrapped back on, and Vide applies
+	-- properties in no fixed order, so a caller's `TextWrapped = false`
+	-- was silently lost (names wrapped mid-word instead of shrinking).
+	-- Re-apply it once TextScaled has been set.
+	if merged.TextWrapped == false then
+		label.TextWrapped = false
+	end
+	return label
 end
 
 -- The focus ring: a stroke outside the visual in Theme.color.focus.
@@ -288,6 +296,22 @@ function Base.interactive(props: InteractiveProps): TextButton
 			props.visual(state, focused),
 		}),
 	}) :: TextButton
+end
+
+-- Just the stage-panel gradient (on a Base.STAGE_BACKGROUND Frame), for
+-- a surface that keeps its own stroke - a store tile's rarity rim. While
+-- `lit` is true it lifts a step toward white: the pressed/selected look.
+local LIT = 0.12
+function Base.stageGradient(lit: Source<boolean>?): Instance
+	local panel = Theme.fill.panel
+	local litGradient =
+		ColorSequence.new(panel.top:Lerp(Color3.new(1, 1, 1), LIT), panel.bottom:Lerp(Color3.new(1, 1, 1), LIT))
+	return create("UIGradient")({
+		Rotation = 90,
+		Color = function()
+			return if lit and lit() then litGradient else panel.gradient
+		end,
+	})
 end
 
 export type StageProps = {

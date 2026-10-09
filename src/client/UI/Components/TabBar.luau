@@ -50,7 +50,16 @@ local function labelFor(tab: Tab, iconSize: number, ink: () -> Color3, isSelecte
 		Size = UDim2.new(1, -(if tab.icon then iconSize + Theme.spacing.xs else 0) - Theme.spacing.sm, 0.6, 0),
 		Text = tab.label,
 		TextColor3 = ink,
+		-- Shrink, never wrap: the display face is wide, and five tabs with
+		-- icons broke "Season" into "SEASO / N" (Store, 2026-10-09).
+		TextWrapped = false,
 	})
+	-- Five tabs with icons leave ~43 px per label: let a long word drop
+	-- to the caption floor rather than clip at the button style's 14.
+	local fit = label:FindFirstChildOfClass("UITextSizeConstraint")
+	if fit then
+		fit.MinTextSize = Theme.type.caption.min
+	end
 	local outline = label:FindFirstChild("Outline") :: UIStroke?
 	if outline then
 		effect(function()

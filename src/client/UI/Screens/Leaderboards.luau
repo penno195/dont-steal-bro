@@ -200,8 +200,9 @@ local function prizeChip(chip: () -> BoardLogic.PrizeChip, count: () -> number, 
 			local n = math.max(1, count())
 			return UDim2.fromOffset((MenuShell.INNER - (n - 1) * Theme.spacing.xs) / n, CHIP_H)
 		end,
-		BackgroundColor3 = Theme.color.surfaceRaised,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.corner(Theme.radius.sm),
+		Base.stage(),
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,

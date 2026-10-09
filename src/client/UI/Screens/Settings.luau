@@ -67,9 +67,16 @@ local function toggleRow(label: string, value: () -> boolean, onToggle: () -> ()
 				create("Frame")({
 					Name = "Fill",
 					Size = UDim2.fromScale(1, 1),
-					BackgroundColor3 = function()
-						return if state() == "pressed" then Theme.color.surfaceRaised else Theme.color.surface
-					end,
+					BackgroundColor3 = Base.STAGE_BACKGROUND,
+					Base.stageGradient(function()
+						return state() == "pressed"
+					end),
+					create("UIStroke")({
+						BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+						Color = Theme.color.line,
+						Thickness = 2,
+					}),
 					Base.corner(Theme.radius.md),
 					create("UIPadding")({
 						PaddingLeft = UDim.new(0, Theme.spacing.md),
@@ -149,8 +156,9 @@ local function stepperRow(
 			AnchorPoint = Vector2.new(0, 1),
 			Position = UDim2.fromScale(0, 1),
 			Size = UDim2.fromOffset(MenuShell.INNER, ROW_H),
-			BackgroundColor3 = Theme.color.surface,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
 			Base.corner(Theme.radius.md),
+			Base.stage({ rim = Theme.color.line }),
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Horizontal,
 				HorizontalAlignment = Enum.HorizontalAlignment.Center,

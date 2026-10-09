@@ -151,11 +151,10 @@ local function card(
 				create("Frame")({
 					Name = "Fill",
 					Size = UDim2.fromScale(1, 1),
-					BackgroundColor3 = function()
-						return if state() == "pressed" or isSelected()
-							then Theme.color.surfaceRaised
-							else Theme.color.surface
-					end,
+					BackgroundColor3 = Base.STAGE_BACKGROUND,
+					Base.stageGradient(function()
+						return state() == "pressed" or isSelected()
+					end),
 					Base.corner(Theme.radius.md),
 					create("UIStroke")({
 						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
@@ -290,11 +289,11 @@ local function flowBanner(store: Store, pane: number): Instance
 			return text() ~= nil
 		end,
 		Size = UDim2.fromScale(1, 1),
-		BackgroundColor3 = Theme.color.surfaceRaised,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		ZIndex = 5,
 		Base.corner(Theme.radius.md),
 		Base.padding(Theme.spacing.md),
-		create("UIStroke")({ BorderStrokePosition = Enum.BorderStrokePosition.Inner, Color = color, Thickness = 2 }),
+		Base.stage({ rim = color, thickness = 3 }),
 		Base.text("body", {
 			Name = "Message",
 			Size = UDim2.new(1, 0, 1, -(Theme.touch.primaryHeight + Theme.spacing.sm)),

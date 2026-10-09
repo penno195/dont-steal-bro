@@ -410,15 +410,10 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				return UDim2.new(1, -2 * padPx(), 0, 0)
 			end,
 			AutomaticSize = Enum.AutomaticSize.Y,
-			BackgroundColor3 = Theme.elevation[3].surface,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
 			Visible = explainerOpen,
 			Base.corner(Theme.radius.md),
-			create("UIStroke")({
-				BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
-				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-				Color = Theme.color.brand,
-				Thickness = 2,
-			}),
+			Base.stage({ rim = Theme.color.brand }),
 			create("UIPadding")({
 				PaddingTop = UDim.new(0, Theme.spacing.md),
 				PaddingBottom = UDim.new(0, Theme.spacing.md),
@@ -469,7 +464,9 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 		local card = create("Frame")({
 			Name = "TaskViewCard",
 			Size = UDim2.fromScale(1, 1),
-			BackgroundColor3 = Theme.elevation[3].surface,
+			-- The stage panel in a thick gold rim, like a Modal.
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
+			Base.stage({ thickness = 3 }),
 			BackgroundTransparency = function()
 				return if isSheet() then 0 else 0.02
 			end,
@@ -571,7 +568,8 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			ZIndex = 5,
 			Visible = complete,
 			Active = true, -- swallows taps meant for the task underneath
-			BackgroundColor3 = Theme.elevation[3].surface,
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
+			Base.stage({ thickness = 3 }),
 			create("UICorner")({
 				CornerRadius = Theme.radius.lg,
 			}),
