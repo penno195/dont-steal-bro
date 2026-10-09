@@ -115,13 +115,20 @@ end
 -- The card's bottom-left corner, in the ScreenGui's own coordinates (a
 -- CoreUISafeInsets ScreenGui starts at the usable rect). Bottom-left
 -- of the screen, except on touch, where Roblox's thumbstick owns that
--- corner (ReservedMove): there it sits just above the thumbstick.
-local function anchorFor(usable: Layout.Rect, touch: boolean): UDim2
+-- corner (ReservedMove): there it sits just above the thumbstick, or,
+-- when the card is taller than the room above it (a landscape phone:
+-- it grew up under Roblox's top bar on an iPhone), on the bottom edge
+-- just right of the thumbstick. `height` is the card's rendered height.
+local function anchorFor(usable: Layout.Rect, touch: boolean, height: number): UDim2
 	local margin = Theme.spacing.lg
 	if touch then
 		for _, zone in Layout.resolveZones(usable) do
 			if zone.kind == "ReservedMove" then
-				return UDim2.fromOffset(margin, zone.rect.y - usable.y - margin)
+				local above = zone.rect.y - usable.y - margin
+				if height <= above - margin then
+					return UDim2.fromOffset(margin, above)
+				end
+				return UDim2.new(0, zone.rect.x - usable.x + zone.rect.width + margin, 1, -margin)
 			end
 		end
 	end
@@ -295,11 +302,14 @@ local function mountCard()
 			local b = buttons()
 			return joining() and b.play and b.practice
 		end
+		-- Rendered height (after the UIScale); moving the card never
+		-- resizes it, so placing from it can't feed back.
+		local height = source(0)
 		local card = create("Frame")({
 			Name = "Queue",
 			AnchorPoint = Vector2.new(0, 1),
 			Position = function()
-				return anchorFor(usable(), touch())
+				return anchorFor(usable(), touch(), height())
 			end,
 			Size = UDim2.fromOffset(CARD_WIDTH, 0),
 			AutomaticSize = Enum.AutomaticSize.Y,
@@ -432,6 +442,10 @@ local function mountCard()
 			end) :: any,
 			Parent = gui,
 		}) :: Frame
+		card:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
+			height(card.AbsoluteSize.Y)
+		end)
+		height(card.AbsoluteSize.Y)
 		UIScaleController.attachScale(card)
 	end)
 end

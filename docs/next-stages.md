@@ -38,13 +38,18 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     Studio, then enabling them.*
 - [ ] **1b. iPhone playtest fixes** (owner's screenshots, 2026-10-09),
   one per session:
-  - [ ] Hub UI under Roblox's top bar: on iPhone the queue card's
+  - [x] Hub UI under Roblox's top bar: on iPhone the queue card's
     status line ("Finding players...", "Round over? Press Play...")
     sits behind the Roblox menu/chat/mic buttons. Keep HUD and menus
     inside the safe area (ScreenGui `ScreenInsets`, `GuiService`
     top-bar inset) on every screen, not just the Hub; check the race
     HUD's top row and the bottom power-up slots against the notch and
-    the jump button too.
+    the jump button too. *Done 2026-10-09, not yet seen on a phone:
+    every screen already used CoreUISafeInsets; the queue card was
+    the leak. On touch it sat above the thumbstick zone and grew up
+    into the bar when taller than that room; it now drops to the
+    bottom edge right of the thumbstick instead. Race HUD top row
+    only lifts into the bar when it fits between Roblox's buttons.*
   - [ ] Laboratory lighting is still wrong. Find what an earlier fix
     missed (its `LightingPresets` entry vs what's in the map) and check
     it in Studio Play, not just Edit. Lead: a Hub-place playtest on
