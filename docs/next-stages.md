@@ -29,7 +29,13 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     own at the same spot. Not yet seen in Studio: needs a first item.*
   - [ ] Items and pass images for the first month's tiers. Models made
     with AI mesh tools (Studio, Meshy via `MESHY_API_KEY`), to be redone in
-    Blender later.
+    Blender later. *2026-10-09: lineup set (Season1.luau, 11 columns
+    to 30 wins), five wearables written (disabled, asset ids 0), tiles
+    show an item's `previewIconAssetId`. Pictures done for the founder
+    trail, skin and emote (`assets/seasonpass/make-art.js`). Left: the
+    five Meshy models (Loot Sack, Burglar Beanie, Traffic Cone, Game
+    Show Top Hat, Gold Bar Jetpack), their pictures, fitting them in
+    Studio, then enabling them.*
 - [ ] **1b. iPhone playtest fixes** (owner's screenshots, 2026-10-09),
   one per session:
   - [ ] Hub UI under Roblox's top bar: on iPhone the queue card's
@@ -41,7 +47,10 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     the jump button too.
   - [ ] Laboratory lighting is still wrong. Find what an earlier fix
     missed (its `LightingPresets` entry vs what's in the map) and check
-    it in Studio Play, not just Edit.
+    it in Studio Play, not just Edit. Lead: a Hub-place playtest on
+    2026-10-09 warned that Lighting holds an Atmosphere (overrides every
+    preset's fog) and Studio-authored Bloom/ColorCorrection/DepthOfField/
+    SunRays that stack with presets. Check the Match place for the same.
   - [ ] Task views too small on a phone: the cards feel small and
     fiddly. Size them from the screen (bigger share of the height in
     landscape), and grow touch targets to a thumb's size.

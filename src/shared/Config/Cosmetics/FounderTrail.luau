@@ -16,6 +16,7 @@ local FounderTrail: Validate.CosmeticDef = {
 	trailTextureAssetId = 128027629483773,
 	trailColorHex = "#d4af37",
 	trailLifetime = 0.6,
+	previewIconAssetId = 134562449888774,
 }
 
 return FounderTrail
