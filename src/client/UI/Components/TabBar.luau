@@ -1,8 +1,11 @@
 --!strict
 --# selene: allow(mixed_table) -- Vide props + children, see Base.luau
--- TabBar (P6-2): equal-width tabs with a sliding indicator. The
--- selected tab is marked three ways - indicator bar, ink colour, and
--- bold vs regular weight - so it doesn't rest on colour.
+-- TabBar (P6-2): equal-width tabs with a sliding indicator. Since the
+-- UI art pass the indicator is a raised gold key (Base.raised, primary
+-- fill) that slides behind the selected tab on a stage-panel bar. The
+-- selected tab is marked three ways - a filled key vs bare, dark vs
+-- muted ink, and the display face's outline dropped - so it doesn't
+-- rest on colour.
 --
 -- Controller: tabs are ordinary selectable buttons (left/right moves
 -- focus, A picks), and L1/R1 step the selection from anywhere, the
@@ -22,6 +25,7 @@ local Theme = require(script.Parent.Parent.Theme)
 
 local cleanup = vide.cleanup
 local create = vide.create
+local effect = vide.effect
 
 export type Tab = { label: string, icon: string? }
 
@@ -35,7 +39,26 @@ export type Props = {
 }
 
 local HEIGHT = Theme.touch.iconButton + Theme.spacing.xs -- 48
-local INDICATOR = Theme.spacing.xs
+-- The gap between the bar's rim and the gold key.
+local INSET = Theme.spacing.xs
+
+-- A tab's label in the display face. Its outline only shows on the bare
+-- (muted) tabs: dark ink on the gold key can't take a dark outline.
+local function labelFor(tab: Tab, iconSize: number, ink: () -> Color3, isSelected: () -> boolean): TextLabel
+	local label = Base.text("button", {
+		LayoutOrder = 2,
+		Size = UDim2.new(1, -(if tab.icon then iconSize + Theme.spacing.xs else 0) - Theme.spacing.sm, 0.6, 0),
+		Text = tab.label,
+		TextColor3 = ink,
+	})
+	local outline = label:FindFirstChild("Outline") :: UIStroke?
+	if outline then
+		effect(function()
+			outline.Enabled = not isSelected()
+		end)
+	end
+	return label
+end
 
 local function TabBar(props: Props): Frame
 	local count = #props.tabs
@@ -62,26 +85,43 @@ local function TabBar(props: Props): Frame
 		Name = "TabBar",
 		Size = UDim2.fromOffset(tabWidth * count, HEIGHT),
 		LayoutOrder = props.layoutOrder or 0,
-		BackgroundColor3 = Theme.elevation[2].surface,
-		Base.corner(Theme.radius.md),
+		-- The UIGradient tints white into the stage-panel gradient.
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		Base.corner(Theme.radius.lg),
+		create("UIGradient")({ Rotation = 90, Color = Theme.fill.panel.gradient }),
+		create("UIStroke")({
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
+			Color = Theme.fill.panel.rim,
+			Thickness = 2,
+		}),
+		-- Under the tabs (ZIndex), so the labels draw on the key.
+		create("Frame")({
+			Name = "Indicator",
+			ZIndex = 1,
+			Position = function()
+				return UDim2.new(indicatorX(), INSET, 0, INSET)
+			end,
+			Size = UDim2.new(1 / count, -2 * INSET, 1, -2 * INSET),
+			BackgroundTransparency = 1,
+			Base.raised({
+				fill = function()
+					return Theme.fill.primary
+				end,
+				lip = Theme.lip.small,
+				radius = Theme.radius.md,
+				gloss = true,
+			}),
+		}),
 		create("Frame")({
 			Name = "Tabs",
+			ZIndex = 2,
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Horizontal,
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
-		}),
-		create("Frame")({
-			Name = "Indicator",
-			AnchorPoint = Vector2.new(0, 1),
-			Position = function()
-				return UDim2.new(indicatorX(), Theme.spacing.md, 1, 0)
-			end,
-			Size = UDim2.new(1 / count, -2 * Theme.spacing.md, 0, INDICATOR),
-			BackgroundColor3 = Theme.color.brand,
-			Base.corner(Theme.radius.pill),
 		}),
 	}) :: Frame
 
@@ -91,11 +131,11 @@ local function TabBar(props: Props): Frame
 			return props.selected() == i
 		end
 		local ink = function(): Color3
-			return if isSelected() then Theme.color.ink else Theme.color.inkMuted
+			return if isSelected() then Theme.fill.primary.ink else Theme.color.inkMuted
 		end
 		local button = Base.interactive({
 			name = "Tab" .. i,
-			size = Vector2.new(tabWidth, HEIGHT - INDICATOR),
+			size = Vector2.new(tabWidth, HEIGHT),
 			radius = Theme.radius.md,
 			onActivate = function()
 				props.onSelect(i)
@@ -126,20 +166,7 @@ local function TabBar(props: Props): Frame
 							SortOrder = Enum.SortOrder.LayoutOrder,
 						}),
 						(if tab.icon then Icons.view(tab.icon, iconSize, ink) else nil) :: any,
-						Base.text("label", {
-							LayoutOrder = 2,
-							Size = UDim2.new(
-								1,
-								-(if tab.icon then iconSize + Theme.spacing.xs else 0) - Theme.spacing.sm,
-								0.6,
-								0
-							),
-							Text = tab.label,
-							TextColor3 = ink,
-							FontFace = function()
-								return if isSelected() then Theme.type.label.font else Theme.type.body.font
-							end,
-						}),
+						labelFor(tab, iconSize, ink, isSelected),
 					}),
 				}
 			end,

@@ -1,6 +1,9 @@
 --!strict
 --# selene: allow(mixed_table) -- Vide props + children, see Base.luau
 -- IconButton (P6-2): a square, icon-only button - close, back, settings.
+-- Since the UI art pass it's a rounded square on Base.raised, Button's
+-- surface with the small lip; the ghost default stays surfaceless at
+-- rest, so a full-colour close icon still sits on nothing.
 -- The visual is the `iconButton` token (44 at scale 1); at the 0.75
 -- scale floor the hit area pads to 59 reference px so it still renders
 -- at 44 points while the icon stays put.
@@ -41,11 +44,12 @@ local function IconButton(props: Props): TextButton
 	local loading: Base.Source<boolean> = Base.read(props.loading or false)
 	local edge = Theme.touch.iconButton
 	local iconSize = props.iconSize or Theme.spacing.xl
+	local ghost = variant == "ghost"
 
 	local button = Base.interactive({
 		name = "IconButton",
 		size = Vector2.new(edge, edge),
-		radius = Theme.radius.pill,
+		radius = Theme.radius.lg,
 		disabled = props.disabled,
 		loading = loading,
 		onActivate = props.onActivate,
@@ -60,17 +64,22 @@ local function IconButton(props: Props): TextButton
 			local ink = function(): Color3
 				return Theme.color[style().ink]
 			end
-			return {
-				create("Frame")({
-					Name = "Surface",
-					Size = UDim2.fromScale(1, 1),
-					BackgroundColor3 = function()
-						return Theme.color[style().fill]
-					end,
-					BackgroundTransparency = function()
-						return style().fillTransparency
-					end,
-					Base.corner(Theme.radius.pill),
+			local fill = derive(function(): Theme.Fill
+				return Theme.fill[ComponentLogic.fillName(variant, state())]
+			end)
+			return Base.raised({
+				fill = fill,
+				-- The ghost has no surface at rest, so nothing to sink onto.
+				lip = if ghost then 0 else Theme.lip.small,
+				transparency = function()
+					return style().fillTransparency
+				end,
+				radius = Theme.radius.lg,
+				gloss = not ghost,
+				sunk = function()
+					return state() == "pressed"
+				end,
+				children = {
 					create("Frame")({
 						Name = "Overlay",
 						Size = UDim2.fromScale(1, 1),
@@ -78,7 +87,8 @@ local function IconButton(props: Props): TextButton
 						BackgroundTransparency = function()
 							return style().overlayTransparency
 						end,
-						Base.corner(Theme.radius.pill),
+						ZIndex = 2,
+						Base.corner(Theme.radius.lg),
 					}),
 					create("Frame")({
 						Name = "IconSlot",
@@ -86,16 +96,19 @@ local function IconButton(props: Props): TextButton
 						Position = UDim2.fromScale(0.5, 0.5),
 						Size = UDim2.fromOffset(iconSize, iconSize),
 						BackgroundTransparency = 1,
+						ZIndex = 3,
 						Visible = function()
 							return not loading()
 						end,
 						Icons.view(props.icon, iconSize, ink),
 					}),
 					vide.show(loading, function()
-						return Base.spinner(Theme.spacing.lg, ink)
+						local spinner = Base.spinner(Theme.spacing.lg, ink)
+						spinner.ZIndex = 3
+						return spinner
 					end) :: any,
-				}),
-			}
+				},
+			})
 		end,
 	})
 	button.Name = "IconButton_" .. props.label
