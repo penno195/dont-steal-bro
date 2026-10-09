@@ -77,6 +77,37 @@ describe("TaskViewLogic.fitCard", function()
 		expect(w):toBe(0)
 		expect(h):toBe(0)
 	end)
+
+	it("holds a minimum height round squat content", function()
+		local _, h = TaskViewLogic.fitCard(
+			{ width = 400, height = 80 },
+			{ width = 200, height = 24 },
+			0,
+			1400,
+			900,
+			24,
+			164
+		)
+		expect(h):toBe(164)
+	end)
+end)
+
+describe("TaskViewLogic.chromeSide", function()
+	local TOP = { width = 24, height = 128 }
+	local SIDE = { width = 216, height = 24 }
+
+	it("moves the chrome beside the content on a landscape phone", function()
+		-- 760 x 334: stacked leaves 158 tall (k 0.45), the rail 262 (k 0.75).
+		expect(TaskViewLogic.chromeSide({ width = 300, height = 350 }, TOP, SIDE, 760, 334, 24)):toBe("Side")
+	end)
+
+	it("keeps it stacked when both fit at full size", function()
+		expect(TaskViewLogic.chromeSide({ width = 300, height = 350 }, TOP, SIDE, 1400, 900, 24)):toBe("Top")
+	end)
+
+	it("keeps it stacked when width is what binds", function()
+		expect(TaskViewLogic.chromeSide({ width = 600, height = 100 }, TOP, SIDE, 640, 600, 24)):toBe("Top")
+	end)
 end)
 
 describe("TaskViewLogic.flash", function()

@@ -80,7 +80,10 @@ for the handler, config and remote. This page covers only the view.
 
 - **Presentation:** a card sized to the view's content (`contentSize`:
   the play area's natural size, plus header and status line), scaled
-  down evenly to fit the screen (`TaskViewLogic.fitCard`). On any touch
+  down evenly to fit the screen (`TaskViewLogic.fitCard`). On a short
+  landscape screen (a phone) the header and status move to a rail left
+  of the play area when that lets the content draw bigger
+  (`TaskViewLogic.chromeSide`); a wide, squat view keeps them stacked. On any touch
   device or small screen it slides up over a near-black backdrop that
   swallows touches (a sheet); on a big mouse/gamepad screen it grows in
   over a dimmed world (a window, `Tokens.taskView.windowMinShortAxis`).

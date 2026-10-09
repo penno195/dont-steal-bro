@@ -12,7 +12,8 @@
 --   - Open/close transitions (slide up / grow), zero under reduced motion.
 --   - The header: task name, an elapsed timer, and the close button
 --     (the abort path; B on a gamepad does the same).
---   - The status line under the play area, with a feedback icon so a
+--   - The status line under the play area (or under the header in a
+--     side rail on a short landscape screen), with a feedback icon so a
 --     state is never shown by colour alone.
 --   - The input lock: camera and character controls frozen from open to
 --     close via UI/InputLock, released on EVERY close path - success,
@@ -69,6 +70,17 @@ local MIN_CONTENT_WIDTH = 300
 -- corner (the card's rounded corner), so half of it hangs off.
 local CLOSE_SIZE = 52
 local CORNER_INSET = 6
+-- The side rail (TaskViewLogic.chromeSide), for a short landscape
+-- screen: the header row on top, the status two lines tall at the
+-- bottom, the play area to its right. The play area keeps clear of the
+-- close button's corner by RAIL_CLOSE_CLEAR on its right.
+local RAIL_WIDTH = 2 * HEADER_HEIGHT + 2 * Theme.spacing.sm + 1.5 * HEADER_HEIGHT
+local RAIL_STATUS_HEIGHT = 2 * STATUS_HEIGHT
+local RAIL_CLOSE_CLEAR = CLOSE_SIZE / 2 - Theme.spacing.md
+local RAIL_MIN_HEIGHT = 2 * Theme.spacing.md + HEADER_HEIGHT + Theme.spacing.sm + RAIL_STATUS_HEIGHT
+local TOP_CHROME = { width = 2 * Theme.spacing.md, height = CHROME_HEIGHT }
+local SIDE_CHROME =
+	{ width = 2 * Theme.spacing.md + RAIL_WIDTH + Theme.spacing.sm + RAIL_CLOSE_CLEAR, height = 2 * Theme.spacing.md }
 -- How long COMPLETE stays up before the sheet leaves. Not motion
 -- (nothing moves), so reduced motion keeps it.
 local SUCCESS_HOLD = 1.2
@@ -240,23 +252,43 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				then spec.contentSize
 				else (spec.contentSize :: (any) -> Vector2)(challenge)
 		end
-		local cardSize = derive(function(): UDim2
+		-- Room for the close button hanging off the top-right corner:
+		-- half its size off the width and the height (the holder then
+		-- sits CLOSE_SIZE / 4 low, so the overhang is only at the top).
+		local function room(): (number, number)
 			local r, s = usable(), Env.scale()
-			-- Room for the close button hanging off the top-right corner:
-			-- half its size off the width and the height (the holder then
-			-- sits CLOSE_SIZE / 4 low, so the overhang is only at the top).
-			local roomWidth, roomHeight = r.width / s - CLOSE_SIZE, r.height / s - CLOSE_SIZE / 2
+			return r.width / s - CLOSE_SIZE, r.height / s - CLOSE_SIZE / 2
+		end
+		-- The chrome in a rail beside the play area, not above and below.
+		local side = derive(function(): boolean
+			if content == nil then
+				return false
+			end
+			local roomWidth, roomHeight = room()
+			return TaskViewLogic.chromeSide(
+				{ width = content.X, height = content.Y },
+				TOP_CHROME,
+				SIDE_CHROME,
+				roomWidth,
+				roomHeight,
+				T.edgeMargin
+			) == "Side"
+		end)
+		local cardSize = derive(function(): UDim2
+			local roomWidth, roomHeight = room()
 			if content == nil then
 				return UDim2.fromOffset(TaskViewLogic.windowSize(T.windowSize, roomWidth, roomHeight, T.edgeMargin))
 			end
+			local isSide = side()
 			return UDim2.fromOffset(
 				TaskViewLogic.fitCard(
 					{ width = content.X, height = content.Y },
-					{ width = 2 * Theme.spacing.md, height = CHROME_HEIGHT },
-					MIN_CONTENT_WIDTH,
+					if isSide then SIDE_CHROME else TOP_CHROME,
+					if isSide then 0 else MIN_CONTENT_WIDTH,
 					roomWidth,
 					roomHeight,
-					T.edgeMargin
+					T.edgeMargin,
+					if isSide then RAIL_MIN_HEIGHT else nil
 				)
 			)
 		end)
@@ -334,7 +366,16 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			Name = "PlayArea",
 			LayoutOrder = 1,
 			BackgroundTransparency = 1,
-			Size = UDim2.new(1, 0, 1, -(HEADER_HEIGHT + STATUS_HEIGHT + 2 * Theme.spacing.sm)),
+			Position = function()
+				return if side()
+					then UDim2.fromOffset(RAIL_WIDTH + Theme.spacing.sm, 0)
+					else UDim2.fromOffset(0, HEADER_HEIGHT + Theme.spacing.sm)
+			end,
+			Size = function()
+				return if side()
+					then UDim2.new(1, -(RAIL_WIDTH + Theme.spacing.sm + RAIL_CLOSE_CLEAR), 1, 0)
+					else UDim2.new(1, 0, 1, -(HEADER_HEIGHT + STATUS_HEIGHT + 2 * Theme.spacing.sm))
+			end,
 			ClipsDescendants = false,
 		}) :: Frame
 
@@ -493,26 +534,30 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 				PaddingLeft = pad,
 				PaddingRight = pad,
 			}),
-			create("UIListLayout")({
-				Padding = UDim.new(0, Theme.spacing.sm),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-				HorizontalAlignment = Enum.HorizontalAlignment.Center,
-			}),
+			-- Header, play area and status are placed by hand (no list
+			-- layout): stacked, or header over status in a rail on the
+			-- left with the play area beside it (`side`).
 
-			-- No title: the (i) opens the explainer instead. The timer
-			-- keeps clear of the top-right corner, where the close button
-			-- sits (on the holder, below).
+			-- No title: the (i) opens the explainer instead. Stacked, the
+			-- timer keeps clear of the top-right corner, where the close
+			-- button sits (on the holder, below).
 			create("Frame")({
 				Name = "Header",
 				LayoutOrder = 0,
 				BackgroundTransparency = 1,
-				Size = UDim2.new(1, 0, 0, HEADER_HEIGHT),
+				Size = function()
+					return if side()
+						then UDim2.fromOffset(RAIL_WIDTH, HEADER_HEIGHT)
+						else UDim2.new(1, 0, 0, HEADER_HEIGHT)
+				end,
 				infoButton :: any,
 				restartButton :: any,
 				Base.text("label", {
 					Name = "Timer",
 					AnchorPoint = Vector2.new(1, 0),
-					Position = UDim2.new(1, -(HEADER_HEIGHT + Theme.spacing.sm), 0, 0),
+					Position = function()
+						return UDim2.new(1, if side() then 0 else -(HEADER_HEIGHT + Theme.spacing.sm), 0, 0)
+					end,
 					Size = UDim2.fromOffset(HEADER_HEIGHT * 1.5, HEADER_HEIGHT),
 					TextColor3 = Theme.color.inkMuted,
 					Text = function()
@@ -526,13 +571,19 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			create("Frame")({
 				Name = "Status",
 				LayoutOrder = 2,
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.fromScale(0, 1),
 				BackgroundColor3 = function()
 					return Theme.color[style().color]
 				end,
 				BackgroundTransparency = function()
 					return if feedback() == "Neutral" then 1 else 0.75
 				end,
-				Size = UDim2.new(1, 0, 0, STATUS_HEIGHT),
+				Size = function()
+					return if side()
+						then UDim2.fromOffset(RAIL_WIDTH, RAIL_STATUS_HEIGHT)
+						else UDim2.new(1, 0, 0, STATUS_HEIGHT)
+				end,
 				Base.corner(Theme.radius.md),
 				create("UIStroke")({
 					BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing

@@ -64,9 +64,15 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     ambient, which barely shows. Now 14:00, exposure 0.2. Also found:
     `LightingStyle`/`PrioritizeLightingQuality` can't be written at
     runtime, so every preset's style is ignored (place = Soft).*
-  - [ ] Task views too small on a phone: the cards feel small and
+  - [x] Task views too small on a phone: the cards feel small and
     fiddly. Size them from the screen (bigger share of the height in
     landscape), and grow touch targets to a thumb's size.
+    *Done 2026-10-09, checked in Studio Play, not yet on a phone. The
+    stacked header + status took 128 of a phone's ~330 reference px,
+    so content drew at ~45%. They now move to a rail beside the play
+    area whenever that fits the content bigger (~0.72 vs 0.43 on an
+    iPhone for Vent Purge), so every target grows with it (the purge
+    button ~87 pt). Wide squat views (Breaker) stay stacked.*
   - [ ] Text cut off in task art: Pressure Valve's pump button shows
     "PU" for "PUMP". Check every TaskArt button label at phone size.
 - [x] **2. Studio pass on features never checked in Studio.** Season tab
