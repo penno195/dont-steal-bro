@@ -17,6 +17,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Season1 = require(ReplicatedStorage.Shared.Config.Seasons.Season1)
+local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local ClaimPopup = require(script.Parent.ClaimPopup)
 local SeasonPass = require(ReplicatedStorage.Shared.Config.Store.SeasonPass)
 local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
@@ -51,6 +52,19 @@ local function grantText(grant: StoreScreenLogic.Grant): string
 		return grant.cosmeticId or "?"
 	end
 	return grant.kind
+end
+
+-- The real items' pictures, as MenuController shows them.
+local previewIcons: { [string]: number } = {}
+for _, entry in Cosmetics do
+	local id = entry.def.previewIconAssetId
+	if id ~= nil and id > 0 then
+		previewIcons[entry.def.id] = id
+	end
+end
+
+local function grantImage(grant: SeasonTrackLogic.Grant): number?
+	return if grant.kind == "Cosmetic" and grant.cosmeticId then previewIcons[grant.cosmeticId] else nil
 end
 
 local SeasonPassPreview = {}
@@ -123,7 +137,8 @@ function SeasonPassPreview.mount(controller: any): () -> ()
 				table.insert(shown, {
 					premium = reward.premium,
 					text = grantText(reward.grant :: any),
-					kind = reward.grant.kind,
+					icon = SeasonTrackLogic.iconFor(reward.grant),
+					image = grantImage(reward.grant),
 				})
 			end
 			ClaimPopup.open(shown)
@@ -160,7 +175,7 @@ function SeasonPassPreview.mount(controller: any): () -> ()
 			if s == nil or s.season == nil then
 				return nil
 			end
-			return SeasonTrackLogic.view(def, s.season :: any, grantText :: any)
+			return SeasonTrackLogic.view(def, s.season :: any, grantText :: any, grantImage)
 		end,
 		passKeyOf = function()
 			return def.passKey

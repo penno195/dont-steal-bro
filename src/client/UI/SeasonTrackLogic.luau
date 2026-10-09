@@ -57,8 +57,10 @@ export type Row = {
 	wins: number,
 	text: string,
 	status: RowStatus,
-	-- The grant's kind, for the tile's icon until items have pictures.
-	kind: string,
+	-- The tile's picture: the item's own art (an asset id) when it has
+	-- some, else `icon`, a Components/Icons key.
+	icon: string,
+	image: number?,
 	-- This track's wins have reached the item. A reached pass item is
 	-- claimable as soon as the pass is bought.
 	reached: boolean,
@@ -102,7 +104,8 @@ local function track(
 	wins: number,
 	paid: number,
 	locked: boolean,
-	grantText: (Grant) -> string
+	grantText: (Grant) -> string,
+	imageFor: (Grant) -> number?
 ): TrackView
 	local rows: { Row } = {}
 	local nextAt: number? = nil
@@ -128,26 +131,38 @@ local function track(
 			wins = item.wins,
 			text = grantText(item.grant),
 			status = status,
-			kind = item.grant.kind,
+			icon = SeasonTrackLogic.iconFor(item.grant),
+			image = imageFor(item.grant),
 			reached = reached,
 		})
 	end
 	return { title = title, wins = wins, nextAt = nextAt, locked = locked, claimable = claimable, rows = rows }
 end
 
-function SeasonTrackLogic.view(def: SeasonDef, state: SeasonState, grantText: (Grant) -> string): View
+-- `imageFor` names an item's own picture (a cosmetic's preview icon);
+-- nil, or nil from it, falls back to the grant's icon.
+function SeasonTrackLogic.view(
+	def: SeasonDef,
+	state: SeasonState,
+	grantText: (Grant) -> string,
+	imageFor: ((Grant) -> number?)?
+): View
 	local locked = not state.passSeen
+	local image = imageFor or function(_: Grant): number?
+		return nil
+	end
 	return {
 		name = def.displayName,
 		timeLeft = SeasonTrackLogic.timeLeftText(state.secondsLeft),
-		free = track("Free track", def.free, state.freeWins, state.freePaid, false, grantText),
+		free = track("Free track", def.free, state.freeWins, state.freePaid, false, grantText, image),
 		premium = track(
 			if locked then "Premium track · needs the pass" else "Premium track",
 			def.premium,
 			state.premiumWins,
 			state.premiumPaid,
 			locked,
-			grantText
+			grantText,
+			image
 		),
 	}
 end
@@ -197,8 +212,9 @@ function SeasonTrackLogic.columns(view: View): { Column }
 	return columns
 end
 
--- Until the items have pictures (next-stages.md 1a), a reward shows an
--- icon for its grant's kind (a Components/Icons key).
+-- A reward with no picture of its own shows an icon (a Components/Icons
+-- key): a power-up its own icon, which Icons keys by power-up id, and
+-- anything else one for its grant's kind.
 local KIND_ICON: { [string]: string } = {
 	Currency = "coin",
 	PowerUpStock = "bolt",
@@ -206,8 +222,11 @@ local KIND_ICON: { [string]: string } = {
 	Title = "trophy",
 }
 
-function SeasonTrackLogic.iconFor(kind: string): string
-	return KIND_ICON[kind] or "star"
+function SeasonTrackLogic.iconFor(grant: Grant): string
+	if grant.kind == "PowerUpStock" and grant.powerUpId ~= nil then
+		return grant.powerUpId
+	end
+	return KIND_ICON[grant.kind] or "gem"
 end
 
 export type Reward = { premium: boolean, grant: Grant }

@@ -518,7 +518,7 @@ local ARROW = 40
 -- Stands in for an empty slot (a tier only the other row pays at), so a
 -- hidden tile's bindings never read nil.
 local EMPTY_ROW: SeasonTrackLogic.Row =
-	{ index = 0, wins = 0, text = "", status = "Locked", kind = "", reached = false }
+	{ index = 0, wins = 0, text = "", status = "Locked", icon = "gem", reached = false }
 
 -- A row's fill with another rim: the tile's state shows in its rim.
 local function withRim(fill: Theme.Fill, rim: Color3): Theme.Fill
@@ -619,9 +619,15 @@ local function tile(
 		Claimable = withRim(base, Theme.fill.share.top),
 		Claimed = withRim(base, Theme.color.success),
 	}
-	local itemIcon = derive(function()
-		return SeasonTrackLogic.iconFor(row().kind)
-	end)
+	local picture = C.Icons.picture(function()
+		return row().icon
+	end, function()
+		return row().image
+	end, base.ink)
+	picture.AnchorPoint = Vector2.new(0.5, 0)
+	picture.Position = UDim2.new(0.5, 0, 0, CHIP_H + Theme.spacing.xs)
+	picture.Size = UDim2.new(1, 0, 1, -(2 * CHIP_H + NAME_H + 3 * Theme.spacing.xs))
+	create("UIAspectRatioConstraint")({ AspectRatio = 1, Parent = picture })
 	local cornerIcon = derive(function()
 		return status().icon or "none"
 	end)
@@ -682,14 +688,7 @@ local function tile(
 								icon.ZIndex = 4
 								return icon
 							end)) :: any,
-							switch(itemIcon)(iconViews({ "coin", "bolt", "gem", "trophy", "star" }, function(key)
-								local icon = C.Icons.view(key, 0, base.ink)
-								icon.AnchorPoint = Vector2.new(0.5, 0)
-								icon.Position = UDim2.new(0.5, 0, 0, CHIP_H + Theme.spacing.xs)
-								icon.Size = UDim2.new(1, 0, 1, -(2 * CHIP_H + NAME_H + 3 * Theme.spacing.xs))
-								create("UIAspectRatioConstraint")({ AspectRatio = 1, Parent = icon })
-								return icon
-							end)) :: any,
+							picture,
 							Base.text("caption", {
 								Name = "Item",
 								AnchorPoint = Vector2.new(0, 1),

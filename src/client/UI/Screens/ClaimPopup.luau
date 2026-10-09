@@ -15,7 +15,6 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
-local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
 local Theme = require(script.Parent.Parent.Theme)
 
 local create = vide.create
@@ -28,12 +27,17 @@ local POP_FROM = 0.6 -- the cards' starting scale, before they bounce in
 export type Reward = {
 	premium: boolean,
 	text: string, -- what the reward is, e.g. "75 coins"
-	kind: string, -- its grant kind, for the icon
+	icon: string, -- SeasonTrackLogic.iconFor of its grant
+	image: number?, -- the item's own picture, if it has one
 }
 
 local function card(reward: Reward, order: number): Instance
 	local fill = if reward.premium then Theme.fill.seasonPaid else Theme.fill.seasonFree
-	local icon = C.Icons.view(SeasonTrackLogic.iconFor(reward.kind), 0, fill.ink)
+	local icon = C.Icons.picture(function()
+		return reward.icon
+	end, function()
+		return reward.image
+	end, fill.ink)
 	icon.AnchorPoint = Vector2.new(0.5, 0)
 	icon.Position = UDim2.fromScale(0.5, 0)
 	icon.Size = UDim2.new(1, 0, 1, -(NAME_H + Theme.spacing.xs))

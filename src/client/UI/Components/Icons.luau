@@ -154,4 +154,37 @@ function Icons.view(key: string, size: number, color: Color3 | () -> Color3): Gu
 	}) :: TextLabel
 end
 
+-- A reward's picture that follows its data: the item's own full-colour
+-- art (`image`, an asset id) when it has some, else icon `key` tinted
+-- `color`. Fills its parent; the caller sizes it. Every key a reward
+-- falls back to has real art, so this never needs the glyph stand-in.
+function Icons.picture(key: () -> string, image: () -> number?, color: Color3): ImageLabel
+	local function fallback(): Icon
+		local icon = ICONS[key()]
+		return if icon ~= nil and icon.image ~= nil then icon else ICONS.gem
+	end
+	return create("ImageLabel")({
+		Name = "Picture",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		ScaleType = Enum.ScaleType.Fit,
+		Image = function()
+			local id = image()
+			return if id ~= nil then string.format("rbxassetid://%d", id) else fallback().image :: string
+		end,
+		ImageRectOffset = function()
+			local rect = if image() == nil then fallback().rect else nil
+			return if rect then rect.Min else Vector2.zero
+		end,
+		ImageRectSize = function()
+			local rect = if image() == nil then fallback().rect else nil
+			return if rect then rect.Max - rect.Min else Vector2.zero
+		end,
+		ImageColor3 = function()
+			local own = image() ~= nil or fallback().fullColor == true
+			return if own then Color3.new(1, 1, 1) else color
+		end,
+	}) :: ImageLabel
+end
+
 return Icons

@@ -141,6 +141,14 @@ local function rarityOf(grant: StoreScreenLogic.Grant): string?
 	return nil
 end
 
+-- A season reward's own picture: a cosmetic's preview icon, once it has
+-- one. Anything else shows its icon (SeasonTrackLogic.iconFor).
+local function grantImage(grant: SeasonTrackLogic.Grant): number?
+	local def = if grant.kind == "Cosmetic" and grant.cosmeticId then cosmeticDefs[grant.cosmeticId] else nil
+	local id = if def then def.previewIconAssetId else nil
+	return if type(id) == "number" and id > 0 then id else nil
+end
+
 local function cosmeticName(id: string): string
 	local def = cosmeticDefs[id]
 	return if def then def.displayName else id
@@ -253,7 +261,7 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?)
 				if season == nil or def == nil then
 					return nil
 				end
-				return SeasonTrackLogic.view(def, season :: any, grantText :: any)
+				return SeasonTrackLogic.view(def, season :: any, grantText :: any, grantImage)
 			end,
 			claim = function(track: ("Free" | "Premium")?, upTo: number?)
 				Net.fireServer("SeasonClaimIntent", { track = track, upTo = upTo })
@@ -510,7 +518,8 @@ function MenuController:init()
 					table.insert(shown, {
 						premium = reward.premium,
 						text = grantText(reward.grant :: any),
-						kind = reward.grant.kind,
+						icon = SeasonTrackLogic.iconFor(reward.grant),
+						image = grantImage(reward.grant),
 					})
 				end
 				ClaimPopup.open(shown)

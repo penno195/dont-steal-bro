@@ -513,6 +513,23 @@ describe("SeasonTrackLogic", function()
 		expect(view.free.rows[1].text):toBe("100 coins")
 	end)
 
+	it("pictures an item by its own art, else its icon", function()
+		local view = SeasonTrackLogic.view(def, state({}), text, function(grant)
+			return if grant.cosmeticId == "trail" then 42 else nil
+		end)
+		expect(view.premium.rows[1].image):toBe(42)
+		expect(view.premium.rows[2].image):toBe(nil)
+		expect(view.premium.rows[2].icon):toBe("coin")
+		expect(SeasonTrackLogic.view(def, state({}), text).premium.rows[1].image):toBe(nil)
+	end)
+
+	it("shows a power-up reward with that power-up's own icon", function()
+		expect(SeasonTrackLogic.iconFor({ kind = "PowerUpStock", powerUpId = "overclock", amount = 2 })):toBe(
+			"overclock"
+		)
+		expect(SeasonTrackLogic.iconFor({ kind = "Cosmetic", cosmeticId = "x" })):toBe("gem")
+	end)
+
 	it("locks the whole premium track without the pass", function()
 		local view = SeasonTrackLogic.view(def, state({}), text)
 		expect(view.premium.locked):toBe(true)
@@ -579,7 +596,7 @@ describe("SeasonTrackLogic", function()
 		end
 		expect(table.concat(wins, ",")):toBe("0,3,5,10")
 		expect(columns[1].free):toBe(nil)
-		expect((columns[1].premium :: any).kind):toBe("Cosmetic")
+		expect((columns[1].premium :: any).icon):toBe("gem")
 		expect(columns[2].premium):toBe(nil)
 		expect((columns[2].free :: any).text):toBe("100 coins")
 	end)

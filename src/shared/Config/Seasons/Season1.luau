@@ -6,10 +6,11 @@
 -- bought, including everything already reached. Every item here is
 -- track-only forever, and Validate enforces that.
 --
--- Every count and amount is PLACEHOLDER (rewards-roadmap.md step 7), and
--- the tiers are refilled in the season-pass items step. Ships disabled:
--- its cosmetics have no Roblox assets yet, and an enabled season may not
--- grant a disabled cosmetic.
+-- The lineup is the owner's (2026-10-09): eleven columns from 0 to 30
+-- wins, a paid item at every column and a free one at every other, with
+-- five new wearables. Amounts are still PLACEHOLDER (rewards-roadmap.md
+-- step 7b). Ships disabled: the new wearables have no Roblox assets yet,
+-- and an enabled season may not grant a disabled cosmetic.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
@@ -22,16 +23,25 @@ local Season1: Validate.SeasonDef = {
 	endsOn = "2026-12-01",
 	passKey = "season-pass",
 	free = {
-		{ wins = 3, grant = { kind = "Currency", amount = 50 } },
-		{ wins = 10, grant = { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 3 } },
-		{ wins = 25, grant = { kind = "Currency", amount = 250 } },
+		{ wins = 2, grant = { kind = "Currency", amount = 50 } },
+		{ wins = 6, grant = { kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 3 } },
+		{ wins = 10, grant = { kind = "Cosmetic", cosmeticId = "hat-traffic-cone" } },
+		{ wins = 16, grant = { kind = "Currency", amount = 100 } },
+		{ wins = 20, grant = { kind = "PowerUpStock", powerUpId = "task-insight", amount = 2 } },
+		{ wins = 30, grant = { kind = "Currency", amount = 250 } },
 	},
 	premium = {
-		{ wins = 0, grant = { kind = "Cosmetic", cosmeticId = "trail-founder" } },
-		{ wins = 5, grant = { kind = "Currency", amount = 75 } },
+		{ wins = 0, grant = { kind = "Cosmetic", cosmeticId = "back-loot-sack" } },
+		{ wins = 2, grant = { kind = "Currency", amount = 75 } },
+		{ wins = 4, grant = { kind = "Cosmetic", cosmeticId = "hat-burglar-beanie" } },
+		{ wins = 6, grant = { kind = "Cosmetic", cosmeticId = "trail-founder" } },
+		{ wins = 8, grant = { kind = "PowerUpStock", powerUpId = "second-wind", amount = 2 } },
 		{ wins = 10, grant = { kind = "Cosmetic", cosmeticId = "emote-victory-flex" } },
-		{ wins = 20, grant = { kind = "PowerUpStock", powerUpId = "second-wind", amount = 2 } },
-		{ wins = 30, grant = { kind = "Cosmetic", cosmeticId = "skin-founder" } },
+		{ wins = 13, grant = { kind = "Currency", amount = 150 } },
+		{ wins = 16, grant = { kind = "Cosmetic", cosmeticId = "hat-game-show-top-hat" } },
+		{ wins = 20, grant = { kind = "PowerUpStock", powerUpId = "overclock", amount = 2 } },
+		{ wins = 25, grant = { kind = "Cosmetic", cosmeticId = "skin-founder" } },
+		{ wins = 30, grant = { kind = "Cosmetic", cosmeticId = "back-gold-bar-jetpack" } },
 	},
 }
 
