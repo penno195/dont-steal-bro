@@ -452,6 +452,7 @@ local function broadcastStatus(entries: { Entry }?, pageWasFull: boolean, practi
 					queueSize = status.queueSize,
 					queueSizeIsLowerBound = status.queueSizeIsLowerBound,
 					estimatedWaitSeconds = status.estimatedWaitSeconds,
+					practice = practice,
 				})
 			end
 		end
@@ -694,7 +695,7 @@ local function joinPractice(player: Player, preservedEnqueuedAt: number?, messag
 	for _, member in members do
 		tickets[member] = { status = "Waiting", enqueuedAt = enqueuedAt, claimSeen = nil, practice = true }
 		practiceEntries[member] = MatchmakingLogic.newEntry(member.UserId, myJobId, enqueuedAt, 0, {}, {})
-		sendState(member, { status = "Waiting", message = message })
+		sendState(member, { status = "Waiting", message = message, practice = true })
 	end
 end
 

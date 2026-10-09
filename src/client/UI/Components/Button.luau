@@ -26,6 +26,9 @@ export type Props = {
 	icon: string?,
 	-- Reference pixels. Defaults to a comfortable single-action width.
 	width: number?,
+	-- The minimum touch height (44) instead of the primary 56, with
+	-- slimmer padding: an action inside a list row (PlayerRow.accessory).
+	compact: boolean?,
 	disabled: (boolean | Base.Source<boolean>)?,
 	loading: (boolean | Base.Source<boolean>)?,
 	order: number?,
@@ -39,7 +42,9 @@ local DEFAULT_WIDTH = Theme.spacing.xxxl * 4 -- 192
 local function Button(props: Props): TextButton
 	local variant: ComponentLogic.Variant = props.variant or "primary"
 	local loading: Base.Source<boolean> = Base.read(props.loading or false)
-	local size = Vector2.new(props.width or DEFAULT_WIDTH, Theme.touch.primaryHeight)
+	local compact = props.compact == true
+	local size =
+		Vector2.new(props.width or DEFAULT_WIDTH, if compact then Theme.touch.iconButton else Theme.touch.primaryHeight)
 
 	return Base.interactive({
 		name = "Button",
@@ -102,7 +107,14 @@ local function Button(props: Props): TextButton
 						Visible = function()
 							return not loading()
 						end,
-						Base.padding(Theme.spacing.md),
+						if compact
+							then create("UIPadding")({
+								PaddingLeft = UDim.new(0, Theme.spacing.sm),
+								PaddingRight = UDim.new(0, Theme.spacing.sm),
+								PaddingTop = UDim.new(0, Theme.spacing.xs),
+								PaddingBottom = UDim.new(0, Theme.spacing.xs),
+							})
+							else Base.padding(Theme.spacing.md),
 						create("UIListLayout")({
 							FillDirection = Enum.FillDirection.Horizontal,
 							HorizontalAlignment = Enum.HorizontalAlignment.Center,

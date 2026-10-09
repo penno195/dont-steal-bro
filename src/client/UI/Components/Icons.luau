@@ -74,6 +74,10 @@ local ICONS: { [string]: Icon } = {
 	-- Station markers (P7-6).
 	rival = { glyph = "👤", image = "rbxassetid://103224537713261" }, -- a rival is working at this station
 
+	-- The Hub's practice party button. Borrows the rival silhouette until
+	-- a two-person icon is drawn.
+	party = { glyph = "👥", image = "rbxassetid://103224537713261" },
+
 	-- One per power-up, keyed by PowerUpDef.id so a lookup needs no map.
 	freeze = { glyph = "❄", image = "rbxassetid://112112451877002" },
 	["phase-step"] = { glyph = "👻", image = "rbxassetid://118964136173077" },

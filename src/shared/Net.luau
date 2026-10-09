@@ -1217,7 +1217,9 @@ Net.Remotes = {
 	-- Server -> client, sent to that player only: their own queue status
 	-- (Idle / Joining / Waiting with position, size and an estimated wait /
 	-- MatchFound / Travelling (P5-2) / Unavailable, plus a message). Never includes who else
-	-- is queued or anyone's streak (design-decisions.md Q7).
+	-- is queued or anyone's streak (design-decisions.md Q7). Waiting
+	-- carries `practice` when the line is the practice queue, so a party
+	-- member queued by their leader's tap sees which line they're in.
 	QueueState = {
 		name = "QueueState",
 		direction = "ServerBroadcast",

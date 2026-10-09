@@ -241,6 +241,14 @@ practice queue (`TeleportLogic.isPracticeHub`).
   cancels it for the party, and so does any change to the party. A
   player in a party is refused ranked, and joining a party drops a
   ranked ticket.
+- **Client.** The Hub queue card (`QueueController`) shows Play and
+  Practice when solo, Practice alone for a party leader and no join
+  button for a member (`PartyViewLogic.queueButtons`), plus a Party
+  button. `PartyController` owns the party panel (members, everyone
+  else here with Invite, Leave party), the Accept/Decline invite
+  prompt, which times itself out after `partyInviteTtlSeconds`, and
+  `PartyState` notices as toasts. QueueState's Waiting carries
+  `practice`, so a member queued by their leader sees which line.
 - **The flag.** The group record carries `practice = true` and the
   lobby's `returnAccessCode`. The match server reads both from the
   manifest and settles `isPracticeMatch` once, when the arrival gate

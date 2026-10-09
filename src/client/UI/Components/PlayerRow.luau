@@ -24,6 +24,11 @@ export type Props = {
 	-- Right-hand value, e.g. a streak count, with an optional icon key.
 	trailing: (string | Base.Source<string>)?,
 	trailingIcon: string?,
+	-- A control at the right-hand end instead of `trailing` (the party
+	-- panel's Invite button), `accessoryWidth` reference px wide and
+	-- centred vertically. The row owns its position; the caller sizes it.
+	accessory: GuiObject?,
+	accessoryWidth: number?,
 	isLocalPlayer: boolean?,
 	width: number?,
 	layoutOrder: number?,
@@ -44,7 +49,15 @@ local function PlayerRow(props: Props): Frame
 	local hasRank = props.rank ~= nil
 	local left = Theme.spacing.md + (if hasRank then RANK + Theme.spacing.sm else 0)
 	local textLeft = left + AVATAR + Theme.spacing.md
-	local trailingWidth = if props.trailing then Theme.spacing.xxxl + Theme.spacing.lg else 0
+	local trailingWidth = if props.accessory
+		then props.accessoryWidth or 0
+		elseif props.trailing then Theme.spacing.xxxl + Theme.spacing.lg
+		else 0
+	local accessory = props.accessory
+	if accessory ~= nil then
+		accessory.AnchorPoint = Vector2.new(1, 0.5)
+		accessory.Position = UDim2.new(1, -Theme.spacing.sm, 0.5, 0)
+	end
 
 	return create("Frame")({
 		Name = "PlayerRow",
@@ -108,7 +121,8 @@ local function PlayerRow(props: Props): Frame
 			TextWrapped = false,
 			TextTruncate = Enum.TextTruncate.AtEnd,
 		}),
-		(if props.trailing
+		accessory :: any,
+		(if props.trailing and accessory == nil
 			then create("Frame")({
 				Name = "Trailing",
 				AnchorPoint = Vector2.new(1, 0.5),

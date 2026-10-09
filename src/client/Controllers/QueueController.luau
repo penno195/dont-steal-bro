@@ -5,6 +5,11 @@
 -- UI/QueueLogic (pure, tested). This file wires them to the remotes,
 -- the screen, and the board over the queue pad.
 --
+-- PRACTICE (design-decisions.md Q7): a Practice button beside Play and
+-- a Party button that opens PartyController's panel. Which join buttons
+-- show depends on the party (PartyViewLogic.queueButtons): solo gets
+-- both, a party's leader gets Practice only, a member gets neither.
+--
 -- WHERE: bottom-left, leaving the Primary zone (bottom-right) to the
 -- practice power-up slots, which sit where they do in a race. On touch
 -- it lifts above Roblox's thumbstick (Layout's ReservedMove zone), so
@@ -36,9 +41,11 @@ local Base = require(script.Parent.Parent.UI.Components.Base)
 local Icons = require(script.Parent.Parent.UI.Components.Icons)
 local Layout = require(script.Parent.Parent.UI.Layout)
 local LockerLogic = require(script.Parent.Parent.UI.LockerLogic)
+local PartyViewLogic = require(script.Parent.Parent.UI.PartyViewLogic)
 local QueueLogic = require(script.Parent.Parent.UI.QueueLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local MenuController = require(script.Parent.MenuController)
+local PartyController = require(script.Parent.PartyController)
 local UIScaleController = require(script.Parent.UIScaleController)
 
 local source = vide.source
@@ -67,10 +74,20 @@ local TONE_INK: { [QueueLogic.Tone]: Color3 } = {
 local state = source(QueueLogic.new())
 -- A plain function, not derive(): Vide only allows derive inside a
 -- root, and this is read from two (the card and the board).
+-- Set by MatchmakingService on a private hub server. Never changes
+-- while the server runs, so a plain read is enough.
+local function practiceServer(): boolean
+	return workspace:GetAttribute("PracticeServer") == true
+end
+
 local function view(): QueueLogic.View
-	-- Set by MatchmakingService on a private hub server. Never changes
-	-- while the server runs, so a plain read is enough.
-	return QueueLogic.view(state(), workspace:GetAttribute("PracticeServer") == true)
+	return QueueLogic.view(state(), practiceServer())
+end
+
+-- Which join buttons the party allows (design-decisions.md Q7: ranked
+-- is solo, and only a party's leader queues it for Practice).
+local function buttons(): PartyViewLogic.QueueButtons
+	return PartyViewLogic.queueButtons(PartyController.state(), Players.LocalPlayer.UserId, practiceServer())
 end
 local roundState = source(nil :: string?)
 
@@ -82,11 +99,14 @@ local function isHubServer(): boolean
 	return game.PlaceId == hubPlaceId
 end
 
-local function onTap()
+-- `practice`: the Practice button (or a party leader's only button).
+-- The server decides what the line really is; a private hub is
+-- practice whatever this says.
+local function onTap(practice: boolean?)
 	local nextState, intent = QueueLogic.tap(state(), os.clock())
 	state(nextState)
 	if intent == "Join" then
-		Net.fireServer("QueueJoinIntent", {})
+		Net.fireServer("QueueJoinIntent", if practice then { mode = "Practice" } else {})
 	elseif intent == "Leave" then
 		Net.fireServer("QueueLeaveIntent", {})
 	end
@@ -250,9 +270,30 @@ local function mountCard()
 	end)
 
 	vide.root(function()
-		local hasText = function(): boolean
+		-- Idle with nothing from the server to say: why a button is
+		-- missing ("Parties play Practice only."), if one is.
+		local detail = function(): string?
 			local v = view()
-			return v.headline ~= nil or v.detail ~= nil
+			if v.action == "Join" and state().message == nil then
+				return buttons().note or v.detail
+			end
+			return v.detail
+		end
+		local hasText = function(): boolean
+			return view().headline ~= nil or detail() ~= nil
+		end
+		local joining = function(): boolean
+			return view().action == "Join"
+		end
+		-- The full-width primary: Play, or Practice for a party leader,
+		-- who has no ranked button (ranked is solo).
+		local mainButton = function(): boolean
+			local b = buttons()
+			return joining() and (b.play or b.practice)
+		end
+		local practiceBeside = function(): boolean
+			local b = buttons()
+			return joining() and b.play and b.practice
 		end
 		local card = create("Frame")({
 			Name = "Queue",
@@ -306,10 +347,10 @@ local function mountCard()
 							LayoutOrder = 2,
 							Size = UDim2.new(1, 0, 0, 2 * Theme.type.body.size + Theme.spacing.xs),
 							Text = function()
-								return view().detail or ""
+								return detail() or ""
 							end,
 							Visible = function()
-								return view().detail ~= nil
+								return detail() ~= nil
 							end,
 							TextColor3 = Theme.color.inkMuted,
 						}),
@@ -318,19 +359,61 @@ local function mountCard()
 			end) :: any,
 			-- Two buttons rather than one relabelled: Button's variant is
 			-- fixed at build time, and Play should read as THE action.
-			show(function()
-				return view().action == "Join"
-			end, function()
+			show(mainButton, function()
 				return C.Button({
-					label = "Play",
+					label = function(): string
+						return if buttons().play then "Play" else "Practice"
+					end,
 					icon = "bolt",
 					variant = "primary",
 					width = CARD_WIDTH,
 					loading = function()
 						return view().busy
 					end,
-					onActivate = onTap,
+					onActivate = function()
+						onTap(not buttons().play)
+					end,
 					layoutOrder = 2,
+				}) :: any
+			end) :: any,
+			-- Practice (when Play is the main button) and the party panel.
+			-- Gone once the match is committed, like every other button.
+			show(function()
+				return view().action ~= nil
+			end, function()
+				return create("Frame")({
+					Name = "Secondary",
+					LayoutOrder = 3,
+					Size = UDim2.fromOffset(CARD_WIDTH, Theme.touch.iconButton),
+					BackgroundTransparency = 1,
+					create("UIListLayout")({
+						FillDirection = Enum.FillDirection.Horizontal,
+						VerticalAlignment = Enum.VerticalAlignment.Center,
+						Padding = UDim.new(0, Theme.spacing.sm),
+						SortOrder = Enum.SortOrder.LayoutOrder,
+					}),
+					show(practiceBeside, function()
+						return C.Button({
+							label = "Practice",
+							variant = "secondary",
+							compact = true,
+							width = CARD_WIDTH - Theme.touch.iconButton - Theme.spacing.sm,
+							disabled = function()
+								return view().busy
+							end,
+							onActivate = function()
+								onTap(true)
+							end,
+							layoutOrder = 1,
+						}) :: any
+					end) :: any,
+					C.IconButton({
+						icon = "party",
+						label = "Party",
+						variant = "secondary",
+						onActivate = PartyController.openPanel,
+						layoutOrder = 2,
+					}),
 				}) :: any
 			end) :: any,
 			show(function()
@@ -400,7 +483,7 @@ end
 
 local QueueController: Loader.Controller = {
 	name = "QueueController",
-	dependencies = { "UIScaleController", "MenuController" },
+	dependencies = { "UIScaleController", "MenuController", "PartyController" },
 }
 
 function QueueController:init()

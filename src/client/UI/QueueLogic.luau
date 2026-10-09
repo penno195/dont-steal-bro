@@ -18,6 +18,11 @@
 -- So `queued` is tracked here: an Unavailable keeps whatever it was,
 -- except straight after Joining, where it means the write failed.
 --
+-- PRACTICE: the Practice button's line (design-decisions.md Q7) takes
+-- the same intents, with mode = "Practice". Its Waiting states say so
+-- (`practice`), which is how a party member queued by their leader's
+-- tap learns which line they're in. Kept until the player is Idle.
+--
 -- COMMITTED: once MatchFound or Travelling, leaving is refused
 -- server-side ("Your match is already on its way"), so the card offers
 -- no button at all rather than one that can't work.
@@ -36,6 +41,7 @@ export type State = {
 	queueSize: number?,
 	queueSizeIsLowerBound: boolean,
 	estimatedWaitSeconds: number?,
+	practice: boolean,
 	-- os.clock() of the tap still awaiting a reply; nil when none.
 	pendingSince: number?,
 }
@@ -71,6 +77,7 @@ function QueueLogic.new(): State
 		queueSize = nil,
 		queueSizeIsLowerBound = false,
 		estimatedWaitSeconds = nil,
+		practice = false,
 		pendingSince = nil,
 	}
 end
@@ -103,6 +110,11 @@ function QueueLogic.apply(state: State, payload: any): State
 	nextState.status = status
 	nextState.queued = queued
 	nextState.message = if type(payload.message) == "string" and payload.message ~= "" then payload.message else nil
+	if status == "Waiting" and payload.practice ~= nil then
+		nextState.practice = payload.practice == true
+	else
+		nextState.practice = queued and state.practice
+	end
 	if status == "Waiting" then
 		-- The per-tick broadcast carries the numbers; the first Waiting
 		-- (straight after the join) carries only an optional message.
@@ -203,9 +215,10 @@ function QueueLogic.view(state: State, practice: boolean?): View
 		view.board = "Joining..."
 	elseif status == "Waiting" then
 		local line = lineText(state)
-		view.headline = "Finding players..."
+		local headline = if state.practice then "Finding practice players..." else "Finding players..."
+		view.headline = headline
 		view.detail = state.message or line
-		view.board = if line then "In line  " .. line else "Finding players..."
+		view.board = if line then (if state.practice then "Practice  " else "In line  ") .. line else headline
 	elseif status == "MatchFound" then
 		view.headline = "Match found!"
 		view.tone = "success"
