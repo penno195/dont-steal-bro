@@ -71,6 +71,7 @@ local REFUSAL_SECONDS = 1.5
 local REFUSALS: { [string]: string } = {
 	["no valid target"] = "No target",
 	["on cooldown"] = "Cooling down",
+	["target is protected - item kept"] = "Protected - item kept",
 }
 
 local taskNames: { [string]: string } = {}

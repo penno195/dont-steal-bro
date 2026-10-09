@@ -347,6 +347,14 @@ local DIMINISHING_RETURNS_WINDOW_SECONDS = 20 -- powerups.md rule 2
 local DIMINISHING_RETURNS_FLOOR_SECONDS = 0.5 -- powerups.md rule 2
 local ROUND_DISABLE_CAP_SECONDS = 15 -- powerups.md rule 3
 
+-- Pure: true while rule 1's post-effect immunity window is open, i.e. a
+-- new hard-control effect would be refused outright. Asked on its own by
+-- PowerUpService before it spends the caster's item: firing into the
+-- window keeps the item (user decision 2026-10-09, powerups.md rule 1).
+function StatusEffectResolver.inImmunityWindow(history: HardControlHistory, now: number): boolean
+	return history.lastEndedAt ~= nil and (now - history.lastEndedAt) < IMMUNITY_WINDOW_SECONDS
+end
+
 -- Pure: decides whether/how a NEW HardControl-category application
 -- against `history` should land, at time `now`, for an effect whose
 -- undiminished duration is `baseDurationSeconds`. Constants above are
@@ -360,7 +368,7 @@ function StatusEffectResolver.decideHardControlApplication(
 	baseDurationSeconds: number
 ): HardControlDecision
 	-- Rule 1: post-effect immunity.
-	if history.lastEndedAt ~= nil and (now - history.lastEndedAt) < IMMUNITY_WINDOW_SECONDS then
+	if StatusEffectResolver.inImmunityWindow(history, now) then
 		return {
 			allowed = false,
 			effectiveDurationSeconds = 0,

@@ -167,6 +167,23 @@ TestRunner.describe("StatusEffectResolver.decideHardControlApplication - immunit
 	end)
 end)
 
+TestRunner.describe("StatusEffectResolver.inImmunityWindow", function()
+	TestRunner.it("is open for 3s after a hard-control effect ends, then closes", function()
+		local history: StatusEffectResolver.HardControlHistory =
+			{ lastEndedAt = 100, recentApplications = {}, totalDisabledSeconds = 2.5 }
+
+		TestRunner.expect(StatusEffectResolver.inImmunityWindow(history, 102.9)):toBe(true)
+		TestRunner.expect(StatusEffectResolver.inImmunityWindow(history, 103)):toBe(false)
+	end)
+
+	TestRunner.it("is closed for a racer never hard-controlled", function()
+		local history: StatusEffectResolver.HardControlHistory =
+			{ lastEndedAt = nil, recentApplications = {}, totalDisabledSeconds = 0 }
+
+		TestRunner.expect(StatusEffectResolver.inImmunityWindow(history, 0)):toBe(false)
+	end)
+end)
+
 TestRunner.describe("StatusEffectResolver.decideHardControlApplication - three freezes in ten seconds", function()
 	TestRunner.it("applies diminishing returns: full, then -50%, then -75%", function()
 		local history: StatusEffectResolver.HardControlHistory =

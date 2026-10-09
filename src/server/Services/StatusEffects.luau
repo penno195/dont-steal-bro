@@ -665,6 +665,19 @@ local StatusEffects: Loader.Service = {
 	applyEffectFor = applyEffectFor,
 	notifyUsedOn = notifyUsedOn,
 
+	-- True when `powerUpId` is a hard-control effect and `targetId` is in
+	-- rule 1's post-effect immunity window, so it would be refused.
+	-- PowerUpService asks before spending the caster's item, and again on
+	-- impact, so firing into the window never costs the item.
+	isImmuneTo = function(targetId: number, powerUpId: string): boolean
+		local effectDef = StatusEffectDefs[powerUpId]
+		if effectDef == nil or effectDef.category ~= "HardControl" then
+			return false
+		end
+		pruneExpired(targetId)
+		return StatusEffectResolver.inImmunityWindow(ensureState(targetId).hardControlHistory, now())
+	end,
+
 	-- P3-5: NPCService calls this when a bot's rig is despawned or
 	-- replaced, the same way a human's respawn clears theirs below.
 	clearFor = clearAllEffects,

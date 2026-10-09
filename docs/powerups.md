@@ -279,6 +279,10 @@ hard-control effect for 3 seconds, regardless of caster. Long enough to
 guarantee real, unimpeded recovery movement; short enough that it's not a
 standing free pass for the rest of the round.
 
+Firing a hard-control item into the window is refused and the caster
+**keeps the item** (user decision 2026-10-09, design-decisions.md Q12
+"firing into the immunity window"). Wards and rule 5 still spend it.
+
 **2. Diminishing returns across the same 20-second window: -50% on the
 2nd, -75% on the 3rd, floor 0.5s.** The immunity window already prevents
 back-to-back chaining of the *same* effect from *any* caster, but a

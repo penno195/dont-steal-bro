@@ -763,3 +763,21 @@ two hard-control items feeling different.
 **Unchanged:** the anti-frustration layer (`powerups.md`) - the 3s
 post-effect immunity, diminishing returns and the 15s rolling cap still
 bound the worst case, now reached in fewer hits.
+
+### Applied case: firing into the immunity window (2026-10-09, user decision)
+
+**Decision:** a hard-control item (Freeze, Push/Trip) aimed at someone
+inside their 3s post-effect immunity window is **refused, and the caster
+keeps the item** with its cooldown untouched. The HUD reads "Protected -
+item kept". If the window opens while a throw is in the air (someone
+else's hit landed first), the item goes back on impact: to its own slot,
+or any free one; with no free slot it is lost, as a pickup would be.
+
+**Why:** in a playtest the attacker lost the item to a target it could
+not affect, which felt unfair to the attacker. The window protects the
+victim; it shouldn't also cost the attacker.
+
+**Unchanged:** wards the victim chose (Second Wind, Phase Step) and Task
+Scramble's per-round cap (rule 5) still spend the caster's item.
+Diminishing returns and the 15s rolling cap still land, shortened or
+softened, so they spend it too.
