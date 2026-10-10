@@ -149,6 +149,23 @@ describe("StoreScreenLogic catalogue", function()
 		expect(StoreScreenLogic.categoryOf(bundle)):toBe("Bundles")
 	end)
 
+	it("says what a plinth's cosmetic is, and when it's limited", function()
+		local categories = { crown = "Hat", shield = "BackItem" }
+		local function category(id: string): string?
+			return categories[id]
+		end
+		local hat = item("hat", "DeveloperProduct", { { kind = "Cosmetic", cosmeticId = "crown" } })
+		expect(StoreScreenLogic.plinthKind(hat, category)):toBe("Hat")
+		local shield = item("shield", "DeveloperProduct", { { kind = "Cosmetic", cosmeticId = "shield" } })
+		shield.onSaleUntil = "2026-12-01 00:00"
+		expect(StoreScreenLogic.plinthKind(shield, category)):toBe("Back item · Limited")
+		-- A sale price on another item isn't a limited edition.
+		shield.replaces = "shield-full"
+		expect(StoreScreenLogic.plinthKind(shield, category)):toBe("Back item")
+		expect(StoreScreenLogic.plinthKind(pass, category)):toBe(nil)
+		expect(StoreScreenLogic.plinthKind(coins, category)):toBe(nil)
+	end)
+
 	it("files power-ups bought with Robux under Bundles", function()
 		local stock = item("stock", "DeveloperProduct", {
 			{ kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 10 },

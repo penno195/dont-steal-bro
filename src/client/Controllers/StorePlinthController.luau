@@ -6,7 +6,8 @@
 -- Q1, "the featured plinths").
 --
 -- WHAT A PLINTH SHOWS: a billboard over it with the item's picture,
--- name and price. A Robux item shows what Roblox really charges, with
+-- name, what it is ("Hat · Limited", StoreScreenLogic.plinthKind) and
+-- price. A Robux item shows what Roblox really charges, with
 -- the config's "was" price struck through and a SALE tag only if that
 -- live price is lower; MenuController.priceOf works that out, the same
 -- as the store's cards. An empty slot shows nothing.
@@ -33,6 +34,7 @@ local RunService = game:GetService("RunService")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
+local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Env = require(script.Parent.Parent.UI.Components.Env)
 local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -56,6 +58,12 @@ local MODEL_SPIN = math.rad(50) -- per second
 local MODEL_BOB = 0.25 -- studs, up and down
 local MODEL_BOB_PERIOD = 3 -- seconds
 local TEXT_BOARD_H = 1.9
+local KIND_BOARD_H = 2.5 -- the text-only board with a "Hat · Limited" line
+
+local cosmeticCategory: { [string]: string } = {}
+for _, entry in Cosmetics do
+	cosmeticCategory[entry.def.id] = entry.def.category
+end
 local TEXT_BOARD_LIFT = 5.6
 
 local mounted: { [Instance]: () -> () } = {}
@@ -149,17 +157,41 @@ local function mount(part: Instance)
 				vide.cleanup(spinModel(part :: BasePart, m))
 			end
 		end)
-		-- Name and price take the whole board once the model replaces the
-		-- picture: a row's scale with the picture, or without it.
-		local function row(withPicture: number, textOnly: number): number
-			return if model() then textOnly else withPicture
+		local kind = derive(function(): string?
+			local i = item()
+			return if i
+				then StoreScreenLogic.plinthKind(i, function(id: string): string?
+					return cosmeticCategory[id]
+				end)
+				else nil
+		end)
+		-- The board's rows as {position, size} scales. Name and price
+		-- take the whole board once the model replaces the picture; a
+		-- kind line squeezes in between them when there is one.
+		local layout = derive(function(): { [string]: { number } }
+			local k = kind() ~= nil
+			if model() then
+				return if k
+					then { image = { 0, 0 }, name = { 0, 0.4 }, kind = { 0.4, 0.22 }, price = { 0.64, 0.36 } }
+					else { image = { 0, 0 }, name = { 0, 0.47 }, kind = { 0, 0 }, price = { 0.53, 0.47 } }
+			end
+			return if k
+				then { image = { 0, 0.5 }, name = { 0.52, 0.16 }, kind = { 0.68, 0.12 }, price = { 0.82, 0.18 } }
+				else { image = { 0, 0.58 }, name = { 0.6, 0.18 }, kind = { 0, 0 }, price = { 0.8, 0.2 } }
+		end)
+		local function at(name: string): UDim2
+			return UDim2.fromScale(0, layout()[name][1])
+		end
+		local function size(name: string): UDim2
+			return UDim2.fromScale(1, layout()[name][2])
 		end
 
 		local gui = create("BillboardGui")({
 			Name = "StorePlinth" .. slot,
 			Adornee = part,
 			Size = function()
-				return UDim2.fromScale(BOARD_W, if model() then TEXT_BOARD_H else BOARD_H)
+				local textH = if kind() then KIND_BOARD_H else TEXT_BOARD_H
+				return UDim2.fromScale(BOARD_W, if model() then textH else BOARD_H)
 			end,
 			StudsOffsetWorldSpace = function()
 				return Vector3.new(0, part.Size.Y / 2 + (if model() then TEXT_BOARD_LIFT else BOARD_LIFT), 0)
@@ -172,7 +204,9 @@ local function mount(part: Instance)
 			end,
 			create("ImageLabel")({
 				Name = "Image",
-				Size = UDim2.fromScale(1, 0.58),
+				Size = function()
+					return size("image")
+				end,
 				BackgroundTransparency = 1,
 				ScaleType = Enum.ScaleType.Fit,
 				Visible = function()
@@ -186,10 +220,10 @@ local function mount(part: Instance)
 			textLabel({
 				Name = "Name",
 				Position = function()
-					return UDim2.fromScale(0, row(0.6, 0))
+					return at("name")
 				end,
 				Size = function()
-					return UDim2.fromScale(1, row(0.18, 0.47))
+					return size("name")
 				end,
 				FontFace = Theme.type.title.font,
 				TextStrokeTransparency = 0.4,
@@ -199,12 +233,30 @@ local function mount(part: Instance)
 				end,
 			}),
 			textLabel({
-				Name = "Price",
+				Name = "Kind",
 				Position = function()
-					return UDim2.fromScale(0, row(0.8, 0.53))
+					return at("kind")
 				end,
 				Size = function()
-					return UDim2.fromScale(1, row(0.2, 0.47))
+					return size("kind")
+				end,
+				FontFace = Theme.type.label.font,
+				TextColor3 = Theme.color.inkMuted,
+				TextStrokeTransparency = 0.4,
+				Visible = function()
+					return kind() ~= nil
+				end,
+				Text = function()
+					return kind() or ""
+				end,
+			}),
+			textLabel({
+				Name = "Price",
+				Position = function()
+					return at("price")
+				end,
+				Size = function()
+					return size("price")
 				end,
 				FontFace = Theme.type.label.font,
 				TextColor3 = Theme.color.primary,

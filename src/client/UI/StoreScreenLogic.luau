@@ -243,6 +243,33 @@ function StoreScreenLogic.slotFor(category: string): string?
 	return SLOT_FOR_CATEGORY[category]
 end
 
+-- What a plinth says an item IS, under its name: "Hat · Limited",
+-- "Back item · Limited" (owner's wording, 2026-10-10). Only for an item
+-- granting exactly one cosmetic; "Limited" when it's off sale after a
+-- date and isn't a sale price on another item (`replaces`). nil = no
+-- line, e.g. the season pass, whose name already says what it is.
+local KIND_WORD: { [string]: string } = {
+	BackItem = "Back item",
+	CallingCard = "Calling card",
+	StreakFlair = "Streak flair",
+}
+
+function StoreScreenLogic.plinthKind(item: Item, cosmeticCategory: (cosmeticId: string) -> string?): string?
+	local ids = cosmeticIds(item)
+	if #ids ~= 1 then
+		return nil
+	end
+	local category = cosmeticCategory(ids[1])
+	if category == nil then
+		return nil
+	end
+	local word = KIND_WORD[category] or category
+	if item.onSaleUntil ~= nil and item.replaces == nil then
+		return word .. " · Limited"
+	end
+	return word
+end
+
 -- One tab's items, sorted by config sortOrder then key (so two items
 -- with the same order still land in a stable place across refreshes).
 -- `livePassKey` is the running season's pass: the Season tab offers only
