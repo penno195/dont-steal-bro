@@ -1,62 +1,96 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="456" viewBox="0 -48 2200 695">
-<defs>
-    <radialGradient id="bg" cx="50%" cy="38%" r="70%">
-      <stop offset="0" stop-color="#3A2275"/>
-      <stop offset="1" stop-color="#120728"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="456" viewBox="0 0 1440 456">
+  <!-- Studio Corvus community banner, in the style of the game's icon and
+       thumbnail: bright sky, gold burst, chunky white/yellow lettering
+       outlined in red. No logo: Roblox lays the community icon (the
+       raven) over the bottom-left corner, so keep x < 520, y > 250 free of
+       anything that matters.
+       Roblox shows it object-fit: cover in a taller box: the top 79px is
+       always cropped, and below ~1900px wide only x 155-1285 shows. On
+       desktop the icon and name cover about x 320-590, y 350-456. Keep the
+       title inside x 200-1240, y 100-340. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E6FD9"/>
+      <stop offset="0.6" stop-color="#3FA9F5"/>
+      <stop offset="1" stop-color="#9ED8FF"/>
+    </linearGradient>
+    <radialGradient id="burst" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFF6C8" stop-opacity="1"/>
+      <stop offset="0.35" stop-color="#FFC93C" stop-opacity="0.85"/>
+      <stop offset="1" stop-color="#FFC93C" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="bird" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#2A1A4A"/>
-      <stop offset="0.55" stop-color="#0D0618"/>
+    <linearGradient id="yellowText" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFF27A"/>
+      <stop offset="0.55" stop-color="#FFC21A"/>
+      <stop offset="1" stop-color="#FF8A00"/>
+    </linearGradient>
+    <linearGradient id="whiteText" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E4E8F0"/>
     </linearGradient>
     <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#FFE27A"/>
+      <stop offset="0" stop-color="#FFE98A"/>
       <stop offset="1" stop-color="#F2A900"/>
     </linearGradient>
-    <clipPath id="badge"><circle cx="256" cy="256" r="214"/></clipPath>
-  
-<linearGradient id="sky" x1="0" y1="0" x2="1" y2="0">
-<stop offset="0" stop-color="#0B0418"/><stop offset="0.5" stop-color="#25124F"/><stop offset="1" stop-color="#0B0418"/></linearGradient>
-<radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#5A3FA0" stop-opacity="0.7"/><stop offset="1" stop-color="#5A3FA0" stop-opacity="0"/></radialGradient>
-<linearGradient id="goldText" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE27A"/><stop offset="1" stop-color="#F2A900"/></linearGradient>
-</defs>
-<rect y="-48" width="2200" height="695" fill="url(#sky)"/><circle cx="1990" cy="647" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="1584" cy="-9" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="1063" cy="620" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="1151" cy="617" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="1774" cy="-6" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="288" cy="-9" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="259" cy="-39" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="1439" cy="615" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="262" cy="-34" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="1191" cy="-16" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="1722" cy="-7" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="347" cy="-11" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="633" cy="-32" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="2149" cy="617" r="2" fill="#FFFFFF" opacity="0.4"/>
-<circle cx="1326" cy="154" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="197" cy="74" r="1.5" fill="#FFFFFF" opacity="0.4"/><circle cx="237" cy="519" r="2" fill="#FFFFFF" opacity="0.25"/><circle cx="352" cy="444" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="985" cy="92" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="507" cy="228" r="1.5" fill="#FFFFFF" opacity="0.6"/><circle cx="1624" cy="50" r="2" fill="#FFFFFF" opacity="0.25"/><circle cx="545" cy="296" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="482" cy="584" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="740" cy="105" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="399" cy="560" r="1.5" fill="#FFFFFF" opacity="0.6"/><circle cx="244" cy="210" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="2177" cy="437" r="2.5" fill="#FFFFFF" opacity="0.4"/><circle cx="1856" cy="370" r="2.5" fill="#FFFFFF" opacity="0.25"/><circle cx="736" cy="249" r="1.5" fill="#FFFFFF" opacity="0.6"/><circle cx="1229" cy="537" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="1838" cy="294" r="1.5" fill="#FFFFFF" opacity="0.25"/><circle cx="2096" cy="428" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="622" cy="500" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="317" cy="571" r="2.5" fill="#FFFFFF" opacity="0.4"/><circle cx="1434" cy="508" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="383" cy="276" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="266" cy="62" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="1825" cy="291" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="1421" cy="23" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="688" cy="119" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="893" cy="294" r="2" fill="#FFFFFF" opacity="0.6"/><circle cx="1014" cy="407" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="330" cy="170" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="1138" cy="140" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="1140" cy="425" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="1558" cy="236" r="2" fill="#FFFFFF" opacity="0.25"/><circle cx="721" cy="154" r="2" fill="#FFFFFF" opacity="0.6"/><circle cx="955" cy="12" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="746" cy="269" r="2.5" fill="#FFFFFF" opacity="0.25"/><circle cx="596" cy="429" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="1305" cy="128" r="1.5" fill="#FFFFFF" opacity="0.4"/><circle cx="1607" cy="407" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="424" cy="493" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="780" cy="68" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="664" cy="112" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="215" cy="104" r="1.5" fill="#FFFFFF" opacity="0.6"/><circle cx="619" cy="549" r="1.5" fill="#FFFFFF" opacity="0.4"/><circle cx="104" cy="72" r="2" fill="#FFFFFF" opacity="0.6"/><circle cx="1541" cy="152" r="2.5" fill="#FFFFFF" opacity="0.4"/><circle cx="1491" cy="485" r="1.5" fill="#FFFFFF" opacity="0.25"/><circle cx="1999" cy="477" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="1277" cy="87" r="2" fill="#FFFFFF" opacity="0.25"/><circle cx="1403" cy="271" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="661" cy="528" r="1.5" fill="#FFFFFF" opacity="0.25"/><circle cx="2163" cy="370" r="2" fill="#FFFFFF" opacity="0.6"/><circle cx="110" cy="540" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="372" cy="267" r="2.5" fill="#FFFFFF" opacity="0.25"/><circle cx="1456" cy="228" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="913" cy="199" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="928" cy="204" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="118" cy="28" r="2.5" fill="#FFFFFF" opacity="0.4"/><circle cx="1061" cy="198" r="2.5" fill="#FFFFFF" opacity="0.4"/><circle cx="1431" cy="373" r="1.5" fill="#FFFFFF" opacity="0.25"/><circle cx="418" cy="232" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="1383" cy="209" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="7" cy="490" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="347" cy="122" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="816" cy="489" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="1361" cy="88" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="1644" cy="86" r="2" fill="#FFFFFF" opacity="0.25"/><circle cx="520" cy="28" r="2" fill="#FFFFFF" opacity="0.6"/><circle cx="1906" cy="149" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="1435" cy="159" r="2" fill="#FFFFFF" opacity="0.25"/><circle cx="58" cy="105" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="797" cy="216" r="1.5" fill="#FFFFFF" opacity="0.4"/><circle cx="871" cy="299" r="2" fill="#FFFFFF" opacity="0.6"/><circle cx="1335" cy="265" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="249" cy="362" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="2116" cy="430" r="2" fill="#FFFFFF" opacity="0.6"/><circle cx="621" cy="536" r="1.5" fill="#FFFFFF" opacity="0.4"/><circle cx="750" cy="4" r="2" fill="#FFFFFF" opacity="0.25"/><circle cx="579" cy="484" r="1.5" fill="#FFFFFF" opacity="0.6"/><circle cx="252" cy="333" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="232" cy="254" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="172" cy="100" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="114" cy="64" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="2070" cy="524" r="2" fill="#FFFFFF" opacity="0.6"/><circle cx="1135" cy="463" r="3" fill="#FFFFFF" opacity="0.6"/><circle cx="1014" cy="535" r="2.5" fill="#FFFFFF" opacity="0.6"/><circle cx="829" cy="458" r="2" fill="#FFFFFF" opacity="0.4"/><circle cx="498" cy="401" r="3" fill="#FFFFFF" opacity="0.4"/><circle cx="297" cy="246" r="3" fill="#FFFFFF" opacity="0.25"/><circle cx="871" cy="310" r="1.5" fill="#FFFFFF" opacity="0.25"/><circle cx="1499" cy="146" r="2.5" fill="#FFFFFF" opacity="0.25"/>
-<ellipse cx="560" cy="300" rx="420" ry="320" fill="url(#glow)"/>
-<path d="M0 0 Q 22 -20 44 -8 Q 54 -3 60 4 Q 66 -3 76 -8 Q 98 -20 120 0 Q 96 -8 80 4 Q 70 12 66 22 L 54 22 Q 50 12 40 4 Q 24 -8 0 0 Z" transform="translate(1880,60) scale(0.8)" fill="#0B0418" stroke="#7A5CD6" stroke-width="3" opacity="1"/><path d="M0 0 Q 22 -20 44 -8 Q 54 -3 60 4 Q 66 -3 76 -8 Q 98 -20 120 0 Q 96 -8 80 4 Q 70 12 66 22 L 54 22 Q 50 12 40 4 Q 24 -8 0 0 Z" transform="translate(2040,120) scale(0.5)" fill="#0B0418" stroke="#7A5CD6" stroke-width="3" opacity="0.85"/><path d="M0 0 Q 22 -20 44 -8 Q 54 -3 60 4 Q 66 -3 76 -8 Q 98 -20 120 0 Q 96 -8 80 4 Q 70 12 66 22 L 54 22 Q 50 12 40 4 Q 24 -8 0 0 Z" transform="translate(1760,95) scale(0.45)" fill="#0B0418" stroke="#7A5CD6" stroke-width="3" opacity="0.75"/><path d="M0 0 Q 22 -20 44 -8 Q 54 -3 60 4 Q 66 -3 76 -8 Q 98 -20 120 0 Q 96 -8 80 4 Q 70 12 66 22 L 54 22 Q 50 12 40 4 Q 24 -8 0 0 Z" transform="translate(1990,470) scale(0.6)" fill="#0B0418" stroke="#7A5CD6" stroke-width="3" opacity="0.85"/><path d="M0 0 Q 22 -20 44 -8 Q 54 -3 60 4 Q 66 -3 76 -8 Q 98 -20 120 0 Q 96 -8 80 4 Q 70 12 66 22 L 54 22 Q 50 12 40 4 Q 24 -8 0 0 Z" transform="translate(150,90) scale(0.55)" fill="#0B0418" stroke="#7A5CD6" stroke-width="3" opacity="0.75"/><path d="M0 0 Q 22 -20 44 -8 Q 54 -3 60 4 Q 66 -3 76 -8 Q 98 -20 120 0 Q 96 -8 80 4 Q 70 12 66 22 L 54 22 Q 50 12 40 4 Q 24 -8 0 0 Z" transform="translate(110,500) scale(0.45)" fill="#0B0418" stroke="#7A5CD6" stroke-width="3" opacity="0.65"/>
-<g transform="translate(340,80) scale(0.86)">
+    <symbol id="coin" viewBox="-34 -34 68 68" overflow="visible">
+      <circle r="30" cy="4" fill="#B07800" stroke="#5A3A00" stroke-width="3"/>
+      <circle r="28" fill="url(#gold)"/>
+      <circle r="20" fill="none" stroke="#D99A00" stroke-width="3"/>
+      <text y="13" text-anchor="middle" font-family="Segoe UI Black, Arial Black, sans-serif" font-weight="900" font-size="34" fill="#C98A00">$</text>
+      <path d="M -18 -12 Q -12 -20 -3 -22" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" opacity="0.9"/>
+    </symbol>
+    <symbol id="coinEdge" viewBox="-34 -34 68 68" overflow="visible">
+      <ellipse rx="30" ry="11" cy="4" fill="#B07800" stroke="#5A3A00" stroke-width="3"/>
+      <ellipse rx="28" ry="9" fill="url(#gold)"/>
+    </symbol>
+    <symbol id="cash" viewBox="-50 -26 100 52" overflow="visible">
+      <rect x="-48" y="-24" width="96" height="48" rx="5" fill="#4CC96B" stroke="#1E7A36" stroke-width="3"/>
+      <rect x="-40" y="-16" width="80" height="32" rx="3" fill="none" stroke="#2E9E4C" stroke-width="2.5"/>
+      <circle r="12" fill="#2E9E4C"/>
+      <text y="7" text-anchor="middle" font-family="Segoe UI Black, Arial Black, sans-serif" font-weight="900" font-size="20" fill="#BDF5C9">$</text>
+    </symbol>
+  </defs>
 
-  
-  <circle cx="256" cy="256" r="214" fill="url(#bg)"/>
+  <rect width="1440" height="456" fill="url(#sky)"/>
+  <g fill="#FFFFFF" opacity="0.16" transform="translate(-210 20)"><path d="M 930 190 L 2530 190 L 2520 366 Z"/><path d="M 930 190 L 2490 546 L 2441 715 Z"/><path d="M 930 190 L 2372 884 L 2287 1038 Z"/><path d="M 930 190 L 2181 1188 L 2064 1319 Z"/><path d="M 930 190 L 1928 1441 L 1784 1543 Z"/><path d="M 930 190 L 1624 1632 L 1462 1699 Z"/><path d="M 930 190 L 1286 1750 L 1113 1780 Z"/><path d="M 930 190 L 930 1790 L 754 1780 Z"/><path d="M 930 190 L 574 1750 L 405 1701 Z"/><path d="M 930 190 L 236 1632 L 82 1547 Z"/><path d="M 930 190 L -68 1441 L -199 1324 Z"/><path d="M 930 190 L -321 1188 L -423 1044 Z"/><path d="M 930 190 L -512 884 L -579 722 Z"/><path d="M 930 190 L -630 546 L -660 373 Z"/><path d="M 930 190 L -670 190 L -660 14 Z"/><path d="M 930 190 L -630 -166 L -581 -335 Z"/><path d="M 930 190 L -512 -504 L -427 -658 Z"/><path d="M 930 190 L -321 -808 L -204 -939 Z"/><path d="M 930 190 L -68 -1061 L 76 -1163 Z"/><path d="M 930 190 L 236 -1252 L 398 -1319 Z"/><path d="M 930 190 L 574 -1370 L 747 -1400 Z"/><path d="M 930 190 L 930 -1410 L 1106 -1400 Z"/><path d="M 930 190 L 1286 -1370 L 1455 -1321 Z"/><path d="M 930 190 L 1624 -1252 L 1778 -1167 Z"/><path d="M 930 190 L 1928 -1061 L 2059 -944 Z"/><path d="M 930 190 L 2181 -808 L 2283 -664 Z"/><path d="M 930 190 L 2372 -504 L 2439 -342 Z"/><path d="M 930 190 L 2490 -166 L 2520 7 Z"/></g>
+  <ellipse cx="720" cy="210" rx="640" ry="300" fill="url(#burst)"/>
 
-  <g clip-path="url(#badge)">
-    <!-- raven, facing right -->
-    <path fill="url(#bird)" stroke="#6B4FC0" stroke-width="3" stroke-linejoin="round" d="
-      M 108 520
-      C 98 400 116 248 218 180
-      C 260 150 322 144 358 180
-      C 394 190 424 212 450 248
-      C 420 252 388 258 356 266
-      L 350 288
-      Q 374 312 338 318
-      Q 364 342 324 346
-      Q 350 372 308 376
-      Q 332 404 292 406
-      Q 310 438 282 442
-      L 290 520 Z"/>
-    <!-- beak line -->
-    <path d="M 356 250 Q 400 246 444 247" fill="none" stroke="#5A3FA0" stroke-width="4" stroke-linecap="round"/>
-    <!-- rim-light feathers on the crown and nape -->
-    <path d="M 196 212 Q 236 178 288 172" fill="none" stroke="#7A5CD6" stroke-width="5" stroke-linecap="round" opacity="0.7"/>
-    <path d="M 150 300 Q 168 250 205 222" fill="none" stroke="#7A5CD6" stroke-width="5" stroke-linecap="round" opacity="0.5"/>
-    <!-- eye -->
-    <circle cx="316" cy="200" r="17" fill="url(#gold)"/>
-    <circle cx="320" cy="200" r="7" fill="#120728"/>
-    <circle cx="311" cy="194" r="4" fill="#FFFFFF"/>
+  <!-- clouds along the bottom -->
+  <g fill="#FFFFFF" opacity="0.55">
+    <circle cx="80" cy="470" r="90"/><circle cx="200" cy="450" r="70"/><circle cx="320" cy="480" r="80"/>
+    <circle cx="600" cy="470" r="70"/><circle cx="700" cy="445" r="60"/><circle cx="800" cy="475" r="75"/>
+    <circle cx="1080" cy="470" r="80"/><circle cx="1190" cy="450" r="65"/><circle cx="1320" cy="465" r="85"/><circle cx="1430" cy="450" r="60"/>
+  </g>
+  <g fill="#FFFFFF" opacity="0.35">
+    <ellipse cx="560" cy="70" rx="70" ry="22"/><ellipse cx="600" cy="56" rx="40" ry="22"/>
+    <ellipse cx="1180" cy="40" rx="80" ry="22"/><ellipse cx="1220" cy="26" rx="44" ry="20"/>
+  </g>
+  <path d="M 0 430 Q 720 404 1440 430 L 1440 456 L 0 456 Z" fill="#FFFFFF" opacity="0.35"/>
+
+  <!-- cash and coins flying past, framing the title -->
+  <use href="#cash" x="-50" y="-26" width="100" height="52" transform="translate(205 140) rotate(-22) scale(0.95)"/>
+  <use href="#coin" x="-34" y="-34" width="68" height="68" transform="translate(230 250) rotate(-14) scale(1.0)"/>
+  <use href="#coinEdge" x="-34" y="-34" width="68" height="68" transform="translate(90 200) rotate(28) scale(0.9)"/>
+  <use href="#coin" x="-34" y="-34" width="68" height="68" transform="translate(70 90) rotate(18) scale(0.8)"/>
+  <use href="#cash" x="-50" y="-26" width="100" height="52" transform="translate(1235 120) rotate(20) scale(0.85)"/>
+  <use href="#coin" x="-34" y="-34" width="68" height="68" transform="translate(1250 250) rotate(14) scale(1.0)"/>
+  <use href="#coinEdge" x="-34" y="-34" width="68" height="68" transform="translate(1180 330) rotate(-22) scale(0.8)"/>
+  <use href="#coin" x="-34" y="-34" width="68" height="68" transform="translate(1370 180) rotate(-10) scale(0.85)"/>
+  <use href="#cash" x="-50" y="-26" width="100" height="52" transform="translate(1360 360) rotate(-30) scale(0.85)"/>
+  <use href="#coin" x="-34" y="-34" width="68" height="68" transform="translate(1000 365) rotate(8) scale(0.65)"/>
+  <use href="#cash" x="-50" y="-26" width="100" height="52" transform="translate(760 380) rotate(10) scale(0.65)"/>
+
+  <!-- title, game-logo style: tilted, white + yellow, red then dark outline -->
+  <g transform="translate(-210 20) rotate(-4 930 190)" font-family="Segoe UI Black, Arial Black, sans-serif" font-weight="900" text-anchor="middle" letter-spacing="2">
+    <text x="930" y="190" font-size="100" stroke="#3A0606" stroke-width="34" stroke-linejoin="round">STUDIO <tspan>CORVUS</tspan></text>
+    <text x="930" y="190" font-size="100" stroke="#E0262B" stroke-width="20" stroke-linejoin="round" fill="#E0262B">STUDIO <tspan>CORVUS</tspan></text>
+    <text x="930" y="190" font-size="100" fill="url(#whiteText)">STUDIO <tspan fill="url(#yellowText)">CORVUS</tspan></text>
   </g>
 
-  <circle cx="256" cy="256" r="214" fill="none" stroke="url(#gold)" stroke-width="14"/>
-</g>
-<text x="860" y="300" font-family="Segoe UI" font-weight="900" font-size="132" letter-spacing="6" fill="url(#goldText)" stroke="#1B0B33" stroke-width="4" paint-order="stroke">STUDIO CORVUS</text>
-<rect x="866" y="336" width="1000" height="6" rx="3" fill="#FFD23F" opacity="0.8"/>
-<text x="866" y="420" font-family="Segoe UI" font-weight="700" font-size="60" fill="#C9BDF0">Makers of <tspan fill="#FFFFFF" font-weight="900">Don't Steal Bro!</tspan></text>
+  <!-- subtitle on a red ribbon -->
+  <g transform="translate(-210 20) rotate(-4 930 190)">
+    <path d="M 630 232 L 1230 232 L 1252 262 L 1230 292 L 630 292 L 608 262 Z" fill="#3A0606" transform="translate(0 6)"/>
+    <path d="M 630 232 L 1230 232 L 1252 262 L 1230 292 L 630 292 L 608 262 Z" fill="#E0262B" stroke="#3A0606" stroke-width="5" stroke-linejoin="round"/>
+    <text x="930" y="276" text-anchor="middle" font-family="Segoe UI Black, Arial Black, sans-serif" font-weight="900" font-size="38" letter-spacing="1" fill="#FFFFFF">MAKERS OF <tspan fill="#FFE27A">DON'T STEAL BRO!</tspan></text>
+  </g>
 </svg>
