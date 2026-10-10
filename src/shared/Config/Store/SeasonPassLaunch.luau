@@ -24,7 +24,9 @@ local SeasonPassLaunch: Validate.StoreItemDef = {
 	wasPrice = 199,
 	onSaleUntil = "2026-12-01 00:00", -- the owner: until December's pass (Season 1's endsOn)
 	replaces = "season-pass",
-	featuredSlot = 1,
+	featuredSlot = 2, -- the centre plinth (StorePodium2, x 182)
+	-- assets/seasonpass/models/GoldenTicket (Meshy), ~4 studs across
+	plinthModel = { meshAssetId = 136634816390121, textureAssetId = 135638183265178, scale = 0.022 },
 	sortOrder = 10,
 	imageAssetId = 130933629115331, -- assets/store/season-pass.png
 	grants = { { kind = "SeasonPass" } },

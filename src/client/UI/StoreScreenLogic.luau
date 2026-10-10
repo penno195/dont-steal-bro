@@ -43,6 +43,8 @@ export type Item = {
 	onSaleFrom: string?,
 	onSaleUntil: string?,
 	featuredSlot: number?,
+	-- Validate.PlinthModel: what spins on the item's plinth.
+	plinthModel: { meshAssetId: number, textureAssetId: number, scale: number, rotation: { number }? }?,
 }
 
 -- What an item costs right now: coins, or what Roblox charges (the live

@@ -39,6 +39,20 @@ const ITEMS = {
 		prompt: `A sleek luxury hard-shell backpack, glossy black with polished gold trim along its edges, a large gold raven emblem with spread wings on the front, two short gold straps. ${STYLE}`,
 		texture: "glossy jet black lacquer shell, polished gold trim, gold raven crest emblem with spread wings, deep purple accents",
 	},
+	// Hub store plinths (2026-10-10): the Season Pass's spinning display
+	// model, and the two limited editions on sale until 2026-12-01.
+	GoldenTicket: {
+		prompt: `One single thick golden admission ticket, a flat rectangular card with notched semicircle cut-outs on both short ends, a raised star emblem in the middle, slightly bent. ${STYLE}`,
+		texture: "shiny polished metallic gold ticket, embossed star in the centre, thin raised border, warm yellow highlights",
+	},
+	DiamondHeistCrown: {
+		prompt: `A chunky royal crown with five tall points, crammed with oversized sparkling cut diamonds and gems, open top, crown only. ${STYLE}`,
+		texture: "shiny polished gold crown, huge clear blue-white faceted diamonds, a few red rubies, glossy highlights",
+	},
+	VaultDoorShield: {
+		prompt: `A round thick bank vault door, a heavy steel disc with a big gold spoked spin-wheel handle in the middle and chunky bolts around the rim, worn as a backpack. ${STYLE}`,
+		texture: "brushed silver-grey steel disc, polished gold spoked wheel handle, dark steel bolts around the rim",
+	},
 };
 
 const headers = { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };

@@ -512,6 +512,18 @@ export type StoreItemDef = {
 	-- it's on sale. Two enabled items may share a slot only if their
 	-- sale windows don't overlap.
 	featuredSlot: number?,
+	-- What spins on that plinth instead of the billboard picture
+	-- (user decision, 2026-10-10): a Meshy mesh + texture, sized like a
+	-- wearable (`scale` multiplies the mesh's own size; `rotation` in
+	-- degrees turns it to face out before it spins). nil = picture only.
+	plinthModel: PlinthModel?,
+}
+
+export type PlinthModel = {
+	meshAssetId: number,
+	textureAssetId: number,
+	scale: number,
+	rotation: { number }?,
 }
 
 -- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
@@ -1845,6 +1857,64 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 			"featuredSlot",
 			string.format("expected a plinth slot from 1 to %d, got %s", FEATURED_SLOTS, tostring(def.featuredSlot))
 		)
+	end
+
+	local plinthModel = def.plinthModel
+	if plinthModel ~= nil then
+		if type(plinthModel) ~= "table" then
+			issue(
+				issues,
+				"Store",
+				fileName,
+				"plinthModel",
+				"expected { meshAssetId, textureAssetId, scale, rotation? }"
+			)
+		else
+			if def.featuredSlot == nil then
+				issue(
+					issues,
+					"Store",
+					fileName,
+					"plinthModel",
+					"only a featured item (featuredSlot) is shown on a plinth"
+				)
+			end
+			for _, field in { "meshAssetId", "textureAssetId" } do
+				local id = (plinthModel :: any)[field]
+				if type(id) ~= "number" or id % 1 ~= 0 or id < 0 then
+					issue(issues, "Store", fileName, "plinthModel." .. field, "expected an asset id")
+				elseif def.enabled and id == 0 then
+					issue(
+						issues,
+						"Store",
+						fileName,
+						"plinthModel." .. field,
+						"enabled = true but the model isn't uploaded (id 0)"
+					)
+				end
+			end
+			if type(plinthModel.scale) ~= "number" or plinthModel.scale <= 0 then
+				issue(issues, "Store", fileName, "plinthModel.scale", "must be a positive number")
+			end
+			local rotation = plinthModel.rotation
+			if rotation ~= nil then
+				local ok = type(rotation) == "table" and #rotation == 3
+				if ok then
+					for _, n in rotation do
+						ok = ok and type(n) == "number"
+					end
+				end
+				if not ok then
+					issue(
+						issues,
+						"Store",
+						fileName,
+						"plinthModel.rotation",
+						"expected {x, y, z} numbers, or nil for {0, 0, 0}"
+					)
+				end
+			end
+		end
 	end
 
 	if def.perk ~= nil then

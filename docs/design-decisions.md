@@ -316,6 +316,15 @@ step 7a). Every amount is still unconfirmed until a playtest.
     the group at any time can claim it. A player who later **leaves the
     group keeps it**; membership is checked only to grant it, on join
     and from the Locker's FREE tile, which opens Roblox's join prompt.
+- *Applied (2026-10-10, user decision):* **the first two limited
+  editions** are the **Diamond Heist Crown** (hat, plinth 1) and the
+  **Vault Door Shield** (back item, plinth 3), either side of the Season
+  Pass, which moves to the centre plinth (Slot 2). **149 R$ each**, on sale
+  until **2026-12-01 00:00 UTC** (with Season 1 and the pass launch
+  offer, so the plinth row turns over together). 149 keeps them under
+  the pass's 199 R$. On the plinths a **spinning 3D model replaces the
+  billboard picture** (StoreItemDef.plinthModel); the Season Pass's is a
+  golden ticket.
 
 ## 2. Round timer expires with <3 finished
 

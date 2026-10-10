@@ -2949,4 +2949,26 @@ TestRunner.describe("Validate - sales and limited cosmetics", function()
 		def.featuredSlot = 4
 		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 	end)
+
+	TestRunner.it("accepts a plinth model on a featured item, with a rotation or without", function()
+		local def = validProduct("t")
+		def.featuredSlot = 2
+		def.plinthModel = { meshAssetId = 1, textureAssetId = 2, scale = 0.01 }
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } })):toBe(0)
+		def.plinthModel = { meshAssetId = 1, textureAssetId = 2, scale = 0.01, rotation = { 0, 90, 0 } }
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a plinth model off a plinth, unsized, or not uploaded while enabled", function()
+		local def = validProduct("t")
+		def.plinthModel = { meshAssetId = 1, textureAssetId = 2, scale = 0.01 }
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+		def.featuredSlot = 1
+		def.plinthModel = { meshAssetId = 1, textureAssetId = 2, scale = 0 }
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+		def.plinthModel = { meshAssetId = 0, textureAssetId = 2, scale = 0.01 }
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
+		def.enabled = false
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
 end)
