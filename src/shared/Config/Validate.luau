@@ -587,6 +587,10 @@ export type StoreConfig = {
 	passCacheOwnedTtlSeconds: number,
 	passCacheUnownedTtlSeconds: number,
 
+	-- UserIds treated as owning every perk pass, live servers included
+	-- (design-decisions.md Q8, "Developer perk override").
+	perkOverrideUserIds: { number },
+
 	-- design-decisions.md Q8, verbatim: "Loadouts are capped at 3 items
 	-- regardless of spend." LOCKED, not a placeholder - raising it means
 	-- amending Q8, not editing a number.
@@ -2840,6 +2844,22 @@ local function checkStoreConfig(store: StoreConfig, issues: { Issue })
 			"store.passCacheUnownedTtlSeconds",
 			"must not exceed store.passCacheOwnedTtlSeconds - a player who just bought a pass is the one waiting on this cache, so the negative answer is the one that has to expire sooner"
 		)
+	end
+
+	if type(store.perkOverrideUserIds) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "store.perkOverrideUserIds", "must be a list of user ids")
+	else
+		for i, userId in store.perkOverrideUserIds do
+			if type(userId) ~= "number" or userId <= 0 or userId ~= math.floor(userId) then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					string.format("store.perkOverrideUserIds[%d]", i),
+					"must be a positive integer user id"
+				)
+			end
+		end
 	end
 end
 

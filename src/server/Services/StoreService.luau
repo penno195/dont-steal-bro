@@ -1249,8 +1249,12 @@ local StoreService: Loader.Service = {
 
 	-- Whether this player owns the enabled pass that unlocks `perk`.
 	-- Live (cached) ownership, never a profile field, so nothing but a
-	-- real purchase can make it true.
+	-- real purchase can make it true - except the developer override
+	-- list in GameConfig.store (design-decisions.md Q8).
 	ownsPerk = function(player: Player, perk: Validate.StorePerk): boolean
+		if table.find(GameConfig.store.perkOverrideUserIds, player.UserId) ~= nil then
+			return true
+		end
 		for _, entry in StoreCatalogue do
 			local def = entry.def :: StoreItemDef
 			if def.kind == "GamePass" and def.perk == perk and def.enabled then

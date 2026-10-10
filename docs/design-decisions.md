@@ -779,6 +779,12 @@ the many who own nothing.
   bought from the sheet switches Navigation on by itself. If a receipt
   lands after its race has ended, the round is kept for the next race.
   A pass owner never spends a held round.
+- **Developer perk override** (owner, 2026-10-10): Roblox can't gift a
+  game pass, so `GameConfig.store.perkOverrideUserIds` lists UserIds the
+  server treats as owning every perk pass (today: Unlimited Navigation),
+  on live servers too. It's for the team and testers only. The check is
+  server-side in `StoreService.ownsPerk`. Nothing else is granted, and
+  the Hub store still offers them the pass for sale.
 
 ---
 

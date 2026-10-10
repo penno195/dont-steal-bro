@@ -147,6 +147,7 @@ local function validGameConfig(): Validate.GameConfig
 			receiptProfileWaitSeconds = 30,
 			passCacheOwnedTtlSeconds = 3600,
 			passCacheUnownedTtlSeconds = 60,
+			perkOverrideUserIds = {},
 			loadoutSlots = 3,
 		},
 		matchmaking = {

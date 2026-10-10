@@ -396,6 +396,14 @@ local GameConfig: Validate.GameConfig = {
 		passCacheOwnedTtlSeconds = 3600,
 		passCacheUnownedTtlSeconds = 60,
 
+		-- Developers and testers who get every perk pass (Unlimited
+		-- Navigation) without buying it, live servers included. Roblox
+		-- has no way to gift a game pass, so this is the only route.
+		-- Checked server-side against UserId; keep it to the team.
+		perkOverrideUserIds = {
+			10068109232, -- sillynoah676767 (collaborator)
+		},
+
 		-- LOCKED by design-decisions.md Q8: "Loadouts are capped at 3
 		-- items regardless of spend." Validate.checkStoreConfig asserts
 		-- this is exactly 3 - changing it means amending Q8.
