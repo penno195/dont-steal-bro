@@ -686,6 +686,19 @@ as a **practice mode** for playing with friends.
   race expires the offer, and a practice race is a race. That text is
   followed as written. Revisit if players lose offers by warming up.
 
+### Applied case: the first-time tutorial (2026-10-10, user decision)
+
+Decided by the project owner, before soft launch: **new players get a
+hub intro on first join, which then offers a guided practice round.**
+Both are offered and skippable, never forced, and both can be replayed
+from Settings. This replaces onboarding.md's "no tutorial level": the
+in-round tip cards stay as well.
+- The guided round is a practice round (the case above), so it never
+  touches a streak, a stat or a leaderboard.
+- Not built yet. The design (the intro's cards, the round's steps) is
+  still to be worked out, and anything it can't answer goes back to
+  the owner.
+
 ## 8. Are starting power-ups sold for Robux?
 
 **Decision:** Power-ups may be purchased with Robux, provided **every**
