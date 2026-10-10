@@ -136,21 +136,65 @@ Draw-Label $g 'x5 EACH' 410 52 (Rgb 255 255 255)
 Save-Icon $c 'bundle-starter-loadout.png'
 
 # ===== season-pass: Season Pass ==========================================
-$c = New-Icon (Rgb 60 50 120) (Rgb 15 10 40); $g = $c[1]
-# A ticket: rounded card with notches bitten out of both sides.
+$c = New-Icon (Rgb 140 70 230) (Rgb 30 10 80); $g = $c[1]
+$purple = Rgb 70 30 150
+# Sunburst rays behind the ticket.
+for ($i = 0; $i -lt 16; $i++) {
+	$a0 = [Math]::PI / 8 * $i; $a1 = $a0 + [Math]::PI / 16
+	$g.FillPolygon((Brush (Rgb 255 255 255 26)), [System.Drawing.PointF[]]@(
+		(Pt 256 241), (Pt (256 + [Math]::Cos($a0) * 360) (241 + [Math]::Sin($a0) * 360)),
+		(Pt (256 + [Math]::Cos($a1) * 360) (241 + [Math]::Sin($a1) * 360))))
+}
+# A golden ticket, tipped jauntily: rounded card with notches bitten out of
+# both sides, a crown in its window and a star on the torn-off stub. No
+# season number: seasons are monthly, and a number baked in goes stale.
+$g.TranslateTransform(256, 241); $g.RotateTransform(-10); $g.TranslateTransform(-256, -241)
+$x0 = 106; $y0 = 146; $x1 = 406; $y1 = 336; $r = 22; $n = 26
 $ticket = New-Object System.Drawing.Drawing2D.GraphicsPath
-$ticket.AddRectangle((New-Object System.Drawing.RectangleF 96, 150, 320, 212))
-$notches = New-Object System.Drawing.Drawing2D.GraphicsPath
-$notches.AddEllipse(70, 230, 52, 52); $notches.AddEllipse(390, 230, 52, 52)
-$region = New-Object System.Drawing.Region $ticket
-$region.Exclude($notches)
-$gold = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle 96, 150, 320, 212), (Rgb 255 225 110), (Rgb 220 150 20), 90
-$g.FillRegion($gold, $region)
-$dash = Pen (Rgb 150 90 10) 6
-$dash.DashStyle = 'Dash'
-$g.DrawRectangle($dash, 122, 172, 268, 168)
-Draw-Label $g 'S1' 256 78 (Rgb 255 255 255)
-foreach ($p in @(@(150, 110, 22), @(372, 104, 16), @(256, 92, 12), @(400, 400, 18), @(118, 404, 14))) {
+$ticket.AddArc($x0, $y0, 2 * $r, 2 * $r, 180, 90)
+$ticket.AddArc($x1 - 2 * $r, $y0, 2 * $r, 2 * $r, 270, 90)
+$ticket.AddArc($x1 - $n, 241 - $n, 2 * $n, 2 * $n, 270, -180)
+$ticket.AddArc($x1 - 2 * $r, $y1 - 2 * $r, 2 * $r, 2 * $r, 0, 90)
+$ticket.AddArc($x0, $y1 - 2 * $r, 2 * $r, 2 * $r, 90, 90)
+$ticket.AddArc($x0 - $n, 241 - $n, 2 * $n, 2 * $n, 90, -180)
+$ticket.CloseFigure()
+$g.TranslateTransform(8, 12); $g.FillPath((Brush (Rgb 0 0 0 90)), $ticket); $g.TranslateTransform(-8, -12)
+$gold = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle $x0, $y0, 300, 190), (Rgb 255 232 120), (Rgb 225 145 15), 90
+$g.FillPath($gold, $ticket)
+# A glossy band across the card.
+$g.SetClip($ticket)
+$g.FillPolygon((Brush (Rgb 255 255 255 70)), [System.Drawing.PointF[]]@((Pt 150 140), (Pt 210 140), (Pt 130 340), (Pt 70 340)))
+$g.ResetClip()
+$g.DrawPath((Pen $ink 12), $ticket)
+# Perforation between the window and the stub.
+$dash = Pen (Rgb 150 85 10) 7
+$dash.DashStyle = 'Dot'
+$g.DrawLine($dash, 316, ($y0 + 18), 316, ($y1 - 18))
+# The window: a purple panel with a gold crown.
+$win = New-Object System.Drawing.Drawing2D.GraphicsPath
+$win.AddArc(134, 172, 32, 32, 180, 90); $win.AddArc(264, 172, 32, 32, 270, 90)
+$win.AddArc(264, 278, 32, 32, 0, 90); $win.AddArc(134, 278, 32, 32, 90, 90)
+$win.CloseFigure()
+$g.FillPath((Brush $purple), $win); $g.DrawPath((Pen $ink 7), $win)
+$crown = [System.Drawing.PointF[]](@(@(-50, 34), @(-58, -26), @(-26, 4), @(0, -42), @(26, 4), @(58, -26), @(50, 34)) |
+	ForEach-Object { Pt (215 + $_[0]) (246 + $_[1]) })
+$cg = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle 150, 196, 130, 90), (Rgb 255 240 140), (Rgb 240 160 20), 90
+$g.FillPolygon($cg, $crown); $g.DrawPolygon((Pen $ink 7), $crown)
+foreach ($t in @(@(-58, -26), @(0, -42), @(58, -26))) {
+	$g.FillEllipse((Brush (Rgb 255 240 140)), 215 + $t[0] - 10, 246 + $t[1] - 10, 20, 20)
+	$g.DrawEllipse((Pen $ink 5), 215 + $t[0] - 10, 246 + $t[1] - 10, 20, 20)
+}
+$g.FillEllipse((Brush (Rgb 255 80 110)), 203, 252, 24, 20); $g.DrawEllipse((Pen $ink 4), 203, 252, 24, 20)
+# The stub's star.
+$star = @()
+for ($i = 0; $i -lt 10; $i++) {
+	$a = [Math]::PI / 5 * $i - [Math]::PI / 2
+	$rr = if ($i % 2 -eq 0) { 34 } else { 15 }
+	$star += Pt (360 + [Math]::Cos($a) * $rr) (243 + [Math]::Sin($a) * $rr)
+}
+$g.FillPolygon((Brush $purple), [System.Drawing.PointF[]]$star); $g.DrawPolygon((Pen $ink 5), [System.Drawing.PointF[]]$star)
+$g.ResetTransform()
+foreach ($p in @(@(132, 118, 22), @(386, 108, 16), @(402, 372, 16), @(112, 356, 12))) {
 	$x = $p[0]; $y = $p[1]; $r = $p[2]
 	$pts = @()
 	for ($i = 0; $i -lt 8; $i++) {
