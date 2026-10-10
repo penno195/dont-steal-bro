@@ -20,7 +20,7 @@ local CorvusCrestPack: Validate.CosmeticDef = {
 	wearMeshAssetId = 70420142763325,
 	wearTextureAssetId = 122006621028960,
 	wearScale = 0.0115,
-	wearOffset = { 0, 0, 0.75 },
+	wearOffset = { 0, 0, 0.35 }, -- its back panel flat to the back; the straps reach past it (measured 2026-10-10)
 	wearRotation = { 0, 180, 0 }, -- the model's front faces away from the back
 	previewIconAssetId = 135583353017773,
 }

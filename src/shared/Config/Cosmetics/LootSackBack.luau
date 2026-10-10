@@ -18,7 +18,7 @@ local LootSackBack: Validate.CosmeticDef = {
 	wearMeshAssetId = 112676661018842,
 	wearTextureAssetId = 131147733929237,
 	wearScale = 0.011,
-	wearOffset = { 0, 0, 0.75 },
+	wearOffset = { 0, 0, 0.61 }, -- its body flat to the back, measured off the mesh (2026-10-10)
 	wearRotation = { 0, 180, 0 }, -- the model's front faces away from the back
 	previewIconAssetId = 115821742918760,
 }

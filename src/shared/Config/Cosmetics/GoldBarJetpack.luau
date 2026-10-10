@@ -18,7 +18,7 @@ local GoldBarJetpack: Validate.CosmeticDef = {
 	wearMeshAssetId = 96237860330723,
 	wearTextureAssetId = 81943353741587,
 	wearScale = 0.0115,
-	wearOffset = { 0, 0, 0.75 },
+	wearOffset = { 0, 0, 0.63 }, -- its body flat to the back, measured off the mesh (2026-10-10)
 	wearRotation = { 0, 180, 0 }, -- the model's front faces away from the back
 	previewIconAssetId = 74118338451108,
 }
