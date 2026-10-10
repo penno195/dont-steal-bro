@@ -76,6 +76,7 @@ local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
+local StoreOffers = require(ReplicatedStorage.Shared.StoreOffers)
 local CosmeticLogic = require(ServerScriptService.Server.CosmeticLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local Signal = require(ReplicatedStorage.Packages.Signal)
@@ -795,12 +796,12 @@ end
 -- server-side: the price comes from config by key, the balance from the
 -- profile, and the deduction and the grant land in one mutation
 -- (StoreLogic.buyWithCoins), saved straight away like a receipt.
-local function buyWithCoins(player: Player, def: StoreItemDef)
+local function buyWithCoins(player: Player, def: StoreItemDef, resultKey: string)
 	local getHandle = receiptHandleFor
 	local handle = if getHandle then getHandle(player) else nil
 	local data = if handle then handle.getData() else nil
 	if handle == nil or data == nil or not handle.isActive() then
-		sendPurchaseResult(player, def.key, "Unavailable", "Your data isn't loaded yet. Try again in a moment.")
+		sendPurchaseResult(player, resultKey, "Unavailable", "Your data isn't loaded yet. Try again in a moment.")
 		return
 	end
 
@@ -815,7 +816,7 @@ local function buyWithCoins(player: Player, def: StoreItemDef)
 		local message = if reason == "not enough coins"
 			then "You don't have enough coins for that yet."
 			else "That item isn't available right now."
-		sendPurchaseResult(player, def.key, "NotEnoughCoins", message)
+		sendPurchaseResult(player, resultKey, "NotEnoughCoins", message)
 		return
 	end
 
@@ -826,7 +827,7 @@ local function buyWithCoins(player: Player, def: StoreItemDef)
 	data.navigationRounds = after.navigationRounds or data.navigationRounds
 	handle.save()
 	recordGrant(player, def, nil, changes)
-	sendPurchaseResult(player, def.key, "Granted", "")
+	sendPurchaseResult(player, resultKey, "Granted", "")
 	pushState(player)
 	purchaseLanded:Fire(player, def)
 	Loader.get("Telemetry").purchaseCompleted(player, def.key, def.kind, nil)
@@ -852,6 +853,22 @@ local function handlePurchaseIntent(player: Player, key: string)
 		return
 	end
 
+	-- Sale windows and launch offers (design-decisions.md Q1, "the
+	-- featured plinths" and "limited cosmetics"). The client asks for a
+	-- key; what it's sold is the offer standing in for that key now
+	-- (asking for "season-pass" during the launch offer prompts the
+	-- 99 R$ product), or nothing if the key is outside its window or
+	-- stood down. The client's clock never decides this. Results still
+	-- go out under the key the client asked for, so its UI can match
+	-- them. Receipts are not checked against windows: a product bought
+	-- a second before the end is still granted.
+	local offered = StoreOffers.resolve(StoreCatalogue :: any, key, os.time()) :: StoreItemDef?
+	if offered == nil then
+		sendPurchaseResult(player, key, "Unavailable", "That offer isn't available right now.")
+		return
+	end
+	def = offered
+
 	-- P8-5 kill switch: no new prompts while the store is off.
 	if not Loader.get("LiveConfig").flags().storeEnabled then
 		sendPurchaseResult(player, key, "Unavailable", "The store is closed right now. Try again later.")
@@ -876,7 +893,7 @@ local function handlePurchaseIntent(player: Player, key: string)
 	end
 
 	if def.kind == "CoinOffer" then
-		buyWithCoins(player, def)
+		buyWithCoins(player, def, key)
 		return
 	end
 
