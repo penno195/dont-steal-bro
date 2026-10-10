@@ -93,6 +93,8 @@ local KIND_CATEGORY: { [string]: Category } = {
 -- filed under a tab that disagrees with its contents. A game pass is
 -- Season (rewards step 5) unless it's a perk pass, which grants nothing
 -- and sits in Bundles; anything granting two different kinds is a bundle.
+-- Power-ups bought with Robux (Sprint Boost x10, the Starter Loadout)
+-- are bundles too: the Power-ups tab is the coin offers.
 function StoreScreenLogic.categoryOf(item: Item): Category
 	if item.kind == "GamePass" then
 		return if item.perk ~= nil then "Bundles" else "Season"
@@ -104,6 +106,9 @@ function StoreScreenLogic.categoryOf(item: Item): Category
 			return "Bundles"
 		end
 		found = c
+	end
+	if found == "PowerUps" and item.kind ~= "CoinOffer" then
+		return "Bundles"
 	end
 	return found or "Bundles"
 end

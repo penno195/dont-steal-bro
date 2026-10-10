@@ -149,6 +149,13 @@ describe("StoreScreenLogic catalogue", function()
 		expect(StoreScreenLogic.categoryOf(bundle)):toBe("Bundles")
 	end)
 
+	it("files power-ups bought with Robux under Bundles", function()
+		local stock = item("stock", "DeveloperProduct", {
+			{ kind = "PowerUpStock", powerUpId = "sprint-boost", amount = 10 },
+		})
+		expect(StoreScreenLogic.categoryOf(stock)):toBe("Bundles")
+	end)
+
 	it("reads as the rarest thing inside, and currency has no rarity", function()
 		local rarities: { [string]: string } = { ["skin-founder"] = "Uncommon", ["trail-founder"] = "Rare" }
 		local lookup = function(g: StoreScreenLogic.Grant): string?
