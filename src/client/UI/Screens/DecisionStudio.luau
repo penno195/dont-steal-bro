@@ -25,7 +25,8 @@
 --
 -- SECRECY: this file never sees another player's choice before the
 -- reveal packet, because the Store has nowhere to put one - `locked` is
--- a set of ids, and `reveal` is nil until DecisionReveal parses. The
+-- a set of ids (only ever your own: nobody is told when anyone else
+-- locks), and `reveal` is nil until DecisionReveal parses. The
 -- reveal's cards are built the moment it arrives, not preloaded per
 -- outcome; both choice faces are drawn from the same two tokens for
 -- everyone, so nothing outcome-specific exists early.
@@ -167,7 +168,7 @@ local STAGE_TITLE: { [string]: string } = {
 local STAGE_HINT: { [string]: string } = {
 	Waiting = "",
 	Intro = "Their record is over their heads.",
-	Negotiate = "Talk or type. Promises cost nothing.",
+	Negotiate = "Talk or type. Hold to lock in any time.",
 	-- The server locks anyone still undecided at the deadline into the
 	-- default (DecisionService), so say so - a silent default reads as
 	-- the game choosing at random.
@@ -846,7 +847,7 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 			ZIndex = 2,
 			Base.corner(Theme.radius.lg),
 		}),
-		-- Dimmed until Choose opens: visible early so the thumb knows
+		-- Dimmed until Negotiate opens: visible early so the thumb knows
 		-- where it's going, inert until it's allowed to go there.
 		create("Frame")({
 			Name = "Dim",
@@ -966,17 +967,9 @@ local function lockedCard(store: Store, order: number): Frame
 				Name = "Waiting",
 				Position = UDim2.fromScale(0, 0.55),
 				Size = UDim2.fromScale(1, 0.45),
-				Text = function()
-					local waiting = 0
-					for _, seat in store.seats() do
-						if not store.locked()[seat.id] then
-							waiting += 1
-						end
-					end
-					return if waiting == 0
-						then "Everyone's in. Revealing…"
-						else string.format("Waiting for %d more. You can't change it.", waiting)
-				end,
+				-- No count of who's left: nobody is told when anyone
+				-- else locks in (the 2026-10-10 case).
+				Text = "Reveal when everyone's in. You can't change it.",
 				TextColor3 = Theme.color.inkMuted,
 				TextXAlignment = Enum.TextXAlignment.Left,
 			}),
@@ -1326,8 +1319,13 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			local endsAt = store.endsAt()
 			return if endsAt then math.max(0, endsAt - now()) else 0
 		end)
+		-- Lock-in opens with Negotiate, not just Choose (the 2026-10-10
+		-- case); Locked rides on your own lock in either phase.
+		local selfLocked = derive(function()
+			return store.confirm().state == "Locked"
+		end)
 		local chooseOpen = derive(function()
-			return stage() == "Choose"
+			return store.isFinalist() and DecisionLogic.canLock(store.phase()) and not selfLocked()
 		end)
 
 		-- Header: title, hint, (i), countdown. Titles carries the outcome
@@ -1481,7 +1479,7 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 		local shareButton = holdButton("Share", store, chooseOpen, 2)
 		local buttonsUp = derive(function()
 			local s = stage()
-			return store.isFinalist() and (s == "Intro" or s == "Negotiate" or s == "Choose")
+			return store.isFinalist() and not selfLocked() and (s == "Intro" or s == "Negotiate" or s == "Choose")
 		end)
 		for _, b in { stealButton, shareButton } do
 			b.Parent = gui

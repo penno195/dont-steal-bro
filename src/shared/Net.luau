@@ -911,9 +911,10 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
-	-- Server -> client (broadcast): "when someone locks in, broadcast
-	-- only that they locked in, never what they chose" (the task's own
-	-- requirement, verbatim) - this payload is ONLY ever {playerId}.
+	-- Server -> client (targeted): your own lock-in was accepted. Only
+	-- ever {playerId}, never the choice, and fired to the locker alone:
+	-- others aren't told who locked in or when (design-decisions.md,
+	-- 2026-10-10 case).
 	DecisionLockedIn = {
 		name = "DecisionLockedIn",
 		direction = "ServerBroadcast",
@@ -923,10 +924,10 @@ Net.Remotes = {
 	} :: RemoteDef,
 
 	-- Client -> server: a qualifier's Steal/Share submission during
-	-- Choose. Gated to the "DecisionStudio" ROUND state here (NetGuard's
-	-- own coarse gate); DecisionService's own handler checks the FINER
-	-- "is it actually the Choose PHASE right now" itself, since NetGuard
-	-- has no notion of an inner phase machine.
+	-- Negotiate or Choose. Gated to the "DecisionStudio" ROUND state here
+	-- (NetGuard's own coarse gate); DecisionService's own handler checks
+	-- the FINER "is it Negotiate or Choose right now" itself, since
+	-- NetGuard has no notion of an inner phase machine.
 	DecisionChooseIntent = {
 		name = "DecisionChooseIntent",
 		direction = "ServerIntent",

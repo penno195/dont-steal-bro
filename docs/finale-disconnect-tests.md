@@ -94,7 +94,7 @@ phase, after the `DecisionPhaseChanged` broadcast naming it.
 ## Case 3 — leaves during Choose, after locking in
 
 **When to close the window:** lock in a **Steal** on client A first
-(watch for `DecisionLockedIn` carrying A's id), then close A's window
+(watch A's own client for `DecisionLockedIn`: no other client gets it), then close A's window
 while Choose is still running.
 
 **Expect:**

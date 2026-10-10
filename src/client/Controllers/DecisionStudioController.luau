@@ -7,8 +7,8 @@
 -- WHAT THIS CLIENT EVER HOLDS, AND WHEN (the P6-5 secrecy audit; the
 -- full version is docs/decision-studio.md):
 --   - its OWN choice, from the moment its own hold completes. Nobody
---     else's: `locked` is a set of ids, because DecisionLockedIn is only
---     ever {playerId}.
+--     else's: `locked` is a set of ids, and only ever holds its own,
+--     because DecisionLockedIn is {playerId} sent to the locker alone.
 --   - everyone's choices from DecisionReveal, the first and only packet
 --     that carries them.
 --   - its own stakes (what each outcome would pay it, and its drop
@@ -133,7 +133,7 @@ local function send(choice: DecisionLogic.Choice)
 	task.spawn(function()
 		for _ = 1, T.ackRetries do
 			task.wait(T.ackTimeout)
-			if sendToken ~= token or acked() or phase() ~= "Choose" then
+			if sendToken ~= token or acked() or not DecisionLogic.canLock(phase()) then
 				return
 			end
 			Net.fireServer("DecisionChooseIntent", { choice = choice })
@@ -142,7 +142,7 @@ local function send(choice: DecisionLogic.Choice)
 end
 
 local function chooseOpen(): boolean
-	return phase() == "Choose" and isFinalist() and reveal() == nil
+	return DecisionLogic.canLock(phase()) and isFinalist() and reveal() == nil
 end
 
 local confirm, press, release, _stopConfirm = DecisionStudio.confirmer(send, chooseOpen)

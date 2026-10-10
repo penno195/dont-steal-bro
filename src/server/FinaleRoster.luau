@@ -261,4 +261,26 @@ function FinaleRoster.allReady(
 	return true
 end
 
+-- Every human finalist has locked in, so the bots should too
+-- (design-decisions.md, the 2026-10-10 case): nobody is left to wait
+-- for. A human who left counts as locked, since their seat was locked
+-- to the default. An all-bot finale has no humans to wait on, so it
+-- returns false and the bots keep their own Choose timing.
+function FinaleRoster.humansAllLocked(
+	qualifierIds: { number },
+	locked: { [number]: boolean },
+	isNPC: (racerId: number) -> boolean
+): boolean
+	local anyHuman = false
+	for _, id in qualifierIds do
+		if not isNPC(id) then
+			anyHuman = true
+			if not locked[id] then
+				return false
+			end
+		end
+	end
+	return anyHuman
+end
+
 return FinaleRoster

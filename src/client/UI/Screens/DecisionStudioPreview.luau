@@ -106,7 +106,7 @@ function DecisionStudioPreview.mount(controller: any): () -> ()
 			acked(true)
 		end)
 	end, function()
-		return phase() == "Choose" and reveal() == nil
+		return DecisionLogic.canLock(phase()) and reveal() == nil
 	end)
 
 	local running = true
@@ -169,9 +169,9 @@ function DecisionStudioPreview.mount(controller: any): () -> ()
 			end
 			talk({})
 
+			-- The rivals' locks are never shown: nobody is told when
+			-- anyone else locks in (the 2026-10-10 case).
 			enter("Choose", SECONDS.Choose)
-			task.delay(2, lock, RIVAL_B)
-			task.delay(4, lock, RIVAL_A)
 			task.wait(SECONDS.Choose)
 			if not running then
 				break

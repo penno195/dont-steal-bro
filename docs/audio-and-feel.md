@@ -43,7 +43,7 @@ that arc:
 | PowerUpHitYou | a new debuff in `StatusEffectsChanged` | SFX | 90 | 0.55 |
 | Qualified / NotQualified | `TaskQualificationResult` (spectators hear neither) | SFX | 95 / 90 | 0.25 / 0.4 |
 | StudioBed | `DecisionStudio` | Music bed | — | — |
-| LockIn / OtherLockIn | `DecisionLockedIn` (you / someone else) | SFX | 95 / 60 | 0.5 / — |
+| LockIn | `DecisionLockedIn` (only ever yours) | SFX | 95 | 0.5 |
 | RevealRiser, RevealCard ×n, RevealOutcome | `DecisionReveal`, timed on `DecisionLogic.revealStep` | SFX | 100 | 0.3 / 0.2 / 0.1 |
 | RevealHeartbeat | lub + softer dub on each `DecisionLogic.heartbeats` beat under a face-down card; quiet → full card by card (`heartbeatVolume`), with a red edge glow per beat (FeelController) | SFX | 100 | — (the reveal's blanket duck) |
 | Win / Loss | at the reveal's result time, for finalists only | SFX | 100 | 0.15 |
@@ -216,7 +216,6 @@ swap one, change its `assetId` in `AudioLogic.CUES`.
 | Qualified | 1837769261 APM "Time Attack (sting)" | 9047102381 APM "Game Day Warrior Sting 1" |
 | NotQualified | 9125449274 PSE conch-shell honk (weak, deflating) | 9047060880 APM "Slow Fuse Sting" |
 | LockIn | 9119727134 PSE "Switch Impact On Flip Up Large Metal 2" | 9120371230 PSE "Vehicle Door Bump Slamming Metal Door 9" |
-| OtherLockIn | 9114214262 PSE "Dvd Player Button 4" | — |
 | RevealRiser | 9043343295 APM "REVERSE NOISE HARD END 09", `startAt` 1.1 s | 1837834352 APM "REVERSE HARD STOP-Metal Build 02" (4.0 s: use `startAt` 1.0) |
 | RevealHeartbeat | 9114457494 PSE "Fist Hit Sofa 1": a muffled thud, played twice per beat (unauditioned) | 9114036353 PSE "Deep Impacts 3"; 9113041746 PSE "Acoustic Whomps 2" |
 | RevealCard | 9038652624 APM "Big Hair Rock - Hit 3" | 9116710746 PSE "Metal Impacts Hard Clanking Hits 5" |

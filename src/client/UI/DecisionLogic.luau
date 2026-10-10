@@ -362,9 +362,18 @@ end
 
 -- STAGE --------------------------------------------------------------
 
+-- Whether a finalist may lock in during this phase: any point in
+-- Negotiate or Choose (design-decisions.md, 2026-10-10 case). The server
+-- holds the same rule (DecisionService.lockIn); this one only arms the
+-- buttons.
+function DecisionLogic.canLock(phase: Phase?): boolean
+	return phase == "Negotiate" or phase == "Choose"
+end
+
 -- The reveal packet wins over the phase: DecisionPhaseChanged("Reveal")
 -- and DecisionReveal are two events with no promised order, and once
--- the packet is here nothing else matters.
+-- the packet is here nothing else matters. Locking in during Negotiate
+-- leaves the stage at Negotiate: the chat is still open.
 function DecisionLogic.stage(phase: Phase?, reveal: Reveal?, selfLocked: boolean, isFinalist: boolean): Stage
 	if reveal ~= nil then
 		return "Reveal"

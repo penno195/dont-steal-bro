@@ -248,16 +248,6 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.5,
 		duck = { level = 0.5, attack = 0.02, hold = 0.3, release = 0.5 },
 	}),
-	-- Someone else locked in: quieter, so your own lock stays the loud one.
-	OtherLockIn = cue({
-		assetId = "rbxassetid://9114214262", -- PSE "Dvd Player Button 4": the same idea, lighter
-		category = "SFX",
-		volume = 0.5,
-		looped = false,
-		spatial = false,
-		priority = 60,
-		cooldown = 0.1,
-	}),
 	-- The reveal. Every one of these ducks hard: the brief says the reveal
 	-- is never buried under music, and the bed is ducked for the whole
 	-- sequence on top of that (revealDuck).

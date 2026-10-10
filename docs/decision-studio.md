@@ -44,9 +44,9 @@ change never rebuilds the seats mid-sentence:
 | Stage | Seats show | Middle | Bottom |
 |---|---|---|---|
 | Intro | name (all under the loading card, see below) | "MEET THE FINALISTS", countdown | payoff table; Steal/Share dimmed so the thumb learns where they are |
-| Negotiate | + 🎙 Speaking / 💬 Typing… | "NEGOTIATE", countdown | same |
-| Choose | + 🔒 Locked / Deciding… | "CHOOSE", countdown | payoff table; Steal/Share live, hold to lock |
-| Locked | same | "LOCKED IN" | payoff table; your choice under a lock, "FINAL", "Waiting for N more" |
+| Negotiate | + 🎙 Speaking / 💬 Typing… | "NEGOTIATE", countdown | payoff table; Steal/Share live, hold to lock; chat line |
+| Choose | + Deciding… (🔒 Locked on your own seat only) | "CHOOSE", countdown | payoff table; Steal/Share live, hold to lock |
+| Locked | same | "LOCKED IN" | payoff table; your choice under a lock, "FINAL" |
 | Reveal | cards flip one by one; then WINS / LOSES | the outcome line, same on every screen | result panel |
 
 A spectator (in the room but not a finalist) sees everything except the
@@ -146,7 +146,12 @@ to the seat count (3, 2 or 1). `tests/DecisionLogic.spec.luau` checks it
 against `Outcomes.resolve` for every combination of choices at every seat
 count, so the table can't tell a player something the resolver won't do.
 
-## Choose: hold to confirm
+## Locking in: hold to confirm
+
+Lock-in opens with **Negotiate** and stays open through Choose
+(design-decisions.md, the 2026-10-10 case). Once all three are locked,
+the server skips straight to the reveal. Lock in during Negotiate and
+the chat stays open, with your locked card beside it.
 
 A mis-tap here is unforgivable, so a lock takes **0.8 s of unbroken hold**
 (`DecisionLogic.TIMING.holdSeconds`):
@@ -171,7 +176,8 @@ P6-4's `InputAdapters.Hold` isn't used: it binds A/Space globally for a
 single target, and two hold targets on one screen would both fire from one
 key.
 
-Other seats show only 🔒 Locked, never which way.
+Nobody else is told you locked in, or when: `DecisionLockedIn` goes to
+you alone. Other seats read "Deciding…" through Choose either way.
 
 ## Reveal: synced to the server's timestamp
 
@@ -256,7 +262,7 @@ against a full memory dump of it:
 | What | Where it lives | When |
 |---|---|---|
 | Who the finalists are, and their reputation | `ids`, `reputations` (controller locals) | from `DecisionParticipants` |
-| Who has locked | `locked`: a **set of ids** | from `DecisionLockedIn`, which is only ever `{playerId}` |
+| Who has locked | `locked`: a **set of ids**, only ever its own | from `DecisionLockedIn`, which is only ever `{playerId}` and only sent to the locker |
 | Its own choice | `confirm` (a Vide source) | from its own completed hold |
 | Everyone's choices | `reveal` | from `DecisionReveal` and nowhere else; `DecisionLogic.parseReveal` is the only function that produces a choice for another id |
 | Its own streak before/after | `personal` | from `DecisionPersonalResult`, targeted, fired after the reveal |
@@ -288,8 +294,8 @@ against a full memory dump of it:
 
 Set `ReplicatedStorage:SetAttribute("UIDecisionStudioPreview", true)`.
 The preview loops a whole finale on short timers (Intro 3 s, Negotiate 6 s,
-Choose 8 s). Rivals take turns speaking and typing, then lock in at 2 s
-and 4 s. You can hold Steal or Share for real. Each loop plays the next
+Choose 8 s). Rivals take turns speaking and typing; their lock-ins are
+never shown. You can hold Steal or Share for real, from Negotiate on. Each loop plays the next
 branch (SoleSteal lost, LoneShare won, AllSteal, AllShare, SoleSteal won)
 and alternates winning and losing a 7-win streak. Continue skips to the
 next loop.

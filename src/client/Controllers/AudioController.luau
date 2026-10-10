@@ -479,8 +479,9 @@ function AudioController:init()
 	end)
 
 	Net.onClientEvent("DecisionLockedIn", function(payload: any)
-		if type(payload) == "table" and type(payload.playerId) == "number" then
-			play(if payload.playerId == selfId then "LockIn" else "OtherLockIn")
+		-- Only ever your own: nobody hears anyone else lock in.
+		if type(payload) == "table" and payload.playerId == selfId then
+			play("LockIn")
 		end
 	end)
 	Net.onClientEvent("DecisionReveal", onReveal)

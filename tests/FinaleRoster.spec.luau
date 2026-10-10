@@ -245,3 +245,23 @@ TestRunner.describe("FinaleRoster.allReady - ending the Intro early", function()
 			:toBe(true)
 	end)
 end)
+
+-- NPC ids are negative here, as in Participants.
+local function isNPC(id: number): boolean
+	return id < 0
+end
+
+TestRunner.describe("FinaleRoster.humansAllLocked - bots follow the humans in", function()
+	TestRunner.it("waits while any human is still deciding", function()
+		TestRunner.expect(FinaleRoster.humansAllLocked({ 1, 2, -3 }, { [1] = true }, isNPC)):toBe(false)
+	end)
+
+	TestRunner.it("goes once every human has locked, whatever the bots have done", function()
+		TestRunner.expect(FinaleRoster.humansAllLocked({ 1, 2, -3 }, { [1] = true, [2] = true }, isNPC)):toBe(true)
+		TestRunner.expect(FinaleRoster.humansAllLocked({ 1, -2, -3 }, { [1] = true }, isNPC)):toBe(true)
+	end)
+
+	TestRunner.it("never fires for an all-bot finale", function()
+		TestRunner.expect(FinaleRoster.humansAllLocked({ -1, -2, -3 }, {}, isNPC)):toBe(false)
+	end)
+end)

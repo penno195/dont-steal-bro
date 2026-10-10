@@ -78,6 +78,9 @@ type BrainRecord = {
 	-- roll and the lock-in can read a line and change the answer.
 	choice: ("Steal" | "Share")?,
 	saidLines: { [string]: boolean },
+	-- Already submitted this finale, so the Choose timer doesn't resubmit
+	-- after an early lock.
+	lockedIn: boolean?,
 	-- The past the Studio's reputation line shows for this bot, rolled
 	-- from its personality once and then fixed.
 	history: { steals: number, shares: number },
@@ -326,6 +329,7 @@ local function beginNegotiate(endsAt: number?)
 		-- reads one to pick the other.
 		record.choice = NPCBrainLogic.rollChoice(record.personality, record.nextRandom())
 		record.saidLines = {}
+		record.lockedIn = false
 
 		local schedule = NPCBrainLogic.lineScheduleSeconds(
 			windowSeconds,
@@ -348,6 +352,17 @@ local function beginNegotiate(endsAt: number?)
 			)
 		end
 	end
+end
+
+-- The one way a bot locks in, from its Choose timer or lockInBotsNow.
+local function submitFor(record: BrainRecord)
+	local choice = record.choice
+	if choice == nil or record.lockedIn then
+		return
+	end
+	record.lockedIn = true
+	local DecisionService = Loader.get("DecisionService") :: any
+	DecisionService.submitChoiceFor(record.id, choice, record.personality.displayName .. " NPC")
 end
 
 local function beginChoose()
@@ -391,13 +406,22 @@ local function beginChoose()
 		table.insert(
 			studioThreads,
 			task.delay(offset, function()
-				local choice = record.choice
-				if choice == nil then
-					return
-				end
-				DecisionService.submitChoiceFor(record.id, choice, record.personality.displayName .. " NPC")
+				submitFor(record)
 			end)
 		)
+	end
+end
+
+-- Every human has locked in (design-decisions.md, the 2026-10-10 case),
+-- so every bot locks in now rather than on its Choose timer. The last
+-- one in sends the Studio straight to the reveal.
+local function lockInBotsNow()
+	local DecisionService = Loader.get("DecisionService") :: any
+	for _, racerId in DecisionService.getQualifierIds() :: { number } do
+		local record = brains[racerId]
+		if Participants.isNPCId(racerId) and record ~= nil then
+			submitFor(record)
+		end
 	end
 end
 
@@ -458,6 +482,8 @@ function NPCBrain:init()
 	DecisionService.onPhaseEnter("Choose", function()
 		beginChoose()
 	end)
+
+	DecisionService.onHumansLocked(lockInBotsNow)
 end
 
 return NPCBrain

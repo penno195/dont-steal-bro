@@ -29,15 +29,18 @@
 --   No choice exists server-side yet at all (`choices` is empty) - there
 --   is nothing to leak because nothing has been decided.
 --
---   Choose: a client can fire DecisionChooseIntent (their OWN choice,
---   which they trivially already know - not a leak). The only thing the
---   SERVER ever sends back during this phase is DecisionLockedIn -
---   {playerId} ONLY, never {playerId, choice}. A memory dump of a
---   client's own received-remote history shows, at most, "these
---   playerIds have locked in" - not what any of them, including other
---   players, actually chose. This is the one place a careless
---   implementation could leak: broadcasting a `choice` field "just for
---   debugging" on this event would defeat the whole requirement. It
+--   Negotiate / Choose: a finalist can lock in at any point in either
+--   phase (the 2026-10-10 case in design-decisions.md) by firing
+--   DecisionChooseIntent (their OWN choice, which they trivially already
+--   know - not a leak). The only thing the SERVER sends back is
+--   DecisionLockedIn - {playerId} ONLY, never {playerId, choice} - and
+--   only to the player who locked in. Nobody else is told who has
+--   locked, or when: an early lock is a tell ("they've decided"), so
+--   it's withheld like the choice itself. The one thing the room can
+--   infer is that EVERYONE locked, when the reveal comes early - that's
+--   the point of locking in. This is the one place a careless
+--   implementation could leak: broadcasting this event, or a `choice`
+--   field on it "just for debugging", would defeat the requirement. It
 --   doesn't happen anywhere in this file.
 --
 --   Reveal: DecisionReveal fires with every choice and the computed
@@ -141,6 +144,10 @@ local exitSignals: { [Phase]: any } = {
 	Reveal = Signal.new(),
 	Resolve = Signal.new(),
 }
+-- Every human finalist has locked in (FinaleRoster.humansAllLocked), so
+-- NPCBrain locks the bots in now. Fires at most once per finale.
+local humansLockedSignal: any = Signal.new()
+local humansLockedFired = false
 
 -- Small lead time between broadcasting DecisionReveal and the instant
 -- `revealAt` names, so a client's own (possibly LONGER) reveal
@@ -433,7 +440,8 @@ enterReveal = function(outcome: Outcomes.OutcomeResult)
 end
 
 -- Steps 1-4, the one function both the Choose timer AND an early
--- all-locked completion call.
+-- all-locked completion (in Negotiate or Choose) call. Cancelling the
+-- pending timer covers either phase's.
 local function resolveAndReveal()
 	cancelPendingPhaseTimer()
 
@@ -446,6 +454,17 @@ local function resolveAndReveal()
 
 	local outcome = computeOutcomeAndWriteProfiles()
 	enterReveal(outcome)
+end
+
+-- After any lock (or a leave that locked a seat): reveal if everyone is
+-- in, or tell NPCBrain once all the humans are, so the bots follow.
+local function afterLock()
+	if allLocked() then
+		resolveAndReveal()
+	elseif not humansLockedFired and FinaleRoster.humansAllLocked(qualifierIds, locked, Participants.isNPCId) then
+		humansLockedFired = true
+		humansLockedSignal:Fire()
+	end
 end
 
 enterChoose = function()
@@ -550,7 +569,7 @@ end
 -- dropped submission from an accepted one - a human's client is
 -- deliberately told nothing either way (see below).
 local function lockIn(racerId: number, choice: any, who: string): boolean
-	if currentPhase ~= "Choose" then
+	if currentPhase ~= "Negotiate" and currentPhase ~= "Choose" then
 		warn(string.format("DecisionService: dropped ChooseIntent from %s - wrong phase", who))
 		return false
 	end
@@ -573,16 +592,14 @@ local function lockIn(racerId: number, choice: any, who: string): boolean
 	-- Choose timer isn't.
 	Loader.get("Telemetry").choiceLocked(racerId)
 
-	-- Still only {playerId} - the secrecy audit at the top of this file
-	-- holds identically for a bot's lock-in. A client learning WHICH of
-	-- the finalists is an NPC is fine (they can see the rig); learning
-	-- what it picked before the reveal is not, and this payload has
-	-- never carried it.
-	Net.fireAllClients("DecisionLockedIn", { playerId = racerId })
-
-	if allLocked() then
-		resolveAndReveal()
+	-- Still only {playerId}, and to the locker alone (the secrecy audit
+	-- at the top of this file). A bot has no client to tell.
+	local player = Players:GetPlayerByUserId(racerId)
+	if player ~= nil then
+		Net.fireClient("DecisionLockedIn", player, { playerId = racerId })
 	end
+
+	afterLock()
 
 	return true
 end
@@ -649,8 +666,8 @@ local function handleQualifierLeaving(userId: number)
 		})
 	end
 
-	if decision.mayCompleteRound and currentPhase == "Choose" and allLocked() then
-		resolveAndReveal()
+	if decision.mayCompleteRound and (currentPhase == "Negotiate" or currentPhase == "Choose") then
+		afterLock()
 	end
 
 	-- Nobody to wait for in an empty seat. Marked ready outright rather
@@ -786,6 +803,7 @@ local function beginDecisionStudio()
 	ready = {}
 	personalResults = {}
 	outcomeWritten = false
+	humansLockedFired = false
 	currentPhase = nil
 
 	if #qualifierIds == 0 then
@@ -942,6 +960,11 @@ local DecisionService: Loader.Service = {
 
 	onPhaseExit = function(phase: Phase, callback: () -> ())
 		return exitSignals[phase]:Connect(callback)
+	end,
+
+	-- Every human finalist has locked in; the bots should now.
+	onHumansLocked = function(callback: () -> ())
+		return humansLockedSignal:Connect(callback)
 	end,
 }
 

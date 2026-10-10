@@ -582,6 +582,28 @@ hidden through the intro, Negotiate and Choose.
   titles case's "after the result is in" to this slightly earlier
   moment, but doesn't change `TitleService` by itself.
 
+### Applied case: locking in early, in secret (2026-10-10, user decision)
+
+Decided by the project owner: **a finalist can lock in at any point in
+Negotiate or Choose, and nobody else is told that they did.** Once all
+three are locked, the Studio goes straight to the reveal without waiting
+for either clock.
+- An early lock is a tell ("they've already decided"), so it's
+  withheld like the choice itself. `DecisionLockedIn` goes to the
+  locker alone; other seats show "Deciding…" in Choose whether or not
+  they've locked, there's no "waiting for N more" count, and the
+  someone-else-locked sound is gone.
+- The only thing the room learns is that *everyone* locked, when the
+  reveal comes early. That's the point of the rule.
+- Locking in during Negotiate doesn't close the chat. You can keep
+  talking, but your choice is final.
+- **Bots lock in the moment every human finalist has** (user decision,
+  same day), so a finale with bots in it still goes straight to the
+  reveal. Until then a bot keeps its own random point in Choose. A human
+  who left counts as locked. An all-bot finale just uses the Choose
+  timing. Rule: `FinaleRoster.humansAllLocked`; `NPCBrain` acts on
+  `DecisionService.onHumansLocked`.
+
 ### Applied case: buying back a streak (2026-10-08, user decision)
 
 - **Who:** any player who loses a round while holding a streak of 1 or
