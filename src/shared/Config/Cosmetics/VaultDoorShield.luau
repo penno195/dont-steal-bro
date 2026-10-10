@@ -19,7 +19,7 @@ local VaultDoorShield: Validate.CosmeticDef = {
 	wearMeshAssetId = 80535033484530,
 	wearTextureAssetId = 100679235571954,
 	wearScale = 0.011,
-	wearOffset = { 0, 0, 0.75 },
+	wearOffset = { 0, 0, 0.4 }, -- flat to the back: the shield is ~0.77 studs deep, not the jetpack's bulk (2026-10-10)
 	wearRotation = { 0, 180, 0 },
 	previewIconAssetId = 129578283518802,
 }

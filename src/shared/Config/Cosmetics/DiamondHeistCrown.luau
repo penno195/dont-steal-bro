@@ -19,7 +19,7 @@ local DiamondHeistCrown: Validate.CosmeticDef = {
 	wearMeshAssetId = 131259672821092,
 	wearTextureAssetId = 135718904385281,
 	wearScale = 0.008,
-	wearOffset = { 0, 0.2, 0 },
+	wearOffset = { 0, 0.45, 0 }, -- its base just under the head top, so it sits on the hair (2026-10-10)
 	previewIconAssetId = 108786929402766,
 }
 
