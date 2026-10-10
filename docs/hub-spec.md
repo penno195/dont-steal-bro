@@ -20,6 +20,7 @@ geometry is ever cloned into a match server.
 | `HubPracticeDummy` | BasePart (floor spot) | 0+ (optional) | — |
 | `HubPracticeTask` | BasePart (stand spot) | 0–1 (optional) | — (the server sets `StationId`) |
 | `HubSoftBarrier` | BasePart | 1+ | — |
+| `HubDailyHuntSpot` | BasePart or Model (floor spot) | 0+ (none = no hunt) | — (the pickup floats 2.5 studs above it, seen only by its owner) |
 
 `ZoneId` is one of `SpawnPlaza`, `QueuePad`, `StoreFront`,
 `Leaderboards`, `PracticeArea`. `ApproachPoint` is where a player stands

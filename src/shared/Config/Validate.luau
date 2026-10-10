@@ -687,6 +687,15 @@ export type CommunityConfig = {
 	recheckCooldownSeconds: number, -- per player, between membership checks the client asks for
 }
 
+-- The daily hunt (design-decisions.md Q1, "the daily hunt"): one hidden
+-- pickup per player per UTC day at a `spotTag` part in the hub.
+export type DailyHuntConfig = {
+	spotTag: string,
+	claimRadius: number, -- studs from today's spot a claim may be made from
+	powerUpChance: number, -- 0-1: a freely earnable power-up, else `coins`
+	coins: number,
+}
+
 export type PracticeConfig = {
 	durationScale: number, -- 0-1 multiplier on every effect's duration
 	maxEffectSeconds: number, -- ceiling on any one effect after scaling
@@ -871,6 +880,9 @@ export type GameConfig = {
 
 	-- The community reward. See CommunityConfig above.
 	community: CommunityConfig,
+
+	-- The daily hunt. See DailyHuntConfig above.
+	dailyHunt: DailyHuntConfig,
 
 	-- Studio test mode. See StudioTestConfig above.
 	studioTest: StudioTestConfig,
@@ -2995,6 +3007,32 @@ local function checkCommunityConfig(cc: CommunityConfig, issues: { Issue })
 	end
 end
 
+local function checkDailyHuntConfig(dh: DailyHuntConfig, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "dailyHunt." .. field, message)
+	end
+
+	if dh == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "dailyHunt", "the daily hunt config block is missing entirely")
+		return
+	end
+
+	if type(dh.spotTag) ~= "string" or dh.spotTag == "" then
+		bad("spotTag", "must name a CollectionService tag")
+	end
+	-- Wide enough for a phone's laggy position, narrow enough that the
+	-- pickup has to be found rather than claimed from across the room.
+	if type(dh.claimRadius) ~= "number" or dh.claimRadius < 4 or dh.claimRadius > 30 then
+		bad("claimRadius", "must be from 4 to 30 studs")
+	end
+	if type(dh.powerUpChance) ~= "number" or dh.powerUpChance < 0 or dh.powerUpChance > 1 then
+		bad("powerUpChance", "must be from 0 to 1")
+	end
+	if type(dh.coins) ~= "number" or dh.coins < 1 or dh.coins % 1 ~= 0 then
+		bad("coins", "must be a positive whole number")
+	end
+end
+
 local function checkPracticeConfig(pc: PracticeConfig, issues: { Issue })
 	local function bad(field: string, message: string)
 		issue(issues, "GameConfig", "GameConfig.luau", "practice." .. field, message)
@@ -3322,6 +3360,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkPracticeConfig(config.practice, issues)
 	checkDoorConfig(config.doors, issues)
 	checkCommunityConfig(config.community, issues)
+	checkDailyHuntConfig(config.dailyHunt, issues)
 	checkStudioTestConfig(config.studioTest, config.playerCount, issues)
 
 	local telemetry = config.telemetry

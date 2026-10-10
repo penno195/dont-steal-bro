@@ -215,6 +215,7 @@ local function validGameConfig(): Validate.GameConfig
 		},
 		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
 		community = { groupId = 0, rewardCosmeticId = "hat-ltd", recheckCooldownSeconds = 10 },
+		dailyHunt = { spotTag = "HubDailyHuntSpot", claimRadius = 12, powerUpChance = 0.5, coins = 25 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
 		telemetry = {
 			enabled = true,
@@ -2801,6 +2802,41 @@ TestRunner.describe("Validate - community reward", function()
 		config.community.groupId = 1.5
 		config.community.recheckCooldownSeconds = 10
 		TestRunner.expect(#runCommunity(config) > 0):toBeTruthy()
+	end)
+end)
+
+-- ===== The daily hunt (Q1, 2026-10-09) ==================================
+
+TestRunner.describe("Validate - daily hunt", function()
+	local function issuesFor(edit: (Validate.DailyHuntConfig) -> ()): number
+		local config = validGameConfig()
+		edit(config.dailyHunt)
+		return #Validate.run({
+			gameConfig = config,
+			maps = { { fileName = "TestMap.luau", def = validMap("test-map", { "pressure-valve" }) } },
+			tasks = { { fileName = "PressureValve.luau", def = validTask("pressure-valve") } },
+			powerUps = { { fileName = "TestPowerUp.luau", def = validPowerUp("test-powerup") } },
+			titles = { { fileName = "TestTitle.luau", def = validTitle("test-title", 0) } },
+		})
+	end
+
+	TestRunner.it("accepts the default block", function()
+		TestRunner.expect(issuesFor(function() end)):toBe(0)
+	end)
+
+	TestRunner.it("refuses a missing tag, a bad radius, chance or coin amount", function()
+		TestRunner.expect(issuesFor(function(dh)
+			dh.spotTag = ""
+		end) > 0):toBeTruthy()
+		TestRunner.expect(issuesFor(function(dh)
+			dh.claimRadius = 100
+		end) > 0):toBeTruthy()
+		TestRunner.expect(issuesFor(function(dh)
+			dh.powerUpChance = 1.5
+		end) > 0):toBeTruthy()
+		TestRunner.expect(issuesFor(function(dh)
+			dh.coins = 2.5
+		end) > 0):toBeTruthy()
 	end)
 end)
 

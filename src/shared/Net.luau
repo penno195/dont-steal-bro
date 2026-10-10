@@ -1163,6 +1163,42 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Server -> client (targeted at its owner only, never fireAllClients):
+	-- this player's daily hunt (design-decisions.md Q1, "the daily
+	-- hunt"), { day = "YYYY-MM-DD", position = Vector3? }. `position` is
+	-- today's spot, or nil once claimed (or when the hub has no spots).
+	-- Targeted because only its owner may see it: the client draws the
+	-- pickup itself, and nobody else's client ever learns where it is.
+	DailyHuntState = {
+		name = "DailyHuntState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server: "I'm at my pickup". Carries nothing: the server
+	-- works out today's spot itself and checks the character's distance
+	-- from it and the profile's last claim day.
+	DailyHuntClaim = {
+		name = "DailyHuntClaim",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the claimer only): what the pickup
+	-- paid, { kind = "Currency" | "PowerUpStock", amount, powerUpId? }.
+	-- A UI notification only; the grant itself arrives through StoreState.
+	DailyHuntResult = {
+		name = "DailyHuntResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: switch Navigation on or off (design-decisions.md
 	-- Q8, "Navigation"). The client never says whether it has paid: the
 	-- server checks the pass, the round already charged and the rounds

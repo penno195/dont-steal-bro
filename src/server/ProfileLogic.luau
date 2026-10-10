@@ -130,6 +130,15 @@ export type ProfileData = {
 	-- loss, replaced by the next loss, cleared by a buy-back or by the
 	-- start of their next race. Only ever shown to its owner.
 	buyBackOffer: BuyBackOffer?,
+
+	-- ===== schema v9, the daily hunt =====================================
+
+	-- The UTC day (PeriodKeys.dayKey) this player last claimed the daily
+	-- hunt's pickup, or nil if never (design-decisions.md Q1, "the daily
+	-- hunt"). Written in the same mutation as the reward, so a claim
+	-- pays once a day. Only the last day is kept: the reward doesn't
+	-- grow with consecutive days.
+	lastHuntDay: string?,
 }
 
 -- A lost streak still open to buying back: which round lost it, and how
@@ -153,7 +162,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 8
+local CURRENT_SCHEMA_VERSION = 9
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -180,6 +189,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		lastLoadout = {},
 		navigationRounds = 0,
 		buyBackOffer = nil,
+		lastHuntDay = nil,
 	}
 end
 
@@ -299,6 +309,15 @@ migrations[7] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 8
 	next.buyBackOffer = nil
+	return next
+end
+
+-- v8 -> v9 (the daily hunt): never claimed. Nothing before this version
+-- could have claimed one.
+migrations[8] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 9
+	next.lastHuntDay = nil
 	return next
 end
 

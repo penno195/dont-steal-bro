@@ -544,6 +544,19 @@ local GameConfig: Validate.GameConfig = {
 		recheckCooldownSeconds = 10,
 	},
 
+	-- The daily hunt (design-decisions.md Q1, "the daily hunt"): one
+	-- hidden pickup per player per UTC day, at one of the hub's
+	-- `spotTag` parts, picked from the user id and the date. Only its
+	-- owner sees it. DailyHuntService pays it once a day, to a player
+	-- standing within `claimRadius` studs of today's spot: a freely
+	-- earnable power-up `powerUpChance` of the time, else `coins`.
+	dailyHunt = {
+		spotTag = "HubDailyHuntSpot",
+		claimRadius = 12,
+		powerUpChance = 0.5,
+		coins = 25, -- a power-up's coin price (Store/*Coins.luau)
+	},
+
 	-- Studio test mode (StudioTestService). Never runs outside Studio.
 	-- Pressing Play loads `mapId` from ServerStorage.Maps and starts a
 	-- round once `minHumans` have loaded, NPCs filling the rest. Set

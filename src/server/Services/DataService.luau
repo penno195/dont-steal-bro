@@ -720,6 +720,27 @@ local function addCurrency(player: Player, amount: number)
 	end
 end
 
+-- The UTC day this player last claimed the daily hunt, or nil.
+local function getLastHuntDay(player: Player): string?
+	local d = data(player)
+	return if d then d.lastHuntDay else nil
+end
+
+-- The daily hunt's one write (design-decisions.md Q1, "the daily hunt"):
+-- marks `dayKey` claimed and applies `grant` in the same mutation, so a
+-- crash keeps both or neither. Returns the change lines, or nil when the
+-- profile isn't writable or `dayKey` is already claimed. Not forced to
+-- save: a crash before the next autosave hands back the claim and its
+-- reward together, and the player can claim again that day.
+local function claimDailyHunt(player: Player, dayKey: string, grant: StoreLogic.Grant): { string }?
+	local d = writable(player)
+	if d == nil or d.lastHuntDay == dayKey then
+		return nil
+	end
+	d.lastHuntDay = dayKey
+	return applyGrantsTo(d, { grant })
+end
+
 local function getStats(player: Player): ProfileLogic.Stats
 	local d = data(player)
 	if d == nil then
@@ -825,6 +846,8 @@ local DataService: Loader.Service = {
 	expireBuyBackOffer = expireBuyBackOffer,
 	getSeasonProgress = getSeasonProgress,
 	addCurrency = addCurrency,
+	getLastHuntDay = getLastHuntDay,
+	claimDailyHunt = claimDailyHunt,
 	getStats = getStats,
 	recordRoundStat = recordRoundStat,
 	getUnlockedTitles = getUnlockedTitles,
