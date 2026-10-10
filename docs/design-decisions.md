@@ -276,6 +276,10 @@ step 7a). Every amount is still unconfirmed until a playtest.
 - **The three store plinths (`HubStorePodium`) each show one store
   item.** Walking up opens the hub store on that item; every purchase
   still goes through `StoreService`.
+  - *Applied (2026-10-10, user decision):* "walking up" means a
+    ProximityPrompt that appears near the plinth and opens the store
+    with one tap, not an automatic open on approach: walking past the
+    three plinths must not keep popping menus over the screen.
 - **The owner picks what's featured.** A listing stays until its end
   date and time (UTC) or until the owner removes it; nothing rotates on
   its own. Coins only buy power-up stock and Navigation (see "what

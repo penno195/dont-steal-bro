@@ -472,6 +472,50 @@ describe("StoreScreenLogic.itemsIn (Season tab)", function()
 	end)
 end)
 
+-- ===== sales and launch offers (Q1, "the featured plinths") ================
+
+describe("StoreScreenLogic sales", function()
+	local pass = item("s1-pass", "DeveloperProduct", { { kind = "SeasonPass" } })
+	local launch = item("s1-launch", "DeveloperProduct", { { kind = "SeasonPass" } })
+	launch.replaces = "s1-pass"
+	launch.onSaleUntil = "2026-12-01 00:00"
+
+	it("shows the launch offer in the pass's place while it's on", function()
+		local onNow = function(i: StoreScreenLogic.Item)
+			return i ~= pass
+		end
+		local here = StoreScreenLogic.itemsIn({ pass, launch }, "Season", "s1-pass", onNow)
+		expect(#here):toBe(1)
+		expect(here[1].key):toBe("s1-launch")
+	end)
+
+	it("hides the launch offer once it's over, and the pass comes back", function()
+		local onNow = function(i: StoreScreenLogic.Item)
+			return i == pass
+		end
+		local here = StoreScreenLogic.itemsIn({ pass, launch }, "Season", "s1-pass", onNow)
+		expect(#here):toBe(1)
+		expect(here[1].key):toBe("s1-pass")
+	end)
+
+	it("keeps a plain disabled item as Coming soon, hides timed ones that are off", function()
+		local soon = item("soon", "DeveloperProduct", { { kind = "Currency", amount = 5 } }, false)
+		expect(StoreScreenLogic.isListed(soon, false)):toBe(true)
+		local limited = item("limited", "DeveloperProduct", { { kind = "Cosmetic", cosmeticId = "x" } }, false)
+		limited.onSaleUntil = "2026-11-01 00:00"
+		expect(StoreScreenLogic.isListed(limited, false)):toBe(false)
+		expect(StoreScreenLogic.isListed(pass, false)):toBe(false) -- enabled, but stood down
+		expect(StoreScreenLogic.isListed(pass, true)):toBe(true)
+	end)
+
+	it("strikes through the was price only when there is one", function()
+		expect(StoreScreenLogic.priceRich(pass, { now = 99, was = 199 })):toBe("R$ 99  <s>R$ 199</s>")
+		expect(StoreScreenLogic.priceRich(pass, { now = 199 })):toBe("R$ 199")
+		local coins = item("c", "CoinOffer", { { kind = "PowerUpStock", powerUpId = "x" } })
+		expect(StoreScreenLogic.priceText(coins, { now = 20, was = 25 })):toBe("20 coins")
+	end)
+end)
+
 describe("SeasonTrackLogic", function()
 	local def: SeasonTrackLogic.SeasonDef = {
 		id = "s1",

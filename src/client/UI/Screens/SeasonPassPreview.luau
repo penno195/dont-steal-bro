@@ -156,6 +156,12 @@ function SeasonPassPreview.mount(controller: any): () -> ()
 	local unmount = Store.mount(controller, {
 		items = { pass },
 		initialCategory = "Season",
+		isOffered = function()
+			return true
+		end,
+		priceOf = function(item: StoreScreenLogic.Item): StoreScreenLogic.Price
+			return { now = item.robuxPrice }
+		end,
 		rarityOf = function()
 			return nil
 		end,

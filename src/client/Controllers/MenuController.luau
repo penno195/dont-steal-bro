@@ -44,6 +44,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local StoreConfig = require(ReplicatedStorage.Shared.Config.Store)
 local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
+local StoreOffers = require(ReplicatedStorage.Shared.StoreOffers)
 local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local BoardLogic = require(script.Parent.Parent.UI.BoardLogic)
 local C = require(script.Parent.Parent.UI.Components)
@@ -77,6 +78,9 @@ local IN_PLAY: { [string]: boolean } = {
 }
 
 local FLOW_TICK = 0.5
+-- How often the store's view of the server clock moves on. Sale windows
+-- are to the minute, and the server refuses anything that just ended.
+local OFFER_TICK = 30
 local STUDIO_POLL = 0.25
 
 -- ===== static config =========================================================
@@ -88,6 +92,54 @@ for _, entry in StoreConfig do
 	if entry.def.assetId ~= 0 then
 		byAssetId[entry.def.assetId] = entry.def.key
 	end
+end
+
+-- ===== offers ================================================================
+-- What's on sale right now (design-decisions.md Q1, "the featured
+-- plinths"), on the server's clock: a player's own clock never decides
+-- what shows. StoreService runs the same StoreOffers checks on os.time(),
+-- and its answer is the one that counts.
+
+local serverNow = source(Workspace:GetServerTimeNow())
+local livePrices = source({} :: { [string]: number })
+local priceAsked: { [string]: boolean } = {}
+
+local function isOffered(item: StoreScreenLogic.Item): boolean
+	return StoreOffers.isOffered(StoreConfig :: any, item :: any, serverNow())
+end
+
+-- What Roblox really charges for a Robux item with a "was" price: the
+-- sale tag shows only if that's lower (Q1, "the featured plinths").
+-- Asked once per key; config's robuxPrice stands in until it answers.
+local function fetchLivePrice(item: StoreScreenLogic.Item)
+	local assetId = (item :: any).assetId :: number
+	if item.kind == "CoinOffer" or item.wasPrice == nil or assetId == 0 or priceAsked[item.key] then
+		return
+	end
+	priceAsked[item.key] = true
+	task.spawn(function()
+		local infoType = if item.kind == "GamePass" then Enum.InfoType.GamePass else Enum.InfoType.Product
+		local ok, info = pcall(function()
+			return MarketplaceService:GetProductInfoAsync(assetId, infoType)
+		end)
+		local price = if ok and type(info) == "table" then (info :: any).PriceInRobux else nil
+		if type(price) == "number" then
+			local nextPrices = table.clone(livePrices())
+			nextPrices[item.key] = price
+			livePrices(nextPrices)
+		else
+			priceAsked[item.key] = false -- try again next time it's shown
+		end
+	end)
+end
+
+local function priceOf(item: StoreScreenLogic.Item): StoreScreenLogic.Price
+	if item.kind == "CoinOffer" then
+		return { now = item.coinPrice or 0, was = StoreOffers.wasPrice(item :: any, nil) }
+	end
+	fetchLivePrice(item)
+	local live = livePrices()[item.key]
+	return { now = live or item.robuxPrice, was = StoreOffers.wasPrice(item :: any, live) }
 end
 
 local cosmeticDefs: { [string]: any } = {}
@@ -224,13 +276,16 @@ local function closeMenu()
 	syncLauncher()
 end
 
-local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?)
+local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, storeKey: string?)
 	closeMenu()
 	openMenu = menu
 	if menu == "Store" then
 		unmountMenu = StoreScreen.mount(UIScaleController, {
 			items = items,
 			initialCategory = storeCategory,
+			initialKey = storeKey,
+			isOffered = isOffered,
+			priceOf = priceOf,
 			rarityOf = rarityOf,
 			grantText = grantText,
 			cosmeticName = cosmeticName,
@@ -485,6 +540,15 @@ local MenuController: Loader.Controller = {
 	openLocker = function()
 		open("Locker")
 	end,
+	-- For StorePlinthController: a plinth opens the store on its item,
+	-- and draws it with the same offers and prices the store uses.
+	openStoreOn = function(key: string)
+		open("Store", nil, key)
+	end,
+	featured = function(): { [number]: StoreScreenLogic.Item }
+		return StoreOffers.featured(StoreConfig :: any, serverNow()) :: any
+	end,
+	priceOf = priceOf,
 	repeatLastLoadout = repeatLastLoadout,
 	-- For BuyBackController: which menu is up (nil = none), and the
 	-- round state as this controller last heard it.
@@ -609,6 +673,12 @@ function MenuController:start()
 		while true do
 			task.wait(FLOW_TICK)
 			stepFlow({ type = "Tick" })
+		end
+	end)
+	task.spawn(function()
+		while true do
+			task.wait(OFFER_TICK)
+			serverNow(Workspace:GetServerTimeNow())
 		end
 	end)
 end

@@ -40,6 +40,7 @@ local effect = vide.effect
 local indexes = vide.indexes
 local values = vide.values
 local switch = vide.switch
+local untrack = vide.untrack
 
 local TAB_H = Theme.touch.primaryHeight -- C.TabBar's height (TabBar.luau HEIGHT)
 local CARD_H = 92
@@ -52,6 +53,14 @@ export type Store = {
 	-- The tab it opens on; nil = the first. The hub's coin balance opens
 	-- straight on "Currency".
 	initialCategory: StoreScreenLogic.Category?,
+	-- The item it opens on, overriding initialCategory: a hub plinth
+	-- opens the store on what it shows. Ignored if it isn't listed.
+	initialKey: string?,
+	-- StoreOffers.isOffered on the synced server clock: what's on sale
+	-- right now. The server refuses anything else regardless.
+	isOffered: (StoreScreenLogic.Item) -> boolean,
+	-- What an item costs now, and its struck-through "was" price.
+	priceOf: (StoreScreenLogic.Item) -> StoreScreenLogic.Price,
 	rarityOf: (StoreScreenLogic.Grant) -> string?,
 	-- One line per grant ("500 coins", "Founder's Trail"), for the panel.
 	grantText: (StoreScreenLogic.Grant) -> string,
@@ -84,11 +93,8 @@ local CATEGORY_TAB: { [string]: { label: string, icon: string } } = {
 -- special one; ink-muted for Common so it doesn't compete.
 local RARITY_COLOR: { [string]: string } = { Common = "inkMuted", Uncommon = "success", Rare = "brand" }
 
-local function priceText(item: StoreScreenLogic.Item): string
-	if item.kind == "CoinOffer" then
-		return string.format("%d coins", item.coinPrice or 0)
-	end
-	return string.format("R$ %d", item.robuxPrice)
+local function priceText(store: Store, item: StoreScreenLogic.Item): string
+	return StoreScreenLogic.priceText(item, store.priceOf(item))
 end
 
 -- An item's picture (StoreItemDef.imageAssetId), drawn in its own
@@ -135,9 +141,13 @@ local function card(
 		elseif s == "Unavailable" then
 			return "Coming soon"
 		elseif s == "TooFewCoins" then
-			return "Need " .. priceText(item)
+			return "Need " .. priceText(store, item)
 		end
-		return priceText(item)
+		return StoreScreenLogic.priceRich(item, store.priceOf(item))
+	end)
+	-- A sale reads as the word, not just the struck-through price.
+	local onSale = derive(function()
+		return store.priceOf(item).was ~= nil
 	end)
 	local isSelected = derive(function()
 		return selected() == item.key
@@ -194,11 +204,22 @@ local function card(
 						TextColor3 = Theme.color[RARITY_COLOR[rarity or ""] or "inkMuted"],
 						TextXAlignment = Enum.TextXAlignment.Left,
 					}),
+					Base.text("caption", {
+						Name = "Sale",
+						AnchorPoint = Vector2.new(1, 1),
+						Position = UDim2.new(1, 0, 1, -(Theme.type.body.size + Theme.spacing.xs)),
+						Size = UDim2.new(0.5, 0, 0, Theme.type.caption.size + Theme.spacing.xxs),
+						Text = "SALE",
+						TextColor3 = Theme.color.warning,
+						TextXAlignment = Enum.TextXAlignment.Right,
+						Visible = onSale,
+					}),
 					Base.text("body", {
 						Name = "Tag",
 						AnchorPoint = Vector2.new(0, 1),
 						Position = UDim2.fromScale(0, 1),
 						Size = UDim2.new(1, 0, 0, Theme.type.body.size + Theme.spacing.xxs),
+						RichText = true,
 						Text = tag,
 						TextXAlignment = Enum.TextXAlignment.Left,
 					}),
@@ -232,13 +253,13 @@ local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?, pane:
 		elseif s == "Unavailable" then
 			return "Coming soon"
 		elseif s == "TooFewCoins" then
-			return "Need " .. priceText(i)
+			return "Need " .. priceText(store, i)
 		elseif s == "Owned" or s == "Equipped" then
 			return "Owned"
 		elseif mine() and store.flow().phase == "Processing" then
 			return "Processing..."
 		end
-		return "Buy · " .. priceText(i)
+		return "Buy · " .. priceText(store, i)
 	end)
 	return C.Button({
 		label = label,
@@ -445,9 +466,20 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 					0,
 					PREVIEW - Theme.type.title.size - Theme.spacing.sm
 				),
+				-- On sale, it opens with the struck-through "was" price.
+				RichText = true,
 				Text = function()
+					local i = item()
 					local r = rarity()
-					return (if r then r .. " · " else "") .. contents()
+					local was = if i then store.priceOf(i).was else nil
+					local sale = if i and was
+						then string.format(
+							'<font color="#%s">SALE</font> <s>%s</s> · ',
+							Theme.color.warning:ToHex(),
+							StoreScreenLogic.priceText(i, { now = was })
+						)
+						else ""
+					return sale .. (if r then r .. " · " else "") .. contents()
 				end,
 				TextColor3 = Theme.color.inkMuted,
 				TextWrapped = true,
@@ -1010,7 +1042,13 @@ end
 local function body(store: Store, height: () -> number, layout: MenuShell.BodyLayout): { Instance }
 	local pane = layout.pane
 	local cardW = (pane - Theme.spacing.sm) / 2
-	local initial = store.initialCategory
+	local initialItem: StoreScreenLogic.Item? = nil
+	for _, item in store.items do
+		if item.key == store.initialKey and StoreScreenLogic.isListed(item, store.isOffered(item)) then
+			initialItem = item
+		end
+	end
+	local initial = if initialItem then StoreScreenLogic.categoryOf(initialItem) else store.initialCategory
 	local tabIndex = source(if initial then table.find(StoreScreenLogic.CATEGORIES, initial) or 1 else 1)
 	-- Cast: derive widens a string-literal union back to `string`.
 	local category = derive(function(): StoreScreenLogic.Category
@@ -1020,17 +1058,29 @@ local function body(store: Store, height: () -> number, layout: MenuShell.BodyLa
 		local s = store.state()
 		local season = if s then s.season else nil
 		local livePassKey = if season then store.passKeyOf(season.id) else nil
-		return StoreScreenLogic.itemsIn(store.items, category(), livePassKey)
+		return StoreScreenLogic.itemsIn(store.items, category(), livePassKey, store.isOffered)
 	end)
 	local onSeason = derive(function()
 		return category() == "Season"
 	end)
 	local selectedKey = source(nil :: string?)
 	-- A tab switch selects that tab's first item, so the panel is never
-	-- showing something from a tab the player has left.
+	-- showing something from a tab the player has left. A refresh of the
+	-- same tab (a StoreState push, a sale ending) keeps the selection if
+	-- it's still listed. The first pass selects the item the store was
+	-- opened on.
+	local wanted = if initialItem then initialItem.key else nil
 	effect(function()
 		local list = itemsHere()
-		selectedKey(if list[1] then list[1].key else nil)
+		local keep = wanted or untrack(selectedKey)
+		local pick = if list[1] then list[1].key else nil
+		for _, item in list do
+			if item.key == keep then
+				pick = keep
+			end
+		end
+		wanted = nil
+		selectedKey(pick)
 	end)
 	local selected = derive(function(): StoreScreenLogic.Item?
 		local key = selectedKey()

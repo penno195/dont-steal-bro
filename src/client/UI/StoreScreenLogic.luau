@@ -36,7 +36,20 @@ export type Item = {
 	imageAssetId: number, -- 0 = no art yet (disabled items only, Validate enforces it)
 	grants: { Grant },
 	perk: string?, -- a perk pass (Unlimited Navigation), not a season pass
+	-- Sales and launch offers (design-decisions.md Q1, "the featured
+	-- plinths" and "limited cosmetics"); StoreOffers reads them.
+	wasPrice: number?,
+	replaces: string?,
+	onSaleFrom: string?,
+	onSaleUntil: string?,
+	featuredSlot: number?,
 }
+
+-- What an item costs right now: coins, or what Roblox charges (the live
+-- price once GetProductInfoAsync answers, config's robuxPrice until
+-- then), and the struck-through "was" price if StoreOffers.wasPrice
+-- gives one.
+export type Price = { now: number, was: number? }
 
 -- The StoreState payload (StoreService.pushState), as the client gets it.
 export type StoreState = {
@@ -240,13 +253,34 @@ local function inGrid(item: Item): boolean
 	return true
 end
 
-function StoreScreenLogic.itemsIn(items: { Item }, category: Category, livePassKey: string?): { Item }
+-- Whether a card shows at all, given whether StoreOffers says the item
+-- is offered right now. An enabled item outside its sale window, or
+-- stood down for a launch offer, is hidden, as is a launch offer or
+-- limited item that isn't on: neither is "coming soon". A disabled
+-- item with no window (no Roblox id yet) still shows as Coming soon.
+function StoreScreenLogic.isListed(item: Item, offered: boolean): boolean
+	if offered then
+		return true
+	end
+	return not item.enabled and item.replaces == nil and item.onSaleFrom == nil and item.onSaleUntil == nil
+end
+
+-- `isOffered` is StoreOffers.isOffered against the synced server clock;
+-- nil lists everything (no sale windows to apply). On the Season tab a
+-- launch offer that `replaces` the live pass stands in for it.
+function StoreScreenLogic.itemsIn(
+	items: { Item },
+	category: Category,
+	livePassKey: string?,
+	isOffered: ((Item) -> boolean)?
+): { Item }
 	local out = {}
 	for _, item in items do
 		if
 			inGrid(item)
 			and StoreScreenLogic.categoryOf(item) == category
-			and (category ~= "Season" or item.key == livePassKey)
+			and (category ~= "Season" or (livePassKey ~= nil and (item.key == livePassKey or item.replaces == livePassKey)))
+			and (isOffered == nil or StoreScreenLogic.isListed(item, isOffered(item)))
 		then
 			table.insert(out, item)
 		end
@@ -258,6 +292,30 @@ function StoreScreenLogic.itemsIn(items: { Item }, category: Category, livePassK
 		return a.key < b.key
 	end)
 	return out
+end
+
+-- ===== prices ===============================================================
+
+local function amountText(item: Item, amount: number): string
+	if item.kind == "CoinOffer" then
+		return string.format("%d coins", amount)
+	end
+	return string.format("R$ %d", amount)
+end
+
+-- "R$ 99" or "25 coins": what the item costs now.
+function StoreScreenLogic.priceText(item: Item, price: Price): string
+	return amountText(item, price.now)
+end
+
+-- The price with the "was" price struck through after it, as RichText
+-- (the label must have RichText on): "R$ 99 <s>R$ 199</s>".
+function StoreScreenLogic.priceRich(item: Item, price: Price): string
+	local now = amountText(item, price.now)
+	if price.was == nil then
+		return now
+	end
+	return string.format("%s  <s>%s</s>", now, amountText(item, price.was))
 end
 
 -- ===== the purchase flow ====================================================
