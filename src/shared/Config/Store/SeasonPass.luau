@@ -17,7 +17,7 @@ local SeasonPass: Validate.StoreItemDef = {
 	description = "Unlock this season's paid tiers. Every win this season counts, including the ones you've already won.",
 	robuxPrice = 199, -- PLACEHOLDER: display only, never read for a grant
 	sortOrder = 10,
-	imageAssetId = 130933629115331, -- assets/store/season-pass.png
+	imageAssetId = 125004472230907, -- assets/store/season-pass.png (crown ticket, 2026-10-10)
 	grants = { { kind = "SeasonPass" } },
 }
 

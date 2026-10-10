@@ -28,7 +28,7 @@ local SeasonPassLaunch: Validate.StoreItemDef = {
 	-- assets/seasonpass/models/GoldenTicket (Meshy), ~4 studs across
 	plinthModel = { meshAssetId = 136634816390121, textureAssetId = 135638183265178, scale = 0.022 },
 	sortOrder = 10,
-	imageAssetId = 130933629115331, -- assets/store/season-pass.png
+	imageAssetId = 125004472230907, -- assets/store/season-pass.png (crown ticket, 2026-10-10)
 	grants = { { kind = "SeasonPass" } },
 }
 
