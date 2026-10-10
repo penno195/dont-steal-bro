@@ -73,36 +73,158 @@ function Bolt-Points([float]$cx, [float]$cy, [float]$k) {
 
 $ink = Rgb 30 20 40
 
+# ===== shared: the season pass's finish (art pass 2026-10-10) ==============
+# Sunburst, soft drop shadows, gradients with a gloss band, ink outlines and
+# sparkles, so the coin icons sit beside the season pass as one set.
+function Draw-Sunburst($g, [float]$cx, [float]$cy) {
+	for ($i = 0; $i -lt 16; $i++) {
+		$a0 = [Math]::PI / 8 * $i; $a1 = $a0 + [Math]::PI / 16
+		$g.FillPolygon((Brush (Rgb 255 255 255 26)), [System.Drawing.PointF[]]@(
+			(Pt $cx $cy), (Pt ($cx + [Math]::Cos($a0) * 380) ($cy + [Math]::Sin($a0) * 380)),
+			(Pt ($cx + [Math]::Cos($a1) * 380) ($cy + [Math]::Sin($a1) * 380))))
+	}
+}
+
+function Draw-Sparkles($g, $list) {
+	foreach ($p in $list) {
+		$x = $p[0]; $y = $p[1]; $r = $p[2]
+		$pts = @()
+		for ($i = 0; $i -lt 8; $i++) {
+			$a = [Math]::PI / 4 * $i - [Math]::PI / 2
+			$rr = if ($i % 2 -eq 0) { $r } else { $r / 4 }
+			$pts += Pt ($x + [Math]::Cos($a) * $rr) ($y + [Math]::Sin($a) * $rr)
+		}
+		$g.FillPolygon((Brush (Rgb 255 235 150)), [System.Drawing.PointF[]]$pts)
+	}
+}
+
+function Star-Points([float]$cx, [float]$cy, [float]$outer, [float]$inner) {
+	$pts = @()
+	for ($i = 0; $i -lt 10; $i++) {
+		$a = [Math]::PI / 5 * $i - [Math]::PI / 2
+		$rr = if ($i % 2 -eq 0) { $outer } else { $inner }
+		$pts += Pt ($cx + [Math]::Cos($a) * $rr) ($cy + [Math]::Sin($a) * $rr)
+	}
+	return [System.Drawing.PointF[]]$pts
+}
+
+# A thick gold coin, tilted towards you: a dark rim for its edge, a
+# gradient face with an inner ring and an embossed star, a gloss spot,
+# all inked. $tilt squashes it (1 = face-on).
+function Draw-ShinyCoin($g, [float]$cx, [float]$cy, [float]$r, [float]$tilt = 0.82) {
+	$h = $r * $tilt; $edge = $r * 0.2
+	$w = [Math]::Max(3, $r * 0.13)
+	$g.FillEllipse((Brush (Rgb 0 0 0 70)), ($cx - $r + 4), ($cy - $h + $edge + 8), ($r * 2), ($h * 2))
+	$g.FillEllipse((Brush (Rgb 190 110 10)), ($cx - $r), ($cy - $h + $edge), ($r * 2), ($h * 2))
+	$g.FillRectangle((Brush (Rgb 190 110 10)), ($cx - $r), $cy, ($r * 2), $edge)
+	$g.DrawEllipse((Pen $ink $w), ($cx - $r), ($cy - $h + $edge), ($r * 2), ($h * 2))
+	$rect = New-Object System.Drawing.RectangleF ($cx - $r), ($cy - $h - 1), ($r * 2), ($h * 2 + 2)
+	$face = New-Object System.Drawing.Drawing2D.LinearGradientBrush $rect, (Rgb 255 236 130), (Rgb 240 160 20), 90
+	$g.FillEllipse($face, ($cx - $r), ($cy - $h), ($r * 2), ($h * 2))
+	$g.DrawEllipse((Pen $ink $w), ($cx - $r), ($cy - $h), ($r * 2), ($h * 2))
+	$g.DrawEllipse((Pen (Rgb 205 125 10) ($r * 0.08)), ($cx - $r * 0.72), ($cy - $h * 0.72), ($r * 1.44), ($h * 1.44))
+	if ($r -ge 26) {
+		$star = Star-Points 0 0 ($r * 0.42) ($r * 0.18)
+		$state = $g.Save()
+		$g.TranslateTransform($cx, $cy); $g.ScaleTransform(1, $tilt)
+		$g.FillPolygon((Brush (Rgb 205 125 10)), $star)
+		$g.Restore($state)
+	}
+	$g.FillEllipse((Brush (Rgb 255 255 230 210)), ($cx - $r * 0.62), ($cy - $h * 0.66), ($r * 0.42), ($h * 0.3))
+}
+
 # ===== currency-small: Small Coin Pouch ====================================
-$c = New-Icon (Rgb 80 200 120) (Rgb 20 110 70); $g = $c[1]
+$c = New-Icon (Rgb 90 215 140) (Rgb 10 90 60); $g = $c[1]
+Draw-Sunburst $g 256 236
+# A plump drawstring sack: the body, a frilled neck above a gold cord,
+# a big coin on its front, and coins spilling out around it.
 $pouch = New-Object System.Drawing.Drawing2D.GraphicsPath
-$pouch.AddBezier((Pt 200 190), (Pt 90 260), (Pt 110 400), (Pt 256 400))
-$pouch.AddBezier((Pt 256 400), (Pt 402 400), (Pt 422 260), (Pt 312 190))
+$pouch.AddBezier((Pt 206 196), (Pt 84 250), (Pt 92 396), (Pt 256 396))
+$pouch.AddBezier((Pt 256 396), (Pt 420 396), (Pt 428 250), (Pt 306 196))
 $pouch.CloseFigure()
-$g.FillPath((Brush (Rgb 170 100 50)), $pouch)
-$g.DrawPath((Pen $ink 10), $pouch)
-$g.FillEllipse((Brush (Rgb 140 80 40)), 196, 150, 120, 56)
-$g.DrawEllipse((Pen $ink 10), 196, 150, 120, 56)
-$g.DrawLine((Pen (Rgb 255 210 80) 14), 200, 205, 312, 205)
-Draw-Coin $g 256 300 62
-Draw-Coin $g 330 128 40
-Draw-Coin $g 180 120 32
-Draw-Label $g '75' 440 64 (Rgb 255 255 255)
+$g.TranslateTransform(8, 12); $g.FillPath((Brush (Rgb 0 0 0 90)), $pouch); $g.TranslateTransform(-8, -12)
+$sack = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle 90, 190, 340, 210), (Rgb 205 135 70), (Rgb 130 70 30), 90
+$g.FillPath($sack, $pouch)
+$g.SetClip($pouch)
+$g.FillPolygon((Brush (Rgb 255 255 255 55)), [System.Drawing.PointF[]]@((Pt 150 190), (Pt 200 190), (Pt 140 400), (Pt 90 400)))
+$g.FillEllipse((Brush (Rgb 0 0 0 40)), 290, 210, 200, 220)
+$g.ResetClip()
+$g.DrawPath((Pen $ink 12), $pouch)
+# The frilled neck.
+$neck = New-Object System.Drawing.Drawing2D.GraphicsPath
+$neck.AddBezier((Pt 214 200), (Pt 190 170), (Pt 176 140), (Pt 196 128))
+$neck.AddBezier((Pt 196 128), (Pt 222 140), (Pt 236 120), (Pt 256 132))
+$neck.AddBezier((Pt 256 132), (Pt 276 120), (Pt 290 140), (Pt 316 128))
+$neck.AddBezier((Pt 316 128), (Pt 336 140), (Pt 322 170), (Pt 298 200))
+$neck.CloseFigure()
+$ng = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle 176, 120, 160, 84), (Rgb 215 145 80), (Rgb 150 85 40), 90
+$g.FillPath($ng, $neck); $g.DrawPath((Pen $ink 10), $neck)
+# The gold cord and its bow's two tails.
+$cord = New-Object System.Drawing.Drawing2D.GraphicsPath
+$cord.AddArc(200, 186, 112, 30, 180, -180)
+$g.DrawPath((Pen $ink 26), $cord); $g.DrawPath((Pen (Rgb 255 210 70) 14), $cord)
+foreach ($t in @(@(256, 208, 230, 250), @(256, 208, 284, 252))) {
+	$g.DrawLine((Pen $ink 22), $t[0], $t[1], $t[2], $t[3]); $g.DrawLine((Pen (Rgb 255 210 70) 10), $t[0], $t[1], $t[2], $t[3])
+}
+$g.FillEllipse((Brush (Rgb 255 210 70)), 244, 196, 24, 24); $g.DrawEllipse((Pen $ink 6), 244, 196, 24, 24)
+Draw-ShinyCoin $g 256 306 52 0.9
+Draw-ShinyCoin $g 128 372 30
+Draw-ShinyCoin $g 386 366 34
+Draw-ShinyCoin $g 352 132 26
+Draw-Sparkles $g @(@(120, 128, 22), @(400, 210, 14), @(96, 270, 12), @(420, 110, 16))
+Draw-Label $g '75' 446 54 (Rgb 255 220 90)
 Save-Icon $c 'currency-small.png'
 
 # ===== currency-large: Large Coin Chest ====================================
-$c = New-Icon (Rgb 170 110 255) (Rgb 70 30 150); $g = $c[1]
-# Coin pile spilling out of the open chest.
-Draw-Coin $g 196 190 44; Draw-Coin $g 316 190 44; Draw-Coin $g 256 160 50
-Draw-Coin $g 150 222 38; Draw-Coin $g 362 222 38
-$g.FillRectangle((Brush (Rgb 150 85 40)), 116, 230, 280, 150)
-$g.DrawRectangle((Pen $ink 10), 116, 230, 280, 150)
-$g.FillRectangle((Brush (Rgb 255 200 60)), 116, 270, 280, 22)
-$g.DrawRectangle((Pen $ink 6), 116, 270, 280, 22)
-$g.FillRectangle((Brush (Rgb 255 200 60)), 230, 262, 52, 66)
-$g.DrawRectangle((Pen $ink 8), 230, 262, 52, 66)
-$g.FillEllipse((Brush $ink), 249, 284, 14, 18)
-Draw-Label $g '250' 440 64 (Rgb 255 230 90)
+$c = New-Icon (Rgb 140 70 230) (Rgb 30 10 80); $g = $c[1]
+Draw-Sunburst $g 256 230
+# A treasure chest thrown open: the lid tipped back, a warm glow out of
+# it, a heap of coins over the brim and a few spilt in front.
+$trim = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle 100, 70, 312, 330), (Rgb 255 236 130), (Rgb 225 145 15), 90
+# The lid, behind everything.
+$lid = New-Object System.Drawing.Drawing2D.GraphicsPath
+$lid.AddLine(118, 214, 140, 110); $lid.AddBezier((Pt 140 110), (Pt 200 70), (Pt 312 70), (Pt 372 110)); $lid.AddLine(372, 110, 394, 214)
+$lid.CloseFigure()
+$g.FillPath((Brush (Rgb 110 60 25)), $lid); $g.DrawPath((Pen $ink 12), $lid)
+$strap = [System.Drawing.PointF[]]@((Pt 236 80), (Pt 276 80), (Pt 284 214), (Pt 228 214))
+$g.FillPolygon($trim, $strap); $g.DrawPolygon((Pen $ink 7), $strap)
+# The glow out of the open chest.
+$glow = New-Object System.Drawing.Drawing2D.GraphicsPath
+$glow.AddEllipse(96, 100, 320, 210)
+$gb = New-Object System.Drawing.Drawing2D.PathGradientBrush $glow
+$gb.CenterColor = Rgb 255 240 150 200
+$gb.SurroundColors = [System.Drawing.Color[]]@((Rgb 255 240 150 0))
+$g.FillPath($gb, $glow)
+# The heap, back row first.
+foreach ($k in @(@(166, 208, 34), @(346, 208, 34), @(206, 186, 38), @(306, 186, 38), @(256, 162, 44), @(222, 214, 36), @(292, 214, 36))) {
+	Draw-ShinyCoin $g $k[0] $k[1] $k[2]
+}
+# The body, its shadow first.
+$body = New-Object System.Drawing.Drawing2D.GraphicsPath
+$body.AddRectangle((New-Object System.Drawing.RectangleF 112, 222, 288, 160))
+$g.TranslateTransform(8, 12); $g.FillPath((Brush (Rgb 0 0 0 90)), $body); $g.TranslateTransform(-8, -12)
+$bw = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle 112, 220, 288, 164), (Rgb 185 110 55), (Rgb 115 60 25), 90
+$g.FillPath($bw, $body)
+foreach ($y in 274, 330) { $g.DrawLine((Pen (Rgb 95 50 20) 5), 118, $y, 394, $y) }
+$g.SetClip($body)
+$g.FillPolygon((Brush (Rgb 255 255 255 45)), [System.Drawing.PointF[]]@((Pt 150 220), (Pt 196 220), (Pt 150 384), (Pt 104 384)))
+$g.ResetClip()
+$g.DrawPath((Pen $ink 12), $body)
+# Gold banding: the brim, two corner straps and the lock plate.
+foreach ($r in @(@(106, 210, 300, 24), @(134, 234, 26, 148), @(352, 234, 26, 148))) {
+	$g.FillRectangle($trim, $r[0], $r[1], $r[2], $r[3]); $g.DrawRectangle((Pen $ink 7), $r[0], $r[1], $r[2], $r[3])
+}
+$plate = New-Object System.Drawing.Drawing2D.GraphicsPath
+$plate.AddArc(226, 240, 60, 60, 180, 180); $plate.AddLine(286, 270, 286, 318); $plate.AddLine(286, 318, 226, 318)
+$plate.CloseFigure()
+$g.FillPath($trim, $plate); $g.DrawPath((Pen $ink 8), $plate)
+$g.FillEllipse((Brush $ink), 247, 268, 18, 18); $g.FillPolygon((Brush $ink), [System.Drawing.PointF[]]@((Pt 251 280), (Pt 261 280), (Pt 265 302), (Pt 247 302)))
+# Spilt coins in front.
+Draw-ShinyCoin $g 96 384 30
+Draw-ShinyCoin $g 418 380 34
+Draw-ShinyCoin $g 380 408 24
+Draw-Sparkles $g @(@(100, 120, 22), @(412, 96, 18), @(444, 270, 14), @(70, 300, 12))
+Draw-Label $g '250' 446 54 (Rgb 255 220 90)
 Save-Icon $c 'currency-large.png'
 
 # ===== stock-sprint-boost-10: Sprint Boost x10 =============================
