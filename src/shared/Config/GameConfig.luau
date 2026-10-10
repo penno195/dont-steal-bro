@@ -532,6 +532,18 @@ local GameConfig: Validate.GameConfig = {
 		openAngle = 95, -- degrees; a Model's own OpenAngle attribute overrides it
 	},
 
+	-- The community reward (design-decisions.md Q1, "a community reward"):
+	-- one exclusive cosmetic, free to members of the game's Roblox group.
+	-- StoreService checks membership itself (Player:IsInGroupAsync) when
+	-- the profile loads and when the player taps Check in the store, and
+	-- grants it once. Owners keep it if they later leave the group, and
+	-- it has no end date (user decision 2026-10-10).
+	community = {
+		groupId = 250844631, -- "Studio Corvus"; 0 switches the reward off
+		rewardCosmeticId = "back-corvus-crest-pack",
+		recheckCooldownSeconds = 10,
+	},
+
 	-- Studio test mode (StudioTestService). Never runs outside Studio.
 	-- Pressing Play loads `mapId` from ServerStorage.Maps and starts a
 	-- round once `minHumans` have loaded, NPCs filling the rest. Set

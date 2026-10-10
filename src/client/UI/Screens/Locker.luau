@@ -78,6 +78,16 @@ export type Locker = {
 	-- Wear a title, or nil to go back to the highest rung.
 	equipTitle: (titleId: string?) -> (),
 	close: () -> (),
+
+	-- The community reward's tile, at the end of the Style grid while
+	-- it's on and not yet owned. `check` opens the join prompt and asks
+	-- the server; `text` is the tile's caption.
+	community: {
+		offered: () -> boolean,
+		name: string,
+		text: () -> string,
+		check: () -> (),
+	}?,
 }
 
 local TABS: { { label: string, icon: string? } } = {
@@ -466,6 +476,48 @@ local function cosmeticCard(locker: Locker, row: () -> LockerLogic.CosmeticRow, 
 	})
 end
 
+-- The community reward, free for joining the group. A Rare-edged tile
+-- like an owned one, so it reads as a real item, with a FREE tag.
+local function communityCard(locker: Locker, width: number): Instance?
+	local community = locker.community
+	if community == nil then
+		return nil
+	end
+	return Base.interactive({
+		name = "CommunityReward",
+		size = Vector2.new(width, CARD_H),
+		layoutOrder = 10000,
+		order = 9999,
+		radius = Theme.radius.md,
+		onActivate = community.check,
+		visual = function(state)
+			return {
+				tileFill(state, function()
+					return "Rare"
+				end, {
+					Base.text("label", {
+						Name = "Name",
+						Size = UDim2.fromScale(1, 0.5),
+						Text = "FREE · " .. community.name,
+						TextColor3 = Theme.color.brand,
+						TextTruncate = Enum.TextTruncate.AtEnd,
+						TextXAlignment = Enum.TextXAlignment.Left,
+					}),
+					Base.text("caption", {
+						Name = "Detail",
+						Position = UDim2.fromScale(0, 0.5),
+						Size = UDim2.fromScale(1, 0.5),
+						Text = community.text,
+						TextColor3 = Theme.color.inkMuted,
+						TextTruncate = Enum.TextTruncate.AtEnd,
+						TextXAlignment = Enum.TextXAlignment.Left,
+					}),
+				}),
+			}
+		end,
+	})
+end
+
 -- ===== Titles tab ===========================================================
 
 local function titleCard(locker: Locker, row: () -> LockerLogic.TitleRow, index: number, width: number): Instance
@@ -557,6 +609,9 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 			locker.categoryOrder
 		)
 	end)
+	local communityOffered = derive(function(): boolean
+		return locker.community ~= nil and locker.community.offered()
+	end)
 	local titleRows = derive(function(): { LockerLogic.TitleRow }
 		local s = locker.state()
 		return if s then LockerLogic.titles(s :: any, locker.titleLadder) else {}
@@ -621,13 +676,18 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 				TextYAlignment = Enum.TextYAlignment.Top,
 			}),
 			switch(derive(function()
-				return #cosmeticRows() > 0
+				return #cosmeticRows() > 0 or communityOffered()
 			end))({
 				[true] = function()
 					return grid("Cosmetics", position, pane, gridH, {
 						indexes(cosmeticRows, function(row: () -> LockerLogic.CosmeticRow, index: number)
 							return cosmeticCard(locker, row, index, cardW)
 						end) :: any,
+						switch(communityOffered)({
+							[true] = function()
+								return communityCard(locker, cardW)
+							end,
+						}) :: any,
 					})
 				end,
 				[false] = function()

@@ -678,6 +678,15 @@ export type VoteConfig = {
 -- P5-5: the hub practice area, which runs the real power-up and status
 -- effect services under EffectContext's practice flag. The first three
 -- fields are EffectContext.PracticeRules.
+-- The community reward (design-decisions.md Q1, "a community reward"):
+-- one cosmetic, free to members of the game's Roblox group. groupId 0
+-- switches it off.
+export type CommunityConfig = {
+	groupId: number,
+	rewardCosmeticId: string,
+	recheckCooldownSeconds: number, -- per player, between membership checks the client asks for
+}
+
 export type PracticeConfig = {
 	durationScale: number, -- 0-1 multiplier on every effect's duration
 	maxEffectSeconds: number, -- ceiling on any one effect after scaling
@@ -859,6 +868,9 @@ export type GameConfig = {
 
 	-- Proximity doors. See DoorConfig above.
 	doors: DoorConfig,
+
+	-- The community reward. See CommunityConfig above.
+	community: CommunityConfig,
 
 	-- Studio test mode. See StudioTestConfig above.
 	studioTest: StudioTestConfig,
@@ -2961,6 +2973,28 @@ local function checkDoorConfig(dc: DoorConfig, issues: { Issue })
 	end
 end
 
+local function checkCommunityConfig(cc: CommunityConfig, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "community." .. field, message)
+	end
+
+	if cc == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "community", "the community config block is missing entirely")
+		return
+	end
+
+	if type(cc.groupId) ~= "number" or cc.groupId < 0 or cc.groupId % 1 ~= 0 then
+		bad("groupId", "must be a whole number, or 0 to switch the reward off")
+	end
+	if type(cc.rewardCosmeticId) ~= "string" or cc.rewardCosmeticId == "" then
+		bad("rewardCosmeticId", "must name a cosmetic id")
+	end
+	-- Each check is a Roblox web call, so a tap can't be spammed into many.
+	if type(cc.recheckCooldownSeconds) ~= "number" or cc.recheckCooldownSeconds < 5 then
+		bad("recheckCooldownSeconds", "must be at least 5")
+	end
+end
+
 local function checkPracticeConfig(pc: PracticeConfig, issues: { Issue })
 	local function bad(field: string, message: string)
 		issue(issues, "GameConfig", "GameConfig.luau", "practice." .. field, message)
@@ -3287,6 +3321,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkVoteConfig(config.vote, config.matchmaking, config.teleport, issues)
 	checkPracticeConfig(config.practice, issues)
 	checkDoorConfig(config.doors, issues)
+	checkCommunityConfig(config.community, issues)
 	checkStudioTestConfig(config.studioTest, config.playerCount, issues)
 
 	local telemetry = config.telemetry
@@ -4301,6 +4336,67 @@ function Validate.run(input: RegistryInput): { Issue }
 					end
 				end
 			end
+		end
+	end
+
+	-- The community reward is exclusive to the group: a cosmetic that
+	-- nothing else hands out (not sold, not a drop, not a leaderboard
+	-- prize, not on a season track). It may be disabled while its asset
+	-- is being made: StoreService grants nothing until it's enabled.
+	local community = input.gameConfig.community
+	if
+		cosmetics ~= nil
+		and community ~= nil
+		and type(community.groupId) == "number"
+		and community.groupId > 0
+		and type(community.rewardCosmeticId) == "string"
+	then
+		local id = community.rewardCosmeticId
+		local function bad(message: string)
+			issue(issues, "GameConfig", "GameConfig.luau", "community.rewardCosmeticId", message)
+		end
+		local cosmetic: CosmeticDef? = nil
+		for _, entry in cosmetics do
+			if entry.def.id == id then
+				cosmetic = entry.def
+			end
+		end
+		local where: string? = nil
+		if store ~= nil then
+			for _, entry in store do
+				for _, grant in (if type(entry.def.grants) == "table" then entry.def.grants else {}) :: { any } do
+					if type(grant) == "table" and grant.kind == "Cosmetic" and grant.cosmeticId == id then
+						where = "sold by " .. entry.fileName
+					end
+				end
+			end
+		end
+		if leaderboard ~= nil and type(leaderboard.payouts) == "table" then
+			for kind, bands in leaderboard.payouts do
+				for _, band in (if type(bands) == "table" then bands else {}) :: { any } do
+					if type(band) == "table" and band.cosmeticId == id then
+						where = string.format("paid by the %s leaderboard", tostring(kind))
+					end
+				end
+			end
+		end
+		for _, entry in (input.seasons or {}) :: { { fileName: string, def: SeasonDef } } do
+			for _, trackName in { "free", "premium" } do
+				local track = (entry.def :: any)[trackName]
+				for _, item in (if type(track) == "table" then track else {}) :: { any } do
+					local grant = if type(item) == "table" then item.grant else nil
+					if type(grant) == "table" and grant.kind == "Cosmetic" and grant.cosmeticId == id then
+						where = string.format("on %s's %s track", entry.fileName, trackName)
+					end
+				end
+			end
+		end
+		if cosmetic == nil then
+			bad(string.format("%q is not a cosmetic id", id))
+		elseif cosmetic.winDrop == true then
+			bad(string.format("cosmetic %q is a win drop (winDrop = true); the community reward is group-only", id))
+		elseif where ~= nil then
+			bad(string.format("cosmetic %q is also %s; the community reward is group-only", id, where))
 		end
 	end
 

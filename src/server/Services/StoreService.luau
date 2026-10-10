@@ -73,6 +73,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local StoreCatalogue = require(ReplicatedStorage.Shared.Config.Store)
 local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
+local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
@@ -789,6 +790,104 @@ local function handleSeasonClaim(player: Player, track: SeasonLogic.Track?, upTo
 	pushState(player)
 end
 
+-- ===== the community reward (design-decisions.md Q1) =====================
+
+-- One cosmetic, free to members of the game's Roblox group
+-- (GameConfig.community). Membership is asked of Roblox here, never
+-- taken from the client: CommunityRewardCheck only asks for a check,
+-- and is throttled per player because each check is a web call. Paid
+-- once, into ownedCosmetics, so leaving the group later doesn't take
+-- it back.
+local lastCommunityCheckAt: { [Player]: number } = {}
+
+local function sendCommunityResult(player: Player, status: string)
+	Net.fireClient("CommunityRewardResult", player, { status = status })
+end
+
+local function checkCommunityReward(player: Player, tapped: boolean)
+	local config = GameConfig.community
+	local cosmeticId = config.rewardCosmeticId
+	local enabled = false
+	for _, entry in Cosmetics do
+		if entry.def.id == cosmeticId then
+			enabled = entry.def.enabled
+		end
+	end
+	if config.groupId <= 0 or not enabled then
+		if tapped then
+			sendCommunityResult(player, "Unavailable")
+		end
+		return
+	end
+	if table.find((Loader.get("DataService") :: any).getOwnedCosmetics(player), cosmeticId) ~= nil then
+		if tapped then
+			sendCommunityResult(player, "Owned")
+		end
+		return
+	end
+	-- Only taps are throttled: the check on profile load runs once a session.
+	if tapped then
+		local last = lastCommunityCheckAt[player]
+		if last ~= nil and now() - last < config.recheckCooldownSeconds then
+			sendCommunityResult(player, "TooSoon")
+			return
+		end
+		lastCommunityCheckAt[player] = now()
+	end
+
+	local ok, isMember = pcall(player.IsInGroupAsync, player, config.groupId)
+	if player.Parent ~= Players then
+		return
+	end
+	if not ok then
+		warn(string.format("StoreService: group check failed for %s: %s", player.Name, tostring(isMember)))
+		if tapped then
+			sendCommunityResult(player, "Unavailable")
+		end
+		return
+	end
+	if not isMember then
+		if tapped then
+			sendCommunityResult(player, "NotMember")
+		end
+		return
+	end
+
+	-- The check yielded, so the profile is read fresh, after it.
+	local getHandle = receiptHandleFor
+	local handle = if getHandle then getHandle(player) else nil
+	local data = if handle then handle.getData() else nil
+	if handle == nil or data == nil or not handle.isActive() then
+		if tapped then
+			sendCommunityResult(player, "Unavailable")
+		end
+		return
+	end
+	if table.find(data.ownedCosmetics, cosmeticId) ~= nil then
+		return
+	end
+	local after, changes = StoreLogic.applyGrants({
+		currency = data.currency,
+		powerUpStock = data.powerUpStock,
+		ownedCosmetics = data.ownedCosmetics,
+		unlockedTitles = data.unlockedTitles,
+		navigationRounds = data.navigationRounds,
+	}, { { kind = "Cosmetic", cosmeticId = cosmeticId } } :: any)
+	data.ownedCosmetics = after.ownedCosmetics
+	handle.save()
+	print(
+		string.format(
+			"StoreService: %s (%d) community reward, group %d: %s",
+			player.Name,
+			player.UserId,
+			config.groupId,
+			table.concat(changes, ", ")
+		)
+	)
+	pushState(player)
+	sendCommunityResult(player, "Granted")
+end
+
 -- ===== coin offers (rewards-roadmap.md step 6) ============================
 
 -- Coins buy a specific power-up at a fixed price (design-decisions.md Q1;
@@ -1195,6 +1294,10 @@ function StoreService:init()
 		handleSeasonClaim(player, payload.track, payload.upTo)
 	end)
 
+	NetGuard.on("CommunityRewardCheck", function(player: Player)
+		checkCommunityReward(player, true)
+	end)
+
 	NetGuard.on("StoreLoadoutIntent", function(player: Player, payload: any)
 		if loadoutLocked(player) then
 			return
@@ -1279,6 +1382,7 @@ function StoreService:init()
 	Players.PlayerRemoving:Connect(function(player: Player)
 		ownership[player] = nil
 		lastPassSyncAt[player] = nil
+		lastCommunityCheckAt[player] = nil
 		pendingPassSync[player] = nil
 	end)
 end
@@ -1292,6 +1396,7 @@ function StoreService:start()
 	DataService.onLoaded(function(player: Player)
 		syncPasses(player)
 		pushState(player)
+		checkCommunityReward(player, false)
 	end)
 end
 

@@ -1,4 +1,5 @@
-// Generates the five Season 1 wearables with Meshy's text-to-3D API.
+// Generates the five Season 1 wearables, and the community reward's
+// Corvus Crest Pack, with Meshy's text-to-3D API.
 // Run: node assets/seasonpass/make-models.js  (needs MESHY_API_KEY in env)
 // Writes assets/seasonpass/models/<name>/{model.fbx,model.glb,texture.png,thumb.png,task.json}.
 // Re-running skips any item whose folder already has model.fbx.
@@ -33,6 +34,10 @@ const ITEMS = {
 	GoldBarJetpack: {
 		prompt: `A backpack jetpack made of a stack of shiny gold ingot bars (trapezoid gold bullion bricks) strapped together with black belts, two grey rocket nozzles underneath. ${STYLE}`,
 		texture: "shiny yellow gold bullion bars, dark grey metal rocket nozzles, black belts",
+	},
+	CorvusCrestPack: {
+		prompt: `A sleek luxury hard-shell backpack, glossy black with polished gold trim along its edges, a large gold raven emblem with spread wings on the front, two short gold straps. ${STYLE}`,
+		texture: "glossy jet black lacquer shell, polished gold trim, gold raven crest emblem with spread wings, deep purple accents",
 	},
 };
 

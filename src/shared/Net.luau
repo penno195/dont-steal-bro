@@ -1139,6 +1139,30 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: "I've joined the group, check me" (the community
+	-- reward, design-decisions.md Q1). Carries nothing: the server asks
+	-- Roblox about membership itself, at most once per
+	-- GameConfig.community.recheckCooldownSeconds per player.
+	CommunityRewardCheck = {
+		name = "CommunityRewardCheck",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.2 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at the asker only): how that check went,
+	-- { status = "Granted" | "NotMember" | "Owned" | "TooSoon" |
+	-- "Unavailable" }. A UI notification only; the grant itself arrives
+	-- through StoreState.
+	CommunityRewardResult = {
+		name = "CommunityRewardResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: switch Navigation on or off (design-decisions.md
 	-- Q8, "Navigation"). The client never says whether it has paid: the
 	-- server checks the pass, the round already charged and the rounds

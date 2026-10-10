@@ -311,6 +311,11 @@ step 7a). Every amount is still unconfirmed until a playtest.
   except through Social Links, and checking Discord membership would mean
   collecting the player's Discord account. Discord is linked only
   through the experience's Social Links, and no reward is tied to it.
+  - *Applied (2026-10-10, user decision):* the reward is the **Corvus
+    Crest Pack** (a back item). It has **no end date**: anyone who joins
+    the group at any time can claim it. A player who later **leaves the
+    group keeps it**; membership is checked only to grant it, on join
+    and from the Locker's FREE tile, which opens Roblox's join prompt.
 
 ## 2. Round timer expires with <3 finished
 

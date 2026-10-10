@@ -31,6 +31,7 @@
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
+local GroupService = game:GetService("GroupService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -240,6 +241,55 @@ local function stepFlow(event: StoreScreenLogic.FlowEvent)
 	end
 end
 
+-- ===== the community reward ================================================
+
+-- The Locker's "free for group members" tile (GameConfig.community).
+-- Tapping it opens Roblox's own join prompt, then asks the server to
+-- check; the server asks Roblox, so nothing here can grant the item.
+local communityText = source("Join the Studio Corvus community, then tap here.")
+local communityBusy = false
+
+local COMMUNITY_TEXT: { [string]: string } = {
+	NotMember = "Not in the group yet. Join it, then tap again.",
+	TooSoon = "Checked a moment ago. Tap again in a few seconds.",
+	Unavailable = "Couldn't check right now. Try again later.",
+	Owned = "Already yours. Find it below.",
+}
+
+local function communityOffered(): boolean
+	local config = GameConfig.community
+	local def = cosmeticDefs[config.rewardCosmeticId]
+	local state = storeState()
+	return config.groupId > 0
+		and def ~= nil
+		and def.enabled
+		and state ~= nil
+		and table.find(state.ownedCosmetics, config.rewardCosmeticId) == nil
+end
+
+local function checkCommunity()
+	if communityBusy then
+		return
+	end
+	communityBusy = true
+	communityText("Opening the join prompt...")
+	task.spawn(function()
+		local ok, status = pcall(GroupService.PromptJoinAsync, GroupService, GameConfig.community.groupId)
+		if ok and status == Enum.GroupMembershipStatus.JoinRequestPending then
+			communityText("Join request sent. Tap again once it's accepted.")
+			communityBusy = false
+		elseif ok and status == Enum.GroupMembershipStatus.None then
+			communityText("Join the Studio Corvus community, then tap here.")
+			communityBusy = false
+		else
+			-- Joined, already a member, or the prompt failed (it may have
+			-- been joined on the website): either way, let the server look.
+			communityText("Checking...")
+			Net.fireServer("CommunityRewardCheck", {})
+		end
+	end)
+end
+
 -- "Same as last round", from the Locker or the queue strip. The server
 -- picks what goes in, from the profile.
 local function repeatLastLoadout()
@@ -348,6 +398,12 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 				return def and def.rarity
 			end,
 			categoryOrder = COSMETIC_CATEGORY_ORDER,
+			community = {
+				offered = communityOffered,
+				name = cosmeticName(GameConfig.community.rewardCosmeticId),
+				text = communityText,
+				check = checkCommunity,
+			},
 			setSlot = function(slotIndex: number, powerUpId: string?)
 				Net.fireServer("StoreLoadoutIntent", { slotIndex = slotIndex, powerUpId = powerUpId })
 			end,
@@ -592,6 +648,25 @@ function MenuController:init()
 		end
 		storeState(payload)
 		stepFlow({ type = "State", state = payload })
+	end)
+	Net.onClientEvent("CommunityRewardResult", function(payload: any)
+		communityBusy = false
+		local status = if type(payload) == "table" then payload.status else nil
+		if status == "Granted" then
+			communityText("Join the Studio Corvus community, then tap here.")
+			local grant = { kind = "Cosmetic", cosmeticId = GameConfig.community.rewardCosmeticId }
+			ClaimPopup.open({
+				{
+					premium = true,
+					text = grantText(grant :: any),
+					icon = SeasonTrackLogic.iconFor(grant :: any),
+					image = grantImage(grant :: any),
+				},
+			})
+			Loader.get("AudioController").play("SeasonClaim")
+		elseif type(status) == "string" and COMMUNITY_TEXT[status] then
+			communityText(COMMUNITY_TEXT[status])
+		end
 	end)
 	Net.onClientEvent("StorePurchaseResult", function(payload: any)
 		if type(payload.key) == "string" and type(payload.status) == "string" then

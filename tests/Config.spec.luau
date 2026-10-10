@@ -214,6 +214,7 @@ local function validGameConfig(): Validate.GameConfig
 			taskId = "pressure-valve",
 		},
 		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
+		community = { groupId = 0, rewardCosmeticId = "hat-ltd", recheckCooldownSeconds = 10 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
 		telemetry = {
 			enabled = true,
@@ -2747,6 +2748,62 @@ TestRunner.describe("Validate - streak buy-back tiers", function()
 	end)
 end)
 
+-- ===== The community reward (Q1, 2026-10-09) ============================
+
+TestRunner.describe("Validate - community reward", function()
+	local function runCommunity(config: Validate.GameConfig, cosmetic: Validate.CosmeticDef?): { Validate.Issue }
+		return Validate.run({
+			gameConfig = config,
+			maps = {},
+			tasks = {},
+			powerUps = { { fileName = "SprintBoost.luau", def = validPowerUp("sprint-boost") } },
+			titles = {},
+			cosmetics = { { fileName = "Pack.luau", def = cosmetic or validCosmetic("pack", "Skin") } },
+		})
+	end
+	local function on(): Validate.GameConfig
+		local config = validGameConfig()
+		config.community = { groupId = 250844631, rewardCosmeticId = "pack", recheckCooldownSeconds = 10 }
+		return config
+	end
+
+	TestRunner.it("accepts an enabled cosmetic nothing else hands out", function()
+		TestRunner.expect(#runCommunity(on())):toBe(0)
+	end)
+
+	TestRunner.it("refuses an unknown cosmetic, allows a disabled one", function()
+		local config = on()
+		config.community.rewardCosmeticId = "nope"
+		TestRunner.expect(#runCommunity(config) > 0):toBeTruthy()
+		local pack = validCosmetic("pack", "Skin")
+		pack.enabled = false
+		pack.shirtAssetId = 0
+		pack.pantsAssetId = 0
+		TestRunner.expect(#runCommunity(on(), pack)):toBe(0)
+	end)
+
+	TestRunner.it("refuses a win drop or a leaderboard prize", function()
+		local pack = validCosmetic("pack", "Skin")
+		pack.winDrop = true
+		TestRunner.expect(#runCommunity(on(), pack) > 0):toBeTruthy()
+		local config = on()
+		config.leaderboard.payouts = { Weekly = { { maxRank = 1, currency = 100, cosmeticId = "pack" } } }
+		TestRunner.expect(#runCommunity(config) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("is unchecked when switched off, but the block must be sane", function()
+		local config = on()
+		config.community.groupId = 0
+		config.community.rewardCosmeticId = "nope"
+		TestRunner.expect(#runCommunity(config)):toBe(0)
+		config.community.recheckCooldownSeconds = 1
+		TestRunner.expect(#runCommunity(config) > 0):toBeTruthy()
+		config.community.groupId = 1.5
+		config.community.recheckCooldownSeconds = 10
+		TestRunner.expect(#runCommunity(config) > 0):toBeTruthy()
+	end)
+end)
+
 -- ===== Sales, limited cosmetics and plinths (Q1, 2026-10-09) =============
 
 local function runSelling(
@@ -2801,6 +2858,12 @@ TestRunner.describe("Validate - sales and limited cosmetics", function()
 	TestRunner.it("refuses selling a leaderboard prize", function()
 		local config = validGameConfig()
 		config.leaderboard.payouts = { Weekly = { { maxRank = 1, currency = 100, cosmeticId = "hat-ltd" } } }
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } }, nil, config) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses selling the community reward", function()
+		local config = validGameConfig()
+		config.community.groupId = 1
 		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } }, nil, config) > 0):toBeTruthy()
 	end)
 
