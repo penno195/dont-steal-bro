@@ -20,7 +20,8 @@
 -- does). A failed audit write warns and doesn't undo the gift, the same
 -- as LiveConfig's audit; the server log line is the fallback record.
 --
--- Step 3 (the gift pop-up) hooks in through onGifted.
+-- Step 3 (the gift pop-up) hooks in through onGifted: each recipient
+-- gets a GiftReceived naming the staff member and the item.
 --
 -- VERIFIED APIs (globalTypes.d.luau):
 --   DataStoreService:GetDataStore(name) -> DataStore
@@ -186,6 +187,17 @@ function StaffService:start()
 	local NetGuard = Loader.get("NetGuard") :: any
 	NetGuard.on("StaffGrantIntent", function(player: Player, payload: any)
 		handleGrant(player, payload)
+	end)
+
+	-- Step 3: tell the recipient. Their client holds the pop-up until
+	-- the race ends (GiftLogic); the gift itself is already theirs.
+	gifted.Event:Connect(function(recipient: Player, staff: Player, gift: StaffGrantLogic.Gift)
+		Net.fireClient("GiftReceived", recipient, {
+			from = staff.DisplayName,
+			kind = gift.kind,
+			amount = gift.amount,
+			cosmeticId = gift.cosmeticId,
+		})
 	end)
 end
 

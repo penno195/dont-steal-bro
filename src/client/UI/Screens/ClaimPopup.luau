@@ -4,6 +4,7 @@
 -- Claim All just paid, as a row of reward cards in the pass rows' gold
 -- (pass) and blue (free), popping in over the store. The caller plays the
 -- SeasonClaim cue alongside it - UI modules don't reach controllers.
+-- The community reward and staff gifts (GiftLogic) reuse it.
 --
 -- Display only: what was paid is the server's (SeasonLogic.claim), read
 -- back from StoreState by SeasonTrackLogic.claimedBetween.
@@ -108,11 +109,14 @@ end
 local ClaimPopup = {}
 
 -- Opens the pop-up over whatever is on screen; returns `close`. A second
--- claim while it's up replaces it (Modal is one at a time).
-function ClaimPopup.open(rewards: { Reward }): () -> ()
+-- claim while it's up replaces it (Modal is one at a time). `title` and
+-- `body` override the claim wording (the staff gift pop-up's "GIFT
+-- RECEIVED!" / "From <name>").
+function ClaimPopup.open(rewards: { Reward }, title: string?, body: string?): () -> ()
 	local close: () -> () = function() end
 	close = C.Modal.open({
-		title = if #rewards == 1 then "REWARD CLAIMED!" else string.format("%d REWARDS CLAIMED!", #rewards),
+		title = title or if #rewards == 1 then "REWARD CLAIMED!" else string.format("%d REWARDS CLAIMED!", #rewards),
+		body = body,
 		dismissible = true,
 		onDismiss = function()
 			close()

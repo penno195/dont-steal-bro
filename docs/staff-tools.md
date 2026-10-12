@@ -29,9 +29,16 @@ finishes it.
   then shows the pass as owned. Audit at `liveOps.staffAuditKey`
   (`docs/live-ops.md`). `StaffService.onGifted` is step 3's hook. Not
   yet tested in Studio: there's no panel until step 4.*
-- [ ] **3. Gift pop-up.** The receiving player sees "Gift received from
+- [x] **3. Gift pop-up.** The receiving player sees "Gift received from
   <staff name>" with the item, and the item lands in their inventory.
   If they're mid-race, the pop-up waits until the race ends.
+  *Built 2026-10-12: `GiftReceived` (staff display name + the gift),
+  fired from `StaffService.onGifted`; drawn by MenuController through
+  `ClaimPopup` (now takes a title and body) with `GiftLogic` specs.
+  Held while the round is in play and through the Studio's reveal,
+  then everything held shows in one pop-up. On a match server that
+  leaves about 7 s of Results before everyone goes home. Not yet
+  tested in Studio: there's no panel until step 4.*
 - [ ] **4. Staff panel (client).** A screen only staff can open, for
   picking a player in the server, then an item, then Give. It shows
   names only, never streaks or titles (Q7 condition 1).

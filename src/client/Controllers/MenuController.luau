@@ -60,6 +60,7 @@ local ResultsScreen = require(script.Parent.Parent.UI.Screens.Results)
 local SettingsScreen = require(script.Parent.Parent.UI.Screens.Settings)
 local StoreScreen = require(script.Parent.Parent.UI.Screens.Store)
 local ClaimPopup = require(script.Parent.Parent.UI.Screens.ClaimPopup)
+local GiftLogic = require(script.Parent.Parent.UI.GiftLogic)
 local DecisionStudioController = require(script.Parent.DecisionStudioController)
 local SettingsController = require(script.Parent.SettingsController)
 local UIScaleController = require(script.Parent.UIScaleController)
@@ -83,15 +84,22 @@ local FLOW_TICK = 0.5
 -- are to the minute, and the server refuses anything that just ended.
 local OFFER_TICK = 30
 local STUDIO_POLL = 0.25
+-- A staff gift waits this long before it pops, so a few given in quick
+-- succession share one pop-up.
+local GIFT_BATCH = 0.5
 
 -- ===== static config =========================================================
 
 local items: { StoreScreenLogic.Item } = {}
 local byAssetId: { [number]: string } = {}
+local imageByKey: { [string]: number } = {} -- store art, for gift cards
 for _, entry in StoreConfig do
 	table.insert(items, entry.def :: any)
 	if entry.def.assetId ~= 0 then
 		byAssetId[entry.def.assetId] = entry.def.key
+	end
+	if entry.def.imageAssetId ~= 0 then
+		imageByKey[entry.def.key] = entry.def.imageAssetId
 	end
 end
 
@@ -586,6 +594,54 @@ local function onRoundState(state: string)
 	syncLauncher()
 end
 
+-- ===== staff gifts ===========================================================
+-- staff-tools.md step 3. The gift is already in the profile; this only
+-- says so. Mid-race, and through the Studio's reveal, gifts wait and
+-- then pop up together (GiftLogic).
+
+local heldGifts: { GiftLogic.Gift } = {}
+local giftWaiting = false
+
+local function showGifts()
+	local gifts = heldGifts
+	heldGifts = {}
+	if #gifts == 0 then
+		return
+	end
+	local shown: { ClaimPopup.Reward } = {}
+	for _, gift in gifts do
+		local key = GiftLogic.storeKey(gift)
+		table.insert(shown, {
+			premium = true,
+			text = GiftLogic.text(gift, cosmeticName),
+			icon = GiftLogic.icon(gift),
+			image = if gift.kind == "Cosmetic"
+				then grantImage({ kind = "Cosmetic", cosmeticId = gift.cosmeticId } :: any)
+				elseif key then imageByKey[key]
+				else nil,
+		})
+	end
+	local title, body = GiftLogic.heading(gifts)
+	ClaimPopup.open(shown, title, body)
+	Loader.get("AudioController").play("SeasonClaim")
+end
+
+local function holdGift(gift: GiftLogic.Gift)
+	table.insert(heldGifts, gift)
+	if giftWaiting then
+		return
+	end
+	giftWaiting = true
+	task.spawn(function()
+		task.wait(GIFT_BATCH)
+		while IN_PLAY[roundState() or ""] or DecisionStudioController.isActive() do
+			task.wait(STUDIO_POLL)
+		end
+		giftWaiting = false
+		showGifts()
+	end)
+end
+
 local MenuController: Loader.Controller = {
 	name = "MenuController",
 	dependencies = { "UIScaleController", "SettingsController", "DecisionStudioController" },
@@ -666,6 +722,12 @@ function MenuController:init()
 			Loader.get("AudioController").play("SeasonClaim")
 		elseif type(status) == "string" and COMMUNITY_TEXT[status] then
 			communityText(COMMUNITY_TEXT[status])
+		end
+	end)
+	Net.onClientEvent("GiftReceived", function(payload: any)
+		local gift = GiftLogic.read(payload)
+		if gift ~= nil then
+			holdGift(gift)
 		end
 	end)
 	Net.onClientEvent("StorePurchaseResult", function(payload: any)

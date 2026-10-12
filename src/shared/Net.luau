@@ -1117,6 +1117,16 @@ Net.Remotes = {
 		direction = "ServerBroadcast",
 	} :: RemoteDef,
 
+	-- Server -> a gift's recipient (fireClient), once it's in their
+	-- profile (staff-tools.md step 3): { from = the staff member's
+	-- display name, kind, amount?, cosmeticId? } as StaffGrantLogic.Gift.
+	-- Display only - the client holds the pop-up while mid-race
+	-- (GiftLogic). Never a streak (Q7 condition 1).
+	GiftReceived = {
+		name = "GiftReceived",
+		direction = "ServerBroadcast",
+	} :: RemoteDef,
+
 	-- Client -> server: equip a cosmetic into a slot, or unequip with a
 	-- nil itemId. Validated against the player's own owned list
 	-- server-side - a client naming a cosmetic it never bought is

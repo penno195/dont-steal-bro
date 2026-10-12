@@ -71,5 +71,6 @@ require("./LockerLogic.spec")
 require("./TimingLogic.spec")
 require("./TelemetryLogic.spec")
 require("./StaffGrantLogic.spec")
+require("./GiftLogic.spec")
 
 TestRunner.run()
