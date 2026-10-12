@@ -527,6 +527,22 @@ export type PlinthModel = {
 	rotation: { number }?,
 }
 
+-- ===== EventDef: staff-tools.md step 5 ==================================
+-- One file per themed event in src/shared/Config/Events/ (design-
+-- decisions.md "Applied case: staff tools"). Staff start one by hand
+-- from the staff panel, for a set number of minutes, and it runs in
+-- every Hub server at once (owner, 2026-10-12: manual only, no
+-- schedule). It shows in the lobby only: its music replaces the hub
+-- bed, and its client view (src/client/EventViews/<view>.luau) draws
+-- whatever that event looks like. Races and the Studio are untouched.
+export type EventDef = {
+	id: string,
+	enabled: boolean, -- false = left off the staff panel and refused by the server
+	displayName: string, -- "Taco Tuesday"
+	musicAssetId: string, -- "rbxassetid://<n>", looped in place of the hub music
+	view: string, -- the EventViews module that draws it
+}
+
 -- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
 -- One file per season in src/shared/Config/Seasons/ (design-decisions.md
 -- Q1's 2026-09-30 revision, applied 2026-10-02). A season is one calendar
@@ -621,6 +637,10 @@ export type LiveOpsConfig = {
 	auditLogCap: number,
 	staffAuditKey: string, -- staff grants' audit log, same DataStore
 	staffAuditLogCap: number,
+	eventKey: string, -- the live event's state (staff-tools.md step 5), same DataStore
+	eventAuditKey: string, -- event starts and stops
+	eventAuditLogCap: number,
+	eventTopic: string, -- MessagingService topic that tells every server at once
 	adminUserIds: { number },
 	tunablePaths: { string }, -- "<root>.<seg>..."; "*" = one segment, trailing "**" = any depth
 }
@@ -2161,6 +2181,27 @@ local function checkSeasonTrack(fileName: string, trackName: string, track: any,
 	end
 end
 
+function Validate.checkEvent(fileName: string, def: EventDef, issues: { Issue })
+	if not isNonEmptyString(def.id) then
+		issue(issues, "Event", fileName, "id", "id must be a non-empty string")
+	elseif #def.id > 64 then
+		-- StaffEventIntent's eventId cap in Net.luau.
+		issue(issues, "Event", fileName, "id", "id must be at most 64 characters")
+	end
+	if type(def.enabled) ~= "boolean" then
+		issue(issues, "Event", fileName, "enabled", "enabled must be a boolean")
+	end
+	if not isNonEmptyString(def.displayName) then
+		issue(issues, "Event", fileName, "displayName", "displayName must be a non-empty string")
+	end
+	if type(def.musicAssetId) ~= "string" or string.match(def.musicAssetId, "^rbxassetid://%d+$") == nil then
+		issue(issues, "Event", fileName, "musicAssetId", 'musicAssetId must look like "rbxassetid://<number>"')
+	end
+	if type(def.view) ~= "string" or string.match(def.view, "^%a%w*$") == nil then
+		issue(issues, "Event", fileName, "view", "view must name a module in src/client/EventViews")
+	end
+end
+
 function Validate.checkSeason(fileName: string, def: SeasonDef, issues: { Issue })
 	if not isNonEmptyString(def.id) then
 		issue(issues, "Season", fileName, "id", "id must be a non-empty string")
@@ -3500,7 +3541,17 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		if type(liveOps.enabled) ~= "boolean" then
 			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.enabled", "must be a boolean")
 		end
-		for _, field in { "dataStoreName", "envelopeKey", "auditKey", "staffAuditKey" } do
+		for _, field in
+			{
+				"dataStoreName",
+				"envelopeKey",
+				"auditKey",
+				"staffAuditKey",
+				"eventKey",
+				"eventAuditKey",
+				"eventTopic",
+			}
+		do
 			if not isNonEmptyString((liveOps :: any)[field]) then
 				issue(issues, "GameConfig", "GameConfig.luau", "liveOps." .. field, "must be a non-empty string")
 			end
@@ -3514,13 +3565,42 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.refreshSeconds", "must be at least 15")
 		end
 		if liveOps.staffAuditKey == liveOps.envelopeKey or liveOps.staffAuditKey == liveOps.auditKey then
-			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.staffAuditKey", "must differ from envelopeKey and auditKey")
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"liveOps.staffAuditKey",
+				"must differ from envelopeKey and auditKey"
+			)
 		end
 		if liveOps.staffAuditLogCap < 1 then
 			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.staffAuditLogCap", "must be at least 1")
 		end
 		if liveOps.auditLogCap < 1 then
 			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.auditLogCap", "must be at least 1")
+		end
+		-- The event keys share the one DataStore, so each names its own
+		-- record (the checks above cover the older three).
+		local keys: { [string]: string } = {}
+		for _, field in { "envelopeKey", "auditKey", "staffAuditKey", "eventKey", "eventAuditKey" } do
+			local key = (liveOps :: any)[field]
+			if type(key) ~= "string" then
+				continue
+			end
+			if keys[key] ~= nil and (field == "eventKey" or field == "eventAuditKey") then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"liveOps." .. field,
+					string.format("must differ from %s (both are %q)", keys[key], key)
+				)
+			elseif keys[key] == nil then
+				keys[key] = field
+			end
+		end
+		if type(liveOps.eventAuditLogCap) ~= "number" or liveOps.eventAuditLogCap < 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.eventAuditLogCap", "must be at least 1")
 		end
 		for i, userId in liveOps.adminUserIds do
 			if type(userId) ~= "number" or userId <= 0 or userId ~= math.floor(userId) then
@@ -3741,6 +3821,9 @@ export type RegistryInput = {
 	-- Rewards step 5. Optional for the same reason - none passed is "no
 	-- seasons", and then every GamePass is left unchecked against them.
 	seasons: { { fileName: string, def: SeasonDef } }?,
+
+	-- Staff tools step 5. Optional for the same reason.
+	events: { { fileName: string, def: EventDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -4298,6 +4381,14 @@ function Validate.run(input: RegistryInput): { Issue }
 			end
 			nextMin = (tier.max or tier.min) + 1
 		end
+	end
+
+	local events = input.events
+	if events ~= nil then
+		for _, entry in events do
+			Validate.checkEvent(entry.fileName, entry.def, issues)
+		end
+		checkDuplicateIds("Event", events :: any, issues)
 	end
 
 	-- ===== rewards step 5's season cross-checks =========================

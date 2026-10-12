@@ -69,6 +69,11 @@ to use the zone. Walk times are measured to it, and wayfinding can reuse it.
 
 ## Doors
 
+Optional: parts tagged `EventDiscoAnchor` (anywhere under `Workspace.Hub`)
+are where the Taco Tuesday event hangs its disco balls, one under each.
+With none tagged, it puts three over the spawn plaza
+(`src/client/EventViews/TacoTuesday.luau`).
+
 Proximity doors work anywhere (hub or a race map); adding one is tagging
 it, never editing code (`DoorService`, `DoorController`, `DoorLogic`).
 

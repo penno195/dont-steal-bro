@@ -40,6 +40,7 @@ local Workspace = game:GetService("Workspace")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local Events = require(ReplicatedStorage.Shared.Config.Events)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -255,6 +256,44 @@ local function staffGive(payload: { [string]: any })
 		if sent == staffSent and staffBusy() then
 			staffBusy(false)
 			staffResult({ ok = false, message = "No reply from the server. Wait a moment and try again." })
+		end
+	end)
+end
+
+-- Events (step 5): the panel's second tab. What's on comes from the
+-- attributes EventService sets in Hub servers.
+local staffEvents: { StaffPanelLogic.EventEntry } = {}
+local staffEventNames: { [string]: string } = {}
+for _, entry in Events do
+	staffEventNames[entry.def.id] = entry.def.displayName
+	if entry.def.enabled then
+		table.insert(staffEvents, { id = entry.def.id, name = entry.def.displayName })
+	end
+end
+local staffEventResult = source(nil :: StaffPanelLogic.Result?)
+local staffEventBusy = source(false)
+local staffEventSent = 0
+local liveEvent = source(nil :: { id: string, endsAt: number }?)
+
+local function readLiveEvent()
+	local id = ReplicatedStorage:GetAttribute("LiveEventId")
+	local endsAt = ReplicatedStorage:GetAttribute("LiveEventEndsAt")
+	if type(id) == "string" and type(endsAt) == "number" then
+		liveEvent({ id = id, endsAt = endsAt })
+	else
+		liveEvent(nil)
+	end
+end
+
+local function staffSendEvent(payload: { [string]: any })
+	staffEventBusy(true)
+	staffEventSent += 1
+	local sent = staffEventSent
+	Net.fireServer("StaffEventIntent", payload)
+	task.delay(STAFF_REPLY_WAIT, function()
+		if sent == staffEventSent and staffEventBusy() then
+			staffEventBusy(false)
+			staffEventResult({ ok = false, message = "No reply from the server. Wait a moment and try again." })
 		end
 	end)
 end
@@ -487,6 +526,8 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 		})
 	elseif menu == "Staff" then
 		staffResult(nil)
+		staffEventResult(nil)
+		readLiveEvent()
 		refreshStaffPlayers()
 		unmountMenu = StaffPanelScreen.mount(UIScaleController, {
 			players = staffPlayers,
@@ -496,6 +537,17 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 			busy = staffBusy,
 			give = staffGive,
 			close = closeMenu,
+			events = staffEvents,
+			eventName = function(id: string): string
+				return staffEventNames[id] or id
+			end,
+			live = liveEvent,
+			serverNow = function(): number
+				return Workspace:GetServerTimeNow()
+			end,
+			eventResult = staffEventResult,
+			eventBusy = staffEventBusy,
+			sendEvent = staffSendEvent,
 		})
 	else
 		unmountMenu = SettingsScreen.mount(UIScaleController, {
@@ -619,14 +671,15 @@ local function mountLauncher()
 		if isStaff then
 			C.IconButton({
 				icon = "gift",
-				label = "Staff gifts",
+				label = "Staff",
 				variant = "secondary",
 				onActivate = function()
 					open("Staff")
 				end,
 				order = 5,
 				layoutOrder = 5,
-			}).Parent = column
+			}).Parent =
+				column
 		end
 		UIScaleController.attachScale(column)
 	end)
@@ -824,6 +877,15 @@ function MenuController:init()
 				staffResult(result)
 			end
 		end)
+		Net.onClientEvent("StaffEventResult", function(payload: any)
+			local result = StaffPanelLogic.readResult(payload)
+			if result ~= nil then
+				staffEventBusy(false)
+				staffEventResult(result)
+			end
+		end)
+		ReplicatedStorage:GetAttributeChangedSignal("LiveEventId"):Connect(readLiveEvent)
+		ReplicatedStorage:GetAttributeChangedSignal("LiveEventEndsAt"):Connect(readLiveEvent)
 		-- The panel's player list follows the server while it's open.
 		Players.PlayerAdded:Connect(refreshStaffPlayers)
 		Players.PlayerRemoving:Connect(function(leaving: Player)

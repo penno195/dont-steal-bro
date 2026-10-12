@@ -55,10 +55,28 @@ finishes it.
   reply that never comes clears after 10 s. Tested in Studio solo:
   100 coins to everyone -> server grant -> pop-up, which also covers
   steps 2 and 3.*
-- [ ] **5. Events.** A themed event (e.g. "Taco Tuesday") with a name,
+- [x] **5. Events.** A themed event (e.g. "Taco Tuesday") with a name,
   a music track and a schedule or a manual start. It runs in **every
   server at once**. During it, staff hand out gifts the step 2 way, to
   one chosen player or to everyone in their own server.
+  *Built 2026-10-12. Owner: **manual start only** (no schedule), for
+  a set number of minutes (1 to 1440) or until stopped; **lobby only**
+  (its music replaces the hub bed; races and the Studio are
+  untouched); each event has **its own look**. An event is one file in
+  `Config/Events/` (name, music, view) plus one client module in
+  `src/client/EventViews/`. The staff panel's new Events tab starts and
+  stops it (two taps each). `EventService` + `EventLogic` (specs) keep
+  one versioned record at `liveOps.eventKey`, tell every Hub at once
+  through MessagingService (`eventTopic`), and every Hub re-reads it
+  each refresh as a backstop. Audit at `liveOps.eventAuditKey`. Hubs
+  show it through the ReplicatedStorage attributes `LiveEventId` /
+  `LiveEventEndsAt`; `EventController` runs the view and
+  `AudioController` the music. Taco Tuesday: tacos rain round each
+  player (Creator Store mesh "roblox-taco-v2") and three disco balls
+  spin over the spawn plaza, or under any part tagged
+  `EventDiscoAnchor`. Tested in Studio solo: start, stop, a bad id, a
+  restart picking up a running event. Cross-server delivery needs a
+  live test with two Hub servers.*
 
 ## Settled (owner, 2026-10-12)
 

@@ -236,4 +236,39 @@ function StaffPanelLogic.readResult(payload: any): Result?
 	}
 end
 
+-- ===== events (step 5) ======================================================
+--
+-- The panel's second tab starts or stops a themed event in every lobby.
+-- EventService checks the sender and every field again (EventLogic).
+
+-- Quick picks for how long an event runs, in minutes.
+StaffPanelLogic.EVENT_MINUTES = { 30, 60, 120 }
+-- EventLogic.MAX_MINUTES, copied (a client module can't require a server
+-- one), as is Net.luau's StaffEventIntent cap - change all three.
+StaffPanelLogic.MAX_EVENT_MINUTES = 1440
+
+export type EventEntry = { id: string, name: string }
+
+-- A StaffEventIntent "Start" for the picked event and the minutes box,
+-- or nil and what's missing.
+function StaffPanelLogic.eventPayload(eventId: string?, minutesText: string): ({ [string]: any }?, string?)
+	if eventId == nil then
+		return nil, "Pick an event"
+	end
+	local minutes = StaffPanelLogic.parseAmount(minutesText)
+	if minutes == nil or minutes > StaffPanelLogic.MAX_EVENT_MINUTES then
+		return nil, string.format("Run it for 1 to %d minutes", StaffPanelLogic.MAX_EVENT_MINUTES)
+	end
+	return { action = "Start", eventId = eventId, minutes = minutes }, nil
+end
+
+-- "Taco Tuesday is on, 42 min left", or nil when nothing is. `now` and
+-- `endsAt` are both server time (os.time on the server).
+function StaffPanelLogic.liveLine(id: string?, endsAt: number?, now: number, nameOf: (string) -> string): string?
+	if id == nil or endsAt == nil or now >= endsAt then
+		return nil
+	end
+	return string.format("%s is on, %d min left", nameOf(id), math.ceil((endsAt - now) / 60))
+end
+
 return StaffPanelLogic

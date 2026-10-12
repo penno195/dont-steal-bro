@@ -687,6 +687,14 @@ local GameConfig: Validate.GameConfig = {
 		-- it reached. A full server gift is one entry.
 		staffAuditKey = "staffGrants",
 		staffAuditLogCap = 1000,
+		-- Events (staff-tools.md step 5). eventKey holds the one live
+		-- event (or none); every server reads it each refresh, and the
+		-- MessagingService topic gets a start or stop to every server
+		-- within seconds instead of a minute.
+		eventKey = "liveEvent",
+		eventAuditKey = "staffEvents",
+		eventAuditLogCap = 200,
+		eventTopic = "LiveEvent",
 		-- The developers' Roblox user ids. Empty = nobody can run admin
 		-- commands (edit the DataStore by hand instead).
 		adminUserIds = {

@@ -17,7 +17,9 @@
 -- BEDS. Hub, race and Studio music are three looped Sounds that crossfade
 -- (AudioLogic.BED_FADE) as the round state changes; the race tension stem
 -- rides on top of the race bed. A bed at zero fade is stopped, not just
--- silent, so it costs nothing.
+-- silent, so it costs nothing. While a themed event is on (the Hub's
+-- LiveEventId attribute, staff-tools.md step 5) its track is a fourth
+-- bed that plays instead of the hub bed (AudioLogic.withEvent).
 --
 -- CLEANUP. Loading, Cleanup and WaitingForPlayers end the round for audio:
 -- every one-shot stops, every duck clears, per-round memory resets, and a
@@ -35,6 +37,7 @@ local Workspace = game:GetService("Workspace")
 local Clock = require(ReplicatedStorage.Shared.Clock)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Maps = require(ReplicatedStorage.Shared.Config.Maps)
+local Events = require(ReplicatedStorage.Shared.Config.Events)
 local Net = require(ReplicatedStorage.Shared.Net)
 local AudioLogic = require(script.Parent.Parent.UI.AudioLogic)
 local DecisionLogic = require(script.Parent.Parent.UI.DecisionLogic)
@@ -60,16 +63,20 @@ type Track = { cueId: string, sound: Sound?, assetId: string, fade: number, targ
 local function track(cueId: string): Track
 	return { cueId = cueId, sound = nil, assetId = CUES[cueId].assetId, fade = 0, target = 0 }
 end
-local beds: { Hub: Track, Race: Track, Studio: Track } = {
+local beds: { Hub: Track, Race: Track, Studio: Track, Event: Track } = {
 	Hub = track("HubAmbience"),
 	Race = track("RaceBed"),
 	Studio = track("StudioBed"),
+	Event = track("EventBed"),
 }
 local bedList: { { key: AudioLogic.Bed, track: Track } } = {
 	{ key = "Hub", track = beds.Hub },
 	{ key = "Race", track = beds.Race },
 	{ key = "Studio", track = beds.Studio },
+	{ key = "Event", track = beds.Event },
 }
+local currentBed: AudioLogic.Bed = "Hub"
+local eventMusic: string? = nil -- the live event's track, or nil
 local tension = track("RaceTension")
 
 -- Per-round memory. resetRound() clears all of it.
@@ -225,6 +232,8 @@ local function currentMapMusic(): string?
 end
 
 local function setBed(bed: AudioLogic.Bed)
+	currentBed = bed
+	bed = AudioLogic.withEvent(bed, eventMusic)
 	if bed == "Race" then
 		local assetId = AudioLogic.resolveRaceBed(currentMapMusic())
 		local race = beds.Race
@@ -493,9 +502,32 @@ function AudioController:init()
 	end)
 end
 
+-- The live event's music, from the attribute EventService sets. A swap
+-- mid-play (one event replacing another) cuts straight over; that's
+-- staff's call and rare.
+local function onLiveEvent()
+	local id = ReplicatedStorage:GetAttribute("LiveEventId")
+	eventMusic = nil
+	for _, entry in Events do
+		if entry.def.id == id then
+			eventMusic = entry.def.musicAssetId
+		end
+	end
+	local event = beds.Event
+	if eventMusic ~= nil and eventMusic ~= event.assetId then
+		event.assetId = eventMusic
+		if event.sound ~= nil then
+			event.sound.SoundId = eventMusic
+		end
+	end
+	setBed(currentBed)
+end
+
 function AudioController:start()
 	-- No RoundState yet means the hub (it never runs a round).
 	setBed(AudioLogic.bedFor(roundState))
+	ReplicatedStorage:GetAttributeChangedSignal("LiveEventId"):Connect(onLiveEvent)
+	onLiveEvent()
 	RunService.Heartbeat:Connect(onHeartbeat)
 end
 

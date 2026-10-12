@@ -82,6 +82,15 @@ the staff user id, the target (`Player` or `Server`), the gift, and the
 user ids it was `delivered` to and `failed` for. Capped at
 `staffAuditLogCap` (1000). Each give also prints a line to the server log.
 
+Events (`staff-tools.md` step 5) live in the same DataStore too. The
+running one is one record under `eventKey` (`liveEvent`): `{ version,
+id, startedAt, endsAt, by }`, where `endsAt` is `os.time()` and a stop
+rewrites it to the moment it stopped. Starts and stops are logged under
+`eventAuditKey` (`staffEvents`), capped at `eventAuditLogCap` (200).
+Staff use the staff panel's Events tab; to end an event by hand in an
+emergency, delete the `liveEvent` key in the Creator Hub, and every
+lobby drops it at its next refresh.
+
 ## What each switch does
 
 | Switch | Where | Behaviour when off |

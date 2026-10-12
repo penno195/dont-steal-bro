@@ -48,7 +48,7 @@ export type CueDef = {
 	startAt: number?,
 }
 
-export type Bed = "Hub" | "Race" | "Studio" | "None"
+export type Bed = "Hub" | "Race" | "Studio" | "Event" | "None"
 
 AudioLogic.PLACEHOLDER_ASSET = "rbxassetid://0"
 
@@ -73,6 +73,19 @@ AudioLogic.CUES = table.freeze({
 		assetId = "rbxassetid://80257380636383", -- APM "Game Lobby" (182 s), owner's pick
 		category = "Music",
 		volume = 0.125, -- halved twice 2026-10-08: the owner found 0.5, then 0.25, overpowering
+		looped = true,
+		spatial = false,
+		priority = 100,
+		cooldown = 0,
+	}),
+	-- A themed event's track (staff-tools.md step 5), playing in place
+	-- of HubAmbience while the event is on. The asset comes from the
+	-- event's config (EventDef.musicAssetId), set before the bed ever
+	-- plays; the hub track here is only a stand-in. This is its mix.
+	EventBed = cue({
+		assetId = "rbxassetid://80257380636383",
+		category = "Music",
+		volume = 0.2, -- a touch over HubAmbience: the song is the event
 		looped = true,
 		spatial = false,
 		priority = 100,
@@ -353,6 +366,15 @@ function AudioLogic.bedFor(state: string?): Bed
 		return "Hub"
 	end
 	return BED_FOR_STATE[state] or "None"
+end
+
+-- A live event's music replaces the hub bed only (owner, 2026-10-12:
+-- events show in the lobby only), never the race or Studio beds.
+function AudioLogic.withEvent(bed: Bed, eventMusicId: string?): Bed
+	if bed == "Hub" and not AudioLogic.isPlaceholder(eventMusicId) then
+		return "Event"
+	end
+	return bed
 end
 
 -- DUCKING ------------------------------------------------------------

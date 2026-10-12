@@ -72,6 +72,7 @@ require("./TimingLogic.spec")
 require("./TelemetryLogic.spec")
 require("./StaffGrantLogic.spec")
 require("./GiftLogic.spec")
+require("./EventLogic.spec")
 require("./StaffPanelLogic.spec")
 
 TestRunner.run()

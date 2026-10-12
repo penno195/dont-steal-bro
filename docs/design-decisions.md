@@ -725,6 +725,15 @@ is `staff-tools.md`.
 - **Events** (e.g. "Taco Tuesday", with themed music and staff gifts)
   run in every server at once. Gifts during an event follow the rule
   above. See `staff-tools.md`.
+- **How events run** (2026-10-12): staff **start them by hand** from
+  the staff panel, for a set number of minutes or until stopped. There
+  is no schedule: "Tuesday" is a theme, not a calendar rule. One event
+  runs at a time; starting one replaces the last. Events show **in the
+  lobby only**: the event's music replaces the hub music, and races
+  and the Decision Studio keep their own. **Each event has its own
+  look** (Taco Tuesday: raining tacos and disco balls, after the
+  Squishie merge game's taco event). Nothing about an event touches a
+  streak, so Q7 is unaffected.
 
 ### Applied case: the first-time tutorial (2026-10-10, user decision)
 

@@ -197,3 +197,41 @@ TestRunner.describe("StaffPanelLogic.readResult", function()
 		TestRunner.expect(StaffPanelLogic.readResult({ ok = true })):toBe(nil)
 	end)
 end)
+
+local describe, it, expect = TestRunner.describe, TestRunner.it, TestRunner.expect
+
+describe("StaffPanelLogic.eventPayload", function()
+	it("builds a Start for a picked event and whole minutes", function()
+		local payload = StaffPanelLogic.eventPayload("taco", "60") :: any
+		expect(payload.action):toBe("Start")
+		expect(payload.eventId):toBe("taco")
+		expect(payload.minutes):toBe(60)
+	end)
+
+	it("says what's missing instead", function()
+		local payload, missing = StaffPanelLogic.eventPayload(nil, "60")
+		expect(payload):toBe(nil)
+		expect(missing ~= nil):toBe(true)
+		for _, text in { "", "0", "abc", "1.5", tostring(StaffPanelLogic.MAX_EVENT_MINUTES + 1) } do
+			expect(StaffPanelLogic.eventPayload("taco", text)):toBe(nil)
+		end
+	end)
+end)
+
+describe("StaffPanelLogic.liveLine", function()
+	local function nameOf(id: string): string
+		return if id == "taco" then "Taco Tuesday" else id
+	end
+
+	it("names the event and rounds the time left up to a minute", function()
+		expect(StaffPanelLogic.liveLine("taco", 1000 + 41 * 60 + 1, 1000, nameOf)):toBe(
+			"Taco Tuesday is on, 42 min left"
+		)
+		expect(StaffPanelLogic.liveLine("taco", 1001, 1000, nameOf)):toBe("Taco Tuesday is on, 1 min left")
+	end)
+
+	it("is nil with no event or once it has ended", function()
+		expect(StaffPanelLogic.liveLine(nil, 2000, 1000, nameOf)):toBe(nil)
+		expect(StaffPanelLogic.liveLine("taco", 1000, 1000, nameOf)):toBe(nil)
+	end)
+end)

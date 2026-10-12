@@ -86,6 +86,18 @@ describe("AudioLogic.bedFor", function()
 	end)
 end)
 
+describe("AudioLogic.withEvent", function()
+	it("swaps only the hub bed, and only for a real track", function()
+		local taco = "rbxassetid://100847230469970"
+		expect(AudioLogic.withEvent("Hub", taco)):toBe("Event")
+		expect(AudioLogic.withEvent("Hub", nil)):toBe("Hub")
+		expect(AudioLogic.withEvent("Hub", AudioLogic.PLACEHOLDER_ASSET)):toBe("Hub")
+		expect(AudioLogic.withEvent("Race", taco)):toBe("Race")
+		expect(AudioLogic.withEvent("Studio", taco)):toBe("Studio")
+		expect(AudioLogic.withEvent("None", taco)):toBe("None")
+	end)
+end)
+
 describe("AudioLogic.duckEnvelope", function()
 	local duck = { level = 0.2, attack = 0.1, hold = 0.5, release = 0.4 }
 

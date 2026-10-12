@@ -237,6 +237,10 @@ local function validGameConfig(): Validate.GameConfig
 			auditLogCap = 200,
 			staffAuditKey = "staffGrants",
 			staffAuditLogCap = 1000,
+			eventKey = "liveEvent",
+			eventAuditKey = "staffEvents",
+			eventAuditLogCap = 200,
+			eventTopic = "LiveEvent",
 			adminUserIds = { 12345 },
 			tunablePaths = { "game.roundTimers.*", "game.npc.**", "powerUp.*.durationSeconds" },
 		},
@@ -2434,6 +2438,18 @@ TestRunner.describe("Validate.checkGameConfig (P8-5 liveOps)", function()
 		end)):toBe(1)
 	end)
 
+	TestRunner.it("rejects an event key sharing another key, or a zero event cap", function()
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.eventKey = lo.staffAuditKey
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.eventAuditKey = lo.eventKey
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.eventAuditLogCap = 0
+		end)):toBe(1)
+	end)
+
 	TestRunner.it("rejects a non-integer admin id", function()
 		TestRunner.expect(#issuesWith(function(lo)
 			lo.adminUserIds = { 1.5 }
@@ -3004,5 +3020,47 @@ TestRunner.describe("Validate - sales and limited cosmetics", function()
 		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } }) > 0):toBeTruthy()
 		def.enabled = false
 		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = def } })):toBe(0)
+	end)
+end)
+
+-- ===== events (staff tools step 5) =========================================
+
+local function validEvent(id: string): Validate.EventDef
+	return {
+		id = id,
+		enabled = true,
+		displayName = "Taco Tuesday",
+		musicAssetId = "rbxassetid://100847230469970",
+		view = "TacoTuesday",
+	}
+end
+
+local function runEvents(events: { { fileName: string, def: Validate.EventDef } }): { Validate.Issue }
+	return Validate.run({
+		gameConfig = validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = {},
+		titles = {},
+		events = events,
+	})
+end
+
+TestRunner.describe("Validate.checkEvent (staff tools step 5)", function()
+	TestRunner.it("accepts a well-formed event", function()
+		TestRunner.expect(#runEvents({ { fileName = "Taco.luau", def = validEvent("taco") } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a bad music id, a bad view name or a duplicate id", function()
+		local def = validEvent("taco")
+		def.musicAssetId = "100847230469970"
+		TestRunner.expect(#runEvents({ { fileName = "Taco.luau", def = def } })):toBe(1)
+		def = validEvent("taco")
+		def.view = "../Taco"
+		TestRunner.expect(#runEvents({ { fileName = "Taco.luau", def = def } })):toBe(1)
+		TestRunner.expect(#runEvents({
+			{ fileName = "A.luau", def = validEvent("taco") },
+			{ fileName = "B.luau", def = validEvent("taco") },
+		})):toBe(1)
 	end)
 end)

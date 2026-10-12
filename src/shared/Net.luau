@@ -1117,6 +1117,34 @@ Net.Remotes = {
 		direction = "ServerBroadcast",
 	} :: RemoteDef,
 
+	-- Client -> server: a staff member starts or stops a themed event
+	-- (staff-tools.md step 5). Gated like StaffGrantIntent: anyone can
+	-- fire it, EventService drops it with no reply unless the sender is
+	-- on liveOps.adminUserIds. "Start" needs eventId (a Config/Events id)
+	-- and minutes (EventLogic.MAX_MINUTES, copied); it replaces any
+	-- running event. "Stop" ends the running one. Either reaches every
+	-- Hub server. Which event is on is public, so it's replicated as the
+	-- ReplicatedStorage attributes LiveEventId / LiveEventEndsAt, not a
+	-- remote.
+	StaffEventIntent = {
+		name = "StaffEventIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			action = Net.stringEnum({ "Start", "Stop" }),
+			eventId = Net.optional(Net.string({ minLength = 1, maxLength = 64 })),
+			minutes = Net.optional(Net.number({ min = 1, max = 1440, integer = true })),
+		}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.2 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> the staff member who sent a StaffEventIntent: { ok,
+	-- message }, the same shape StaffPanelLogic.readResult reads.
+	StaffEventResult = {
+		name = "StaffEventResult",
+		direction = "ServerBroadcast",
+	} :: RemoteDef,
+
 	-- Server -> one player (fireClient), Hub only (staff-tools.md step
 	-- 3): { gifts = the profile's unseenGifts }, each { id, from = the
 	-- staff member's display name, kind, amount?, cosmeticId? }. Sent
