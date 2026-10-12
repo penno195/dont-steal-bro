@@ -17,12 +17,18 @@ finishes it.
   *Built 2026-10-12: profile v10 `streakSaves`, `StreakSave` grant kind
   (DeveloperProduct only), `UseStreakSaveIntent`. Product 3718198254
   created and enabled the same day.*
-- [ ] **2. Staff grants (server).** One staff-only remote, gated on
+- [x] **2. Staff grants (server).** One staff-only remote, gated on
   `liveOps.adminUserIds`, that gives a chosen player coins, a cosmetic,
   Unlimited Navigation (held in the profile) or Streak Saves. Every
   grant goes into an audit log (who, to whom, what, when), the same way
   LiveConfig does it. There are no caps. Pure validation lives in a
   `*Logic.luau` module with specs.
+  *Built 2026-10-12: `StaffGrantIntent` / `StaffGrantResult`,
+  `StaffService` + `StaffGrantLogic`, also Navigation rounds. Profile
+  v11 `unlimitedNavigation`, read by `StoreService.ownsPerk`; the store
+  then shows the pass as owned. Audit at `liveOps.staffAuditKey`
+  (`docs/live-ops.md`). `StaffService.onGifted` is step 3's hook. Not
+  yet tested in Studio: there's no panel until step 4.*
 - [ ] **3. Gift pop-up.** The receiving player sees "Gift received from
   <staff name>" with the item, and the item lands in their inventory.
   If they're mid-race, the pop-up waits until the race ends.

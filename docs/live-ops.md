@@ -76,6 +76,12 @@ Refused commands are logged too. The log is capped at `auditLogCap`
 (200) entries, dropping the oldest first. Read it in the Creator Hub
 DataStore manager.
 
+Staff grants (`staff-tools.md`) log to the same DataStore under the
+`staffGrants` key (`staffAuditKey`): one entry per give, with the time,
+the staff user id, the target (`Player` or `Server`), the gift, and the
+user ids it was `delivered` to and `failed` for. Capped at
+`staffAuditLogCap` (1000). Each give also prints a line to the server log.
+
 ## What each switch does
 
 | Switch | Where | Behaviour when off |

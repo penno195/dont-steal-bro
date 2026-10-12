@@ -70,5 +70,6 @@ require("./PartyViewLogic.spec")
 require("./LockerLogic.spec")
 require("./TimingLogic.spec")
 require("./TelemetryLogic.spec")
+require("./StaffGrantLogic.spec")
 
 TestRunner.run()

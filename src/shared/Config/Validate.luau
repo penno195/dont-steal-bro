@@ -619,6 +619,8 @@ export type LiveOpsConfig = {
 	auditKey: string,
 	refreshSeconds: number,
 	auditLogCap: number,
+	staffAuditKey: string, -- staff grants' audit log, same DataStore
+	staffAuditLogCap: number,
 	adminUserIds: { number },
 	tunablePaths: { string }, -- "<root>.<seg>..."; "*" = one segment, trailing "**" = any depth
 }
@@ -3498,7 +3500,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		if type(liveOps.enabled) ~= "boolean" then
 			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.enabled", "must be a boolean")
 		end
-		for _, field in { "dataStoreName", "envelopeKey", "auditKey" } do
+		for _, field in { "dataStoreName", "envelopeKey", "auditKey", "staffAuditKey" } do
 			if not isNonEmptyString((liveOps :: any)[field]) then
 				issue(issues, "GameConfig", "GameConfig.luau", "liveOps." .. field, "must be a non-empty string")
 			end
@@ -3510,6 +3512,12 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		-- the DataStore read budget on polling.
 		if liveOps.refreshSeconds < 15 then
 			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.refreshSeconds", "must be at least 15")
+		end
+		if liveOps.staffAuditKey == liveOps.envelopeKey or liveOps.staffAuditKey == liveOps.auditKey then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.staffAuditKey", "must differ from envelopeKey and auditKey")
+		end
+		if liveOps.staffAuditLogCap < 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.staffAuditLogCap", "must be at least 1")
 		end
 		if liveOps.auditLogCap < 1 then
 			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.auditLogCap", "must be at least 1")

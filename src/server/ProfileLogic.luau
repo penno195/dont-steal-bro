@@ -147,6 +147,13 @@ export type ProfileData = {
 	-- buyBackOffer instead of Robux. Bought in the store or gifted by
 	-- staff, never dropped for free. Stacks with no cap.
 	streakSaves: number,
+
+	-- ===== schema v11, staff grants ======================================
+
+	-- Unlimited Navigation given by staff ("Applied case: staff tools"),
+	-- held for good. The game pass is still checked live and never
+	-- written here; this is the only other way to own the perk.
+	unlimitedNavigation: boolean,
 }
 
 -- A lost streak still open to buying back: which round lost it, and how
@@ -170,7 +177,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 10
+local CURRENT_SCHEMA_VERSION = 11
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -199,6 +206,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		buyBackOffer = nil,
 		lastHuntDay = nil,
 		streakSaves = 0,
+		unlimitedNavigation = false,
 	}
 end
 
@@ -335,6 +343,15 @@ migrations[9] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 10
 	next.streakSaves = (old.streakSaves :: number?) or 0
+	return next
+end
+
+-- v10 -> v11 (staff grants): no Unlimited Navigation held. Before this
+-- the only way to own it was the game pass, which is never stored.
+migrations[10] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 11
+	next.unlimitedNavigation = (old.unlimitedNavigation :: boolean?) or false
 	return next
 end
 

@@ -685,6 +685,74 @@ local function getStreakSaves(player: Player): number
 	return if d then d.streakSaves else 0
 end
 
+-- Unlimited Navigation given by staff (schema v11). StoreService.ownsPerk
+-- reads it alongside the live game-pass check.
+local function hasUnlimitedNavigation(player: Player): boolean
+	local d = data(player)
+	return if d then d.unlimitedNavigation else false
+end
+
+-- ===== staff grants (staff-tools.md step 2) ===============================
+--
+-- A gift is free, so the writer is handed out once, to StaffService,
+-- like the progression writer and the receipt handle: nothing else in
+-- the game can give a player something for nothing by calling it.
+
+export type StaffGiftWriter = (
+	player: Player,
+	grants: { StoreLogic.Grant },
+	unlimitedNavigation: boolean
+) -> { string }?
+
+local staffGiftWriterClaimedBy: string? = nil
+
+-- Applies a staff gift in one mutation and saves straight away, so a
+-- gift the audit log records survives a crash. nil = not writable
+-- (still loading, or live-ops read-only); the caller logs it as failed.
+local function writeStaffGift(player: Player, grants: { StoreLogic.Grant }, unlimitedNavigation: boolean): { string }?
+	local d = writable(player)
+	local profile = profiles[player]
+	if d == nil or profile == nil then
+		return nil
+	end
+	local after, changes = StoreLogic.applyGrants({
+		currency = d.currency,
+		powerUpStock = d.powerUpStock,
+		ownedCosmetics = d.ownedCosmetics,
+		unlockedTitles = d.unlockedTitles,
+		navigationRounds = d.navigationRounds,
+		streakSaves = d.streakSaves,
+	}, grants)
+	d.currency = after.currency
+	d.ownedCosmetics = after.ownedCosmetics
+	d.navigationRounds = after.navigationRounds or d.navigationRounds
+	d.streakSaves = after.streakSaves or d.streakSaves
+	if unlimitedNavigation then
+		table.insert(
+			changes,
+			if d.unlimitedNavigation
+				then "unlimited navigation already held (no change)"
+				else "unlimited navigation granted"
+		)
+		d.unlimitedNavigation = true
+	end
+	profile:Save()
+	return changes
+end
+
+local function claimStaffGiftWriter(claimantName: string): StaffGiftWriter
+	assert(
+		staffGiftWriterClaimedBy == nil,
+		string.format(
+			"DataService.claimStaffGiftWriter: already claimed by %q - StaffService is the only staff gift writer",
+			tostring(staffGiftWriterClaimedBy)
+		)
+	)
+	staffGiftWriterClaimedBy = claimantName
+	print(string.format("DataService: staff gift writer claimed by %s", claimantName))
+	return writeStaffGift
+end
+
 -- The streak this player may buy back (design-decisions.md Q7, "buying
 -- back a streak"), or nil. The progression writer opens it, a buy-back
 -- receipt closes it, and expireBuyBackOffer closes it at a race start.
@@ -850,6 +918,9 @@ local DataService: Loader.Service = {
 	getNavigationRounds = getNavigationRounds,
 	spendNavigationRound = spendNavigationRound,
 	getStreakSaves = getStreakSaves,
+	hasUnlimitedNavigation = hasUnlimitedNavigation,
+	-- Staff tools step 2: handed out once, to StaffService.
+	claimStaffGiftWriter = claimStaffGiftWriter,
 	getBuyBackOffer = getBuyBackOffer,
 	expireBuyBackOffer = expireBuyBackOffer,
 	getSeasonProgress = getSeasonProgress,

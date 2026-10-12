@@ -1084,6 +1084,39 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: a staff member gives a gift (staff-tools.md step
+	-- 2). Anyone can fire it; StaffService drops it unless the sender is
+	-- on liveOps.adminUserIds, with no reply, so its existence isn't
+	-- confirmed to anyone else. `target` "Player" needs targetUserId (a
+	-- player in this server); "Server" means everyone in it. `kind` is
+	-- StaffGrantLogic.GIFT_KINDS, copied (this file can't require a
+	-- server module) - change both together. StaffGrantLogic.checkGift
+	-- decides which of amount/cosmeticId each kind takes. Allowed in
+	-- every round state: a gift mid-race lands at once (step 3 holds
+	-- its pop-up until the race ends).
+	StaffGrantIntent = {
+		name = "StaffGrantIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			target = Net.stringEnum({ "Player", "Server" }),
+			targetUserId = Net.optional(Net.number({ min = 1, integer = true })),
+			kind = Net.stringEnum({ "Currency", "Cosmetic", "NavigationRound", "UnlimitedNavigation", "StreakSave" }),
+			amount = Net.optional(Net.number({ min = 1, max = 2147483647, integer = true })),
+			cosmeticId = Net.optional(Net.string({ minLength = 1, maxLength = 64 })),
+		}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> the staff member who sent a StaffGrantIntent (fireClient).
+	-- `ok` false = refused, `message` says why. Otherwise how many
+	-- recipients got it and how many couldn't (profile not writable).
+	-- Names and counts only, never a streak (Q7 condition 1).
+	StaffGrantResult = {
+		name = "StaffGrantResult",
+		direction = "ServerBroadcast",
+	} :: RemoteDef,
+
 	-- Client -> server: equip a cosmetic into a slot, or unequip with a
 	-- nil itemId. Validated against the player's own owned list
 	-- server-side - a client naming a cosmetic it never bought is

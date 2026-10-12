@@ -231,16 +231,17 @@ local function pushState(player: Player)
 
 	local ownedPasses: { string } = {}
 	local perPlayer = ownership[player]
-	if perPlayer ~= nil then
-		for _, entry in StoreCatalogue do
-			local def = entry.def :: StoreItemDef
-			if def.kind ~= "GamePass" or def.assetId <= 0 then
-				continue
-			end
-			local cached = perPlayer[def.assetId]
-			if cached ~= nil and cached.owned then
-				table.insert(ownedPasses, def.key)
-			end
+	-- A staff-given Unlimited Navigation shows its pass as owned, so the
+	-- store doesn't sell the player what they already hold.
+	local giftedNavigation = DataService.hasUnlimitedNavigation(player)
+	for _, entry in StoreCatalogue do
+		local def = entry.def :: StoreItemDef
+		if def.kind ~= "GamePass" or def.assetId <= 0 then
+			continue
+		end
+		local cached = if perPlayer ~= nil then perPlayer[def.assetId] else nil
+		if (cached ~= nil and cached.owned) or (giftedNavigation and def.perk == "UnlimitedNavigation") then
+			table.insert(ownedPasses, def.key)
 		end
 	end
 
@@ -1306,9 +1307,13 @@ local StoreService: Loader.Service = {
 	-- Whether this player owns the enabled pass that unlocks `perk`.
 	-- Live (cached) ownership, never a profile field, so nothing but a
 	-- real purchase can make it true - except the developer override
-	-- list in GameConfig.store (design-decisions.md Q8).
+	-- list in GameConfig.store (design-decisions.md Q8) and Unlimited
+	-- Navigation given by staff, which the profile holds (staff tools).
 	ownsPerk = function(player: Player, perk: Validate.StorePerk): boolean
 		if table.find(GameConfig.store.perkOverrideUserIds, player.UserId) ~= nil then
+			return true
+		end
+		if perk == "UnlimitedNavigation" and (Loader.get("DataService") :: any).hasUnlimitedNavigation(player) then
 			return true
 		end
 		for _, entry in StoreCatalogue do

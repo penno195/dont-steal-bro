@@ -682,6 +682,11 @@ local GameConfig: Validate.GameConfig = {
 		-- switch reaches every server within a minute.
 		refreshSeconds = 60,
 		auditLogCap = 200,
+		-- Staff grants (staff-tools.md step 2) log to the same DataStore
+		-- under their own key: one entry per give, however many players
+		-- it reached. A full server gift is one entry.
+		staffAuditKey = "staffGrants",
+		staffAuditLogCap = 1000,
 		-- The developers' Roblox user ids. Empty = nobody can run admin
 		-- commands (edit the DataStore by hand instead).
 		adminUserIds = { 11654855572 }, -- Corvus2026

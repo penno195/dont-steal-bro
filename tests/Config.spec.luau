@@ -235,6 +235,8 @@ local function validGameConfig(): Validate.GameConfig
 			auditKey = "audit",
 			refreshSeconds = 60,
 			auditLogCap = 200,
+			staffAuditKey = "staffGrants",
+			staffAuditLogCap = 1000,
 			adminUserIds = { 12345 },
 			tunablePaths = { "game.roundTimers.*", "game.npc.**", "powerUp.*.durationSeconds" },
 		},
@@ -2420,6 +2422,15 @@ TestRunner.describe("Validate.checkGameConfig (P8-5 liveOps)", function()
 	TestRunner.it("rejects the audit log sharing the envelope's key", function()
 		TestRunner.expect(#issuesWith(function(lo)
 			lo.auditKey = lo.envelopeKey
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects the staff grant log sharing another key, or a zero cap", function()
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.staffAuditKey = lo.auditKey
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.staffAuditLogCap = 0
 		end)):toBe(1)
 	end)
 
