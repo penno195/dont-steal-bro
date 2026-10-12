@@ -40,11 +40,18 @@ finishes it.
   client shows them through `ClaimPopup` (now takes a title and body)
   once the loading cover is gone and no practice round is on, then
   `GiftsSeenIntent { upToId }` clears them. Rules in `GiftLogic` and
-  `StaffGrantLogic.noteUnseen / markSeen`, with specs. Not yet tested
-  in Studio: there's no panel until step 4.*
-- [ ] **4. Staff panel (client).** A screen only staff can open, for
+  `StaffGrantLogic.noteUnseen / markSeen`, with specs.*
+- [x] **4. Staff panel (client).** A screen only staff can open, for
   picking a player in the server, then an item, then Give. It shows
   names only, never streaks or titles (Q7 condition 1).
+  *Built 2026-10-12: a fifth launcher button (gift icon) for
+  `liveOps.adminUserIds` only, so it opens between rounds, not mid-
+  race. `Screens/StaffPanel` (who on the left, what on the right in
+  landscape), `UI/StaffPanelLogic` with specs, data in MenuController.
+  Give takes two taps (no caps, so the second tap is the guard). A
+  reply that never comes clears after 10 s. Tested in Studio solo:
+  100 coins to everyone -> server grant -> pop-up, which also covers
+  steps 2 and 3.*
 - [ ] **5. Events.** A themed event (e.g. "Taco Tuesday") with a name,
   a music track and a schedule or a manual start. It runs in **every
   server at once**. During it, staff hand out gifts the step 2 way, to

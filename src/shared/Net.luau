@@ -1090,10 +1090,10 @@ Net.Remotes = {
 	-- confirmed to anyone else. `target` "Player" needs targetUserId (a
 	-- player in this server); "Server" means everyone in it. `kind` is
 	-- StaffGrantLogic.GIFT_KINDS, copied (this file can't require a
-	-- server module) - change both together. StaffGrantLogic.checkGift
-	-- decides which of amount/cosmeticId each kind takes. Allowed in
-	-- every round state: a gift mid-race lands at once (step 3 shows
-	-- its pop-up back in the Hub).
+	-- server module), as is StaffPanelLogic.KINDS - change all three.
+	-- StaffGrantLogic.checkGift decides which of amount/cosmeticId each
+	-- kind takes. Allowed in every round state: a gift mid-race lands at
+	-- once (step 3 shows its pop-up back in the Hub).
 	StaffGrantIntent = {
 		name = "StaffGrantIntent",
 		direction = "ServerIntent",

@@ -12,7 +12,8 @@
 -- right edge at mid-height, where a right thumb rests in portrait and
 -- clear of Roblox's jump button below. Hidden while a round is in play
 -- (RaceHUD and the Decision Studio own the screen then), and while a
--- menu is open.
+-- menu is open. Staff (liveOps.adminUserIds) get a fifth, the staff
+-- gift panel (staff-tools.md step 4).
 --
 -- THE COIN BALANCE: hub only, top-right under Roblox's top bar - where
 -- players look for a currency. The "+" says it's a button: it opens the
@@ -60,7 +61,9 @@ local ResultsScreen = require(script.Parent.Parent.UI.Screens.Results)
 local SettingsScreen = require(script.Parent.Parent.UI.Screens.Settings)
 local StoreScreen = require(script.Parent.Parent.UI.Screens.Store)
 local ClaimPopup = require(script.Parent.Parent.UI.Screens.ClaimPopup)
+local StaffPanelScreen = require(script.Parent.Parent.UI.Screens.StaffPanel)
 local GiftLogic = require(script.Parent.Parent.UI.GiftLogic)
+local StaffPanelLogic = require(script.Parent.Parent.UI.StaffPanelLogic)
 local DecisionStudioController = require(script.Parent.DecisionStudioController)
 local SettingsController = require(script.Parent.SettingsController)
 local UIScaleController = require(script.Parent.UIScaleController)
@@ -87,6 +90,9 @@ local STUDIO_POLL = 0.25
 -- A staff gift waits this long before it pops, so a few given in quick
 -- succession share one pop-up.
 local GIFT_BATCH = 0.5
+-- How long the staff panel waits for StaffGrantResult before saying
+-- there was no reply (NetGuard drops a rate-limited intent silently).
+local STAFF_REPLY_WAIT = 10
 
 -- ===== static config =========================================================
 
@@ -215,6 +221,44 @@ local function cosmeticName(id: string): string
 	return if def then def.displayName else id
 end
 
+-- ===== staff panel ===========================================================
+-- staff-tools.md step 4. The button shows for liveOps.adminUserIds only;
+-- StaffService re-checks the sender on every give.
+
+local isStaff = StaffPanelLogic.isStaff(selfId, GameConfig.liveOps.adminUserIds)
+
+local staffCosmetics: { StaffPanelLogic.CosmeticEntry } = {}
+for id, def in cosmeticDefs do
+	table.insert(staffCosmetics, { id = id, name = def.displayName, category = def.category })
+end
+staffCosmetics = StaffPanelLogic.sortCosmetics(staffCosmetics)
+
+local staffPlayers = source({} :: { StaffPanelLogic.PlayerEntry })
+local staffResult = source(nil :: StaffPanelLogic.Result?)
+local staffBusy = source(false)
+local staffSent = 0 -- which give a reply timeout belongs to
+
+local function refreshStaffPlayers()
+	local entries: { StaffPanelLogic.PlayerEntry } = {}
+	for _, player in Players:GetPlayers() do
+		table.insert(entries, { userId = player.UserId, displayName = player.DisplayName, name = player.Name })
+	end
+	staffPlayers(StaffPanelLogic.sortPlayers(entries))
+end
+
+local function staffGive(payload: { [string]: any })
+	staffBusy(true)
+	staffSent += 1
+	local sent = staffSent
+	Net.fireServer("StaffGrantIntent", payload)
+	task.delay(STAFF_REPLY_WAIT, function()
+		if sent == staffSent and staffBusy() then
+			staffBusy(false)
+			staffResult({ ok = false, message = "No reply from the server. Wait a moment and try again." })
+		end
+	end)
+end
+
 local function grantText(grant: StoreScreenLogic.Grant): string
 	if grant.kind == "Currency" then
 		return string.format("%d coins", grant.amount or 0)
@@ -319,7 +363,7 @@ end
 
 -- ===== screens ===============================================================
 
-type Menu = "Store" | "Locker" | "Leaderboards" | "Results" | "Settings"
+type Menu = "Store" | "Locker" | "Leaderboards" | "Results" | "Settings" | "Staff"
 
 local openMenu: Menu? = nil
 local unmountMenu: (() -> ())? = nil
@@ -441,6 +485,18 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 			close = closeMenu,
 			nameOf = DropNames,
 		})
+	elseif menu == "Staff" then
+		staffResult(nil)
+		refreshStaffPlayers()
+		unmountMenu = StaffPanelScreen.mount(UIScaleController, {
+			players = staffPlayers,
+			cosmetics = staffCosmetics,
+			cosmeticName = cosmeticName,
+			result = staffResult,
+			busy = staffBusy,
+			give = staffGive,
+			close = closeMenu,
+		})
 	else
 		unmountMenu = SettingsScreen.mount(UIScaleController, {
 			settings = SettingsController.settings,
@@ -501,11 +557,16 @@ local function mountLauncher()
 	end)
 
 	vide.root(function()
+		-- Staff get a fifth button, under Settings, for the staff panel.
+		local buttons = if isStaff then 5 else 4
 		local column = create("Frame")({
 			Name = "Launcher",
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.new(1, -Theme.spacing.sm, 0.45, 0),
-			Size = UDim2.fromOffset(Theme.touch.iconButton, 4 * Theme.touch.iconButton + 3 * Theme.spacing.md),
+			Size = UDim2.fromOffset(
+				Theme.touch.iconButton,
+				buttons * Theme.touch.iconButton + (buttons - 1) * Theme.spacing.md
+			),
 			BackgroundTransparency = 1,
 			Visible = visible,
 			create("UIListLayout")({
@@ -555,6 +616,18 @@ local function mountLauncher()
 			}),
 			Parent = gui,
 		}) :: Frame
+		if isStaff then
+			C.IconButton({
+				icon = "gift",
+				label = "Staff gifts",
+				variant = "secondary",
+				onActivate = function()
+					open("Staff")
+				end,
+				order = 5,
+				layoutOrder = 5,
+			}).Parent = column
+		end
 		UIScaleController.attachScale(column)
 	end)
 end
@@ -743,6 +816,26 @@ function MenuController:init()
 	Net.onClientEvent("GiftReceived", function(payload: any)
 		holdGifts(GiftLogic.read(payload))
 	end)
+	if isStaff then
+		Net.onClientEvent("StaffGrantResult", function(payload: any)
+			local result = StaffPanelLogic.readResult(payload)
+			if result ~= nil then
+				staffBusy(false)
+				staffResult(result)
+			end
+		end)
+		-- The panel's player list follows the server while it's open.
+		Players.PlayerAdded:Connect(refreshStaffPlayers)
+		Players.PlayerRemoving:Connect(function(leaving: Player)
+			local entries: { StaffPanelLogic.PlayerEntry } = {}
+			for _, entry in staffPlayers() do
+				if entry.userId ~= leaving.UserId then
+					table.insert(entries, entry)
+				end
+			end
+			staffPlayers(entries)
+		end)
+	end
 	Net.onClientEvent("StorePurchaseResult", function(payload: any)
 		if type(payload.key) == "string" and type(payload.status) == "string" then
 			stepFlow({
