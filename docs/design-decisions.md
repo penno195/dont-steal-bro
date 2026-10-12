@@ -716,9 +716,11 @@ is `staff-tools.md`.
   streak in advance, which adds to the buy-back case's known cost. The
   owner accepted this. P0-7's tripwire should count saves used on
   top-100 streaks.
-- **Events** (e.g. "Taco Tuesday", with themed music and staff gifts):
-  how gifts are handed out and how far an event reaches are still open.
-  See `staff-tools.md`.
+- **Who a gift goes to** (2026-10-12): one chosen player in the staff
+  member's own server, or every player currently in that server.
+- **Events** (e.g. "Taco Tuesday", with themed music and staff gifts)
+  run in every server at once. Gifts during an event follow the rule
+  above. See `staff-tools.md`.
 
 ### Applied case: the first-time tutorial (2026-10-10, user decision)
 

@@ -27,14 +27,16 @@ finishes it.
   picking a player in the server, then an item, then Give. It shows
   names only, never streaks or titles (Q7 condition 1).
 - [ ] **5. Events.** A themed event (e.g. "Taco Tuesday") with a name,
-  a music track and a schedule or a manual start. Staff give a chosen
-  gift during it. Needs the open questions below answered first.
+  a music track and a schedule or a manual start. It runs in **every
+  server at once**. During it, staff hand out gifts the step 2 way, to
+  one chosen player or to everyone in their own server.
 
-## Open questions (ask the owner before step 5)
+## Settled (owner, 2026-10-12)
 
-- Does an event gift go straight to every player in the server, or to
-  the players staff pick?
-- Does an event run in one server or in every server at once?
-- The taco song needs an audio asset id the owner is allowed to use
-  (Creator Store or their own upload). Until then the music slot stays
-  empty.
+- **Who a gift goes to:** staff pick either **one player in their own
+  server** or **every player currently in their own server**. Staff
+  can't reach players in other servers.
+- **Event reach:** an event (its theme and music) runs in every server.
+- **Taco Tuesday music:** "It's Raining Tacos", Creator Store audio
+  `100847230469970`, uploaded by DistrokidOfficial (the licensed
+  distributor). Avoid fan re-uploads.
