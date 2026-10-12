@@ -686,6 +686,40 @@ as a **practice mode** for playing with friends.
   race expires the offer, and a practice race is a race. That text is
   followed as written. Revisit if players lose offers by warming up.
 
+### Applied case: staff tools (2026-10-12, user decision)
+
+Staff can give items to players and run themed events. The build plan
+is `staff-tools.md`.
+
+- **Who is staff:** the same list as live-ops admins,
+  `liveOps.adminUserIds`. Everyone on it has full power, with no tiers.
+- **What staff can give:** coins, cosmetics, Navigation (a round, or
+  unlimited, held in the profile) and Streak Saves. **Staff can never
+  set or change a streak directly.**
+- **Safeguards:** every grant is logged (who, to whom, what, when).
+  There are no caps.
+- **How a gift arrives:** it's chosen and given, never random. The
+  player sees a pop-up, "Gift received from <staff name>", and the item
+  goes into their inventory.
+- **Streak Save:** a held item that does the same as a buy-back. When a
+  player loses with a buy-back offer open and holds a save, they choose
+  between using the save and paying Robux. It's sold in the store for a
+  **flat 100 R$**, which is cheaper than any buy-back above streak 1.
+  (A streak-1 buy-back is 99 R$. The buy-back case's "every price ends
+  in 9" rule doesn't apply to this item.) Saves stack freely. They
+  **never drop for free**, in games or in the lobby. The only ways to
+  get one are buying it and a staff gift.
+- **Q7 still holds:** the staff panel shows player names, never streaks
+  or titles. A save is only offered on the player's own end screen or
+  in the Hub, as with buy-back.
+- **Known cost:** stacking saves lets a player shield a leaderboard
+  streak in advance, which adds to the buy-back case's known cost. The
+  owner accepted this. P0-7's tripwire should count saves used on
+  top-100 streaks.
+- **Events** (e.g. "Taco Tuesday", with themed music and staff gifts):
+  how gifts are handed out and how far an event reaches are still open.
+  See `staff-tools.md`.
+
 ### Applied case: the first-time tutorial (2026-10-10, user decision)
 
 Decided by the project owner, before soft launch: **new players get a
