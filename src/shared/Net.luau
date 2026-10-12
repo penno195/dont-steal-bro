@@ -1092,8 +1092,8 @@ Net.Remotes = {
 	-- StaffGrantLogic.GIFT_KINDS, copied (this file can't require a
 	-- server module) - change both together. StaffGrantLogic.checkGift
 	-- decides which of amount/cosmeticId each kind takes. Allowed in
-	-- every round state: a gift mid-race lands at once (step 3 holds
-	-- its pop-up until the race ends).
+	-- every round state: a gift mid-race lands at once (step 3 shows
+	-- its pop-up back in the Hub).
 	StaffGrantIntent = {
 		name = "StaffGrantIntent",
 		direction = "ServerIntent",
@@ -1117,14 +1117,27 @@ Net.Remotes = {
 		direction = "ServerBroadcast",
 	} :: RemoteDef,
 
-	-- Server -> a gift's recipient (fireClient), once it's in their
-	-- profile (staff-tools.md step 3): { from = the staff member's
-	-- display name, kind, amount?, cosmeticId? } as StaffGrantLogic.Gift.
-	-- Display only - the client holds the pop-up while mid-race
-	-- (GiftLogic). Never a streak (Q7 condition 1).
+	-- Server -> one player (fireClient), Hub only (staff-tools.md step
+	-- 3): { gifts = the profile's unseenGifts }, each { id, from = the
+	-- staff member's display name, kind, amount?, cosmeticId? }. Sent
+	-- when the profile loads and after each gift; the gifts themselves
+	-- are already applied. Never a streak (Q7 condition 1).
 	GiftReceived = {
 		name = "GiftReceived",
 		direction = "ServerBroadcast",
+	} :: RemoteDef,
+
+	-- Client -> server: the gift pop-up showed everything up to and
+	-- including `upToId`, so those leave the queue. Hub only; it can
+	-- only clear pop-up records, never a gift (StaffGrantLogic.markSeen).
+	GiftsSeenIntent = {
+		name = "GiftsSeenIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			upToId = Net.string({ minLength = 1, maxLength = 64 }),
+		}),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
 	} :: RemoteDef,
 
 	-- Client -> server: equip a cosmetic into a slot, or unequip with a

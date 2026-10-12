@@ -701,6 +701,10 @@ is `staff-tools.md`.
 - **How a gift arrives:** it's chosen and given, never random. The
   player sees a pop-up, "Gift received from <staff name>", and the item
   goes into their inventory.
+- **When the pop-up shows** (2026-10-12): only in the lobby (Hub). The
+  item lands at once wherever the player is, but a gift given in a
+  match waits for the trip back to the lobby, and if they close the
+  game first, it shows the next time they load into it.
 - **Streak Save:** a held item that does the same as a buy-back. When a
   player loses with a buy-back offer open and holds a save, they choose
   between using the save and paying Robux. It's sold in the store for a

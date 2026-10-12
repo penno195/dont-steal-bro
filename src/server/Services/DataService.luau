@@ -34,6 +34,7 @@ local ProfileStoreLib = require(ServerScriptService.ServerPackages.ProfileStore)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
+local StaffGrantLogic = require(ServerScriptService.Server.StaffGrantLogic)
 
 local STORE_NAME = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData"
 
@@ -701,7 +702,8 @@ end
 export type StaffGiftWriter = (
 	player: Player,
 	grants: { StoreLogic.Grant },
-	unlimitedNavigation: boolean
+	unlimitedNavigation: boolean,
+	unseen: ProfileLogic.UnseenGift
 ) -> { string }?
 
 local staffGiftWriterClaimedBy: string? = nil
@@ -709,7 +711,13 @@ local staffGiftWriterClaimedBy: string? = nil
 -- Applies a staff gift in one mutation and saves straight away, so a
 -- gift the audit log records survives a crash. nil = not writable
 -- (still loading, or live-ops read-only); the caller logs it as failed.
-local function writeStaffGift(player: Player, grants: { StoreLogic.Grant }, unlimitedNavigation: boolean): { string }?
+-- `unseen` joins the queue of pop-ups the Hub shows (schema v12).
+local function writeStaffGift(
+	player: Player,
+	grants: { StoreLogic.Grant },
+	unlimitedNavigation: boolean,
+	unseen: ProfileLogic.UnseenGift
+): { string }?
 	local d = writable(player)
 	local profile = profiles[player]
 	if d == nil or profile == nil then
@@ -736,8 +744,24 @@ local function writeStaffGift(player: Player, grants: { StoreLogic.Grant }, unli
 		)
 		d.unlimitedNavigation = true
 	end
+	d.unseenGifts = StaffGrantLogic.noteUnseen(d.unseenGifts, unseen)
 	profile:Save()
 	return changes
+end
+
+-- Staff gifts whose pop-up the player hasn't seen yet (schema v12).
+local function getUnseenGifts(player: Player): { ProfileLogic.UnseenGift }
+	local d = data(player)
+	return if d then d.unseenGifts else {}
+end
+
+-- The client showed everything up to `upToId`: clear those. Only ever
+-- removes pop-up records, never a gift, so it needs no claimed writer.
+local function markGiftsSeen(player: Player, upToId: string)
+	local d = writable(player)
+	if d ~= nil then
+		d.unseenGifts = StaffGrantLogic.markSeen(d.unseenGifts, upToId)
+	end
 end
 
 local function claimStaffGiftWriter(claimantName: string): StaffGiftWriter
@@ -921,6 +945,8 @@ local DataService: Loader.Service = {
 	hasUnlimitedNavigation = hasUnlimitedNavigation,
 	-- Staff tools step 2: handed out once, to StaffService.
 	claimStaffGiftWriter = claimStaffGiftWriter,
+	getUnseenGifts = getUnseenGifts,
+	markGiftsSeen = markGiftsSeen,
 	getBuyBackOffer = getBuyBackOffer,
 	expireBuyBackOffer = expireBuyBackOffer,
 	getSeasonProgress = getSeasonProgress,

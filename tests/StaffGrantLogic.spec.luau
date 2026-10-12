@@ -137,3 +137,39 @@ describe("StaffGrantLogic.appendAudit", function()
 		expect(#log):toBe(1)
 	end)
 end)
+
+describe("StaffGrantLogic unseen gift queue", function()
+	local function gift(id: string): StaffGrantLogic.UnseenGift
+		return StaffGrantLogic.unseen({ kind = "Currency", amount = 5 }, "Penno", id)
+	end
+
+	it("records the id, the sender and the gift", function()
+		local entry = StaffGrantLogic.unseen({ kind = "Cosmetic", cosmeticId = "hat" }, "Penno", "g1")
+		expect(entry.id):toBe("g1")
+		expect(entry.from):toBe("Penno")
+		expect(entry.cosmeticId):toBe("hat")
+	end)
+
+	it("queues newest last and caps from the front", function()
+		local list = {}
+		for index = 1, StaffGrantLogic.UNSEEN_CAP + 2 do
+			list = StaffGrantLogic.noteUnseen(list, gift(tostring(index)))
+		end
+		expect(#list):toBe(StaffGrantLogic.UNSEEN_CAP)
+		expect(list[1].id):toBe("3")
+	end)
+
+	it("clears up to the id shown, keeping gifts given since", function()
+		local list = { gift("A"), gift("B"), gift("C") }
+		local left = StaffGrantLogic.markSeen(list, "B")
+		expect(#left):toBe(1)
+		expect(left[1].id):toBe("C")
+		expect(#StaffGrantLogic.markSeen(list, "C")):toBe(0)
+	end)
+
+	it("clears nothing for an id it doesn't hold", function()
+		local list = { gift("A") }
+		expect(#StaffGrantLogic.markSeen(list, "Z")):toBe(1)
+		expect(#StaffGrantLogic.markSeen(list, nil)):toBe(1)
+	end)
+end)

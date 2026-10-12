@@ -32,13 +32,16 @@ finishes it.
 - [x] **3. Gift pop-up.** The receiving player sees "Gift received from
   <staff name>" with the item, and the item lands in their inventory.
   If they're mid-race, the pop-up waits until the race ends.
-  *Built 2026-10-12: `GiftReceived` (staff display name + the gift),
-  fired from `StaffService.onGifted`; drawn by MenuController through
-  `ClaimPopup` (now takes a title and body) with `GiftLogic` specs.
-  Held while the round is in play and through the Studio's reveal,
-  then everything held shows in one pop-up. On a match server that
-  leaves about 7 s of Results before everyone goes home. Not yet
-  tested in Studio: there's no panel until step 4.*
+  *Built 2026-10-12. Owner: the pop-up shows **only in the lobby**,
+  so a gift given in a match, or before the game is closed, shows on
+  the next lobby visit. Each gift joins the profile's `unseenGifts`
+  (v12, capped at 20, ids from GenerateGUID). The Hub sends them as
+  `GiftReceived` when the profile loads and after each gift; the
+  client shows them through `ClaimPopup` (now takes a title and body)
+  once the loading cover is gone and no practice round is on, then
+  `GiftsSeenIntent { upToId }` clears them. Rules in `GiftLogic` and
+  `StaffGrantLogic.noteUnseen / markSeen`, with specs. Not yet tested
+  in Studio: there's no panel until step 4.*
 - [ ] **4. Staff panel (client).** A screen only staff can open, for
   picking a player in the server, then an item, then Give. It shows
   names only, never streaks or titles (Q7 condition 1).

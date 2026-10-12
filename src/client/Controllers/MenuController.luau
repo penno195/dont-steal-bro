@@ -595,11 +595,12 @@ local function onRoundState(state: string)
 end
 
 -- ===== staff gifts ===========================================================
--- staff-tools.md step 3. The gift is already in the profile; this only
--- says so. Mid-race, and through the Studio's reveal, gifts wait and
--- then pop up together (GiftLogic).
+-- staff-tools.md step 3. Only the Hub sends GiftReceived (GiftLogic);
+-- the gifts are already in the profile, this only says so, then tells
+-- the server which ones it showed. A Hub practice round holds it.
 
 local heldGifts: { GiftLogic.Gift } = {}
+local giftSeen: { [string]: boolean } = {} -- ids shown or waiting
 local giftWaiting = false
 
 local function showGifts()
@@ -608,6 +609,7 @@ local function showGifts()
 	if #gifts == 0 then
 		return
 	end
+	Net.fireServer("GiftsSeenIntent", { upToId = gifts[#gifts].id })
 	local shown: { ClaimPopup.Reward } = {}
 	for _, gift in gifts do
 		local key = GiftLogic.storeKey(gift)
@@ -626,15 +628,29 @@ local function showGifts()
 	Loader.get("AudioController").play("SeasonClaim")
 end
 
-local function holdGift(gift: GiftLogic.Gift)
-	table.insert(heldGifts, gift)
+local function holdGifts(gifts: { GiftLogic.Gift })
+	local fresh = GiftLogic.fresh(gifts, giftSeen)
+	if #fresh == 0 then
+		return
+	end
+	for _, gift in fresh do
+		giftSeen[gift.id] = true
+		table.insert(heldGifts, gift)
+	end
 	if giftWaiting then
 		return
 	end
 	giftWaiting = true
 	task.spawn(function()
 		task.wait(GIFT_BATCH)
-		while IN_PLAY[roundState() or ""] or DecisionStudioController.isActive() do
+		-- Sent as the profile loads, so on joining the Hub it would
+		-- otherwise pop up under the loading screen.
+		local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+		while
+			IN_PLAY[roundState() or ""]
+			or DecisionStudioController.isActive()
+			or playerGui:FindFirstChild("LoadingCover") ~= nil
+		do
 			task.wait(STUDIO_POLL)
 		end
 		giftWaiting = false
@@ -725,10 +741,7 @@ function MenuController:init()
 		end
 	end)
 	Net.onClientEvent("GiftReceived", function(payload: any)
-		local gift = GiftLogic.read(payload)
-		if gift ~= nil then
-			holdGift(gift)
-		end
+		holdGifts(GiftLogic.read(payload))
 	end)
 	Net.onClientEvent("StorePurchaseResult", function(payload: any)
 		if type(payload.key) == "string" and type(payload.status) == "string" then

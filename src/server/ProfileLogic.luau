@@ -154,6 +154,25 @@ export type ProfileData = {
 	-- held for good. The game pass is still checked live and never
 	-- written here; this is the only other way to own the perk.
 	unlimitedNavigation: boolean,
+
+	-- ===== schema v12, staff gift pop-up =================================
+
+	-- Staff gifts the player hasn't seen the pop-up for yet, oldest
+	-- first (staff-tools.md step 3). The gift itself is applied when
+	-- given; this is only what the Hub's "GIFT RECEIVED!" pop-up shows,
+	-- kept here so it outlasts a match server and a closed game.
+	-- StaffGrantLogic.noteUnseen / markSeen keep it, capped.
+	unseenGifts: { UnseenGift },
+}
+
+-- Structurally StaffGrantLogic.UnseenGift: a unique id, who gave it
+-- (display name) and what it was. Never a streak (Q7 condition 1).
+export type UnseenGift = {
+	id: string,
+	from: string,
+	kind: string,
+	amount: number?,
+	cosmeticId: string?,
 }
 
 -- A lost streak still open to buying back: which round lost it, and how
@@ -177,7 +196,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 11
+local CURRENT_SCHEMA_VERSION = 12
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -207,6 +226,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		lastHuntDay = nil,
 		streakSaves = 0,
 		unlimitedNavigation = false,
+		unseenGifts = {},
 	}
 end
 
@@ -352,6 +372,15 @@ migrations[10] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 11
 	next.unlimitedNavigation = (old.unlimitedNavigation :: boolean?) or false
+	return next
+end
+
+-- v11 -> v12 (staff gift pop-up): nothing waiting to be shown. Gifts
+-- given under v11 already showed their pop-up on the spot.
+migrations[11] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 12
+	next.unseenGifts = (old.unseenGifts :: { any }?) or {}
 	return next
 end
 

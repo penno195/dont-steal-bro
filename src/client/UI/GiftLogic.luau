@@ -4,18 +4,22 @@
 -- so they're tested headlessly (tests/GiftLogic.spec.luau).
 -- MenuController draws what this decides, with ClaimPopup.
 --
--- The gift is already in the profile when GiftReceived arrives; the
--- pop-up only says so. Mid-race (MenuController's IN_PLAY states) the
--- gifts wait in a queue and show together once the round leaves play,
--- so a pop-up never covers a task or the Decision Studio.
+-- The gifts are already in the profile; the pop-up only says so. Only
+-- the Hub sends GiftReceived (owner, 2026-10-12), with every gift the
+-- player hasn't seen yet, so one given mid-match or before the game
+-- was closed shows on the next Hub visit. The list can arrive again
+-- before the client's GiftsSeenIntent lands, so `fresh` drops the ids
+-- already shown. A Hub practice round (MenuController's IN_PLAY) still
+-- holds the pop-up until it's over.
 --
 -- Names and items only, never a streak (Q7 condition 1).
 
 local GiftLogic = {}
 
--- GiftReceived, as StaffService sends it. `kind` is one of
--- StaffGrantLogic.GIFT_KINDS.
+-- One entry of GiftReceived.gifts, as StaffService sends it (the
+-- profile's unseenGifts). `kind` is one of StaffGrantLogic.GIFT_KINDS.
 export type Gift = {
+	id: string,
 	from: string,
 	kind: string,
 	amount: number?,
@@ -50,19 +54,50 @@ local STORE_KEY: { [string]: string } = {
 -- How many senders the body names before "and N more".
 local NAMED = 2
 
--- A well-formed GiftReceived payload, or nil.
-function GiftLogic.read(payload: any): Gift?
-	if type(payload) ~= "table" or type(payload.from) ~= "string" or not KINDS[payload.kind] then
+local function readOne(entry: any): Gift?
+	if
+		type(entry) ~= "table"
+		or type(entry.id) ~= "string"
+		or type(entry.from) ~= "string"
+		or not KINDS[entry.kind]
+	then
 		return nil
 	end
-	local amount = payload.amount
-	local cosmeticId = payload.cosmeticId
+	local amount = entry.amount
+	local cosmeticId = entry.cosmeticId
 	return {
-		from = payload.from,
-		kind = payload.kind,
+		id = entry.id,
+		from = entry.from,
+		kind = entry.kind,
 		amount = if type(amount) == "number" then amount else nil,
 		cosmeticId = if type(cosmeticId) == "string" then cosmeticId else nil,
 	}
+end
+
+-- The well-formed gifts of a GiftReceived payload, in order (oldest
+-- first). Malformed entries are skipped.
+function GiftLogic.read(payload: any): { Gift }
+	local gifts: { Gift } = {}
+	if type(payload) == "table" and type(payload.gifts) == "table" then
+		for _, entry in payload.gifts do
+			local gift = readOne(entry)
+			if gift ~= nil then
+				table.insert(gifts, gift)
+			end
+		end
+	end
+	return gifts
+end
+
+-- `gifts` minus any whose id is in `seen` (shown or already waiting).
+function GiftLogic.fresh(gifts: { Gift }, seen: { [string]: boolean }): { Gift }
+	local out: { Gift } = {}
+	for _, gift in gifts do
+		if not seen[gift.id] then
+			table.insert(out, gift)
+		end
+	end
+	return out
 end
 
 local function counted(amount: number?, one: string, many: string): string

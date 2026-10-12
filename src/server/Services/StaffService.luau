@@ -20,25 +20,33 @@
 -- does). A failed audit write warns and doesn't undo the gift, the same
 -- as LiveConfig's audit; the server log line is the fallback record.
 --
--- Step 3 (the gift pop-up) hooks in through onGifted: each recipient
--- gets a GiftReceived naming the staff member and the item.
+-- Step 3 (the gift pop-up): each gift also joins the recipient's
+-- unseenGifts queue (schema v12). Only the Hub shows the pop-up (owner,
+-- 2026-10-12): it sends the queue as GiftReceived when a profile loads
+-- and after each gift, and GiftsSeenIntent clears what was shown. A
+-- match server just queues, so the pop-up waits for the trip back, or
+-- the next time the game loads.
 --
 -- VERIFIED APIs (globalTypes.d.luau):
 --   DataStoreService:GetDataStore(name) -> DataStore
+--   HttpService:GenerateGUID(wrapInCurlyBraces: boolean?) -> string
 --   GlobalDataStore:UpdateAsync(key, (any, DataStoreKeyInfo) -> any) -> (any, DataStoreKeyInfo)
 --   Players:GetPlayerByUserId(userId) -> Player?
 
 local DataStoreService = game:GetService("DataStoreService")
+local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local StaffGrantLogic = require(ServerScriptService.Server.StaffGrantLogic)
+local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 
 local config = GameConfig.liveOps
 
@@ -53,6 +61,7 @@ end
 local store: DataStore? = nil
 local writeGift: any = nil -- DataService.StaffGiftWriter, claimed in init
 local gifted = Instance.new("BindableEvent")
+local isHub = false -- set in init: only the Hub shows gift pop-ups
 
 -- ===== audit ===============================================================
 
@@ -122,7 +131,8 @@ local function handleGrant(staff: Player, payload: any)
 	local failed: { number } = {}
 	for _, userId in recipients do
 		local player = Players:GetPlayerByUserId(userId)
-		local changes = if player ~= nil then writeGift(player, grants, unlimitedNavigation) else nil
+		local unseen = StaffGrantLogic.unseen(gift, staff.DisplayName, HttpService:GenerateGUID(false))
+		local changes = if player ~= nil then writeGift(player, grants, unlimitedNavigation, unseen) else nil
 		if player == nil or changes == nil then
 			table.insert(failed, userId)
 			continue
@@ -173,6 +183,14 @@ local StaffService: Loader.Service = {
 
 function StaffService:init()
 	writeGift = (Loader.get("DataService") :: any).claimStaffGiftWriter("StaffService")
+	-- The same Hub test as the streak tags (Q7: the Hub is where a
+	-- player is between matches).
+	isHub = StreakTagLogic.isHub(
+		game.PlaceId,
+		GameConfig.matchmaking.hubPlaceId,
+		RunService:IsStudio(),
+		Workspace:FindFirstChild("Hub") ~= nil
+	)
 	local ok, result = pcall(function()
 		return DataStoreService:GetDataStore(STORE_NAME)
 	end)
@@ -189,15 +207,23 @@ function StaffService:start()
 		handleGrant(player, payload)
 	end)
 
-	-- Step 3: tell the recipient. Their client holds the pop-up until
-	-- the race ends (GiftLogic); the gift itself is already theirs.
-	gifted.Event:Connect(function(recipient: Player, staff: Player, gift: StaffGrantLogic.Gift)
-		Net.fireClient("GiftReceived", recipient, {
-			from = staff.DisplayName,
-			kind = gift.kind,
-			amount = gift.amount,
-			cosmeticId = gift.cosmeticId,
-		})
+	-- Step 3: the pop-up queue, shown in the Hub only.
+	if not isHub then
+		return
+	end
+	local DataService = Loader.get("DataService") :: any
+	local function sendUnseen(player: Player)
+		local gifts = DataService.getUnseenGifts(player)
+		if #gifts > 0 then
+			Net.fireClient("GiftReceived", player, { gifts = gifts })
+		end
+	end
+	DataService.onLoaded(sendUnseen)
+	gifted.Event:Connect(function(recipient: Player)
+		sendUnseen(recipient)
+	end)
+	NetGuard.on("GiftsSeenIntent", function(player: Player, payload: any)
+		DataService.markGiftsSeen(player, payload.upToId)
 	end)
 end
 

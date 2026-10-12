@@ -189,4 +189,63 @@ function StaffGrantLogic.appendAudit(log: any, entry: AuditEntry, cap: number): 
 	return entries
 end
 
+-- ===== the pop-up queue (step 3) ===========================================
+--
+-- A gift lands in the profile at once, but its "GIFT RECEIVED!" pop-up
+-- only shows in the Hub (owner, 2026-10-12): so a gift given mid-match,
+-- or to someone who quits before getting back, waits in the profile's
+-- unseenGifts until the player is next in the Hub. The Hub sends the
+-- whole list, the client shows what it hasn't shown yet and names the
+-- newest id it showed, and everything up to that id is cleared. A gift
+-- given meanwhile sits after it, so it stays queued.
+
+-- Structurally ProfileLogic.UnseenGift. `id` is unique (a GUID from the
+-- caller), so a resent list never shows a gift twice.
+export type UnseenGift = {
+	id: string,
+	from: string,
+	kind: string,
+	amount: number?,
+	cosmeticId: string?,
+}
+
+-- A bound on profile size, not a policy: past it the oldest pop-ups are
+-- dropped (the gifts themselves are kept). One pop-up shows them all.
+StaffGrantLogic.UNSEEN_CAP = 20
+
+function StaffGrantLogic.unseen(gift: Gift, fromName: string, id: string): UnseenGift
+	return { id = id, from = fromName, kind = gift.kind, amount = gift.amount, cosmeticId = gift.cosmeticId }
+end
+
+-- `list` with `gift` added newest last, capped from the front. A new
+-- table; `list` is untouched.
+function StaffGrantLogic.noteUnseen(list: { UnseenGift }, gift: UnseenGift): { UnseenGift }
+	local out = table.clone(list)
+	table.insert(out, gift)
+	while #out > StaffGrantLogic.UNSEEN_CAP do
+		table.remove(out, 1)
+	end
+	return out
+end
+
+-- `list` without everything up to and including `upToId`, the newest
+-- gift the client says it showed. An id that isn't there (already
+-- cleared, or made up) clears nothing.
+function StaffGrantLogic.markSeen(list: { UnseenGift }, upToId: any): { UnseenGift }
+	local last: number? = nil
+	for index, gift in list do
+		if gift.id == upToId then
+			last = index
+		end
+	end
+	if last == nil then
+		return list
+	end
+	local out: { UnseenGift } = {}
+	for index = last + 1, #list do
+		table.insert(out, list[index])
+	end
+	return out
+end
+
 return StaffGrantLogic
