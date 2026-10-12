@@ -15,8 +15,8 @@ finishes it.
   Owner job: create the developer product in Creator Hub and paste its
   id into the config file.
   *Built 2026-10-12: profile v10 `streakSaves`, `StreakSave` grant kind
-  (DeveloperProduct only), `UseStreakSaveIntent`. Ships `enabled = false`
-  with no id or icon; the owner adds both, then sets it enabled.*
+  (DeveloperProduct only), `UseStreakSaveIntent`. Product 3718198254
+  created and enabled the same day.*
 - [ ] **2. Staff grants (server).** One staff-only remote, gated on
   `liveOps.adminUserIds`, that gives a chosen player coins, a cosmetic,
   Unlimited Navigation (held in the profile) or Streak Saves. Every

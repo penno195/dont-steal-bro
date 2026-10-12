@@ -8,9 +8,7 @@
 -- only other way to get one is a staff gift. Validate keeps it off coin
 -- offers and season tracks.
 --
--- Ships disabled with no id until the owner creates the developer
--- product in Creator Hub and pastes its id in (Store/init.luau), with
--- its icon (assets/store/streak-save.png, from make-store-icons.ps1).
+-- Icon: assets/store/streak-save.png, from make-store-icons.ps1.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
@@ -18,13 +16,13 @@ local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StreakSave: Validate.StoreItemDef = {
 	key = "streak-save",
 	kind = "DeveloperProduct",
-	assetId = 0,
-	enabled = false,
+	assetId = 3718198254,
+	enabled = true,
 	displayName = "Streak Save",
 	description = "Keep it for a bad day. Lose a streak and use this to carry on from where you were.",
 	robuxPrice = 100, -- display only
 	sortOrder = 50,
-	imageAssetId = 0,
+	imageAssetId = 72398974585372, -- assets/store/streak-save.png
 	grants = {
 		{ kind = "StreakSave", amount = 1 },
 	},
