@@ -169,6 +169,21 @@ TestRunner.describe("StaffPanelLogic lists", function()
 	end)
 end)
 
+TestRunner.describe("StaffPanelLogic.matches", function()
+	local hat = { id = "a", name = "Burglar Beanie", category = "Hat" }
+
+	TestRunner.it("matches name or category, ignoring case and outer spaces", function()
+		TestRunner.expect(StaffPanelLogic.matches(hat, "beanie")):toBe(true)
+		TestRunner.expect(StaffPanelLogic.matches(hat, "  HAT ")):toBe(true)
+		TestRunner.expect(StaffPanelLogic.matches(hat, "trail")):toBe(false)
+	end)
+
+	TestRunner.it("shows everything for an empty search, and treats symbols literally", function()
+		TestRunner.expect(StaffPanelLogic.matches(hat, "")):toBe(true)
+		TestRunner.expect(StaffPanelLogic.matches(hat, "%a")):toBe(false)
+	end)
+end)
+
 TestRunner.describe("StaffPanelLogic.readResult", function()
 	TestRunner.it("reads a reply and capitalises its message", function()
 		local result = StaffPanelLogic.readResult({ ok = true, message = "gave 5 coins to 1 player" }) :: any

@@ -33,12 +33,12 @@ StaffPanelLogic.KINDS = {
 	{ kind = "Cosmetic", label = "Cosmetic", icon = "gem", takesAmount = false, presets = {} },
 	{
 		kind = "NavigationRound",
-		label = "Navigation rounds",
+		label = "Nav rounds",
 		icon = "arrow",
 		takesAmount = true,
 		presets = { 1, 5, 10 },
 	},
-	{ kind = "UnlimitedNavigation", label = "Unlimited Navigation", icon = "arrow", takesAmount = false, presets = {} },
+	{ kind = "UnlimitedNavigation", label = "Unlimited Nav", icon = "arrow", takesAmount = false, presets = {} },
 	{ kind = "StreakSave", label = "Streak Saves", icon = "shield", takesAmount = true, presets = { 1, 3, 5 } },
 } :: { KindDef }
 
@@ -201,6 +201,18 @@ function StaffPanelLogic.sortCosmetics(cosmetics: { CosmeticEntry }): { Cosmetic
 		return byLower(a.name, b.name, a.id, b.id)
 	end)
 	return out
+end
+
+-- Whether a cosmetic shows under the search box's text: a plain,
+-- case-insensitive match on its name or category. Empty shows all.
+function StaffPanelLogic.matches(entry: CosmeticEntry, query: string): boolean
+	local wanted = string.lower((string.gsub(query, "^%s+", "")))
+	wanted = string.gsub(wanted, "%s+$", "")
+	if wanted == "" then
+		return true
+	end
+	return string.find(string.lower(entry.name), wanted, 1, true) ~= nil
+		or string.find(string.lower(entry.category), wanted, 1, true) ~= nil
 end
 
 -- ===== the reply ===========================================================

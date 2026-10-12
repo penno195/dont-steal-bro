@@ -46,8 +46,11 @@ finishes it.
   names only, never streaks or titles (Q7 condition 1).
   *Built 2026-10-12: a fifth launcher button (gift icon) for
   `liveOps.adminUserIds` only, so it opens between rounds, not mid-
-  race. `Screens/StaffPanel` (who on the left, what on the right in
-  landscape), `UI/StaffPanelLogic` with specs, data in MenuController.
+  race. `Screens/StaffPanel` is a small centred window, not a full-
+  screen menu (owner, after the Squishie merge game's panel): chip
+  grids for who and what, an amount box with quick picks, and a
+  searchable cosmetic grid. `UI/StaffPanelLogic` with specs, data in
+  MenuController.
   Give takes two taps (no caps, so the second tap is the guard). A
   reply that never comes clears after 10 s. Tested in Studio solo:
   100 coins to everyone -> server grant -> pop-up, which also covers
