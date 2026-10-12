@@ -689,7 +689,10 @@ local GameConfig: Validate.GameConfig = {
 		staffAuditLogCap = 1000,
 		-- The developers' Roblox user ids. Empty = nobody can run admin
 		-- commands (edit the DataStore by hand instead).
-		adminUserIds = { 11654855572 }, -- Corvus2026
+		adminUserIds = {
+			11654855572, -- Corvus2026
+			10068109232, -- sillynoah676767 (collaborator)
+		},
 
 		-- What an override may touch. "*" = one path segment, a trailing
 		-- "**" = any depth. Roots: game = GameConfig, powerUp = PowerUps
