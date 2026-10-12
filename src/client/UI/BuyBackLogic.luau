@@ -16,6 +16,10 @@
 -- THE PRICE is what Roblox reports for the product (managed pricing can
 -- move it), falling back to the config's display price until that
 -- answer arrives. Roblox's own prompt always shows the real charge.
+--
+-- A STREAK SAVE ("Applied case: staff tools") pays for the same thing
+-- with a held item instead of Robux. When the player holds one, the card
+-- offers it first, next to the Robux button.
 
 local BuyBackLogic = {}
 
@@ -25,6 +29,11 @@ export type Offer = {
 	streak: number,
 	robuxPrice: number,
 }
+
+-- The StorePurchaseResult key a Streak Save comes back under
+-- (StoreService's USE_SAVE_KEY). Also what `landed` is told is being
+-- bought while a save is being used.
+BuyBackLogic.USE_SAVE_KEY = "use-streak-save"
 
 -- How long the end screen shows before the card opens over it.
 BuyBackLogic.REVEAL_WAIT = 4
@@ -54,6 +63,26 @@ function BuyBackLogic.read(payload: any): Offer?
 		return nil
 	end
 	return { key = offer.key, streak = offer.streak, robuxPrice = offer.robuxPrice }
+end
+
+-- Reads StoreState.streakSaves defensively: anything odd is none held.
+function BuyBackLogic.readSaves(payload: any): number
+	if type(payload) ~= "table" then
+		return 0
+	end
+	local saves = payload.streakSaves
+	if type(saves) ~= "number" or saves < 1 or saves % 1 ~= 0 then
+		return 0
+	end
+	return saves
+end
+
+-- The card's "use a save" button, or nil when none is held.
+function BuyBackLogic.saveLabel(saves: number): string?
+	if saves < 1 then
+		return nil
+	end
+	return string.format("Use a Streak Save (%d held)", saves)
 end
 
 -- One offer's identity: a new loss is a new offer, even at the same tier.
@@ -105,7 +134,10 @@ end
 -- What to say when StoreState changes while a buy-back is being bought:
 -- the offer gone means the receipt landed and the streak is back.
 function BuyBackLogic.landed(buyingKey: string?, before: Offer?, after: Offer?): string?
-	if buyingKey == nil or before == nil or before.key ~= buyingKey or after ~= nil then
+	if buyingKey == nil or before == nil or after ~= nil then
+		return nil
+	end
+	if before.key ~= buyingKey and buyingKey ~= BuyBackLogic.USE_SAVE_KEY then
 		return nil
 	end
 	return string.format("Streak saved: you're back on %d.", before.streak)

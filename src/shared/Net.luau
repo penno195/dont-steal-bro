@@ -1071,6 +1071,19 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: "Use a Streak Save on my open buy-back offer."
+	-- No payload. The server checks the offer may be shown now and that
+	-- a save is held, exactly as it would before a buy-back prompt
+	-- ("Applied case: staff tools"). The result comes back as a
+	-- StorePurchaseResult under the key "use-streak-save".
+	UseStreakSaveIntent = {
+		name = "UseStreakSaveIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 2, refillPerSecond = 0.2 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: equip a cosmetic into a slot, or unequip with a
 	-- nil itemId. Validated against the player's own owned list
 	-- server-side - a client naming a cosmetic it never bought is
@@ -1112,7 +1125,8 @@ Net.Remotes = {
 	-- of who is worth something.
 	-- Also the open streak buy-back offer (`buyBack`: key, streak,
 	-- robuxPrice), which names your own streak - so StoreService holds
-	-- it back on a match server until your round's Results (Q7).
+	-- it back on a match server until your round's Results (Q7) - and
+	-- the Streak Saves held (`streakSaves`), which the offer card spends.
 	StoreState = {
 		name = "StoreState",
 		direction = "ServerBroadcast",

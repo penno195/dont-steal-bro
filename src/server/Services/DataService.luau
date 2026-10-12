@@ -678,6 +678,13 @@ local function spendNavigationRound(player: Player): boolean
 	return true
 end
 
+-- Streak Saves held ("Applied case: staff tools"). StoreService grants
+-- and spends them through the receipt handle; this is the read.
+local function getStreakSaves(player: Player): number
+	local d = data(player)
+	return if d then d.streakSaves else 0
+end
+
 -- The streak this player may buy back (design-decisions.md Q7, "buying
 -- back a streak"), or nil. The progression writer opens it, a buy-back
 -- receipt closes it, and expireBuyBackOffer closes it at a race start.
@@ -842,6 +849,7 @@ local DataService: Loader.Service = {
 	getCurrency = getCurrency,
 	getNavigationRounds = getNavigationRounds,
 	spendNavigationRound = spendNavigationRound,
+	getStreakSaves = getStreakSaves,
 	getBuyBackOffer = getBuyBackOffer,
 	expireBuyBackOffer = expireBuyBackOffer,
 	getSeasonProgress = getSeasonProgress,

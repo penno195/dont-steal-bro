@@ -434,13 +434,14 @@ export type StoreGrantKind =
 	| "Title"
 	| "NavigationRound"
 	| "StreakBuyBack"
+	| "StreakSave"
 	| "SeasonPass"
 -- What a perk pass unlocks for good. Only a GamePass carries one.
 export type StorePerk = "UnlimitedNavigation"
 
 local STORE_PRODUCT_KINDS: { StoreProductKind } = { "GamePass", "DeveloperProduct", "CoinOffer" }
 local STORE_GRANT_KINDS: { StoreGrantKind } =
-	{ "Currency", "PowerUpStock", "Cosmetic", "Title", "NavigationRound", "StreakBuyBack", "SeasonPass" }
+	{ "Currency", "PowerUpStock", "Cosmetic", "Title", "NavigationRound", "StreakBuyBack", "StreakSave", "SeasonPass" }
 -- Plain strings: a one-member list of literals won't widen for inSet.
 local STORE_PERKS: { string } = { "UnlimitedNavigation" }
 
@@ -451,7 +452,7 @@ local STORE_PERKS: { string } = { "UnlimitedNavigation" }
 -- StoreLogic.applyGrants reads only the field its own branch needs.
 export type StoreGrant = {
 	kind: StoreGrantKind,
-	amount: number?, -- Currency: how much. PowerUpStock, NavigationRound: how many.
+	amount: number?, -- Currency: how much. PowerUpStock, NavigationRound, StreakSave: how many.
 	powerUpId: string?, -- PowerUpStock: which power-up, cross-checked against the PowerUps registry
 	cosmeticId: string?, -- Cosmetic: which item, cross-checked against the Cosmetics registry (P4-6)
 	titleId: string?, -- Title: which title, cross-checked against the Titles registry
@@ -2060,6 +2061,16 @@ function Validate.checkStoreItem(fileName: string, def: StoreItemDef, issues: { 
 					field,
 					"`maxStreak` must be an integer no lower than `minStreak`, or nil for the top tier"
 				)
+			end
+		elseif grant.kind == "StreakSave" then
+			-- Robux only: a save never drops for free ("Applied case:
+			-- staff tools"), so no coin price and no free path. Season
+			-- tracks have their own grant list, which leaves it out.
+			if def.kind ~= "DeveloperProduct" then
+				issue(issues, "Store", fileName, field, "a StreakSave grant is only sold as a DeveloperProduct")
+			end
+			if type(grant.amount) ~= "number" or (grant.amount :: number) <= 0 or (grant.amount :: number) % 1 ~= 0 then
+				issue(issues, "Store", fileName, field, "a StreakSave grant needs a positive integer `amount`")
 			end
 		elseif grant.kind == "SeasonPass" then
 			-- Robux only, and alone: it unlocks whichever season is live

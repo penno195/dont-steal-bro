@@ -10,6 +10,8 @@
 -- only from that round's Results. Buying goes through the same
 -- StorePurchaseIntent as the store, with the key the server picked; the
 -- streak comes back when the receipt lands and StoreState drops the offer.
+-- A held Streak Save gets its own button on the card, which sends
+-- UseStreakSaveIntent instead; the server checks the same offer.
 
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
@@ -108,6 +110,23 @@ local function buy(key: string)
 	end)
 end
 
+-- Spends a held save. Shares buyingKey with a Robux buy, so the card
+-- can't do both at once, and `landed` toasts it the same way.
+local function useSave()
+	if buyingKey() ~= nil then
+		return
+	end
+	buyingKey(BuyBackLogic.USE_SAVE_KEY)
+	buyToken += 1
+	local token = buyToken
+	Net.fireServer("UseStreakSaveIntent", {})
+	task.delay(PURCHASE_TIMEOUT, function()
+		if buyToken == token then
+			buyingKey(nil)
+		end
+	end)
+end
+
 local function openCard()
 	local current = offer()
 	if closeCard ~= nil or current == nil then
@@ -116,29 +135,48 @@ local function openCard()
 	local shown = current :: BuyBackLogic.Offer
 	fetchPrice(shown.key)
 
+	local actions: { Modal.Action } = {}
+	local saveLabel = BuyBackLogic.saveLabel(BuyBackLogic.readSaves(MenuController.storeState()))
+	if saveLabel ~= nil then
+		table.insert(actions, {
+			label = saveLabel,
+			variant = "primary",
+			loading = function(): boolean
+				return buyingKey() == BuyBackLogic.USE_SAVE_KEY
+			end,
+			disabled = function(): boolean
+				return buyingKey() ~= nil and buyingKey() ~= BuyBackLogic.USE_SAVE_KEY
+			end,
+			onActivate = useSave,
+		})
+	end
+	table.insert(actions, {
+		label = BuyBackLogic.buyLabel(shown, livePrices[shown.key]),
+		-- A held save is the first choice; Robux steps back beside it.
+		variant = if saveLabel ~= nil then "secondary" else "primary",
+		loading = function(): boolean
+			return buyingKey() == shown.key
+		end,
+		disabled = function(): boolean
+			return buyingKey() ~= nil and buyingKey() ~= shown.key
+		end,
+		onActivate = function()
+			buy(shown.key)
+		end,
+	})
+	table.insert(actions, {
+		label = "No thanks",
+		variant = "secondary",
+		disabled = function(): boolean
+			return buyingKey() ~= nil
+		end,
+		onActivate = hideCard,
+	})
+
 	closeCard = Modal.open({
 		title = BuyBackLogic.title(shown),
 		body = BuyBackLogic.body(shown),
-		actions = {
-			{
-				label = BuyBackLogic.buyLabel(shown, livePrices[shown.key]),
-				variant = "primary",
-				loading = function(): boolean
-					return buyingKey() == shown.key
-				end,
-				onActivate = function()
-					buy(shown.key)
-				end,
-			},
-			{
-				label = "No thanks",
-				variant = "secondary",
-				disabled = function(): boolean
-					return buyingKey() ~= nil
-				end,
-				onActivate = hideCard,
-			},
-		},
+		actions = actions,
 		dismissible = true,
 		onDismiss = function()
 			-- Mid-purchase the Roblox prompt is open on top; the card
@@ -239,7 +277,9 @@ function BuyBackController:init()
 		if type(payload) ~= "table" or payload.key ~= buyingKey() then
 			return
 		end
-		if payload.status ~= "Prompted" then
+		-- "Granted" is a Streak Save spent: leave it buying so the offer
+		-- dropping from StoreState toasts it, as a landed receipt does.
+		if payload.status ~= "Prompted" and payload.status ~= "Granted" then
 			stopBuying()
 			if type(payload.message) == "string" and payload.message ~= "" then
 				C.Toast.show(payload.message, "warning")

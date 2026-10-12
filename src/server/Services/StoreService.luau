@@ -267,6 +267,7 @@ local function pushState(player: Player)
 		equipped = DataService.getEquipped(player),
 		ownedPasses = ownedPasses,
 		navigationRounds = DataService.getNavigationRounds(player),
+		streakSaves = DataService.getStreakSaves(player),
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
 	})
@@ -305,6 +306,7 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 		navigationRounds = data.navigationRounds,
 		currentStreak = data.currentStreak,
 		buyBackOffer = data.buyBackOffer,
+		streakSaves = data.streakSaves,
 	}
 
 	-- The season pass unlocks the live season's premium track; what its
@@ -334,6 +336,7 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 	data.ownedCosmetics = after.ownedCosmetics
 	data.unlockedTitles = after.unlockedTitles
 	data.navigationRounds = after.navigationRounds or data.navigationRounds
+	data.streakSaves = after.streakSaves or data.streakSaves
 	-- A streak buy-back (design-decisions.md Q7). The one streak change
 	-- outside ProgressionService's writer: it restores a streak the
 	-- writer already recorded losing, and only through a paid receipt,
@@ -351,12 +354,12 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 	return changes
 end
 
-local function recordGrant(player: Player, def: StoreItemDef, purchaseId: string?, changes: { string })
-	print(StoreLogic.formatGrantAudit(player.Name, player.UserId, def.key, def.assetId, purchaseId, changes))
+local function logGrant(player: Player, key: string, assetId: number, purchaseId: string?, changes: { string })
+	print(StoreLogic.formatGrantAudit(player.Name, player.UserId, key, assetId, purchaseId, changes))
 
 	table.insert(grantLog, {
 		userId = player.UserId,
-		productKey = def.key,
+		productKey = key,
 		purchaseId = purchaseId,
 		changes = changes,
 		at = os.time(),
@@ -364,6 +367,10 @@ local function recordGrant(player: Player, def: StoreItemDef, purchaseId: string
 	while #grantLog > GRANT_LOG_LIMIT do
 		table.remove(grantLog, 1)
 	end
+end
+
+local function recordGrant(player: Player, def: StoreItemDef, purchaseId: string?, changes: { string })
+	logGrant(player, def.key, def.assetId, purchaseId, changes)
 end
 
 -- ===== receipts ===========================================================
@@ -932,6 +939,55 @@ local function buyWithCoins(player: Player, def: StoreItemDef, resultKey: string
 	Loader.get("Telemetry").purchaseCompleted(player, def.key, def.kind, nil)
 end
 
+-- ===== Streak Saves ("Applied case: staff tools") ==========================
+
+-- Spends a held save on the open buy-back offer. The same gate as a
+-- buy-back prompt (buyBackFor's mayShowBuyBack), so a save can't be
+-- used before the reveal or with no offer; StoreLogic.useStreakSave
+-- then checks a save is held. Like a buy-back receipt, it's the one
+-- other streak write outside ProgressionService, and it's audited.
+local USE_SAVE_KEY = "use-streak-save"
+
+local function handleUseStreakSave(player: Player)
+	local RoundService = Loader.get("RoundService") :: any
+	local getHandle = receiptHandleFor
+	local handle = if getHandle then getHandle(player) else nil
+	local data = if handle then handle.getData() else nil
+	if handle == nil or data == nil or not handle.isActive() then
+		sendPurchaseResult(player, USE_SAVE_KEY, "Unavailable", "Your data isn't loaded yet. Try again in a moment.")
+		return
+	end
+	if not StoreLogic.mayShowBuyBack(data.buyBackOffer, RoundService.getRoundId(), RoundService.getState()) then
+		sendPurchaseResult(player, USE_SAVE_KEY, "Unavailable", "There's no streak to save right now.")
+		return
+	end
+
+	local after, change = StoreLogic.useStreakSave({
+		currency = data.currency,
+		powerUpStock = data.powerUpStock,
+		ownedCosmetics = data.ownedCosmetics,
+		unlockedTitles = data.unlockedTitles,
+		currentStreak = data.currentStreak,
+		buyBackOffer = data.buyBackOffer,
+		streakSaves = data.streakSaves,
+	})
+	if after == nil then
+		sendPurchaseResult(player, USE_SAVE_KEY, "Unavailable", "You don't have a Streak Save.")
+		return
+	end
+
+	data.streakSaves = after.streakSaves
+	data.currentStreak = after.currentStreak
+	data.buyBackOffer = after.buyBackOffer
+	handle.save()
+	logGrant(player, USE_SAVE_KEY, 0, nil, { change })
+	sendPurchaseResult(player, USE_SAVE_KEY, "Granted", "")
+	pushState(player)
+	-- The saved streak shows on the Hub's counter straight away.
+	local StreakTagService = Loader.get("StreakTagService") :: any
+	StreakTagService.broadcast()
+end
+
 -- ===== the purchase prompt flow ===========================================
 
 local function handlePurchaseIntent(player: Player, key: string)
@@ -1288,6 +1344,10 @@ function StoreService:init()
 
 	NetGuard.on("StorePurchaseIntent", function(player: Player, payload: any)
 		handlePurchaseIntent(player, payload.key)
+	end)
+
+	NetGuard.on("UseStreakSaveIntent", function(player: Player)
+		handleUseStreakSave(player)
 	end)
 
 	NetGuard.on("StoreEquipIntent", function(player: Player, payload: any)

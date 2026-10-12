@@ -7,13 +7,16 @@ finishes it.
 
 ## Steps
 
-- [ ] **1. Streak Save item.** A `streakSaves` count in the profile and
+- [x] **1. Streak Save item.** A `streakSaves` count in the profile and
   a `Store/StreakSave.luau` developer product (100 R$). The buy-back
   offer card gets a "Use Streak Save" button when the player holds one,
   next to the Robux button. Using one is server-validated against the
   live offer, exactly like a buy-back receipt, and spends one save.
   Owner job: create the developer product in Creator Hub and paste its
   id into the config file.
+  *Built 2026-10-12: profile v10 `streakSaves`, `StreakSave` grant kind
+  (DeveloperProduct only), `UseStreakSaveIntent`. Ships `enabled = false`
+  with no id or icon; the owner adds both, then sets it enabled.*
 - [ ] **2. Staff grants (server).** One staff-only remote, gated on
   `liveOps.adminUserIds`, that gives a chosen player coins, a cosmetic,
   Unlimited Navigation (held in the profile) or Streak Saves. Every

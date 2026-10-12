@@ -46,6 +46,7 @@ export type GrantKind =
 	| "Title"
 	| "NavigationRound"
 	| "StreakBuyBack"
+	| "StreakSave"
 	| "SeasonPass"
 
 export type Grant = {
@@ -81,6 +82,9 @@ export type GrantState = {
 	-- StreakBuyBack grant, and only StoreService passes these.
 	currentStreak: number?,
 	buyBackOffer: BuyBackOffer?,
+	-- Streak Saves held (ProfileLogic schema v10). Optional for the same
+	-- reason as navigationRounds; a StreakSave grant reads nil as 0.
+	streakSaves: number?,
 }
 
 -- ===== receipts ===========================================================
@@ -234,6 +238,7 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 		navigationRounds = state.navigationRounds,
 		currentStreak = state.currentStreak,
 		buyBackOffer = state.buyBackOffer,
+		streakSaves = state.streakSaves,
 	}
 	local lines: { string } = {}
 
@@ -326,6 +331,15 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 			)
 			updated.currentStreak = offer.streak
 			updated.buyBackOffer = nil
+		elseif grant.kind == "StreakSave" then
+			local amount = grant.amount
+			if amount == nil or amount <= 0 then
+				table.insert(lines, "SKIPPED StreakSave grant with no positive amount")
+				continue
+			end
+			local held = (updated.streakSaves or 0) + amount
+			updated.streakSaves = held
+			table.insert(lines, string.format("streak saves +%d (now %d)", amount, held))
 		elseif grant.kind == "SeasonPass" then
 			-- Nothing in GrantState: the caller unlocks the live season
 			-- (grantsSeasonPass) and logs what that paid.
@@ -396,6 +410,34 @@ function StoreLogic.mayShowBuyBack(offer: BuyBackOffer?, currentRoundId: string,
 		return false
 	end
 	return offer.roundId ~= currentRoundId or roundState == "Results" or roundState == "Cleanup"
+end
+
+-- Spends one Streak Save on the open offer ("Applied case: staff
+-- tools"): the same restore a buy-back receipt makes, paid with a held
+-- save instead of Robux. Returns nil and a reason, writing nothing, when
+-- there's no save or no offer. The caller checks mayShowBuyBack first,
+-- exactly as it does before opening a buy-back prompt.
+function StoreLogic.useStreakSave(state: GrantState): (GrantState?, string)
+	local held = state.streakSaves or 0
+	if held < 1 then
+		return nil, "no Streak Save held"
+	end
+	local offer = state.buyBackOffer
+	if offer == nil then
+		return nil, "no streak buy-back offer is open"
+	end
+	local updated = table.clone(state)
+	updated.streakSaves = held - 1
+	updated.currentStreak = offer.streak
+	updated.buyBackOffer = nil
+	return updated,
+		string.format(
+			"streak saved %d -> %d with a Streak Save (round %s, %d left)",
+			state.currentStreak or 0,
+			offer.streak,
+			offer.roundId,
+			held - 1
+		)
 end
 
 -- ===== coin offers (rewards-roadmap.md step 6) ==============================

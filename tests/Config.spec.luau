@@ -2638,6 +2638,28 @@ local function coinOffer(key: string): Validate.StoreItemDef
 	return def
 end
 
+TestRunner.describe("Validate.checkStoreItem (StreakSave, staff tools step 1)", function()
+	TestRunner.it("accepts a developer product selling saves", function()
+		local def = validProduct("s")
+		def.grants = { { kind = "StreakSave", amount = 1 } }
+		TestRunner.expect(#runWithStore({ { fileName = "S.luau", def = def } })):toBe(0)
+	end)
+
+	TestRunner.it("refuses a save for coins: it never comes free", function()
+		local def = coinOffer("c")
+		def.grants = { { kind = "StreakSave", amount = 1 } }
+		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = def } }) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a save grant without a positive integer amount", function()
+		for _, amount in { 0, -1, 1.5 } do
+			local def = validProduct("s")
+			def.grants = { { kind = "StreakSave", amount = amount } }
+			TestRunner.expect(#runWithStore({ { fileName = "S.luau", def = def } }) > 0):toBeTruthy()
+		end
+	end)
+end)
+
 TestRunner.describe("Validate.checkStoreItem (CoinOffer, rewards step 6)", function()
 	TestRunner.it("accepts an enabled coin offer with no Roblox asset", function()
 		TestRunner.expect(#runWithStore({ { fileName = "C.luau", def = coinOffer("c") } })):toBe(0)

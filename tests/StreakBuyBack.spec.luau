@@ -108,3 +108,50 @@ TestRunner.describe("StoreLogic.mayShowBuyBack", function()
 		TestRunner.expect(StoreLogic.mayShowBuyBack(nil, "srv:3", "Results")):toBe(false)
 	end)
 end)
+
+TestRunner.describe("Streak Saves", function()
+	local function withSaves(saves: number?, offer: StoreLogic.BuyBackOffer?): StoreLogic.GrantState
+		local s = state(offer)
+		s.streakSaves = saves
+		return s
+	end
+
+	TestRunner.it("stacks a bought save on top of those held", function()
+		local after, lines = StoreLogic.applyGrants(withSaves(2, nil), { { kind = "StreakSave", amount = 1 } })
+		TestRunner.expect(after.streakSaves):toBe(3)
+		TestRunner.expect(lines[1]):toBe("streak saves +1 (now 3)")
+	end)
+
+	TestRunner.it("reads no saves held as 0", function()
+		local after = StoreLogic.applyGrants(withSaves(nil, nil), { { kind = "StreakSave", amount = 2 } })
+		TestRunner.expect(after.streakSaves):toBe(2)
+	end)
+
+	TestRunner.it("spends one to restore the open offer's streak, like a buy-back", function()
+		local before = withSaves(2, { roundId = "srv:3", streak = 7 })
+		local after, line = StoreLogic.useStreakSave(before)
+		TestRunner.expect(after ~= nil):toBe(true)
+		local saved = after :: StoreLogic.GrantState
+		TestRunner.expect(saved.currentStreak):toBe(7)
+		TestRunner.expect(saved.streakSaves):toBe(1)
+		TestRunner.expect(saved.buyBackOffer == nil):toBe(true)
+		TestRunner.expect(line):toBe("streak saved 0 -> 7 with a Streak Save (round srv:3, 1 left)")
+		-- The state passed in is untouched.
+		TestRunner.expect(before.streakSaves):toBe(2)
+		TestRunner.expect(before.buyBackOffer ~= nil):toBe(true)
+	end)
+
+	TestRunner.it("refuses with no save held", function()
+		local after, reason = StoreLogic.useStreakSave(withSaves(0, { roundId = "srv:3", streak = 7 }))
+		TestRunner.expect(after == nil):toBe(true)
+		TestRunner.expect(reason):toBe("no Streak Save held")
+	end)
+
+	TestRunner.it("refuses with no offer open, and keeps the save", function()
+		local before = withSaves(1, nil)
+		local after, reason = StoreLogic.useStreakSave(before)
+		TestRunner.expect(after == nil):toBe(true)
+		TestRunner.expect(reason):toBe("no streak buy-back offer is open")
+		TestRunner.expect(before.streakSaves):toBe(1)
+	end)
+end)

@@ -139,6 +139,14 @@ export type ProfileData = {
 	-- pays once a day. Only the last day is kept: the reward doesn't
 	-- grow with consecutive days.
 	lastHuntDay: string?,
+
+	-- ===== schema v10, Streak Saves ======================================
+
+	-- Streak Saves held (design-decisions.md, "Applied case: staff
+	-- tools"). One does what a buy-back does, spent against an open
+	-- buyBackOffer instead of Robux. Bought in the store or gifted by
+	-- staff, never dropped for free. Stacks with no cap.
+	streakSaves: number,
 }
 
 -- A lost streak still open to buying back: which round lost it, and how
@@ -162,7 +170,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 9
+local CURRENT_SCHEMA_VERSION = 10
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -190,6 +198,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		navigationRounds = 0,
 		buyBackOffer = nil,
 		lastHuntDay = nil,
+		streakSaves = 0,
 	}
 end
 
@@ -318,6 +327,14 @@ migrations[8] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 9
 	next.lastHuntDay = nil
+	return next
+end
+
+-- v9 -> v10 (Streak Saves): none held. Nothing earlier sold or gave one.
+migrations[9] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 10
+	next.streakSaves = (old.streakSaves :: number?) or 0
 	return next
 end
 
