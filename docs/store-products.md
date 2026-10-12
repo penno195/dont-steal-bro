@@ -96,6 +96,7 @@ both together.
 | `StreakBuyBack6.luau` | 3717322985 | enabled |
 | `StreakBuyBack7.luau` | 3717323070 | enabled |
 | `StreakBuyBack8Plus.luau` | 3717323241 | enabled |
+| `StreakSave.luau` | Streak Save | 100 | Keep it for a bad day. Lose a streak and use this to carry on from where you were. *(Added 2026-10-12, staff tools step 1; a held item that stacks, shown in the store's Bundles tab. Icon: `assets/store/streak-save.png`.)* |
 | `SeasonPass.luau` | 3717513986 | enabled (2026-10-09); purchases refused while no season is live |
 
 Navigation's art is in `assets/store/navigation-round.png` and

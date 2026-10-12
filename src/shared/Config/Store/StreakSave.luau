@@ -10,7 +10,7 @@
 --
 -- Ships disabled with no id until the owner creates the developer
 -- product in Creator Hub and pastes its id in (Store/init.luau), with
--- its icon (assets/store/streak-save.png, not made yet).
+-- its icon (assets/store/streak-save.png, from make-store-icons.ps1).
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)

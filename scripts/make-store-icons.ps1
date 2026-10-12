@@ -514,3 +514,28 @@ foreach ($tier in @('1', '2', '3', '4', '5', '6', '7', '8+')) {
 	$name = if ($tier -eq '8+') { 'streak-buy-back-8-plus.png' } else { "streak-buy-back-$tier.png" }
 	Save-Icon $c $name
 }
+
+# ===== Streak Save ("Applied case: staff tools") ============================
+# A held buy-back: the same streak flame, kept safe inside a shield, on a
+# cool blue so it doesn't read as one of the buy-back tiers. No number:
+# it saves any streak.
+function Draw-Shield($g, [float]$cx, [float]$top, [float]$w, [float]$h) {
+	$x0 = $cx - $w / 2; $x1 = $cx + $w / 2
+	$p = New-Object System.Drawing.Drawing2D.GraphicsPath
+	$p.AddBezier((Pt $cx $top), (Pt ($cx + $w * 0.25) ($top + $h * 0.08)), (Pt ($x1 - $w * 0.12) ($top + $h * 0.06)), (Pt $x1 ($top + $h * 0.1)))
+	$p.AddBezier((Pt $x1 ($top + $h * 0.1)), (Pt ($x1 + $w * 0.02) ($top + $h * 0.55)), (Pt ($cx + $w * 0.3) ($top + $h * 0.85)), (Pt $cx ($top + $h)))
+	$p.AddBezier((Pt $cx ($top + $h)), (Pt ($cx - $w * 0.3) ($top + $h * 0.85)), (Pt ($x0 - $w * 0.02) ($top + $h * 0.55)), (Pt $x0 ($top + $h * 0.1)))
+	$p.AddBezier((Pt $x0 ($top + $h * 0.1)), (Pt ($x0 + $w * 0.12) ($top + $h * 0.06)), (Pt ($cx - $w * 0.25) ($top + $h * 0.08)), (Pt $cx $top))
+	$p.CloseFigure()
+	$g.DrawPath((Pen $ink 34), $p)
+	$g.DrawPath((Pen $white 18), $p)
+	$fill = New-Object System.Drawing.Drawing2D.LinearGradientBrush (New-Object System.Drawing.Rectangle ([int]$x0), ([int]$top), ([int]$w), ([int]$h)), (Rgb 70 60 160), (Rgb 30 25 80), 90
+	$g.FillPath($fill, $p)
+}
+
+$c = New-Icon (Rgb 90 190 255) (Rgb 70 40 170); $g = $c[1]
+Draw-Shield $g 256 78 252 290
+Draw-Flame $g 256 216 0.76 (Rgb 255 120 30) (Rgb 255 220 80)
+Draw-Sparkles $g @(@(84, 150, 22), @(428, 150, 16), @(96, 300, 12), @(420, 290, 14))
+Draw-Label $g 'SAVE' 430 56 (Rgb 255 220 90)
+Save-Icon $c 'streak-save.png'
