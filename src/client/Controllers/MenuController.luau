@@ -64,6 +64,8 @@ local StoreScreen = require(script.Parent.Parent.UI.Screens.Store)
 local ClaimPopup = require(script.Parent.Parent.UI.Screens.ClaimPopup)
 local StaffPanelScreen = require(script.Parent.Parent.UI.Screens.StaffPanel)
 local GiftLogic = require(script.Parent.Parent.UI.GiftLogic)
+local PrizeReveal = require(script.Parent.Parent.UI.Screens.PrizeReveal)
+local PrizeRevealLogic = require(script.Parent.Parent.UI.PrizeRevealLogic)
 local StaffPanelLogic = require(script.Parent.Parent.UI.StaffPanelLogic)
 local DecisionStudioController = require(script.Parent.DecisionStudioController)
 local SettingsController = require(script.Parent.SettingsController)
@@ -91,6 +93,9 @@ local STUDIO_POLL = 0.25
 -- A staff gift waits this long before it pops, so a few given in quick
 -- succession share one pop-up.
 local GIFT_BATCH = 0.5
+-- Seconds between the Hub being clear and the tutorial reward's spin
+-- starting, so the player has landed before the show begins.
+local REVEAL_SETTLE = 0.8
 -- How long the staff panel waits for StaffGrantResult before saying
 -- there was no reply (NetGuard drops a rate-limited intent silently).
 local STAFF_REPLY_WAIT = 10
@@ -881,7 +886,12 @@ function MenuController:init()
 			communityText(COMMUNITY_TEXT[status])
 		end
 	end)
-	-- The guided round's once-only reward, over its Results screen.
+	-- The guided round's once-only reward, revealed back in the Hub
+	-- (owner, 2026-10-15): a prize-wheel spin with ticks over the reveal
+	-- riser, then a flash, confetti and the claim pop-up with its win
+	-- flourish. It waits, like the gift pop-up, for the loading screen
+	-- and any other dialog to clear, so the show isn't missed.
+	local tutorialRevealing = false
 	Net.onClientEvent("TutorialRewarded", function(payload: any)
 		local grants = if type(payload) == "table" and type(payload.grants) == "table" then payload.grants else {}
 		local shown: { ClaimPopup.Reward } = {}
@@ -893,10 +903,51 @@ function MenuController:init()
 				image = grantImage(grant),
 			})
 		end
-		if #shown > 0 then
-			ClaimPopup.open(shown, "TUTORIAL DONE!", "First round finished. These are yours.")
-			Loader.get("AudioController").play("SeasonClaim")
+		if #shown == 0 or tutorialRevealing then
+			return
 		end
+		tutorialRevealing = true
+		task.spawn(function()
+			local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+			while
+				IN_PLAY[roundState() or ""]
+				or DecisionStudioController.isActive()
+				or playerGui:FindFirstChild("LoadingCover") ~= nil
+				or playerGui:FindFirstChild("Modal") ~= nil
+			do
+				task.wait(STUDIO_POLL)
+			end
+			task.wait(REVEAL_SETTLE)
+			Net.fireServer("TutorialRewardSeenIntent", {})
+			local audio = Loader.get("AudioController") :: any
+			local reveal = PrizeReveal.open(PrizeRevealLogic.SPIN)
+			audio.play("RevealRiser")
+			local started = os.clock()
+			for _, tick in PrizeRevealLogic.ticks() do
+				local wait = tick.at - (os.clock() - started)
+				if wait > 0 then
+					task.wait(wait)
+				end
+				audio.playScaled("PrizeTick", tick.volume)
+				reveal.tick()
+			end
+			local rest = PrizeRevealLogic.SPIN - (os.clock() - started)
+			if rest > 0 then
+				task.wait(rest)
+			end
+			reveal.reveal()
+			ClaimPopup.open(shown, "TUTORIAL DONE!", "First round finished. These are yours.")
+			audio.play("SeasonClaim")
+			-- The rays stay behind the pop-up until it goes, however it goes
+			-- (Nice!, a tap outside, or another dialog replacing it).
+			local modal = playerGui:FindFirstChild("Modal")
+			if modal then
+				modal.Destroying:Connect(reveal.close)
+			else
+				reveal.close()
+			end
+			tutorialRevealing = false
+		end)
 	end)
 	Net.onClientEvent("GiftReceived", function(payload: any)
 		holdGifts(GiftLogic.read(payload))

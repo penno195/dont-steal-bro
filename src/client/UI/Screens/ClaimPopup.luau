@@ -117,6 +117,9 @@ function ClaimPopup.open(rewards: { Reward }, title: string?, body: string?): ()
 	close = C.Modal.open({
 		title = title or if #rewards == 1 then "REWARD CLAIMED!" else string.format("%d REWARDS CLAIMED!", #rewards),
 		body = body,
+		-- Every body here is one short line; the default three left a gap
+		-- above the cards that pushed the pop-up off a short screen.
+		bodyLines = 1,
 		dismissible = true,
 		onDismiss = function()
 			close()
@@ -154,18 +157,29 @@ function ClaimPopup.open(rewards: { Reward }, title: string?, body: string?): ()
 				end
 				table.insert(rows, row)
 			end
+			-- The bounce's UIScale goes on an inner frame inside a fixed-size
+			-- one. On the auto-sized frame itself, the modal measured the
+			-- cards at POP_FROM and never again once they grew, so the card
+			-- sat off centre and its top went off a short screen.
+			local height = #rows * cardHeight(size) + (#rows - 1) * Theme.spacing.sm
 			local frame = create("Frame")({
 				Name = "Rewards",
-				Size = UDim2.fromOffset(C.Modal.CONTENT_WIDTH, 0),
-				AutomaticSize = Enum.AutomaticSize.Y,
+				Size = UDim2.fromOffset(C.Modal.CONTENT_WIDTH, height),
 				BackgroundTransparency = 1,
-				scale,
-				create("UIListLayout")({
-					Padding = UDim.new(0, Theme.spacing.sm),
-					HorizontalAlignment = Enum.HorizontalAlignment.Center,
-					SortOrder = Enum.SortOrder.LayoutOrder,
+				create("Frame")({
+					Name = "Pop",
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = UDim2.fromScale(0.5, 0.5),
+					Size = UDim2.fromScale(1, 1),
+					BackgroundTransparency = 1,
+					scale,
+					create("UIListLayout")({
+						Padding = UDim.new(0, Theme.spacing.sm),
+						HorizontalAlignment = Enum.HorizontalAlignment.Center,
+						SortOrder = Enum.SortOrder.LayoutOrder,
+					}),
+					rows,
 				}),
-				rows,
 			})
 			-- The bounce in: a back-eased overshoot from POP_FROM.
 			TweenService:Create(

@@ -842,9 +842,10 @@ end
 
 -- The tutorial reward's one write (design-decisions.md, "the first-time
 -- tutorial"): marks it paid and applies `grants` in the same mutation,
--- then saves at once, since it can never be earned again. Returns the
--- change lines, or nil when the profile isn't writable or it was
--- already paid.
+-- then saves at once, since it can never be earned again. It also
+-- leaves the reveal waiting for the Hub (tutorialRewardUnseen, owner
+-- 2026-10-15). Returns the change lines, or nil when the profile isn't
+-- writable or it was already paid.
 local function claimTutorialReward(player: Player, grants: { StoreLogic.Grant }): { string }?
 	local d = writable(player)
 	local profile = profiles[player]
@@ -852,6 +853,7 @@ local function claimTutorialReward(player: Player, grants: { StoreLogic.Grant })
 		return nil
 	end
 	d.tutorialRewarded = true
+	d.tutorialRewardUnseen = true
 	local changes = applyGrantsTo(d, grants)
 	profile:Save()
 	return changes
@@ -860,6 +862,21 @@ end
 local function hasTutorialReward(player: Player): boolean
 	local d = data(player)
 	return if d then d.tutorialRewarded else false
+end
+
+-- Paid, and the Hub hasn't shown its reveal yet (schema v14).
+local function isTutorialRewardUnseen(player: Player): boolean
+	local d = data(player)
+	return if d then d.tutorialRewardUnseen else false
+end
+
+-- The Hub showed the reveal. Only clears the pop-up record, never the
+-- reward, so like markGiftsSeen it needs no claimed writer.
+local function markTutorialRewardSeen(player: Player)
+	local d = writable(player)
+	if d ~= nil then
+		d.tutorialRewardUnseen = false
+	end
 end
 
 local function getStats(player: Player): ProfileLogic.Stats
@@ -977,6 +994,8 @@ local DataService: Loader.Service = {
 	claimDailyHunt = claimDailyHunt,
 	claimTutorialReward = claimTutorialReward,
 	hasTutorialReward = hasTutorialReward,
+	isTutorialRewardUnseen = isTutorialRewardUnseen,
+	markTutorialRewardSeen = markTutorialRewardSeen,
 	getStats = getStats,
 	recordRoundStat = recordRoundStat,
 	getUnlockedTitles = getUnlockedTitles,

@@ -75,5 +75,6 @@ require("./TutorialLogic.spec")
 require("./GiftLogic.spec")
 require("./EventLogic.spec")
 require("./StaffPanelLogic.spec")
+require("./PrizeRevealLogic.spec")
 
 TestRunner.run()

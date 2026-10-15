@@ -1167,14 +1167,26 @@ Net.Remotes = {
 		rateLimit = { capacity = 6, refillPerSecond = 1 },
 	} :: RemoteDef,
 
-	-- Server -> client (targeted): the guided tutorial round just paid
-	-- its once-per-account reward (TutorialService, tutorial seam 4).
+	-- Server -> client (targeted), Hub only: the guided tutorial round
+	-- paid its once-per-account reward and the player hasn't seen the
+	-- reveal yet (profile tutorialRewardUnseen). Sent when the profile
+	-- loads in the Hub, never on the match server (owner, 2026-10-15).
 	-- `{ grants = { { kind, amount?, powerUpId?, cosmeticId? } } }`,
-	-- TutorialLogic.rewardGrants, already applied. Only for the claim
-	-- that paid: a replay hears nothing. Shown as the claim pop-up.
+	-- TutorialLogic.rewardGrants, already applied. Shown as the prize
+	-- reveal, then the claim pop-up.
 	TutorialRewarded = {
 		name = "TutorialRewarded",
 		direction = "ServerBroadcast",
+	} :: RemoteDef,
+
+	-- Client -> server: the Hub showed the tutorial reward reveal, so it
+	-- stops waiting. Can only clear that pop-up record, never the reward.
+	TutorialRewardSeenIntent = {
+		name = "TutorialRewardSeenIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 2, refillPerSecond = 0.2 },
+		states = nil,
 	} :: RemoteDef,
 
 	-- Client -> server: the gift pop-up showed everything up to and

@@ -419,6 +419,12 @@ function AudioController.play(cueId: string, at: BasePart?)
 	play(cueId, at)
 end
 
+-- Public: a 2D one-shot at `volumeScale` times its cue's volume (the
+-- prize reveal's ticks, louder as the spin slows).
+function AudioController.playScaled(cueId: string, volumeScale: number)
+	play(cueId, nil, nil, volumeScale)
+end
+
 function AudioController:init()
 	poolFolder = Instance.new("Folder")
 	poolFolder.Name = "AudioPool"

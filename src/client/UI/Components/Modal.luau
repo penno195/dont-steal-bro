@@ -223,12 +223,31 @@ end
 -- shrinks the same way, keeping its shape, so a wide short screen (a
 -- landscape phone) keeps the title and "Got it" on screen. Full size is
 -- the size it was built at.
-local function fitToScreen(card: Frame, screen: ScreenGui)
+--
+-- Anything else (the claim pop-up's reward cards) has nothing that can
+-- give up height, so the whole card shrinks instead: `fit` scales it,
+-- through the enter animation's UIScale, until it fits the screen.
+local function fitToScreen(card: Frame, screen: ScreenGui, enter: UIScale, fit: (number) -> ())
 	local scroll = card:FindFirstChildWhichIsA("ScrollingFrame")
 	local body = scroll and scroll:FindFirstChildWhichIsA("GuiObject")
 	local picture = card:FindFirstChildWhichIsA("ImageLabel")
 	local fitted: GuiObject? = if scroll ~= nil and body ~= nil then scroll else picture
 	if fitted == nil then
+		local function refitWhole()
+			local scale = enter.Scale
+			if scale <= 0 or card.AbsoluteSize.X <= 0 then
+				return
+			end
+			-- The card's height at an enter scale of 1, and the global
+			-- scale (screen px per reference px) from its width.
+			local natural = card.AbsoluteSize.Y / scale
+			local global = card.AbsoluteSize.X / scale / CARD_WIDTH
+			local room = screen.AbsoluteSize.Y - 2 * Theme.spacing.lg * global
+			fit(math.clamp(room / math.max(natural, 1), 0.5, 1))
+		end
+		cleanup(card:GetPropertyChangedSignal("AbsoluteSize"):Connect(refitWhole))
+		cleanup(screen:GetPropertyChangedSignal("AbsoluteSize"):Connect(refitWhole))
+		refitWhole()
 		return
 	end
 	local full = fitted.Size
@@ -311,26 +330,54 @@ function Modal.open(props: Props): () -> ()
 		})
 		-- A GuiObject honours one UIScale, so the global scale goes on a
 		-- holder and the enter animation (a small grow) on the card.
+		--
+		-- The holder's height follows the card's measured one rather than
+		-- AutomaticSize: through two UIScales Roblox sized it short of the
+		-- card (241 vs 321 px for the tutorial reward pop-up), and with the
+		-- card hung from its top that pushed the card up off a short screen.
+		-- The card is centred in it, so the enter grow and fit stay centred.
 		local holder = create("Frame")({
 			Name = "ModalHolder",
 			AnchorPoint = Vector2.new(0.5, 0.5),
 			Position = UDim2.fromScale(0.5, 0.5),
 			Size = UDim2.fromOffset(CARD_WIDTH, 0),
-			AutomaticSize = Enum.AutomaticSize.Y,
 			BackgroundTransparency = 1,
 			Parent = contentGui,
 		})
 		cleanup(UIScaleController.attachScale(holder))
 		local dialog = Modal.card(props)
-		create("UIScale")({
+		dialog.AnchorPoint = Vector2.new(0.5, 0.5)
+		dialog.Position = UDim2.fromScale(0.5, 0.5)
+		local fit = source(1)
+		local enter = create("UIScale")({
 			Name = "Enter",
 			Scale = Env.animate(function()
-				return if shown() then 1 else 0.92
+				return (if shown() then 1 else 0.92) * fit()
 			end, Theme.motion.base),
 			Parent = dialog,
 		})
 		dialog.Parent = holder
-		fitToScreen(dialog, contentGui)
+		-- The card's height at an enter scale of 1, in the holder's own
+		-- (pre-global-scale) px.
+		local function syncHolder()
+			local global = holder.AbsoluteSize.X / CARD_WIDTH
+			local scale = enter.Scale
+			if global <= 0 or scale <= 0 then
+				return
+			end
+			local height = dialog.AbsoluteSize.Y / global / scale
+			if math.abs(holder.Size.Y.Offset - height) > 0.5 then
+				holder.Size = UDim2.fromOffset(CARD_WIDTH, height)
+			end
+		end
+		cleanup(dialog:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncHolder))
+		cleanup(holder:GetPropertyChangedSignal("AbsoluteSize"):Connect(syncHolder))
+		syncHolder()
+		fitToScreen(dialog, contentGui, enter, function(value: number)
+			if math.abs(value - fit()) > 0.01 then
+				fit(value)
+			end
+		end)
 		return dialog
 	end)
 

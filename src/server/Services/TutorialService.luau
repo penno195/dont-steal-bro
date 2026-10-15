@@ -24,13 +24,16 @@
 --
 --   The reward, once per account, when the round reaches Results with
 --   the player still here. DataService.claimTutorialReward makes the
---   "once"; a replay or a second claim pays nothing.
+--   "once"; a replay or a second claim pays nothing. The player sees it
+--   back in the Hub, not here (owner, 2026-10-15): the claim leaves
+--   the profile's tutorialRewardUnseen set, and the Hub's copy of this
+--   service sends TutorialRewarded when the profile loads there.
 --
 -- Everything else is an ordinary practice round: nothing touches a
 -- streak, a stat or a leaderboard (ProgressionService's practice gate).
 -- The client learns it's a tutorial from Workspace's TutorialMatch
 -- attribute (OnboardingController's step prompts, RaceHUD's hidden
--- clock), and hears about its reward from TutorialRewarded.
+-- clock), and hears about its reward from TutorialRewarded in the Hub.
 --
 -- STUDIO: set Workspace attributes DebugPracticeMatch and
 -- DebugTutorialMatch before the round loads (MatchTeleportService's
@@ -38,6 +41,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 
@@ -47,6 +51,7 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Participants = require(ServerScriptService.Server.Participants)
 local TutorialLogic = require(ServerScriptService.Server.TutorialLogic)
+local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 
 local config = GameConfig.tutorial
 
@@ -119,15 +124,29 @@ local function handlePause(_player: Player, paused: boolean)
 	setFrozen(paused)
 end
 
+local function rewardGrants()
+	return TutorialLogic.rewardGrants(config, cosmeticEnabled(config.rewardCosmeticId))
+end
+
+-- Paid here, shown in the Hub (sendUnseenReward).
 local function payRewards()
 	local DataService = Loader.get("DataService") :: any
-	local grants = TutorialLogic.rewardGrants(config, cosmeticEnabled(config.rewardCosmeticId))
+	local grants = rewardGrants()
 	for _, player in Players:GetPlayers() do
 		local changes = DataService.claimTutorialReward(player, grants)
 		if changes ~= nil then
 			print(string.format("TutorialService: paid the tutorial reward to %d", player.UserId))
-			Net.fireClient("TutorialRewarded", player, { grants = grants })
 		end
+	end
+end
+
+-- Hub only: a reward paid on a match server whose reveal is still
+-- waiting. Re-derived from config rather than stored, the same grants
+-- the claim used unless config changed in between.
+local function sendUnseenReward(player: Player)
+	local DataService = Loader.get("DataService") :: any
+	if DataService.isTutorialRewardUnseen(player) then
+		Net.fireClient("TutorialRewarded", player, { grants = rewardGrants() })
 	end
 end
 
@@ -174,6 +193,21 @@ function TutorialService:start()
 			payRewards()
 		end
 	end)
+
+	-- The same Hub test as the streak tags and staff gifts.
+	local isHub = StreakTagLogic.isHub(
+		game.PlaceId,
+		GameConfig.matchmaking.hubPlaceId,
+		RunService:IsStudio(),
+		Workspace:FindFirstChild("Hub") ~= nil
+	)
+	if isHub then
+		local DataService = Loader.get("DataService") :: any
+		DataService.onLoaded(sendUnseenReward)
+		NetGuard.on("TutorialRewardSeenIntent", function(player: Player)
+			DataService.markTutorialRewardSeen(player)
+		end)
+	end
 end
 
 return TutorialService

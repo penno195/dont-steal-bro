@@ -146,6 +146,20 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0.5,
 		duck = { level = 0.4, attack = 0.05, hold = 1.5, release = 0.8 },
 	}),
+	-- The tutorial reward reveal's prize-wheel spin (owner, 2026-10-15):
+	-- one click per tick on PrizeRevealLogic's slowing timeline, over
+	-- RevealRiser, before SeasonClaim lands with the prize. No cooldown,
+	-- since the first ticks come 50 ms apart; no duck, the riser's holds
+	-- the music down.
+	PrizeTick = cue({
+		assetId = "rbxassetid://9114212929", -- PSE "Dvd Player Button 13", TimerTick's click
+		category = "SFX",
+		volume = 0.7,
+		looped = false,
+		spatial = false,
+		priority = 70,
+		cooldown = 0,
+	}),
 
 	-- Race.
 	TimerTick = cue({

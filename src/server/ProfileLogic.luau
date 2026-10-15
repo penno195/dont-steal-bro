@@ -170,6 +170,14 @@ export type ProfileData = {
 	-- practice round (design-decisions.md, "the first-time tutorial").
 	-- Set in the same mutation as the reward, so it pays once ever.
 	tutorialRewarded: boolean,
+
+	-- ===== schema v14, the tutorial reward reveal ========================
+
+	-- Paid but not yet revealed. The guided round pays at its Results;
+	-- the "you won" reveal waits for the Hub (owner, 2026-10-15), so it
+	-- outlasts the match server like unseenGifts. Cleared when the Hub
+	-- client says it showed it (TutorialRewardSeenIntent).
+	tutorialRewardUnseen: boolean,
 }
 
 -- Structurally StaffGrantLogic.UnseenGift: a unique id, who gave it
@@ -203,7 +211,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 13
+local CURRENT_SCHEMA_VERSION = 14
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -235,6 +243,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		unlimitedNavigation = false,
 		unseenGifts = {},
 		tutorialRewarded = false,
+		tutorialRewardUnseen = false,
 	}
 end
 
@@ -398,6 +407,15 @@ migrations[12] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 13
 	next.tutorialRewarded = (old.tutorialRewarded :: boolean?) or false
+	return next
+end
+
+-- v13 -> v14 (the tutorial reward reveal): nothing waiting. A reward
+-- paid under v13 already showed its pop-up at the round's Results.
+migrations[13] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 14
+	next.tutorialRewardUnseen = (old.tutorialRewardUnseen :: boolean?) or false
 	return next
 end
 
