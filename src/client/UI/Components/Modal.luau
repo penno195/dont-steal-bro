@@ -58,7 +58,8 @@ export type Props = {
 	-- built inside the modal's Vide scope and placed between the body
 	-- and the actions. Its width is Modal.CONTENT_WIDTH, and it sizes
 	-- its own height - except a ScrollingFrame, whose height `open`
-	-- fits to the screen (fitToScreen).
+	-- fits to the screen, and an ImageLabel, which it shrinks to fit
+	-- (fitToScreen).
 	content: (() -> Instance)?,
 }
 
@@ -170,33 +171,48 @@ end
 -- can't push "Got it" off the bottom (mobile audit, iPhone portrait).
 -- Everything is converted to reference px by the content's own width
 -- ratio, which already includes the global and enter-animation scales.
+--
+-- A picture `content` (an ImageLabel, e.g. a tutorial step's screenshot)
+-- shrinks the same way, keeping its shape, so a wide short screen (a
+-- landscape phone) keeps the title and "Got it" on screen. Full size is
+-- the size it was built at.
 local function fitToScreen(card: Frame, screen: ScreenGui)
 	local scroll = card:FindFirstChildWhichIsA("ScrollingFrame")
 	local body = scroll and scroll:FindFirstChildWhichIsA("GuiObject")
-	if scroll == nil or body == nil then
+	local picture = card:FindFirstChildWhichIsA("ImageLabel")
+	local fitted: GuiObject? = if scroll ~= nil and body ~= nil then scroll else picture
+	if fitted == nil then
 		return
 	end
-	local width = scroll.Size.X.Offset
+	local full = fitted.Size
 	local function refit()
-		local s = scroll.AbsoluteSize.X / math.max(width, 1)
+		local s = fitted.AbsoluteSize.X / math.max(fitted.Size.X.Offset, 1)
 		if s <= 0 then
 			return
 		end
-		local chrome = (card.AbsoluteSize.Y - scroll.AbsoluteSize.Y) / s
+		local chrome = (card.AbsoluteSize.Y - fitted.AbsoluteSize.Y) / s
 		local room = screen.AbsoluteSize.Y / s - 2 * Theme.spacing.lg - chrome
-		local height = math.max(math.min(body.AbsoluteSize.Y / s, room), Theme.touch.primaryHeight * 2)
-		if math.abs(scroll.Size.Y.Offset - height) > 0.5 then
-			scroll.Size = UDim2.fromOffset(width, height)
+		local size
+		if fitted == scroll and body ~= nil then
+			local height = math.max(math.min(body.AbsoluteSize.Y / s, room), Theme.touch.primaryHeight * 2)
+			size = UDim2.fromOffset(full.X.Offset, height)
+		else
+			local height = math.max(math.min(full.Y.Offset, room), Theme.touch.primaryHeight)
+			size = UDim2.fromOffset(full.X.Offset * height / math.max(full.Y.Offset, 1), height)
+		end
+		if math.abs(fitted.Size.Y.Offset - size.Y.Offset) > 0.5 then
+			fitted.Size = size
 		end
 	end
-	for _, signal in
-		{
-			body:GetPropertyChangedSignal("AbsoluteSize"),
-			scroll:GetPropertyChangedSignal("AbsoluteSize"),
-			card:GetPropertyChangedSignal("AbsoluteSize"),
-			screen:GetPropertyChangedSignal("AbsoluteSize"),
-		}
-	do
+	local signals = {
+		fitted:GetPropertyChangedSignal("AbsoluteSize"),
+		card:GetPropertyChangedSignal("AbsoluteSize"),
+		screen:GetPropertyChangedSignal("AbsoluteSize"),
+	}
+	if body ~= nil and fitted == scroll then
+		table.insert(signals, body:GetPropertyChangedSignal("AbsoluteSize"))
+	end
+	for _, signal in signals do
 		cleanup(signal:Connect(refit))
 	end
 	refit()

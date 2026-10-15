@@ -244,20 +244,30 @@ export type StepId = "station" | "task" | "grab" | "use" | "finish"
 export type Step = { id: StepId, title: string, body: string, picture: number }
 
 local STEPS: { Step } = {
-	{ id = "station", title = "Head to a station", body = "Follow the arrow to your first task.", picture = 0 },
-	{ id = "task", title = "Do the task", body = "Finish the mini-game to tick it off.", picture = 0 },
-	{ id = "grab", title = "Grab a power-up", body = "Run through one of the glowing orbs.", picture = 0 },
+	{
+		id = "station",
+		title = "Head to a station",
+		body = "Follow the arrow to your first task.",
+		picture = 72834010784044,
+	},
+	{ id = "task", title = "Do the task", body = "Finish the mini-game to tick it off.", picture = 110568131773173 },
+	{
+		id = "grab",
+		title = "Grab a power-up",
+		body = "Run through one of the glowing orbs.",
+		picture = 103735767545857,
+	},
 	{
 		id = "use",
 		title = "Use it on a bot",
 		body = "Tap the power-up button. It hits the nearest rival.",
-		picture = 0,
+		picture = 77015988624200,
 	},
 	{
 		id = "finish",
 		title = "Finish your tasks",
 		body = "Top 3 make the finale. Follow the arrow.",
-		picture = 0,
+		picture = 114091474180130,
 	},
 }
 OnboardingLogic.STEPS = table.freeze(STEPS)
