@@ -1155,6 +1155,18 @@ Net.Remotes = {
 		direction = "ServerBroadcast",
 	} :: RemoteDef,
 
+	-- Client -> server: a guided-round step pop-up opened (`paused =
+	-- true`) or its "Got it" was tapped (false). TutorialService freezes
+	-- the round meanwhile: bots stop and the player is held still. Only
+	-- honoured in a tutorial round's race, which is solo, so a client
+	-- spamming it only stalls its own round.
+	TutorialPause = {
+		name = "TutorialPause",
+		direction = "ServerIntent",
+		schema = Net.struct({ paused = Net.boolean() }),
+		rateLimit = { capacity = 6, refillPerSecond = 1 },
+	} :: RemoteDef,
+
 	-- Server -> client (targeted): the guided tutorial round just paid
 	-- its once-per-account reward (TutorialService, tutorial seam 4).
 	-- `{ grants = { { kind, amount?, powerUpId?, cosmeticId? } } }`,

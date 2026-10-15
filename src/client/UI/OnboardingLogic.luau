@@ -236,19 +236,29 @@ end
 -- the prompt is the first fact in order not yet true. So a player who
 -- grabs a power-up on the way to their first station skips "Grab a
 -- power-up" when they get there.
+--
+-- Each step opens as a pop-up on a dimmed, frozen screen first (owner,
+-- 2026-10-15), with `picture`: a Studio screenshot of what to look for
+-- (0 = none yet, the pop-up just has the text).
 export type StepId = "station" | "task" | "grab" | "use" | "finish"
-export type Step = { id: StepId, title: string, body: string }
+export type Step = { id: StepId, title: string, body: string, picture: number }
 
 local STEPS: { Step } = {
-	{ id = "station", title = "Head to a station", body = "Follow the arrow to your first task." },
-	{ id = "task", title = "Do the task", body = "Finish the mini-game to tick it off." },
-	{ id = "grab", title = "Grab a power-up", body = "Run through one of the glowing orbs." },
+	{ id = "station", title = "Head to a station", body = "Follow the arrow to your first task.", picture = 0 },
+	{ id = "task", title = "Do the task", body = "Finish the mini-game to tick it off.", picture = 0 },
+	{ id = "grab", title = "Grab a power-up", body = "Run through one of the glowing orbs.", picture = 0 },
 	{
 		id = "use",
 		title = "Use it on a bot",
 		body = "Tap the power-up button. It hits the nearest rival.",
+		picture = 0,
 	},
-	{ id = "finish", title = "Finish your tasks", body = "Top 3 make the finale. Follow the arrow." },
+	{
+		id = "finish",
+		title = "Finish your tasks",
+		body = "Top 3 make the finale. Follow the arrow.",
+		picture = 0,
+	},
 }
 OnboardingLogic.STEPS = table.freeze(STEPS)
 

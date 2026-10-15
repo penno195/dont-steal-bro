@@ -143,8 +143,14 @@ local roundSeed = 0
 -- have finished something).
 local humanDurationSamples: { [string]: { number } } = {}
 
+-- The guided tutorial round can freeze the bots while a step pop-up is
+-- up (TutorialService). Their clock stops with them, so a bot mid-task
+-- or mid-walk picks up exactly where it was: every timer here reads now().
+local pausedAt: number? = nil
+local pausedTotal = 0
+
 local function now(): number
-	return Workspace:GetServerTimeNow()
+	return (pausedAt or Workspace:GetServerTimeNow()) - pausedTotal
 end
 
 -- ===== map injection ========================================================
@@ -1018,6 +1024,9 @@ local function startTicking()
 		local me = coroutine.running()
 		while true do
 			task.wait(interval)
+			if pausedAt ~= nil then
+				continue
+			end
 			local nowValue = now()
 			for _, record in npcs do
 				-- stopTicking can run from INSIDE this loop (see there).
@@ -1131,6 +1140,26 @@ local NPCService: Loader.Service = {
 	debugLoadFromMap = debugLoadFromMap,
 	routeBetween = routeBetween,
 	walkableRoute = walkableRoute,
+
+	-- Freezes or thaws every bot: their tick and clock stop and their
+	-- rigs are anchored where they stand. TutorialService's only.
+	setPaused = function(paused: boolean)
+		if paused == (pausedAt ~= nil) then
+			return
+		end
+		if paused then
+			pausedAt = Workspace:GetServerTimeNow()
+		else
+			pausedTotal += Workspace:GetServerTimeNow() - (pausedAt :: number)
+			pausedAt = nil
+		end
+		for _, record in npcs do
+			local root = record.model:FindFirstChild("HumanoidRootPart")
+			if root ~= nil and root:IsA("BasePart") then
+				root.Anchored = paused
+			end
+		end
+	end,
 
 	markArrivalGraceServed = function()
 		graceAlreadyServed = true

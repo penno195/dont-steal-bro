@@ -777,6 +777,16 @@ in-round tip cards stay as well.
     pays nothing. This is a deliberate exception to practice rounds giving
     no rewards: it's a one-off onboarding gift, not a round payout,
     and it never touches a streak, a stat or a leaderboard.
+  - **How a step is shown** (owner, 2026-10-15, after the first
+    Studio look; replaces the corner tip card): each step opens as a
+    **pop-up in the middle of a dimmed screen, with a picture** of
+    what to look for (e.g. "Head to a station" shows a station with
+    its light on). While it's up the **round is frozen**: bots stop
+    and the player can't move, until they tap "Got it" (it's solo, so
+    nobody else waits). After that a **small reminder** of the step
+    stays in the corner until the step is done. Pictures are **Studio
+    screenshots** of the real game. The four **hub intro cards get a
+    picture each** in the same style.
 
 ## 8. Are starting power-ups sold for Robux?
 

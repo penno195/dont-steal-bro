@@ -20,13 +20,17 @@
 --
 -- THE GUIDED ROUND (tutorial seam 4): in the tutorial round (Workspace
 -- TutorialMatch, set by TutorialService) the tips stand down, so a
--- first real round still gets them. The same card shows the step
--- prompts instead (OnboardingLogic.STEPS), each one up until the
--- player has done it, whatever the tips setting says. A finalist gets
--- How it works on their own as the Studio's talking starts, before
+-- first real round still gets them. Each step (OnboardingLogic.STEPS)
+-- first opens as a pop-up in the middle of a dimmed screen, with its
+-- picture, and the round is frozen until "Got it" (TutorialPause;
+-- TutorialService stops the bots and holds the player). Then the same
+-- corner card keeps the step up as a reminder until the player has done
+-- it, whatever the tips setting says (owner, 2026-10-15). A finalist
+-- gets How it works on their own as the Studio's talking starts, before
 -- they pick.
 
 local Players = game:GetService("Players")
+local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
@@ -80,6 +84,10 @@ local steps = OnboardingLogic.newSteps()
 local step = source(nil :: OnboardingLogic.Step?)
 local racing = false
 local explained = false -- How it works has opened by itself this round
+-- Steps whose pop-up has been read ("Got it") this round, and the one up.
+local acked: { [string]: boolean } = {}
+local popupId = source(nil :: string?)
+local closePopup: (() -> ())? = nil
 
 local function isTutorial(): boolean
 	return Workspace:GetAttribute("TutorialMatch") == true
@@ -87,9 +95,75 @@ end
 
 local dismiss: () -> ()
 
+local function hidePopup()
+	if closePopup ~= nil then
+		closePopup()
+		closePopup = nil
+	end
+	if popupId() ~= nil then
+		popupId(nil)
+		Net.fireServer("TutorialPause", { paused = false })
+	end
+end
+
+local function stepPicture(picture: number): Instance
+	return create("ImageLabel")({
+		Name = "Picture",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(C.Modal.CONTENT_WIDTH, math.floor(C.Modal.CONTENT_WIDTH * 9 / 16)),
+		Image = string.format("rbxassetid://%d", picture),
+		ScaleType = Enum.ScaleType.Fit,
+		Base.corner(Theme.radius.md),
+	})
+end
+
+-- A step not yet read gets its pop-up, and the round freezes under it.
+-- One that's done or read by other means (it latched) just closes.
+local function syncPopup(current: OnboardingLogic.Step?)
+	if current ~= nil and acked[current.id] then
+		current = nil
+	end
+	if current == nil then
+		hidePopup()
+		return
+	end
+	if popupId() == current.id then
+		return
+	end
+	if closePopup ~= nil then
+		closePopup()
+	end
+	local id = current.id
+	local function gotIt()
+		if popupId() == id then
+			acked[id] = true
+			hidePopup()
+		end
+	end
+	local picture = current.picture
+	closePopup = C.Modal.open({
+		title = current.title,
+		body = current.body,
+		content = if picture ~= 0
+			then function()
+				return stepPicture(picture)
+			end
+			else nil,
+		actions = { { label = "Got it", onActivate = gotIt } },
+		dismissible = true,
+		onDismiss = gotIt,
+	})
+	if popupId() == nil then
+		Net.fireServer("TutorialPause", { paused = true })
+	end
+	popupId(id)
+end
+
 local function sync()
 	local tutorial = isTutorial()
-	step(if tutorial and racing then OnboardingLogic.currentStep(steps) else nil)
+	local current = if tutorial and racing then OnboardingLogic.currentStep(steps) else nil
+	step(current)
+	syncPopup(current)
 	local id = if enabled and not tutorial then state.showing else nil
 	local tip = if id then OnboardingLogic.tip(id) else nil
 	showing(tip)
@@ -138,6 +212,10 @@ local function card(): TextButton
 		local tipShown, stepShown = showing(), step()
 		if tipShown ~= nil then
 			return tipShown
+		end
+		-- The corner reminder waits until the step's pop-up is read.
+		if popupId() ~= nil then
+			return nil
 		end
 		return if stepShown then { title = stepShown.title, body = stepShown.body } else nil
 	end)
@@ -232,6 +310,7 @@ local function onRoundState(payload: any)
 	racing = payload.state == "Race"
 	if payload.state == "Loading" then
 		steps = OnboardingLogic.newSteps()
+		acked = {}
 		explained = false
 	end
 	local stage = STAGE_OF_ROUND[payload.state]
@@ -276,8 +355,14 @@ function OnboardingController:init()
 		end
 	end)
 
-	-- The guided round's steps. A task view opening means they reached
-	-- a station; their own route says which tasks are done.
+	-- The guided round's steps. A station's prompt showing means they
+	-- reached it, so "Do the task" pops up before the mini-game opens,
+	-- never over it. A task view opening says the same, as a backstop.
+	ProximityPromptService.PromptShown:Connect(function(prompt: ProximityPrompt)
+		if prompt.Name == "TaskInteractPrompt" then
+			completeStep("station")
+		end
+	end)
 	Net.onClientEvent("TaskChallenge", function()
 		completeStep("station")
 	end)
