@@ -842,9 +842,10 @@ go?" offer. The plan and build order are in `onboarding.md`,
   reward, so finishing still pays Rookie Cap + 100 coins + a Freeze,
   revealed back in the Hub. Then normal play.
 - **Practice-area details (owner, 2026-10-15, after seam 2):** the
-  personal pickup holds **Push/Trip, Blind or Freeze**. Task Scramble
-  was dropped because it does nothing to a dummy (no task), and Freeze
-  is allowed here even though the Locker step also gives one. Firing
+  personal pickup is **always Freeze** (Task Scramble did nothing to a
+  dummy; a random Push/Trip/Blind/Freeze mix was a misreading, owner
+  corrected it the same day). Freeze here is fine even though the
+  Locker step also gives one. Firing
   the item counts as done, whether it lands or not. Card copy:
   "Mess with rivals" / "Grab the glowing power-up in the middle of the
   practice area."; "Aim and fire" / "Drag from its slot (or left click)
