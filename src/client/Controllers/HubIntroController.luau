@@ -9,11 +9,15 @@
 -- changes its own screen. The tutorial's reward is the server's call
 -- (DataService.claimTutorialReward, on finishing the guided round).
 --
+-- Each card has its picture (a Studio screenshot, `picture`) above the
+-- body, like the guided round's step pop-ups.
+--
 -- One Modal per card: Next closes this one and opens the next, so each
 -- card reads as a fresh page. Any way out (Skip, Try, the close button,
 -- B, tapping outside) marks it seen. Settings' "Show the intro" sets
 -- introSeen back to false, and it opens again from the first card.
 
+local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -81,9 +85,17 @@ local function showCard(index: number)
 		showOffer()
 		return
 	end
+	local picture = card.picture
 	closeCurrent = C.Modal.open({
 		title = string.format("%s  %d/%d", card.title, index, #OnboardingLogic.INTRO),
 		body = card.body,
+		content = if picture ~= 0
+			then function()
+				return C.Modal.picture(picture)
+			end
+			else nil,
+		bodyLines = 2,
+		actionsInline = true,
 		actions = {
 			{
 				label = "Next",
@@ -107,6 +119,18 @@ local function showCard(index: number)
 			finish(false)
 		end,
 	})
+end
+
+-- Fetches the cards' pictures while the Hub settles, so each card opens
+-- with its picture already drawn rather than popping in a beat later.
+local function preloadPictures()
+	local ids: { string } = {}
+	for _, card in OnboardingLogic.INTRO do
+		if card.picture ~= 0 then
+			table.insert(ids, string.format("rbxassetid://%d", card.picture))
+		end
+	end
+	pcall(ContentProvider.PreloadAsync, ContentProvider, ids)
 end
 
 local function due(): boolean
@@ -139,6 +163,7 @@ function HubIntroController:start()
 	end
 	roundState = menu.roundState()
 	task.spawn(function()
+		local preloaded = false
 		local dueSince: number? = nil
 		while true do
 			task.wait(POLL)
@@ -147,6 +172,10 @@ function HubIntroController:start()
 				dueSince = nil
 			elseif dueSince == nil then
 				dueSince = os.clock()
+				if not preloaded then
+					preloaded = true
+					task.spawn(preloadPictures)
+				end
 			elseif os.clock() - dueSince >= SETTLE then
 				dueSince = nil
 				open = true

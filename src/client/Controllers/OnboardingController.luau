@@ -106,17 +106,6 @@ local function hidePopup()
 	end
 end
 
-local function stepPicture(picture: number): Instance
-	return create("ImageLabel")({
-		Name = "Picture",
-		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(C.Modal.CONTENT_WIDTH, math.floor(C.Modal.CONTENT_WIDTH * 9 / 16)),
-		Image = string.format("rbxassetid://%d", picture),
-		ScaleType = Enum.ScaleType.Fit,
-		Base.corner(Theme.radius.md),
-	})
-end
-
 -- A step not yet read gets its pop-up, and the round freezes under it.
 -- One that's done or read by other means (it latched) just closes.
 local function syncPopup(current: OnboardingLogic.Step?)
@@ -146,7 +135,7 @@ local function syncPopup(current: OnboardingLogic.Step?)
 		body = current.body,
 		content = if picture ~= 0
 			then function()
-				return stepPicture(picture)
+				return C.Modal.picture(picture)
 			end
 			else nil,
 		actions = { { label = "Got it", onActivate = gotIt } },

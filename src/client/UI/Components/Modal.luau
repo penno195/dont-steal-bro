@@ -51,6 +51,12 @@ export type Props = {
 	-- Stacked vertically, first on top: one thumb reaches a full-width
 	-- stack more easily than a side-by-side pair on a narrow phone.
 	actions: { Action },
+	-- Two actions side by side instead (the hub intro's Next / Skip), so
+	-- a picture `content` keeps more of the height on a landscape phone.
+	actionsInline: boolean?,
+	-- The body's height in lines; 3 if unset. Short copy above a picture
+	-- can give a line back to it.
+	bodyLines: number?,
 	-- Shows a close button, and lets B / tap-outside dismiss.
 	dismissible: boolean?,
 	onDismiss: (() -> ())?,
@@ -72,12 +78,26 @@ local Modal = {}
 
 Modal.CONTENT_WIDTH = ACTION_WIDTH
 
+-- A 16:9 picture as `content` (the tutorial's step and intro pictures):
+-- a Studio screenshot, full content width, shrunk by fitToScreen on a
+-- short screen.
+function Modal.picture(assetId: number): ImageLabel
+	return create("ImageLabel")({
+		Name = "Picture",
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(ACTION_WIDTH, math.floor(ACTION_WIDTH * 9 / 16)),
+		Image = string.format("rbxassetid://%d", assetId),
+		ScaleType = Enum.ScaleType.Fit,
+		Base.corner(Theme.radius.md),
+	}) :: ImageLabel
+end
+
 function Modal.card(props: Props): Frame
 	local children: { Instance } = {
 		Base.text("body", {
 			Name = "Body",
 			LayoutOrder = 1,
-			Size = UDim2.new(1, 0, 0, Theme.type.body.size * 3),
+			Size = UDim2.new(1, 0, 0, Theme.type.body.size * (props.bodyLines or 3)),
 			Text = props.body or "",
 			Visible = props.body ~= nil,
 			TextColor3 = Theme.color.inkMuted,
@@ -90,20 +110,47 @@ function Modal.card(props: Props): Frame
 		content.LayoutOrder = 2
 		table.insert(children, content)
 	end
+	local inline = props.actionsInline == true and #props.actions > 1
+	local actionWidth = if inline
+		then (ACTION_WIDTH - Theme.spacing.sm * (#props.actions - 1)) / #props.actions
+		else ACTION_WIDTH
+	local buttons: { Instance } = {}
 	for i, action in props.actions do
 		table.insert(
-			children,
+			buttons,
 			Button({
 				label = action.label,
 				onActivate = action.onActivate,
 				variant = action.variant or (if i == 1 then "primary" else "secondary"),
 				disabled = action.disabled,
 				loading = action.loading,
-				width = ACTION_WIDTH,
+				width = actionWidth,
 				order = i,
 				layoutOrder = 10 + i,
 			})
 		)
+	end
+	if inline then
+		local row = create("Frame")({
+			Name = "Actions",
+			LayoutOrder = 10,
+			BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(ACTION_WIDTH, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		})
+		for _, button in buttons do
+			button.Parent = row
+		end
+		table.insert(children, row)
+	else
+		for _, button in buttons do
+			table.insert(children, button)
+		end
 	end
 
 	local card = create("Frame")({
@@ -295,7 +342,8 @@ function Modal.open(props: Props): () -> ()
 
 	shown(true)
 	if UIScaleController.getInputMode() == Enum.PreferredInput.Gamepad then
-		local first = card:FindFirstChild("Button")
+		local actions = card:FindFirstChild("Actions")
+		local first = (actions or card):FindFirstChild("Button")
 		if first and first:IsA("GuiObject") then
 			GuiService.SelectedObject = first
 		end

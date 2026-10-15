@@ -29,6 +29,11 @@ then the offer. `HubIntroController` draws it; the copy and the
 | 4 | Your streak | Win and it goes up. Lose once and it's back to 0. |
 | Offer | Want a practice go? | A quick round against bots. Finish it for a Rookie Cap, 100 coins and a Freeze. **[Try a practice round] [Skip]** |
 
+Each card shows its picture (a Studio screenshot, `picture`; ids and
+how they were taken in `assets/tutorial/README.md`) above the body.
+Next and Skip sit side by side (Modal `actionsInline`) and the body is
+two lines, so the picture keeps its size on a landscape phone; the
+pictures are preloaded once the intro is due.
 Every card has Next and Skip. Any way out (Skip, Try, close, B, tap
 outside) sets the `introSeen` setting, so it shows once. Skip pulses
 the Play button (not under reduced motion). Try queues the guided

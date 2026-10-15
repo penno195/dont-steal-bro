@@ -182,20 +182,31 @@ end
 -- THE HUB INTRO (tutorial seam 2, docs/onboarding.md). Four cards on a
 -- player's first visit to the Hub, then the offer: a guided practice
 -- round, or Skip. Titles and copy are the owner's (2026-10-15), in the
--- tips' voice and limits.
-export type IntroCard = { title: string, body: string }
+-- tips' voice and limits. `picture` is a Studio screenshot of the
+-- thing the card talks about (0 = none), shown above the body.
+export type IntroCard = { title: string, body: string, picture: number }
 
 OnboardingLogic.INTRO = table.freeze({
-	table.freeze({ title = "Race your tasks", body = "Follow the arrow, finish your tasks. Top 3 go to the finale." }),
+	table.freeze({
+		title = "Race your tasks",
+		body = "Follow the arrow, finish your tasks. Top 3 go to the finale.",
+		picture = 91245205999536,
+	}),
 	table.freeze({
 		title = "Mess with rivals",
 		body = "Grab power-ups and slow the others down. They'll do it to you too.",
+		picture = 80687323402669,
 	}),
 	table.freeze({
 		title = "Steal or Share",
 		body = "The top 3 pick in secret. Steal only pays if you're the only one.",
+		picture = 114988782676873,
 	}),
-	table.freeze({ title = "Your streak", body = "Win and it goes up. Lose once and it's back to 0." }),
+	table.freeze({
+		title = "Your streak",
+		body = "Win and it goes up. Lose once and it's back to 0.",
+		picture = 90491077637692,
+	}),
 } :: { IntroCard })
 
 OnboardingLogic.INTRO_OFFER = table.freeze({

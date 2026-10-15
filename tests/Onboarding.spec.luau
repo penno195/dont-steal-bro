@@ -114,6 +114,7 @@ describe("OnboardingLogic hub intro", function()
 			table.insert(titles, card.title)
 			expect(#card.title <= 30):toBe(true)
 			expect(#card.body <= 90):toBe(true)
+			expect(typeof(card.picture)):toBe("number")
 		end
 		expect(table.concat(titles, "|")):toBe("Race your tasks|Mess with rivals|Steal or Share|Your streak")
 		expect(#OnboardingLogic.INTRO_OFFER.body <= 90):toBe(true)
