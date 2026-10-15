@@ -112,7 +112,7 @@ function Spotlight.open(props: Props): () -> ()
 			Parent = gui,
 		}) :: Frame
 		cleanup(UIScaleController.attachScale(holder))
-		card = Modal.card({ title = props.title, body = props.body, bodyLines = 2, actions = {} })
+		card = Modal.card({ title = props.title, body = props.body, lead = true, actions = {} })
 		card.AnchorPoint = Vector2.new(0.5, 0.5)
 		card.Position = UDim2.fromScale(0.5, 0.5)
 		card.Parent = holder

@@ -13,8 +13,12 @@
 -- once it's well inside the claim radius (CLAIM_SHARE of it, so a laggy
 -- position still lands inside the server's check).
 --
--- Unlike the hunt's find, this one is meant to be found at once: a
--- shaft of light rises from it, the same as a race station's marker.
+-- It looks exactly like a race pickup (Shared/PickupLook: force-field
+-- shell, lights, the item's icon inside), and it goes in the
+-- PowerUpPickups folder when the hub has one so PickupController spins
+-- and breathes it like the rest. Unlike the hunt's find, this one is
+-- meant to be found at once: a shaft of light rises from it, the same
+-- as a race station's marker.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25,21 +29,18 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
-local PowerUpLogic = require(ReplicatedStorage.Shared.PowerUpLogic)
+local PickupLook = require(ReplicatedStorage.Shared.PickupLook)
 
 local CLAIM_SHARE = 0.6 -- of practicePickupClaimRadius, where the client asks
 local CHECK_SECONDS = 0.2 -- how often it measures the distance
 local RETRY_SECONDS = 3 -- an unanswered claim may be asked again after this
-local BOB_HEIGHT = 0.3
-local BOB_SPEED = 2.5
-local SPIN_SPEED = 1.5 -- radians a second
-local DROP = 3 -- the server sends the orb at root height; the floor is this far below
-local ORB_STUDS = 2
+local BEAM_START = 2.4 -- above the orb centre: the shell's top, so the shaft never crosses the icon
 local BEAM_HEIGHT = 30
 local BEAM_WIDTH_BASE = 1.4
 local BEAM_WIDTH_TOP = 0.3
 
-local pickup: Model? = nil
+local pickup: BasePart? = nil -- the orb (PickupLook)
+local shaft: BasePart? = nil -- the light beam's still base
 local anchor: Vector3? = nil -- where the server measures the claim from
 local claimedAt: number? = nil
 local sinceCheck = 0
@@ -49,6 +50,10 @@ local function clear()
 		pickup:Destroy()
 		pickup = nil
 	end
+	if shaft ~= nil then
+		shaft:Destroy()
+		shaft = nil
+	end
 	anchor = nil
 	claimedAt = nil
 end
@@ -56,65 +61,35 @@ end
 local function roleColor(powerUpId: string): Color3
 	for _, entry in PowerUps do
 		if entry.def.id == powerUpId then
-			local rgb = PowerUpLogic.ROLE_RGB[entry.def.role]
-			if rgb ~= nil then
-				return Color3.fromRGB(rgb[1], rgb[2], rgb[3])
-			end
+			return PickupLook.roleColor(entry.def.role)
 		end
 	end
 	return Color3.new(1, 1, 1)
 end
 
--- A glowing orb in the item's role colour, with a fading shaft of light
--- above it so it reads from across the hub.
+-- The race pickup's look, in the item's role colour, with a fading
+-- shaft of light above it so it reads from across the hub.
 local function draw(position: Vector3, powerUpId: string)
 	clear()
 	local color = roleColor(powerUpId)
-	local model = Instance.new("Model")
-	model.Name = "TutorialPickup"
-
-	local orb = Instance.new("Part")
-	orb.Name = "Orb"
-	orb.Shape = Enum.PartType.Ball
-	orb.Size = Vector3.new(ORB_STUDS, ORB_STUDS, ORB_STUDS)
-	orb.Material = Enum.Material.Neon
-	orb.Color = color
-	orb.Transparency = 0.15
-	orb.Anchored = true
-	orb.CanCollide = false
-	orb.CanQuery = false
+	local models = ReplicatedStorage:FindFirstChild("TutorialPickupModels")
+	local orb = PickupLook.build(CFrame.new(position))
+	orb.Name = "TutorialPickup"
 	orb.CanTouch = false
-	orb.CastShadow = false
-	orb.Parent = model
+	orb.CanQuery = false
+	PickupLook.show(orb, color, if models ~= nil then models:FindFirstChild(powerUpId) else nil)
 
-	local light = Instance.new("PointLight")
-	light.Color = color
-	light.Range = 10
-	light.Brightness = 2
-	light.Parent = orb
-
-	local sparkle = Instance.new("ParticleEmitter")
-	sparkle.Color = ColorSequence.new(color:Lerp(Color3.new(1, 1, 1), 0.3))
-	sparkle.LightEmission = 1
-	sparkle.Size = NumberSequence.new(0.3, 0)
-	sparkle.Lifetime = NumberRange.new(0.6, 1)
-	sparkle.Rate = 8
-	sparkle.Speed = NumberRange.new(1, 2)
-	sparkle.SpreadAngle = Vector2.new(180, 180)
-	sparkle.Parent = orb
-
-	-- The shaft stands on its own still part, so the orb's bob and spin
-	-- don't swing it.
+	-- The shaft rises from the shell's top on its own still part, so it
+	-- never washes over the icon and the orb's spin doesn't swing it.
 	local base = Instance.new("Part")
-	base.Name = "BeamBase"
+	base.Name = "TutorialPickupBeam"
 	base.Size = Vector3.new(0.2, 0.2, 0.2)
 	base.Transparency = 1
 	base.Anchored = true
 	base.CanCollide = false
 	base.CanQuery = false
 	base.CanTouch = false
-	base.CFrame = CFrame.new(position - Vector3.new(0, DROP, 0))
-	base.Parent = model
+	base.CFrame = CFrame.new(position + Vector3.new(0, BEAM_START, 0))
 	local bottom = Instance.new("Attachment")
 	bottom.Parent = base
 	local top = Instance.new("Attachment")
@@ -132,22 +107,20 @@ local function draw(position: Vector3, powerUpId: string)
 	beam.Color = ColorSequence.new(color)
 	beam.Transparency = NumberSequence.new(0.35, 1)
 	beam.Parent = base
+	base.Parent = Workspace
 
-	model.PrimaryPart = orb
-	model.Parent = Workspace
-	pickup = model
+	orb.Parent = Workspace:FindFirstChild("PowerUpPickups") or Workspace
+	pickup = orb
+	shaft = base
 	anchor = position
 end
 
 local function onStep(dt: number)
-	local model, at = pickup, anchor
-	if model == nil or at == nil then
+	local at = anchor
+	if pickup == nil or at == nil then
 		return
 	end
 	local t = os.clock()
-	local orb = model.PrimaryPart :: BasePart
-	orb.CFrame = CFrame.new(at + Vector3.new(0, math.sin(t * BOB_SPEED) * BOB_HEIGHT, 0))
-		* CFrame.Angles(0, t * SPIN_SPEED, 0)
 
 	sinceCheck += dt
 	if sinceCheck < CHECK_SECONDS then

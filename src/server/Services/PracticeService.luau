@@ -447,6 +447,26 @@ local function sendTutorialPickup(player: Player)
 	)
 end
 
+-- The pickup is drawn on its owner's client (TutorialPickupController),
+-- which can't see ServerStorage, so the icon models it may need are
+-- copied to ReplicatedStorage.TutorialPickupModels: a handful of
+-- primitives each, the same ones the race's pickups show.
+local function shareTutorialPickupModels()
+	local source = ServerStorage:FindFirstChild("PowerUpModels")
+	if source == nil then
+		return
+	end
+	local folder = Instance.new("Folder")
+	folder.Name = "TutorialPickupModels"
+	for _, id in GameConfig.tutorial.practicePickupPowerUpIds do
+		local model = source:FindFirstChild(id)
+		if model ~= nil then
+			model:Clone().Parent = folder
+		end
+	end
+	folder.Parent = ReplicatedStorage
+end
+
 local function onTutorialPickupIntent(player: Player, payload: any)
 	if not active or not inTutorial(player) then
 		return
@@ -537,6 +557,7 @@ function PracticeService:init()
 
 	if GameConfig.tutorial.enabled then
 		(Loader.get("NetGuard") :: any).on("TutorialPickupIntent", onTutorialPickupIntent)
+		shareTutorialPickupModels()
 		Players.PlayerRemoving:Connect(function(player: Player)
 			tutorialPickups[player] = nil
 		end)

@@ -71,6 +71,11 @@ export type Props = {
 	-- The body's height in lines; 3 if unset. Short copy above a picture
 	-- can give a line back to it.
 	bodyLines: number?,
+	-- The body in the `lead` style (the tutorial's pop-ups, owner
+	-- 2026-10-15: the line under the title must read clearly): bigger,
+	-- bold, full ink, and as tall as its text (`bodyLines` is
+	-- ignored), so short copy leaves no gap above a picture.
+	lead: boolean?,
 	-- Shows a close button, and lets B / tap-outside dismiss.
 	dismissible: boolean?,
 	onDismiss: (() -> ())?,
@@ -158,8 +163,20 @@ function Modal.picture(assetId: number): ImageLabel
 end
 
 function Modal.card(props: Props): Frame
-	local children: { Instance } = {
-		Base.text("body", {
+	local body = if props.lead
+		then Base.text("lead", {
+			Name = "Body",
+			LayoutOrder = 1,
+			Size = UDim2.fromScale(1, 0),
+			AutomaticSize = Enum.AutomaticSize.Y,
+			TextScaled = false,
+			TextSize = Theme.type.lead.size,
+			Text = props.body or "",
+			Visible = props.body ~= nil,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			TextYAlignment = Enum.TextYAlignment.Top,
+		})
+		else Base.text("body", {
 			Name = "Body",
 			LayoutOrder = 1,
 			Size = UDim2.new(1, 0, 0, Theme.type.body.size * (props.bodyLines or 3)),
@@ -168,8 +185,8 @@ function Modal.card(props: Props): Frame
 			TextColor3 = Theme.color.inkMuted,
 			TextXAlignment = Enum.TextXAlignment.Left,
 			TextYAlignment = Enum.TextYAlignment.Top,
-		}),
-	}
+		})
+	local children: { Instance } = { body }
 	if props.content then
 		local content = props.content() :: GuiObject
 		content.LayoutOrder = 2

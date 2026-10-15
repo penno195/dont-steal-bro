@@ -83,6 +83,9 @@ Tokens.type = table.freeze({
 	caption = table.freeze({ size = 12, min = 10, weight = "Medium", family = "body" }),
 	body = table.freeze({ size = 16, min = 12, weight = "Regular", family = "body" }),
 	label = table.freeze({ size = 18, min = 14, weight = "Bold", family = "body" }),
+	-- A pop-up's one line that says what to do (the tutorial's cards):
+	-- bigger and heavier than body so it's read, not skimmed.
+	lead = table.freeze({ size = 22, min = 16, weight = "Bold", family = "body" }),
 	-- Button and tab labels: the display face at label size.
 	button = table.freeze({ size = 20, min = 14, weight = "Regular", family = "display" }),
 	title = table.freeze({ size = 24, min = 18, weight = "Regular", family = "display" }),

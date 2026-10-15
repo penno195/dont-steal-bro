@@ -184,6 +184,7 @@ local function syncPopup(current: OnboardingLogic.Step?)
 	closePopup = C.Modal.open({
 		title = current.title,
 		body = current.body,
+		lead = true,
 		content = if picture ~= 0
 			then function()
 				return C.Modal.picture(picture)
@@ -306,6 +307,7 @@ local function showStudioCard(phase: string)
 	local modalClose = C.Modal.open({
 		title = cardCopy.title,
 		body = cardCopy.body,
+		lead = true,
 		actions = {
 			{ label = "Got it", onActivate = gotIt, glowAfter = GameConfig.tutorial.explainerGlowSeconds },
 		},

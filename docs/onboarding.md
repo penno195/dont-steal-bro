@@ -245,7 +245,9 @@ leaves the game playable.
    use whether it lands or not. The pickup is always Freeze, and the
    card copy is the owner's (2026-10-15). Each next
    pop-up waits 2 s; "Do the task" opens over the opened task, which
-   holds its start (TaskViewBase.hold) until the card is read.* Server: a personal, aimable pickup for the
+   holds its start (TaskViewBase.hold) until the card is read. The pickup looks exactly like a race pickup
+   (Shared/PickupLook, owner 2026-10-15); the hub copies its icon model
+   to ReplicatedStorage.TutorialPickupModels for the client.* Server: a personal, aimable pickup for the
    tutorial player in `HubPracticeArea`, visible only to its owner like
    the daily hunt's, always a Freeze (owner, 2026-10-15). Dummies skip a player who is
    doing the tutorial. Client: a "Mess with rivals" card to pick it up,
@@ -288,7 +290,10 @@ leaves the game playable.
    cards.
 5. **Pictures.** *Done (not yet seen in Studio). Ids in
    `assets/tutorial/README.md`. The Freeze step reuses the Aim and shoot
-   picture; the Locker steps, play and the Studio cards still have none.*
+   picture; the Locker steps, play and the Studio cards still have none. All
+   tutorial pop-ups (and spotlight captions) show their body in the
+   `lead` type style (22 px bold, full ink, sized to the text; owner
+   2026-10-15).*
    Upload the owner's screenshots (Desktop folder `Tutorial Screenshots`) and wire the ids in:
    `Power UP` for the pickup card, `Aim and shoot` for aim-and-fire,
    `Station` for the task station card, `Follow Arrow` for "Head to a
