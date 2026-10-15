@@ -286,7 +286,10 @@ leaves the game playable.
    explainer overlays pause the Studio timers while they're up, and
    their OK button pulses after 10 s. Add the Negotiate and Choose
    cards.
-5. **Pictures.** Upload the owner's screenshots (Desktop folder `Tutorial Screenshots`) and wire the ids in:
+5. **Pictures.** *Done (not yet seen in Studio). Ids in
+   `assets/tutorial/README.md`. The Freeze step reuses the Aim and shoot
+   picture; the Locker steps, play and the Studio cards still have none.*
+   Upload the owner's screenshots (Desktop folder `Tutorial Screenshots`) and wire the ids in:
    `Power UP` for the pickup card, `Aim and shoot` for aim-and-fire,
    `Station` for the task station card, `Follow Arrow` for "Head to a
    station", and `Task Progress` for "Finish your tasks". Add the

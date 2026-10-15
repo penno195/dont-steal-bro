@@ -46,7 +46,26 @@ flair) and the tag's BillboardGui enlarged so it reads at pop-up size.
 | File | Step | Asset id |
 |---|---|---|
 | welcome.png | Welcome to Don't Steal Bro! | 130263615284046 |
+| hub-rivals.png | Mess with rivals (pickup) | 88483141067762 |
+| hub-aim.png | Aim and fire | 122300696146508 |
+| hub-station.png | Task station | 86829057219619 |
 
 The welcome picture is the owner's own image (devil under STEAL, angel
 under SHARE), cropped to 16:9 clear of the Roblox corner icons and
 scaled to 960x540.
+
+
+## Tutorial v2 guided-round steps
+
+| File | Step | Asset id |
+|---|---|---|
+| step-arrow.png | Head to a station | 88935690507893 |
+| hub-aim.png | Use your Freeze (reuses Aim and fire) | 122300696146508 |
+| step-progress.png | Finish your tasks | 137248450645671 |
+| step-task.png | Do the task (v1 shot, kept) | 110568131773173 |
+
+The v2 pictures are the owner's own screenshots (Desktop folder
+`Tutorial Screenshots`), kept at their own aspect (the pop-up's 16:9 box
+letterboxes them). The mouse cursor was painted out of the pickup and
+station shots with ffmpeg `delogo`, the station shot lost its top 20 px
+of HUD and was scaled to 960 wide, and the arrow crop was doubled.

@@ -242,7 +242,7 @@ local HUB_STEPS: { HubStep } = {
 		kind = "card",
 		title = "Mess with rivals",
 		body = "Grab the glowing power-up in the middle of the practice area.",
-		picture = 0,
+		picture = 88483141067762,
 		waitFor = "pickup",
 	},
 	{
@@ -250,7 +250,7 @@ local HUB_STEPS: { HubStep } = {
 		kind = "card",
 		title = "Aim and fire",
 		body = "Drag from its slot (or left click) to aim at a dummy. Let's go fire!",
-		picture = 0,
+		picture = 122300696146508,
 		waitFor = "use",
 	},
 	{
@@ -258,7 +258,7 @@ local HUB_STEPS: { HubStep } = {
 		kind = "card",
 		title = "Task station",
 		body = "Matches are a race through tasks. Your stations have a beam of light. Find the station and start the task.",
-		picture = 0,
+		picture = 86829057219619,
 		waitFor = "station",
 	},
 	{
@@ -441,14 +441,14 @@ local STEPS: { Step } = {
 		id = "station",
 		title = "Head to a station",
 		body = "Follow the arrow to your first task.",
-		picture = 72834010784044,
+		picture = 88935690507893,
 	},
 	{ id = "task", title = "Do the task", body = "Finish the mini-game to tick it off.", picture = 110568131773173 },
 	{
 		id = "freeze",
 		title = "Use your Freeze",
 		body = "A bot is close! Drag from your Freeze (or left click) to fire it at them.",
-		picture = 0,
+		picture = 122300696146508,
 		gate = "botNear",
 		holdUntilDone = true,
 	},
@@ -456,7 +456,7 @@ local STEPS: { Step } = {
 		id = "finish",
 		title = "Finish your tasks",
 		body = "Top 3 make the finale. Follow the arrow.",
-		picture = 114091474180130,
+		picture = 137248450645671,
 	},
 }
 OnboardingLogic.STEPS = table.freeze(STEPS)
