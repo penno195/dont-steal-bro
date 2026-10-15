@@ -130,20 +130,22 @@ end
 -- The card's bottom-left corner, in the ScreenGui's own coordinates (a
 -- CoreUISafeInsets ScreenGui starts at the usable rect). Bottom-left
 -- of the screen, except on touch, where Roblox's thumbstick owns that
--- corner (ReservedMove): there it sits just above the thumbstick, or,
--- when the card is taller than the room above it (a landscape phone:
--- it grew up under Roblox's top bar on an iPhone), on the bottom edge
--- just right of the thumbstick. `height` is the card's rendered height.
+-- corner (ReservedMove): there it sits just above the thumbstick, its
+-- top never above the top margin (it grew up under Roblox's top bar on
+-- an iPhone). `height` is the card's rendered height.
 local function anchorFor(usable: Layout.Rect, touch: boolean, height: number): UDim2
 	local margin = Theme.spacing.lg
 	if touch then
 		for _, zone in Layout.resolveZones(usable) do
 			if zone.kind == "ReservedMove" then
+				-- Above the thumbstick, and it stays there: the card grows
+				-- once you join (status, loadout strip, Leave), and hopping
+				-- to beside the stick then read as the button running off
+				-- to the bottom middle (playtest 2026-10-15). Too tall to
+				-- fit, it grows up to the top margin and dips into the
+				-- stick zone's top edge rather than move.
 				local above = zone.rect.y - usable.y - margin
-				if height <= above - margin then
-					return UDim2.fromOffset(margin, above)
-				end
-				return UDim2.new(0, zone.rect.x - usable.x + zone.rect.width + margin, 1, -margin)
+				return UDim2.fromOffset(margin, math.max(above, height + margin))
 			end
 		end
 	end

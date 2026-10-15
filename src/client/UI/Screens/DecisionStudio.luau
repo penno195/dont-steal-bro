@@ -1577,11 +1577,20 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			)
 		end)
 		-- Whether the chat line fits between the two buttons (a phone or
-		-- PC held sideways), or has to sit above them (portrait, or a
-		-- squarer tablet). In reference px, like everything it measures.
+		-- PC held sideways, or shrunk a little on a squarer tablet), or
+		-- has to sit above them (portrait). In reference px, like
+		-- everything it measures.
+		local chatFit = derive(function()
+			local scale = math.max(Env.scale(), 0.01)
+			return DecisionLogic.chatFit(guiRect().width / scale, 2 * (CHOICE_W + EDGE + GAP), CHAT_W, scale)
+		end)
 		local between = derive(function()
-			local width = guiRect().width / math.max(Env.scale(), 0.01)
-			return width >= 2 * (CHOICE_W + EDGE + GAP) + CHAT_W
+			return chatFit() ~= nil
+		end)
+		local chatScale = Instance.new("UIScale")
+		chatScale.Parent = chatRow
+		effect(function()
+			chatScale.Scale = chatFit() or 1
 		end)
 		effect(function()
 			local margin = lift()

@@ -456,6 +456,23 @@ describe("DecisionLogic.keyboardLift", function()
 	end)
 end)
 
+describe("DecisionLogic.chatFit", function()
+	it("keeps full size when the line fits between the buttons", function()
+		expect(DecisionLogic.chatFit(900, 356, 320, 1)):toBe(1)
+		expect(DecisionLogic.chatFit(683, 356, 320, 2)):toBe(1)
+	end)
+
+	it("shrinks it on a squarer tablet, no smaller than on a phone", function()
+		-- 1080x810 iPad: scale 2, 540 reference px wide.
+		expect(DecisionLogic.chatFit(540, 356, 320, 2)):toBe(184 / 320)
+	end)
+
+	it("puts it above the buttons when shrinking would go below phone size", function()
+		expect(DecisionLogic.chatFit(600, 356, 320, 1)):toBe(nil)
+		expect(DecisionLogic.chatFit(400, 356, 320, 2)):toBe(nil)
+	end)
+end)
+
 describe("DecisionLogic.waitingNotice", function()
 	local ids = { 1, 2, 3 }
 

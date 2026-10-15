@@ -723,4 +723,20 @@ function DecisionLogic.keyboardLift(keyboardTop: number?, usable: Rect, margin: 
 	return math.clamp(wanted, margin, math.max(margin, usable.height * maxFraction))
 end
 
+-- How much to shrink the Negotiate chat line so it fits between the two
+-- hold buttons, or nil when it can't and must sit above them. A squarer
+-- tablet sideways (an iPad, 4:3) runs at a ~2x UI scale but is only
+-- ~520 reference px wide, so the line didn't fit and stacked over the
+-- buttons (playtest 2026-10-15). Shrinking it is fine down to the size
+-- it has on a phone (on-screen scale 1); below that it's too small to
+-- tap, so it goes above instead. `width` is in reference px, `sides` the
+-- reference px both buttons and their margins take.
+function DecisionLogic.chatFit(width: number, sides: number, chatWidth: number, scale: number): number?
+	local fit = math.min(1, (width - sides) / chatWidth)
+	if fit * scale < math.min(1, scale) then
+		return nil
+	end
+	return fit
+end
+
 return DecisionLogic
