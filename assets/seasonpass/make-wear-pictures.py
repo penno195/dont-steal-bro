@@ -17,6 +17,7 @@ NAMES = {
     "CorvusCrestPack": "back-corvus-crest-pack",
     "DiamondHeistCrown": "hat-diamond-heist-crown",
     "VaultDoorShield": "back-vault-door-shield",
+    "RookieCapHat": "hat-rookie-cap",
 }
 
 for folder, out in NAMES.items():

@@ -53,6 +53,12 @@ const ITEMS = {
 		prompt: `A round thick bank vault door, a heavy steel disc with a big gold spoked spin-wheel handle in the middle and chunky bolts around the rim, worn as a backpack. ${STYLE}`,
 		texture: "brushed silver-grey steel disc, polished gold spoked wheel handle, dark steel bolts around the rim",
 	},
+	// The tutorial's finishing gift (2026-10-15). Made front-facing; the
+	// config turns it round with wearRotation so it's worn backwards.
+	RookieCapHat: {
+		prompt: `One single baseball cap with a rounded six-panel crown, a button on top and a curved peak, cap only, empty inside. ${STYLE}`,
+		texture: "bright red cotton crown, white peak, white top button, one big bold white star patch on the front panel",
+	},
 };
 
 const headers = { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json" };
