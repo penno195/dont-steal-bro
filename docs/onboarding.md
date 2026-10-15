@@ -63,10 +63,17 @@ answers, design-decisions.md "the first-time tutorial"):
 
 On the client (seam 4):
 
-- **Step prompts** take the tip card's corner (`OnboardingController`;
-  copy and order are `OnboardingLogic.STEPS`, tested). One is up at a
-  time, through the race, and stays until the player does it; taps
-  don't close it. Each step is a fact that stays true once it is, and
+- **Step prompts** (`OnboardingController`; copy and order are
+  `OnboardingLogic.STEPS`, tested). Each step first opens as a **pop-up
+  in the middle of a dimmed screen** with its picture (a Studio
+  screenshot, `picture`), and the round is **frozen** until "Got it"
+  (owner, 2026-10-15): the client sends `TutorialPause`, and
+  TutorialService stops the bots (`NPCService.setPaused`) and anchors
+  the player, only during a tutorial race. Then the step stays in the
+  tip card's corner as a reminder until the player does it; taps
+  don't close it. A station's prompt showing counts as reaching it, so
+  "Do the task" pops up before the mini-game opens. One is up at a
+  time, through the race. Each step is a fact that stays true once it is, and
   the prompt is the first one not yet true, so a step done early is
   skipped. Copy picked by the owner 2026-10-15:
 
