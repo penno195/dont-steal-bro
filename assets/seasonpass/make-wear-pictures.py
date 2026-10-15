@@ -21,7 +21,11 @@ NAMES = {
 }
 
 for folder, out in NAMES.items():
-    im = Image.open(os.path.join(HERE, "models", folder, "thumb.png")).convert("RGBA")
+    # A painted-over texture (add-cap-lettering.py) brings its own render.
+    thumb = os.path.join(HERE, "models", folder, "thumb-lettered.png")
+    if not os.path.exists(thumb):
+        thumb = os.path.join(HERE, "models", folder, "thumb.png")
+    im = Image.open(thumb).convert("RGBA")
     a = im.getchannel("A").point(lambda v: 255 if v > 40 else 0)
     im = im.crop(a.getbbox())
     fit = S - 2 * PAD
