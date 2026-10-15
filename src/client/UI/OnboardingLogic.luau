@@ -182,8 +182,8 @@ end
 -- THE HUB STEPS (tutorial v2, docs/onboarding.md "Tutorial v2"). On a
 -- player's first visit to the Hub, in order: the welcome card, the
 -- practice area (a power-up to grab and fire, then the task station),
--- then (seam 3) the inventory, ending on "press Play" with only Play
--- lit. Copy is the owner's (2026-10-15, design-decisions.md "the
+-- then the Locker (a free power-up to put in the loadout), ending on
+-- "press Play" with only Play lit. Copy is the owner's (2026-10-15, design-decisions.md "the
 -- tutorial, second version"; the practice area's cards, same day).
 --
 --   kind "card"       a pop-up on a dimmed screen. `skip` adds the Skip
@@ -192,11 +192,26 @@ end
 --                     corner card until the player has done it.
 --   kind "spotlight"  the screen dims except `target`, ringed, with the
 --                     title and body in a caption card beside it. The
---                     step ends when the player uses the target.
+--                     step ends when spotlightDone says so.
+--
+-- `gift` (the Locker's card) first asks the server for the free
+-- power-up, and the card only shows if it was given just now.
 --
 -- `picture` is a Studio screenshot (0 = none yet).
-export type HubStepId = "welcome" | "rivals" | "aim" | "station" | "task" | "play"
-export type HubTarget = "play"
+export type HubStepId =
+	"welcome"
+	| "rivals"
+	| "aim"
+	| "station"
+	| "task"
+	| "locker"
+	| "gift"
+	| "loadout"
+	| "close"
+	| "play"
+-- What a spotlight lights: the launcher's Locker button, the free
+-- power-up's tile in the Locker, the Locker's close button, and Play.
+export type HubTarget = "locker" | "gift" | "close" | "play"
 -- What a card waits for (hubWaitDone): holding an Aimed item (the
 -- personal pickup), a power-up fired, the practice station's task
 -- opened, and that task solved.
@@ -208,6 +223,7 @@ export type HubStep = {
 	body: string,
 	picture: number,
 	skip: boolean?,
+	gift: boolean?,
 	target: HubTarget?,
 	waitFor: HubWait?,
 }
@@ -253,6 +269,41 @@ local HUB_STEPS: { HubStep } = {
 		picture = 0,
 		waitFor = "solve",
 	},
+	-- The Locker steps (seam 3). The gift card's body and the loadout
+	-- caption are the owner's; the titles and the Locker and close
+	-- captions are Claude's draft (2026-10-15), for the owner to tweak.
+	{
+		id = "locker",
+		kind = "spotlight",
+		title = "Your Locker",
+		body = "Your power-ups live in the Locker. Open it!",
+		picture = 0,
+		target = "locker",
+	},
+	{
+		id = "gift",
+		kind = "card",
+		title = "A free power-up!",
+		body = "Here is a free power up to get you started!",
+		picture = 0,
+		gift = true,
+	},
+	{
+		id = "loadout",
+		kind = "spotlight",
+		title = "Load it up",
+		body = "Click to add to your load out for a match!",
+		picture = 0,
+		target = "gift",
+	},
+	{
+		id = "close",
+		kind = "spotlight",
+		title = "All set",
+		body = "Close the Locker to head back.",
+		picture = 0,
+		target = "close",
+	},
 	{
 		id = "play",
 		kind = "spotlight",
@@ -293,6 +344,43 @@ function OnboardingLogic.hubWaitDone(wait: HubWait?, facts: HubFacts): boolean
 		return facts.solved
 	end
 	return true
+end
+
+-- How things stand for the spotlight steps, read live each check:
+-- whether the Locker is open, the free power-up's stock and whether
+-- it's in the loadout, whether the loadout is full, and whether the
+-- player is in the queue.
+export type SpotlightFacts = {
+	lockerOpen: boolean,
+	giftStock: number,
+	giftLoaded: boolean,
+	loadoutFull: boolean,
+	queued: boolean,
+}
+
+-- Is a spotlight step done? The gift's step also ends when it can't be
+-- done: none in stock (a replay after it was spent), or a full loadout
+-- (a tap on the tile would do nothing), so the player is never stuck
+-- behind a dim with nothing that works.
+function OnboardingLogic.spotlightDone(target: HubTarget, f: SpotlightFacts): boolean
+	if target == "locker" then
+		return f.lockerOpen
+	elseif target == "gift" then
+		return f.giftLoaded or f.giftStock <= 0 or f.loadoutFull
+	elseif target == "close" then
+		return not f.lockerOpen
+	end
+	return f.queued
+end
+
+-- What to light right now. The gift's tile is inside the Locker, so a
+-- player who shut it (Escape, gamepad B) is pointed back at the Locker
+-- button rather than left with nothing lit.
+function OnboardingLogic.spotlightAim(target: HubTarget, f: SpotlightFacts): HubTarget
+	if target == "gift" and not f.lockerOpen then
+		return "locker"
+	end
+	return target
 end
 
 -- Whether the intro should open now. Only in the Hub, only between

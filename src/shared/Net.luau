@@ -1189,6 +1189,32 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server, Hub only: the hub tutorial's Locker step opened
+	-- the Locker, so give this account its free power-up
+	-- (GameConfig.tutorial.lockerGiftPowerUpId). TutorialService gives it
+	-- once per account (profile tutorialGiftGiven), and only while saved
+	-- settings say the tutorial is still running (introSeen false), so
+	-- Skip still gives nothing. Always answered with TutorialGiftResult.
+	TutorialGiftIntent = {
+		name = "TutorialGiftIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 2, refillPerSecond = 0.2 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted): the answer to TutorialGiftIntent.
+	-- `{ granted = boolean, powerUpId = string }`: whether it was given
+	-- just now (false = already given, or not in the tutorial), and which
+	-- item the step should light. StoreState follows a grant.
+	TutorialGiftResult = {
+		name = "TutorialGiftResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server, Hub only: the hub tutorial's "Mess with rivals"
 	-- step. `claim = false` asks for this player's personal pickup,
 	-- `claim = true` says "I'm at it". PracticeService only answers a

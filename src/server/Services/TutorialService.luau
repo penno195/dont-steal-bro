@@ -150,6 +150,27 @@ local function sendUnseenReward(player: Player)
 	end
 end
 
+-- Hub only: the hub tutorial's Locker gift (tutorial v2 seam 3). Only
+-- while saved settings say the tutorial is running, so a player who
+-- skipped gets nothing (design-decisions.md, "the tutorial, second
+-- version"); DataService.claimTutorialGift makes it once per account.
+local function giveLockerGift(player: Player)
+	local DataService = Loader.get("DataService") :: any
+	local powerUpId = config.lockerGiftPowerUpId
+	local loaded = DataService.isLoaded(player)
+	local granted = false
+	if TutorialLogic.inHubTutorial(config.enabled, loaded, loaded and DataService.getSettings(player).introSeen) then
+		local changes =
+			DataService.claimTutorialGift(player, { kind = "PowerUpStock", powerUpId = powerUpId, amount = 1 })
+		if changes ~= nil then
+			granted = true
+			print(string.format("TutorialService: gave the Locker gift to %d", player.UserId))
+			Loader.get("StoreService").pushState(player)
+		end
+	end
+	Net.fireClient("TutorialGiftResult", player, { granted = granted, powerUpId = powerUpId })
+end
+
 local TutorialService: Loader.Service = {
 	name = "TutorialService",
 	dependencies = {
@@ -160,6 +181,7 @@ local TutorialService: Loader.Service = {
 		"TaskService",
 		"DataService",
 		"NPCService",
+		"StoreService",
 	},
 
 	-- True for the whole of a tutorial round.
@@ -207,6 +229,7 @@ function TutorialService:start()
 		NetGuard.on("TutorialRewardSeenIntent", function(player: Player)
 			DataService.markTutorialRewardSeen(player)
 		end)
+		NetGuard.on("TutorialGiftIntent", giveLockerGift)
 	end
 end
 

@@ -3,9 +3,11 @@
 -- a player's first visit to the Hub, OnboardingLogic.HUB_STEPS in order.
 -- The welcome card first (with Skip), then the practice area: a
 -- personal power-up to grab (TutorialPickupController) and fire at a
--- dummy, then the practice task station. Last "press Play", with the
--- screen dimmed and only Play lit (C.Spotlight). That Play tap queues
--- the guided round (QueueController.armTutorial).
+-- dummy, then the practice task station. Then the Locker: its button
+-- lit (C.Spotlight), a free power-up given as it opens
+-- (TutorialGiftIntent), its tile lit until it's in the loadout, then
+-- the close button. Last "press Play", with only Play lit. That Play
+-- tap queues the guided round (QueueController.armTutorial).
 --
 -- A card with `waitFor` is read and closed, then stays up in the corner
 -- card (OnboardingController.remind) until the player has done it. What
@@ -27,6 +29,7 @@ local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
@@ -45,7 +48,12 @@ local WAIT_POLL = 0.2
 local PICKUP_TIMEOUT = 8
 -- A done step's pause before the next pop-up (owner, 2026-10-15).
 local NEXT_DELAY = 2
+-- How long the Locker's gift card waits for the server's answer (and
+-- the stock it brings) before skipping itself.
+local GIFT_TIMEOUT = 6
+local SPOTLIGHT_POLL = 0.1
 local PRACTICE_TAG = "HubPracticeTask"
+local GIFT_ID = GameConfig.tutorial.lockerGiftPowerUpId
 
 local settings: any
 local menu: any
@@ -67,6 +75,8 @@ local facts: OnboardingLogic.HubFacts = { holdsAimed = false, used = false, open
 local pickupOffered = false -- the server sent this player a pickup
 -- What the step in the corner card is waiting for, if any.
 local waiting: OnboardingLogic.HubWait? = nil
+-- The server's answer to this flow's TutorialGiftIntent: nil = none yet.
+local giftGranted: boolean? = nil
 
 local roundState: string? = nil
 local open = false
@@ -182,21 +192,126 @@ local function showCard(index: number, step: OnboardingLogic.HubStep)
 	})
 end
 
--- The "press Play" step: ends when the player is in the queue. The tap
--- itself goes to the real Play button, armed to queue the guided round.
-local function showPlay(step: OnboardingLogic.HubStep)
-	queue.armTutorial(true)
+-- How the spotlight steps stand right now (OnboardingLogic.SpotlightFacts).
+local function spotlightFacts(): OnboardingLogic.SpotlightFacts
+	local s = menu.storeState()
+	local stock, loaded, full = 0, false, false
+	if s ~= nil then
+		stock = s.powerUpStock[GIFT_ID] or 0
+		loaded = table.find(s.loadout, GIFT_ID) ~= nil
+		full = #s.loadout >= s.loadoutSlots
+	end
+	return {
+		lockerOpen = menu.currentMenu() == "Locker",
+		giftStock = stock,
+		giftLoaded = loaded,
+		loadoutFull = full,
+		queued = queue.queued(),
+	}
+end
+
+-- Drawn, and not inside something hidden: a GuiObject in a hidden
+-- frame keeps its AbsoluteSize, and the spotlight would ring nothing.
+local function onScreen(gui: GuiObject?): GuiObject?
+	local node: Instance? = gui
+	while node ~= nil do
+		if node:IsA("GuiObject") and not node.Visible then
+			return nil
+		elseif node:IsA("LayerCollector") then
+			return if node.Enabled then gui else nil
+		end
+		node = node.Parent
+	end
+	return nil
+end
+
+local function lockerScreen(): Instance?
+	local playerGui = Players.LocalPlayer:FindFirstChild("PlayerGui")
+	return if playerGui then playerGui:FindFirstChild("LockerScreen") else nil
+end
+
+-- The GuiObject a spotlight lights. The Locker's own parts are found by
+-- name: the gift's tile by its PowerUpId attribute (Locker.stockCard),
+-- the close button in MenuShell's header.
+local function targetGui(target: OnboardingLogic.HubTarget): GuiObject?
+	if target == "play" then
+		return queue.playButton()
+	elseif target == "locker" then
+		return onScreen(menu.lockerButton())
+	end
+	local screen = lockerScreen()
+	if screen == nil then
+		return nil
+	end
+	if target == "gift" then
+		for _, gui in screen:GetDescendants() do
+			if gui:IsA("GuiObject") and gui:GetAttribute("PowerUpId") == GIFT_ID then
+				return onScreen(gui)
+			end
+		end
+		return nil
+	end
+	local header = screen:FindFirstChild("Header", true)
+	local close = if header then header:FindFirstChild("IconButton") else nil
+	return if close and close:IsA("GuiObject") then onScreen(close) else nil
+end
+
+-- A spotlight step: ends when OnboardingLogic.spotlightDone says so.
+-- "press Play" ends the flow, its tap having gone to the real Play
+-- button, armed to queue the guided round. The others go on to the
+-- next step NEXT_DELAY later.
+local function showSpotlight(index: number, step: OnboardingLogic.HubStep)
+	-- (Cast: the frozen step table widens its literals to string.)
+	local target: OnboardingLogic.HubTarget = step.target :: any
+	if target == "play" then
+		queue.armTutorial(true)
+	end
 	closeCurrent = C.Spotlight.open({
-		target = queue.playButton,
+		target = function()
+			return targetGui(OnboardingLogic.spotlightAim(target, spotlightFacts()))
+		end,
 		title = step.title,
 		body = step.body,
 	})
 	task.spawn(function()
-		while open and not queue.queued() do
-			task.wait(0.1)
+		while open and not OnboardingLogic.spotlightDone(target, spotlightFacts()) do
+			task.wait(SPOTLIGHT_POLL)
 		end
-		if open then
+		if not open then
+			return
+		elseif target == "play" then
 			finish(true)
+			return
+		end
+		closeStep()
+		task.wait(NEXT_DELAY)
+		if open then
+			showStep(index + 1)
+		end
+	end)
+end
+
+-- The Locker's gift card: asks the server for the free power-up, and
+-- shows only if it was given just now, once the stock it brings has
+-- arrived (else the next step would see none and skip itself). Not
+-- given (already had it, a replay): straight on.
+local function showGift(index: number, step: OnboardingLogic.HubStep)
+	giftGranted = nil
+	Net.fireServer("TutorialGiftIntent", {})
+	task.spawn(function()
+		local started = os.clock()
+		while open and os.clock() - started < GIFT_TIMEOUT do
+			if giftGranted == false or (giftGranted == true and spotlightFacts().giftStock > 0) then
+				break
+			end
+			task.wait(WAIT_POLL)
+		end
+		if not open then
+			return
+		elseif giftGranted == true then
+			showCard(index, step)
+		else
+			showStep(index + 1)
 		end
 	end)
 end
@@ -205,13 +320,12 @@ function showStep(index: number)
 	local step = OnboardingLogic.HUB_STEPS[index]
 	if step == nil then
 		finish(false)
+	elseif step.gift then
+		showGift(index, step)
 	elseif step.kind == "card" then
 		showCard(index, step)
-	elseif step.target == "play" then
-		showPlay(step)
 	else
-		-- A spotlight step this build can't draw yet: skip it.
-		showStep(index + 1)
+		showSpotlight(index, step)
 	end
 end
 
@@ -271,6 +385,11 @@ local function listen()
 	Net.onClientEvent("PowerUpThrown", function(payload: any)
 		if payload.casterId == Players.LocalPlayer.UserId then
 			facts.used = true
+		end
+	end)
+	Net.onClientEvent("TutorialGiftResult", function(payload: any)
+		if type(payload) == "table" then
+			giftGranted = payload.granted == true
 		end
 	end)
 	Net.onClientEvent("TutorialPickupState", function(payload: any)

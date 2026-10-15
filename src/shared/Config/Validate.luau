@@ -740,6 +740,7 @@ export type TutorialConfig = {
 	rewardPowerUps: { [string]: number }, -- power-up id -> how many go into loadout stock
 	practicePickupPowerUpIds: { string }, -- the hub step's personal pickup: Aimed items, one at random
 	practicePickupClaimRadius: number, -- studs from the pickup a claim may be made from
+	lockerGiftPowerUpId: string, -- the hub Locker step's free power-up, once per account
 }
 
 -- The daily hunt (design-decisions.md Q1, "the daily hunt"): one hidden
@@ -3230,6 +3231,9 @@ local function checkTutorialConfig(tc: TutorialConfig, issues: { Issue })
 	then
 		bad("practicePickupClaimRadius", "must be a number from 2 to 20 studs")
 	end
+	if type(tc.lockerGiftPowerUpId) ~= "string" or tc.lockerGiftPowerUpId == "" then
+		bad("lockerGiftPowerUpId", "must name a power-up id")
+	end
 end
 
 local function checkDailyHuntConfig(dh: DailyHuntConfig, issues: { Issue })
@@ -4777,6 +4781,25 @@ function Validate.run(input: RegistryInput): { Issue }
 					)
 				)
 			end
+		end
+	end
+	-- The Locker step's gift goes into loadout stock, and the step has
+	-- the player put it in their loadout: it must exist and be eligible.
+	if tutorialOn and type(tutorial.lockerGiftPowerUpId) == "string" and tutorial.lockerGiftPowerUpId ~= "" then
+		local found: any = nil
+		for _, entry in input.powerUps do
+			if entry.def.id == tutorial.lockerGiftPowerUpId then
+				found = entry.def
+			end
+		end
+		if found == nil or not (found.acquisition and found.acquisition.loadoutEligible) then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"tutorial.lockerGiftPowerUpId",
+				string.format("%q is not a loadout-eligible power-up id", tutorial.lockerGiftPowerUpId)
+			)
 		end
 	end
 	-- The hub step's pickup is there to aim and fire, so each item must

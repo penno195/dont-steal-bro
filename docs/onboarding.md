@@ -252,7 +252,14 @@ leaves the game playable.
    then an aim-and-fire card. Then a "Task station" card. The
    `HubPracticeTask` station gets a permanent light beam (the race
    station's), and a card says to complete the task when it opens.
-3. **Inventory + Play.** Spotlight the inventory (Locker) button. On
+3. **Inventory + Play.** *Done (not yet seen in Studio). Steps locker,
+   gift, loadout, close sit between "Do the task" and Play. The gift is
+   `GameConfig.tutorial.lockerGiftPowerUpId` (Freeze), given by the Hub's
+   TutorialService on `TutorialGiftIntent` once per account (profile v15
+   `tutorialGiftGiven`) and only while `introSeen` is false; a replay
+   skips the card. The loadout step also ends with no stock or a full
+   loadout, and points back at the Locker button if the Locker is shut.
+   The titles and the Locker/close captions are Claude's draft.* Spotlight the inventory (Locker) button. On
    open, a card grants the free Freeze. That needs a server grant, once
    per account, with its own profile flag (a schema bump). Then
    spotlight the Freeze item until it's in the loadout, spotlight the

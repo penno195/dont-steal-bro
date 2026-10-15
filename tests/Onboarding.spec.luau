@@ -134,15 +134,55 @@ describe("OnboardingLogic hub intro", function()
 		end
 	end)
 
-	it("runs the practice area between the welcome and Play", function()
+	it("runs the practice area, then the Locker, between the welcome and Play", function()
 		local order = {}
 		for _, step in OnboardingLogic.HUB_STEPS do
 			table.insert(order, step.id)
 		end
-		expect(table.concat(order, ",")):toBe("welcome,rivals,aim,station,task,play")
+		expect(table.concat(order, ",")):toBe("welcome,rivals,aim,station,task,locker,gift,loadout,close,play")
 		-- "aim" directly follows "rivals": with no pickup both are skipped.
 		expect(OnboardingLogic.HUB_STEPS[2].waitFor):toBe("pickup")
 		expect(OnboardingLogic.HUB_STEPS[3].waitFor):toBe("use")
+		-- Only the Locker's card asks for the gift.
+		for _, step in OnboardingLogic.HUB_STEPS do
+			expect(step.gift == true):toBe(step.id == "gift")
+		end
+	end)
+
+	it("ends each Locker spotlight on what it asks for", function()
+		local base = { lockerOpen = false, giftStock = 1, giftLoaded = false, loadoutFull = false, queued = false }
+		local function with(overrides: { [string]: any }): any
+			local f = table.clone(base) :: any
+			for k, v in overrides do
+				f[k] = v
+			end
+			return f
+		end
+		local done = OnboardingLogic.spotlightDone
+		expect(done("locker", base)):toBe(false)
+		expect(done("locker", with({ lockerOpen = true }))):toBe(true)
+		expect(done("gift", with({ lockerOpen = true }))):toBe(false)
+		expect(done("gift", with({ lockerOpen = true, giftLoaded = true }))):toBe(true)
+		expect(done("close", with({ lockerOpen = true }))):toBe(false)
+		expect(done("close", base)):toBe(true)
+		expect(done("play", base)):toBe(false)
+		expect(done("play", with({ queued = true }))):toBe(true)
+	end)
+
+	it("never strands the player on a gift they can't load", function()
+		local f = { lockerOpen = true, giftStock = 0, giftLoaded = false, loadoutFull = false, queued = false }
+		expect(OnboardingLogic.spotlightDone("gift", f)):toBe(true)
+		f.giftStock = 2
+		f.loadoutFull = true
+		expect(OnboardingLogic.spotlightDone("gift", f)):toBe(true)
+	end)
+
+	it("points back at the Locker button while the Locker is shut", function()
+		local f = { lockerOpen = false, giftStock = 1, giftLoaded = false, loadoutFull = false, queued = false }
+		expect(OnboardingLogic.spotlightAim("gift", f)):toBe("locker")
+		expect(OnboardingLogic.spotlightAim("close", f)):toBe("close")
+		f.lockerOpen = true
+		expect(OnboardingLogic.spotlightAim("gift", f)):toBe("gift")
 	end)
 
 	it("waits on what each practice step asks for", function()

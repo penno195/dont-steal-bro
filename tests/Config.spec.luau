@@ -227,6 +227,7 @@ local function validGameConfig(): Validate.GameConfig
 			rewardPowerUps = { ["sprint-boost"] = 1 },
 			practicePickupPowerUpIds = { "push-trip" },
 			practicePickupClaimRadius = 6,
+			lockerGiftPowerUpId = "sprint-boost",
 		},
 		dailyHunt = { spotTag = "HubDailyHuntSpot", claimRadius = 12, powerUpChance = 0.5, coins = 25 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
@@ -2943,6 +2944,14 @@ TestRunner.describe("Validate - tutorial reward", function()
 		config.tutorial.practicePickupPowerUpIds = {}
 		config.tutorial.practicePickupClaimRadius = 50
 		TestRunner.expect(count(runTutorial(config), "tutorial.practicePickup")):toBe(2)
+	end)
+
+	TestRunner.it("refuses a Locker gift that isn't a loadout power-up", function()
+		local config = on()
+		config.tutorial.lockerGiftPowerUpId = "nope"
+		TestRunner.expect(count(runTutorial(config), "tutorial.lockerGiftPowerUpId")):toBe(1)
+		config.tutorial.lockerGiftPowerUpId = ""
+		TestRunner.expect(count(runTutorial(config), "lockerGiftPowerUpId")):toBe(1)
 	end)
 
 	TestRunner.it("refuses bots that would go faster than usual", function()

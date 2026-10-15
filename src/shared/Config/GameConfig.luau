@@ -579,6 +579,12 @@ local GameConfig: Validate.GameConfig = {
 		-- studs.
 		practicePickupPowerUpIds = { "freeze" },
 		practicePickupClaimRadius = 6,
+		-- The hub tutorial's Locker step (tutorial v2, seam 3): one of this,
+		-- free, once per account, as the Locker first opens. It's extra to
+		-- the round's reward above (owner, 2026-10-15), and the step then
+		-- has the player put it in their loadout, so it must be
+		-- loadout-eligible.
+		lockerGiftPowerUpId = "freeze",
 	},
 
 	-- The daily hunt (design-decisions.md Q1, "the daily hunt"): one

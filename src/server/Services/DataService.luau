@@ -859,6 +859,22 @@ local function claimTutorialReward(player: Player, grants: { StoreLogic.Grant })
 	return changes
 end
 
+-- The hub tutorial's Locker gift (tutorial v2 seam 3): marks it given
+-- and applies `grant` in the same mutation, then saves at once, like
+-- the reward above. Returns the change lines, or nil when the profile
+-- isn't writable or this account already had it.
+local function claimTutorialGift(player: Player, grant: StoreLogic.Grant): { string }?
+	local d = writable(player)
+	local profile = profiles[player]
+	if d == nil or profile == nil or d.tutorialGiftGiven then
+		return nil
+	end
+	d.tutorialGiftGiven = true
+	local changes = applyGrantsTo(d, { grant })
+	profile:Save()
+	return changes
+end
+
 local function hasTutorialReward(player: Player): boolean
 	local d = data(player)
 	return if d then d.tutorialRewarded else false
@@ -993,6 +1009,7 @@ local DataService: Loader.Service = {
 	getLastHuntDay = getLastHuntDay,
 	claimDailyHunt = claimDailyHunt,
 	claimTutorialReward = claimTutorialReward,
+	claimTutorialGift = claimTutorialGift,
 	hasTutorialReward = hasTutorialReward,
 	isTutorialRewardUnseen = isTutorialRewardUnseen,
 	markTutorialRewardSeen = markTutorialRewardSeen,

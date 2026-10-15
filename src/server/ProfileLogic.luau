@@ -178,6 +178,14 @@ export type ProfileData = {
 	-- outlasts the match server like unseenGifts. Cleared when the Hub
 	-- client says it showed it (TutorialRewardSeenIntent).
 	tutorialRewardUnseen: boolean,
+
+	-- ===== schema v15, the hub tutorial's Locker gift ====================
+
+	-- Whether the hub tutorial's Locker step has given this account its
+	-- free power-up (GameConfig.tutorial.lockerGiftPowerUpId; tutorial
+	-- v2 seam 3). Set in the same mutation as the grant, so it gives
+	-- once ever, however often the tutorial is replayed.
+	tutorialGiftGiven: boolean,
 }
 
 -- Structurally StaffGrantLogic.UnseenGift: a unique id, who gave it
@@ -211,7 +219,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 14
+local CURRENT_SCHEMA_VERSION = 15
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -244,6 +252,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		unseenGifts = {},
 		tutorialRewarded = false,
 		tutorialRewardUnseen = false,
+		tutorialGiftGiven = false,
 	}
 end
 
@@ -416,6 +425,15 @@ migrations[13] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 14
 	next.tutorialRewardUnseen = (old.tutorialRewardUnseen :: boolean?) or false
+	return next
+end
+
+-- v14 -> v15 (the hub tutorial's Locker gift): not yet given. Nothing
+-- before this version could have given it.
+migrations[14] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 15
+	next.tutorialGiftGiven = (old.tutorialGiftGiven :: boolean?) or false
 	return next
 end
 

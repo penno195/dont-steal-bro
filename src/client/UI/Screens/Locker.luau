@@ -39,6 +39,7 @@ local derive = vide.derive
 local indexes = vide.indexes
 local switch = vide.switch
 local show = vide.show
+local effect = vide.effect
 
 local TAB_H = Theme.touch.primaryHeight -- C.TabBar's height (TabBar.luau HEIGHT)
 local SLOT_H = 72
@@ -244,7 +245,7 @@ local function stockCard(locker: Locker, row: () -> LockerLogic.StockRow, index:
 	local ink = function(): Color3
 		return if block() then Theme.color.inkMuted else Theme.color.ink
 	end
-	return Base.interactive({
+	local button = Base.interactive({
 		name = "Stock" .. index,
 		size = Vector2.new(width, CARD_H),
 		layoutOrder = index,
@@ -303,6 +304,12 @@ local function stockCard(locker: Locker, row: () -> LockerLogic.StockRow, index:
 			}
 		end,
 	})
+	-- Which item the tile is, for the hub tutorial's spotlight
+	-- (HubIntroController finds the gift's tile by it).
+	effect(function()
+		button:SetAttribute("PowerUpId", row().powerUpId)
+	end)
+	return button
 end
 
 local function loadoutSection(locker: Locker, pane: number, position: UDim2): Instance

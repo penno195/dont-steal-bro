@@ -412,6 +412,8 @@ type Menu = "Store" | "Locker" | "Leaderboards" | "Results" | "Settings" | "Staf
 local openMenu: Menu? = nil
 local unmountMenu: (() -> ())? = nil
 local syncLauncher: () -> () = function() end
+-- The launcher's Locker button, for the hub tutorial's spotlight.
+local lockerButtonRef: GuiObject? = nil
 
 -- Same check as QueueController's: the hub place, or in Studio a place
 -- with a Hub model when no hub place id is configured.
@@ -646,16 +648,20 @@ local function mountLauncher()
 				Padding = UDim.new(0, Theme.spacing.md),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
-			C.IconButton({
-				icon = "locker",
-				label = "Locker",
-				variant = "secondary",
-				onActivate = function()
-					open("Locker")
-				end,
-				order = 1,
-				layoutOrder = 1,
-			}),
+			(function()
+				local button = C.IconButton({
+					icon = "locker",
+					label = "Locker",
+					variant = "secondary",
+					onActivate = function()
+						open("Locker")
+					end,
+					order = 1,
+					layoutOrder = 1,
+				})
+				lockerButtonRef = button
+				return button
+			end)(),
 			C.IconButton({
 				icon = "shop",
 				label = "Store",
@@ -813,6 +819,11 @@ local MenuController: Loader.Controller = {
 	storeState = storeState,
 	openLocker = function()
 		open("Locker")
+	end,
+	-- For HubIntroController (tutorial v2 seam 3): the launcher's Locker
+	-- button, to spotlight while the launcher is showing.
+	lockerButton = function(): GuiObject?
+		return lockerButtonRef
 	end,
 	-- For StorePlinthController: a plinth opens the store on its item,
 	-- and draws it with the same offers and prices the store uses.
