@@ -852,6 +852,12 @@ go?" offer. The plan and build order are in `onboarding.md`,
   race through tasks. Your stations have a beam of light. Find the
   station and start the task."; "Do the task" / "Complete the task to
   move on to the next or the final."
+- **Pacing (owner, 2026-10-15, after the seam 2 playtest):** a step's
+  next pop-up waits **2 s** after the step is done, so the player sees
+  what they did (a power-up landing). "Task station" ends when the
+  practice task **opens**, and "Do the task" pops up over the open task;
+  the task holds its start (Code Playback's flash) until that card is
+  read.
 
 ## 8. Are starting power-ups sold for Robux?
 

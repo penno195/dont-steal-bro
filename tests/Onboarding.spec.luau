@@ -146,7 +146,7 @@ describe("OnboardingLogic hub intro", function()
 	end)
 
 	it("waits on what each practice step asks for", function()
-		local none = { holdsAimed = false, used = false, atStation = false, solved = false }
+		local none = { holdsAimed = false, used = false, opened = false, solved = false }
 		local function with(key: string): any
 			local f = table.clone(none) :: any
 			f[key] = true
@@ -156,10 +156,10 @@ describe("OnboardingLogic hub intro", function()
 		expect(OnboardingLogic.hubWaitDone("pickup", with("holdsAimed"))):toBe(true)
 		expect(OnboardingLogic.hubWaitDone("use", with("holdsAimed"))):toBe(false)
 		expect(OnboardingLogic.hubWaitDone("use", with("used"))):toBe(true)
-		expect(OnboardingLogic.hubWaitDone("station", with("atStation"))):toBe(true)
+		expect(OnboardingLogic.hubWaitDone("station", with("opened"))):toBe(true)
 		-- Solving it means they got there.
 		expect(OnboardingLogic.hubWaitDone("station", with("solved"))):toBe(true)
-		expect(OnboardingLogic.hubWaitDone("solve", with("atStation"))):toBe(false)
+		expect(OnboardingLogic.hubWaitDone("solve", with("opened"))):toBe(false)
 		expect(OnboardingLogic.hubWaitDone("solve", with("solved"))):toBe(true)
 		expect(OnboardingLogic.hubWaitDone(nil, none)):toBe(true)
 	end)

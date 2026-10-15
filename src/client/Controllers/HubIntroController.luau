@@ -25,7 +25,6 @@
 local CollectionService = game:GetService("CollectionService")
 local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
-local ProximityPromptService = game:GetService("ProximityPromptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
@@ -33,6 +32,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local C = require(script.Parent.Parent.UI.Components)
 local OnboardingLogic = require(script.Parent.Parent.UI.OnboardingLogic)
+local TaskViewBase = require(script.Parent.Parent.UI.TaskViewBase)
 
 -- How often to check whether the intro is due, and how long to let the
 -- Hub settle (character in, loading screen gone) before it opens.
@@ -43,6 +43,8 @@ local WAIT_POLL = 0.2
 -- With no pickup from the server by then (no practice area on this
 -- server), the power-up steps are skipped rather than left hanging.
 local PICKUP_TIMEOUT = 8
+-- A done step's pause before the next pop-up (owner, 2026-10-15).
+local NEXT_DELAY = 2
 local PRACTICE_TAG = "HubPracticeTask"
 
 local settings: any
@@ -59,10 +61,12 @@ for _, entry in PowerUps do
 end
 
 -- What the waiting steps check (OnboardingLogic.HubFacts). holdsAimed
--- and atStation follow the live state; used and solved latch, and are
--- reset as the step that waits on them begins.
-local facts: OnboardingLogic.HubFacts = { holdsAimed = false, used = false, atStation = false, solved = false }
+-- follows the live state; used, opened and solved latch, and are reset
+-- as the step that waits on them begins.
+local facts: OnboardingLogic.HubFacts = { holdsAimed = false, used = false, opened = false, solved = false }
 local pickupOffered = false -- the server sent this player a pickup
+-- What the step in the corner card is waiting for, if any.
+local waiting: OnboardingLogic.HubWait? = nil
 
 local roundState: string? = nil
 local open = false
@@ -80,6 +84,8 @@ end
 local function finish(played: boolean)
 	closeStep()
 	open = false
+	waiting = nil
+	TaskViewBase.hold(false)
 	onboarding.remind(nil, nil)
 	pickups.clear()
 	queue.armTutorial(false)
@@ -92,9 +98,11 @@ end
 local showStep: (number) -> ()
 
 -- After a waiting card is read: the step sits in the corner card until
--- it's done, then the next one opens.
+-- it's done, then the next one opens NEXT_DELAY later, so the player
+-- sees what they did (a power-up landing) before the next pop-up.
 local function awaitStep(index: number, step: OnboardingLogic.HubStep)
 	onboarding.remind(step.title, step.body)
+	waiting = step.waitFor
 	local started = os.clock()
 	task.spawn(function()
 		local nextIndex = index + 1
@@ -109,8 +117,12 @@ local function awaitStep(index: number, step: OnboardingLogic.HubStep)
 			end
 			task.wait(WAIT_POLL)
 		end
+		waiting = nil
 		if open then
 			onboarding.remind(nil, nil)
+			task.wait(NEXT_DELAY)
+		end
+		if open then
 			showStep(nextIndex)
 		end
 	end)
@@ -123,6 +135,7 @@ local function showCard(index: number, step: OnboardingLogic.HubStep)
 	elseif step.waitFor == "use" then
 		facts.used = false
 	elseif step.waitFor == "station" then
+		facts.opened = false
 		facts.solved = false
 	end
 	local actions = {
@@ -130,6 +143,8 @@ local function showCard(index: number, step: OnboardingLogic.HubStep)
 			label = OnboardingLogic.HUB_BUTTONS.next,
 			onActivate = function()
 				closeStep()
+				-- The task under this card starts now (see listen).
+				TaskViewBase.hold(false)
 				if step.waitFor ~= nil then
 					awaitStep(index, step)
 				else
@@ -236,11 +251,6 @@ local function isPracticeStation(stationId: any): boolean
 	return false
 end
 
-local function isPracticePrompt(prompt: ProximityPrompt): boolean
-	local parent = prompt.Parent
-	return prompt.Name == "TaskInteractPrompt" and parent ~= nil and CollectionService:HasTag(parent, PRACTICE_TAG)
-end
-
 -- Feeds `facts` from the same events the HUD and tips hear. Cheap, and
 -- harmless outside the tutorial: nothing reads them then.
 local function listen()
@@ -268,20 +278,15 @@ local function listen()
 			pickupOffered = true
 		end
 	end)
-	ProximityPromptService.PromptShown:Connect(function(prompt: ProximityPrompt)
-		if isPracticePrompt(prompt) then
-			facts.atStation = true
-		end
-	end)
-	ProximityPromptService.PromptHidden:Connect(function(prompt: ProximityPrompt)
-		if isPracticePrompt(prompt) then
-			facts.atStation = false
-		end
-	end)
-	-- Opening it counts as getting there; solving it is the task step.
+	-- Opening the task ends the station step, and "Do the task" then
+	-- pops up over it (owner, 2026-10-15). Until that card is read the
+	-- task holds its start, so Code Playback's flash isn't hidden.
 	Net.onClientEvent("TaskChallenge", function(payload: any)
 		if isPracticeStation(payload.stationId) then
-			facts.atStation = true
+			facts.opened = true
+			if open and waiting == "station" then
+				TaskViewBase.hold(true)
+			end
 		end
 	end)
 	Net.onClientEvent("TaskResult", function(payload: any)

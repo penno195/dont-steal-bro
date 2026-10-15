@@ -198,8 +198,8 @@ end
 export type HubStepId = "welcome" | "rivals" | "aim" | "station" | "task" | "play"
 export type HubTarget = "play"
 -- What a card waits for (hubWaitDone): holding an Aimed item (the
--- personal pickup), a power-up used, standing at the practice station,
--- and its task solved.
+-- personal pickup), a power-up fired, the practice station's task
+-- opened, and that task solved.
 export type HubWait = "pickup" | "use" | "station" | "solve"
 export type HubStep = {
 	id: HubStepId,
@@ -274,11 +274,11 @@ OnboardingLogic.HUB_BUTTONS = table.freeze({
 
 -- Has the player done what a card waits for? `facts` is what the Hub
 -- has seen since that step began (HubIntroController keeps it), except
--- holdsAimed and atStation, which are how things stand right now.
+-- holdsAimed, which is how things stand right now.
 export type HubFacts = {
 	holdsAimed: boolean,
 	used: boolean,
-	atStation: boolean,
+	opened: boolean,
 	solved: boolean,
 }
 
@@ -288,7 +288,7 @@ function OnboardingLogic.hubWaitDone(wait: HubWait?, facts: HubFacts): boolean
 	elseif wait == "use" then
 		return facts.used
 	elseif wait == "station" then
-		return facts.atStation or facts.solved
+		return facts.opened or facts.solved
 	elseif wait == "solve" then
 		return facts.solved
 	end

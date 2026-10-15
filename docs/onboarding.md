@@ -243,7 +243,9 @@ leaves the game playable.
    `HubTutorialPickup` part if the Hub has one, else mid practice area.
    "In the tutorial" = saved `introSeen` is false. Firing counts as the
    use whether it lands or not. The pickup holds Push/Trip, Blind or
-   Freeze, and the card copy is the owner's (2026-10-15).* Server: a personal, aimable pickup for the
+   Freeze, and the card copy is the owner's (2026-10-15). Each next
+   pop-up waits 2 s; "Do the task" opens over the opened task, which
+   holds its start (TaskViewBase.hold) until the card is read.* Server: a personal, aimable pickup for the
    tutorial player in `HubPracticeArea`, visible only to its owner like
    the daily hunt's, drawn from Push/Trip, Blind and Freeze (owner
    swapped Task Scramble, which does nothing to a dummy, for Freeze). Dummies skip a player who is

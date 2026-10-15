@@ -146,6 +146,11 @@ return TaskViewBase.define({
 		local startedAt = os.clock() + LEAD_IN
 		local flashConn: RBXScriptConnection
 		flashConn = RunService.Heartbeat:Connect(function()
+			-- A tutorial card is over the view: the flash waits for it.
+			if ctx.held() then
+				startedAt = os.clock() + LEAD_IN
+				return
+			end
 			local index, on = TaskViewLogic.flash(os.clock() - startedAt, perDigit, count, FLASH_ON)
 			if index == nil and os.clock() >= startedAt then
 				flashConn:Disconnect()

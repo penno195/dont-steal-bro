@@ -57,6 +57,9 @@ local create = vide.create
 local derive = vide.derive
 local source = vide.source
 
+-- Context.held, shared by every view (TaskViewBase.hold sets it).
+local held: Base.Source<boolean> & ((boolean) -> boolean) = source(false) :: any
+
 local T = Tokens.taskView
 local HEADER_HEIGHT = Theme.touch.iconButton
 local STATUS_HEIGHT = Theme.touch.iconButton
@@ -96,6 +99,9 @@ export type Context = {
 	-- Seconds since the view opened, whole seconds (updates once a second).
 	elapsed: Source<number>,
 	presentation: Source<TaskViewLogic.Presentation>,
+	-- True while a hub tutorial card covers the view (TaskViewBase.hold).
+	-- A task that starts on a clock, like Code Playback's flash, waits.
+	held: Source<boolean>,
 	-- The play area frame build() is parented into. Adapters that hit-
 	-- test against it (Drag) take it as `area`.
 	area: Frame,
@@ -694,6 +700,7 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 			attempt = session.attempt,
 			elapsed = elapsed,
 			presentation = presentation,
+			held = held,
 			area = area,
 			submit = function(remote: string, fields: { [string]: any }?)
 				if closing or finished then
@@ -791,6 +798,13 @@ local function open(spec: Spec, stationId: string, challenge: any, session: Task
 end
 
 local TaskViewBase = {}
+
+-- The hub tutorial's "Do the task" card opens over a task it has just
+-- opened, so it holds the task's start until the card is read (owner,
+-- 2026-10-15). Display-only: the server never times the watch phase.
+function TaskViewBase.hold(on: boolean)
+	held(on)
+end
 
 function TaskViewBase.define(spec: Spec): TaskViewTypes.TaskView
 	local current: Attempt? = nil
