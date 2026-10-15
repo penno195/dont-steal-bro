@@ -39,6 +39,9 @@ export type Store = {
 	change: (patch: { [string]: any }) -> (),
 	reset: () -> (),
 	close: () -> (),
+	-- The hub intro again (tutorial seam 2). Hub only; nil elsewhere,
+	-- and the button isn't shown.
+	showIntro: (() -> ())?,
 }
 
 local function hint(text: string, order: number): TextLabel
@@ -283,6 +286,23 @@ local function body(store: Store, height: () -> number): { Instance }
 			hint("Roblox's own text size setting also makes this bigger.", 10),
 			toggleRow("Beginner tips", flag("tips"), flip("tips"), 11),
 			hint("Shows the tips again during your next round.", 12),
+			if store.showIntro
+				then create("Frame")({
+					Name = "IntroSlot",
+					LayoutOrder = 12.5,
+					Size = UDim2.fromOffset(MenuShell.INNER, Theme.touch.primaryHeight),
+					BackgroundTransparency = 1,
+					C.Button({
+						label = "Show the intro",
+						variant = "secondary",
+						width = MenuShell.INNER,
+						onActivate = store.showIntro,
+						order = 199,
+						anchorPoint = Vector2.new(0.5, 0.5),
+						position = UDim2.fromScale(0.5, 0.5),
+					}),
+				})
+				else nil :: any,
 			create("Frame")({
 				Name = "ResetSlot",
 				LayoutOrder = 13,

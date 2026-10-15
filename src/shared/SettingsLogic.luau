@@ -29,6 +29,14 @@ export type PlayerSettings = {
 	-- stored profile from before this field gets the default, so every
 	-- existing player sees the tips once.
 	tips: boolean,
+	-- The hub intro (tutorial seam 2, docs/onboarding.md "The hub
+	-- intro"): false until the player has tapped through it, picked
+	-- Try or Skip. Settings' "Show the intro" sets it back to false.
+	-- Display-only like `tips`; the tutorial REWARD is the server's
+	-- own once-per-account flag (profile tutorialRewarded), never this.
+	-- Not a preference, so "Reset to defaults" leaves it alone
+	-- (SettingsController.reset).
+	introSeen: boolean,
 }
 
 -- HUD scale only goes UP from the computed scale. The computed scale is
@@ -76,6 +84,7 @@ function SettingsLogic.defaults(): PlayerSettings
 		hudScale = 1,
 		colorBlindMode = false,
 		tips = true,
+		introSeen = false,
 	}
 end
 
@@ -116,6 +125,7 @@ local function sanitizeOver(raw: any, d: PlayerSettings): PlayerSettings
 		),
 		colorBlindMode = bool(raw.colorBlindMode, d.colorBlindMode),
 		tips = bool(raw.tips, d.tips),
+		introSeen = bool(raw.introSeen, d.introSeen),
 	}
 end
 

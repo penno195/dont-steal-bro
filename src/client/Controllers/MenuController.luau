@@ -408,6 +408,16 @@ local openMenu: Menu? = nil
 local unmountMenu: (() -> ())? = nil
 local syncLauncher: () -> () = function() end
 
+-- Same check as QueueController's: the hub place, or in Studio a place
+-- with a Hub model when no hub place id is configured.
+local function isHubServer(): boolean
+	local hubPlaceId = GameConfig.matchmaking.hubPlaceId
+	if hubPlaceId == 0 then
+		return RunService:IsStudio() and Workspace:FindFirstChild("Hub") ~= nil
+	end
+	return game.PlaceId == hubPlaceId
+end
+
 local function closeMenu()
 	if unmountMenu ~= nil then
 		(unmountMenu :: () -> ())()
@@ -556,22 +566,19 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 			change = SettingsController.change,
 			reset = SettingsController.reset,
 			close = closeMenu,
+			-- HubIntroController opens it once the menu has closed.
+			showIntro = if isHubServer()
+				then function()
+					SettingsController.change({ introSeen = false })
+					closeMenu()
+				end
+				else nil,
 		})
 	end
 	syncLauncher()
 end
 
 -- ===== launcher ==============================================================
-
--- Same check as QueueController's: the hub place, or in Studio a place
--- with a Hub model when no hub place id is configured.
-local function isHubServer(): boolean
-	local hubPlaceId = GameConfig.matchmaking.hubPlaceId
-	if hubPlaceId == 0 then
-		return RunService:IsStudio() and Workspace:FindFirstChild("Hub") ~= nil
-	end
-	return game.PlaceId == hubPlaceId
-end
 
 local function mountLauncher()
 	local gui = UIScaleController.createScreen("MenuLauncher", { displayOrder = Theme.displayOrder.hud })

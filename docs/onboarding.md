@@ -2,15 +2,41 @@
 
 A new player has to understand the loop in under 60 seconds: race to
 finish tasks, grief your rivals, top 3 reach the finale, then Steal or
-Share. There's no tutorial level and no wall of text. The first round
-is a real round, and a short tip appears the first time each thing
-happens to the player. So every tip explains something already on
-their screen.
+Share. On their first visit to the Hub they get a short intro and the
+offer of a guided practice round (design-decisions.md, "the first-time
+tutorial"). In any round, a short tip appears the first time each
+thing happens to the player, so every tip explains something already
+on their screen.
 
 Code: `UI/OnboardingLogic.luau` (copy and queue, pure, tested),
 `Controllers/OnboardingController.luau` (events and the card),
 `UI/Screens/PayoffExplainer.luau` (How it works), and
 `DecisionLogic.explainerRows` (the explainer's words, from `prizeFor`).
+
+## The hub intro
+
+On a player's first visit to the Hub (between rounds, no menu open,
+not queued, loading screen gone), a modal steps through four cards,
+then the offer. `HubIntroController` draws it; the copy and the
+"is it due" check are `OnboardingLogic.INTRO`, `INTRO_OFFER` and
+`introDue` (tested).
+
+| # | Title | Body |
+|---|---|---|
+| 1 | Race your tasks | Follow the arrow, finish your tasks. Top 3 go to the finale. |
+| 2 | Mess with rivals | Grab power-ups and slow the others down. They'll do it to you too. |
+| 3 | Steal or Share | The top 3 pick in secret. Steal only pays if you're the only one. |
+| 4 | Your streak | Win and it goes up. Lose once and it's back to 0. |
+| Offer | Want a practice go? | A quick round against bots. Finish it for a Rookie Cap, 100 coins and a Freeze. **[Try a practice round] [Skip]** |
+
+Every card has Next and Skip. Any way out (Skip, Try, close, B, tap
+outside) sets the `introSeen` setting, so it shows once. Skip pulses
+the Play button (not under reduced motion). Try queues a practice
+round; the guided tutorial round replaces that in seam 3.
+**Settings → Show the intro** (Hub only) clears `introSeen` and the
+intro opens again once the menu closes. "Reset to defaults" leaves
+`introSeen` alone. Like the tips, it's display-only: the reward is the
+server's own once-per-account flag.
 
 ## The flow
 

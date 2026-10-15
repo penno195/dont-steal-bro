@@ -748,7 +748,9 @@ in-round tip cards stay as well.
   - **Hub intro:** four cards, in this order: Race your tasks, Mess
     with rivals (power-ups), Steal or Share (top 3, in secret), Your
     streak (win and it climbs, lose once and it's 0). Then an offer:
-    "Try a practice round" or Skip. Skip points at Play.
+    "Try a practice round" or Skip. Skip points at Play. Card copy
+    picked by the owner 2026-10-15 (docs/onboarding.md, "The hub
+    intro"); the offer names the reward.
   - **Guided round:** a real practice round against 5 bots, always on
     **Factory**. Each step waits for the player before moving on: go
     to a station, do the task, grab the power-up, use it on a bot. The

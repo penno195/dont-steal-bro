@@ -179,6 +179,56 @@ function OnboardingLogic.dismiss(state: State)
 	advance(state)
 end
 
+-- THE HUB INTRO (tutorial seam 2, docs/onboarding.md). Four cards on a
+-- player's first visit to the Hub, then the offer: a guided practice
+-- round, or Skip. Titles and copy are the owner's (2026-10-15), in the
+-- tips' voice and limits.
+export type IntroCard = { title: string, body: string }
+
+OnboardingLogic.INTRO = table.freeze({
+	table.freeze({ title = "Race your tasks", body = "Follow the arrow, finish your tasks. Top 3 go to the finale." }),
+	table.freeze({
+		title = "Mess with rivals",
+		body = "Grab power-ups and slow the others down. They'll do it to you too.",
+	}),
+	table.freeze({
+		title = "Steal or Share",
+		body = "The top 3 pick in secret. Steal only pays if you're the only one.",
+	}),
+	table.freeze({ title = "Your streak", body = "Win and it goes up. Lose once and it's back to 0." }),
+} :: { IntroCard })
+
+OnboardingLogic.INTRO_OFFER = table.freeze({
+	title = "Want a practice go?",
+	body = "A quick round against bots. Finish it for a Rookie Cap, 100 coins and a Freeze.",
+	try = "Try a practice round",
+	skip = "Skip",
+})
+
+-- Whether the intro should open now. Only in the Hub, only between
+-- rounds (nil or WaitingForPlayers), never over the loading screen,
+-- an open menu or a queue the player is already in, and only once the
+-- saved settings say they haven't seen it.
+export type IntroContext = {
+	isHub: boolean,
+	settingsLoaded: boolean,
+	introSeen: boolean,
+	roundState: string?,
+	loading: boolean,
+	menuOpen: boolean,
+	queued: boolean,
+}
+
+function OnboardingLogic.introDue(c: IntroContext): boolean
+	return c.isHub
+		and c.settingsLoaded
+		and not c.introSeen
+		and (c.roundState == nil or c.roundState == "WaitingForPlayers")
+		and not c.loading
+		and not c.menuOpen
+		and not c.queued
+end
+
 -- True once the player has been taught the whole loop: the race, then
 -- either the Studio or seeing they missed it. That's when the tips turn
 -- themselves off. A player who joined mid-round and skipped the race

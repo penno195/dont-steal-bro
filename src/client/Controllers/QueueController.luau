@@ -38,6 +38,7 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local C = require(script.Parent.Parent.UI.Components)
 local Base = require(script.Parent.Parent.UI.Components.Base)
+local Feel = require(script.Parent.Parent.UI.Components.Feel)
 local Icons = require(script.Parent.Parent.UI.Components.Icons)
 local Layout = require(script.Parent.Parent.UI.Layout)
 local LockerLogic = require(script.Parent.Parent.UI.LockerLogic)
@@ -64,6 +65,12 @@ for _, entry in PowerUps do
 	table.insert(powerUpIds, entry.def.id)
 end
 local TICK = 0.5
+-- The hub intro's Skip points at Play (tutorial seam 2): a few gentle
+-- pulses on the Play button's own UIScale, through a Feel channel.
+local PLAY_POINT = "QueuePlayPoint"
+local PLAY_PULSES = 3
+local PLAY_PULSE_SECONDS = 0.6
+local PLAY_PULSE_SCALE = 0.08
 local BOARD_TAG = "HubQueueCountdown"
 local BOARD_PIXELS_PER_STUD = 28
 
@@ -415,6 +422,7 @@ local function mountCard()
 						layoutOrder = 2,
 					}) :: GuiObject
 					button.ZIndex = 2
+					Feel.attach(button, PLAY_POINT)
 					return button
 				end) :: any,
 				show(function()
@@ -532,7 +540,40 @@ end
 local QueueController: Loader.Controller = {
 	name = "QueueController",
 	dependencies = { "UIScaleController", "MenuController", "PartyController" },
+
+	-- For HubIntroController (tutorial seam 2): the intro waits while
+	-- the player is already in a queue.
+	queued = function(): boolean
+		return view().action == "Leave"
+	end,
 }
+
+-- The intro's "Try a practice round". Seam 3 points this at the guided
+-- tutorial round; until then it queues an ordinary practice round, the
+-- same as tapping Practice.
+function QueueController.startPractice()
+	if view().action == "Join" then
+		onTap(true)
+	end
+end
+
+-- The intro's Skip: pulse the Play button so the player knows where to
+-- go. Nothing under reduced motion; the button is still right there.
+function QueueController.pointAtPlay()
+	if C.Env.reducedMotion() then
+		return
+	end
+	task.spawn(function()
+		local start = os.clock()
+		local total = PLAY_PULSES * PLAY_PULSE_SECONDS
+		while os.clock() - start < total do
+			local t = (os.clock() - start) / PLAY_PULSE_SECONDS
+			Feel.set(PLAY_POINT, 1 + PLAY_PULSE_SCALE * math.abs(math.sin(t * math.pi)))
+			task.wait()
+		end
+		Feel.set(PLAY_POINT, 1)
+	end)
+end
 
 function QueueController:init()
 	if not isHubServer() then

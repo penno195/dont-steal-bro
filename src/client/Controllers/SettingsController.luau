@@ -114,8 +114,12 @@ function SettingsController.change(patch: { [string]: any })
 	end
 end
 
+-- introSeen is a record, not a preference: resetting shouldn't throw
+-- the hub intro back up over the menu.
 function SettingsController.reset()
-	SettingsController.change(SettingsLogic.defaults() :: any)
+	local defaults: { [string]: any } = SettingsLogic.defaults() :: any
+	defaults.introSeen = nil
+	SettingsController.change(defaults)
 end
 
 function SettingsController:init()

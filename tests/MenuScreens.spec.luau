@@ -57,6 +57,12 @@ describe("SettingsLogic.sanitize", function()
 		expect(s.voiceEnabled):toBe(true)
 		expect(s.admin):toBe(nil)
 	end)
+
+	it("starts a new player with the hub intro unseen, and keeps a seen one", function()
+		expect(SettingsLogic.defaults().introSeen):toBe(false)
+		expect(SettingsLogic.sanitize({ introSeen = true }).introSeen):toBe(true)
+		expect(SettingsLogic.sanitize({ introSeen = "yes" }).introSeen):toBe(false)
+	end)
 end)
 
 describe("SettingsLogic.apply", function()

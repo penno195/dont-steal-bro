@@ -91,6 +91,50 @@ describe("OnboardingLogic queue", function()
 	end)
 end)
 
+describe("OnboardingLogic hub intro", function()
+	local function ctx(overrides: { [string]: any }): OnboardingLogic.IntroContext
+		local c: { [string]: any } = {
+			isHub = true,
+			settingsLoaded = true,
+			introSeen = false,
+			roundState = nil,
+			loading = false,
+			menuOpen = false,
+			queued = false,
+		}
+		for k, v in overrides do
+			c[k] = v
+		end
+		return c :: any
+	end
+
+	it("has the four cards, in the owner's order, inside the tip limits", function()
+		local titles = {}
+		for _, card in OnboardingLogic.INTRO do
+			table.insert(titles, card.title)
+			expect(#card.title <= 30):toBe(true)
+			expect(#card.body <= 90):toBe(true)
+		end
+		expect(table.concat(titles, "|")):toBe("Race your tasks|Mess with rivals|Steal or Share|Your streak")
+		expect(#OnboardingLogic.INTRO_OFFER.body <= 90):toBe(true)
+	end)
+
+	it("is due for a new player idle in the Hub", function()
+		expect(OnboardingLogic.introDue(ctx({}))):toBe(true)
+		expect(OnboardingLogic.introDue(ctx({ roundState = "WaitingForPlayers" }))):toBe(true)
+	end)
+
+	it("waits out everything that would put it in the way", function()
+		expect(OnboardingLogic.introDue(ctx({ isHub = false }))):toBe(false)
+		expect(OnboardingLogic.introDue(ctx({ settingsLoaded = false }))):toBe(false)
+		expect(OnboardingLogic.introDue(ctx({ introSeen = true }))):toBe(false)
+		expect(OnboardingLogic.introDue(ctx({ roundState = "Race" }))):toBe(false)
+		expect(OnboardingLogic.introDue(ctx({ loading = true }))):toBe(false)
+		expect(OnboardingLogic.introDue(ctx({ menuOpen = true }))):toBe(false)
+		expect(OnboardingLogic.introDue(ctx({ queued = true }))):toBe(false)
+	end)
+end)
+
 describe("DecisionLogic.explainerRows", function()
 	it("reads the three-seat table the way payoff-table.md does", function()
 		local rows = DecisionLogic.explainerRows(3)
