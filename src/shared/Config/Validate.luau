@@ -726,6 +726,18 @@ export type CommunityConfig = {
 	recheckCooldownSeconds: number, -- per player, between membership checks the client asks for
 }
 
+-- The first-time tutorial (design-decisions.md, "the first-time
+-- tutorial"): the guided practice round's map and bots, and what
+-- finishing it pays, once per account. The cosmetic is tutorial-only.
+export type TutorialConfig = {
+	enabled: boolean, -- false = no intro, no guided round, no reward (and no cross-checks)
+	mapId: string,
+	botCount: number,
+	rewardCosmeticId: string,
+	rewardCurrency: number,
+	rewardPowerUps: { [string]: number }, -- power-up id -> how many go into loadout stock
+}
+
 -- The daily hunt (design-decisions.md Q1, "the daily hunt"): one hidden
 -- pickup per player per UTC day at a `spotTag` part in the hub.
 export type DailyHuntConfig = {
@@ -919,6 +931,9 @@ export type GameConfig = {
 
 	-- The community reward. See CommunityConfig above.
 	community: CommunityConfig,
+
+	-- The first-time tutorial. See TutorialConfig above.
+	tutorial: TutorialConfig,
 
 	-- The daily hunt. See DailyHuntConfig above.
 	dailyHunt: DailyHuntConfig,
@@ -3151,6 +3166,50 @@ local function checkCommunityConfig(cc: CommunityConfig, issues: { Issue })
 	end
 end
 
+local function checkTutorialConfig(tc: TutorialConfig, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "GameConfig", "GameConfig.luau", "tutorial." .. field, message)
+	end
+
+	if tc == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "tutorial", "the tutorial config block is missing entirely")
+		return
+	end
+
+	if type(tc.enabled) ~= "boolean" then
+		bad("enabled", "must be true or false")
+	end
+	if type(tc.mapId) ~= "string" or tc.mapId == "" then
+		bad("mapId", "must name a map id")
+	end
+	-- A practice round has 6 seats; the player takes one.
+	if type(tc.botCount) ~= "number" or tc.botCount < 1 or tc.botCount > 5 or tc.botCount % 1 ~= 0 then
+		bad("botCount", "must be a whole number from 1 to 5")
+	end
+	if type(tc.rewardCosmeticId) ~= "string" or tc.rewardCosmeticId == "" then
+		bad("rewardCosmeticId", "must name a cosmetic id")
+	end
+	if type(tc.rewardCurrency) ~= "number" or tc.rewardCurrency < 0 or tc.rewardCurrency % 1 ~= 0 then
+		bad("rewardCurrency", "must be a whole number, 0 or more")
+	end
+	if type(tc.rewardPowerUps) ~= "table" then
+		bad("rewardPowerUps", "must be a table of power-up id -> count")
+	else
+		for id, count in tc.rewardPowerUps do
+			if type(id) ~= "string" or type(count) ~= "number" or count < 1 or count % 1 ~= 0 then
+				bad(
+					"rewardPowerUps",
+					string.format(
+						"%s = %s: each count must be a whole number, 1 or more",
+						tostring(id),
+						tostring(count)
+					)
+				)
+			end
+		end
+	end
+end
+
 local function checkDailyHuntConfig(dh: DailyHuntConfig, issues: { Issue })
 	local function bad(field: string, message: string)
 		issue(issues, "GameConfig", "GameConfig.luau", "dailyHunt." .. field, message)
@@ -3504,6 +3563,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	checkPracticeConfig(config.practice, issues)
 	checkDoorConfig(config.doors, issues)
 	checkCommunityConfig(config.community, issues)
+	checkTutorialConfig(config.tutorial, issues)
 	checkDailyHuntConfig(config.dailyHunt, issues)
 	checkStudioTestConfig(config.studioTest, config.playerCount, issues)
 
@@ -4578,24 +4638,18 @@ function Validate.run(input: RegistryInput): { Issue }
 		end
 	end
 
-	-- The community reward is exclusive to the group: a cosmetic that
-	-- nothing else hands out (not sold, not a drop, not a leaderboard
-	-- prize, not on a season track). It may be disabled while its asset
-	-- is being made: StoreService grants nothing until it's enabled.
-	local community = input.gameConfig.community
-	if
-		cosmetics ~= nil
-		and community ~= nil
-		and type(community.groupId) == "number"
-		and community.groupId > 0
-		and type(community.rewardCosmeticId) == "string"
-	then
-		local id = community.rewardCosmeticId
+	-- The community reward and the tutorial reward are each exclusive: a
+	-- cosmetic that nothing else hands out (not sold, not a drop, not a
+	-- leaderboard prize, not on a season track, not the other reward). It
+	-- may be disabled while its asset is being made: nothing grants it
+	-- until it's enabled.
+	local function checkExclusiveCosmetic(id: string, field: string, only: string, otherId: string?)
 		local function bad(message: string)
-			issue(issues, "GameConfig", "GameConfig.luau", "community.rewardCosmeticId", message)
+			issue(issues, "GameConfig", "GameConfig.luau", field, message)
 		end
 		local cosmetic: CosmeticDef? = nil
-		for _, entry in cosmetics do
+		local registry: { { fileName: string, def: CosmeticDef } } = cosmetics or {}
+		for _, entry in registry do
 			if entry.def.id == id then
 				cosmetic = entry.def
 			end
@@ -4630,12 +4684,95 @@ function Validate.run(input: RegistryInput): { Issue }
 				end
 			end
 		end
+		if otherId == id then
+			where = "the other exclusive reward (community / tutorial)"
+		end
 		if cosmetic == nil then
 			bad(string.format("%q is not a cosmetic id", id))
 		elseif cosmetic.winDrop == true then
-			bad(string.format("cosmetic %q is a win drop (winDrop = true); the community reward is group-only", id))
+			bad(string.format("cosmetic %q is a win drop (winDrop = true); %s", id, only))
 		elseif where ~= nil then
-			bad(string.format("cosmetic %q is also %s; the community reward is group-only", id, where))
+			bad(string.format("cosmetic %q is also %s; %s", id, where, only))
+		end
+	end
+
+	local community = input.gameConfig.community
+	local tutorial = input.gameConfig.tutorial
+	local communityId = if community ~= nil
+			and type(community.groupId) == "number"
+			and community.groupId > 0
+			and type(community.rewardCosmeticId) == "string"
+		then community.rewardCosmeticId
+		else nil
+	local tutorialOn = tutorial ~= nil and tutorial.enabled == true
+	local tutorialId = if tutorialOn and type(tutorial.rewardCosmeticId) == "string"
+		then tutorial.rewardCosmeticId
+		else nil
+	if cosmetics ~= nil and communityId ~= nil then
+		checkExclusiveCosmetic(
+			communityId,
+			"community.rewardCosmeticId",
+			"the community reward is group-only",
+			tutorialId
+		)
+	end
+	if cosmetics ~= nil and tutorialId ~= nil then
+		checkExclusiveCosmetic(
+			tutorialId,
+			"tutorial.rewardCosmeticId",
+			"the tutorial reward is tutorial-only",
+			communityId
+		)
+	end
+
+	-- The tutorial pays power-ups into loadout stock, so each must exist
+	-- and be loadout-eligible (else it's a dead grant).
+	if tutorialOn and type(tutorial.rewardPowerUps) == "table" then
+		for powerUpId in tutorial.rewardPowerUps do
+			local found: any = nil
+			for _, entry in input.powerUps do
+				if entry.def.id == powerUpId then
+					found = entry.def
+				end
+			end
+			if found == nil then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"tutorial.rewardPowerUps",
+					string.format("%q is not a power-up id", tostring(powerUpId))
+				)
+			elseif not (found.acquisition and found.acquisition.loadoutEligible) then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"tutorial.rewardPowerUps",
+					string.format(
+						"%q is not loadout-eligible, so granting it as stock does nothing",
+						tostring(powerUpId)
+					)
+				)
+			end
+		end
+	end
+	-- Its map must be a real, enabled map.
+	if tutorialOn and type(tutorial.mapId) == "string" then
+		local ok = false
+		for _, entry in input.maps do
+			if entry.def.id == tutorial.mapId and entry.def.enabled ~= false then
+				ok = true
+			end
+		end
+		if not ok then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"tutorial.mapId",
+				string.format("%q is not an enabled map", tutorial.mapId)
+			)
 		end
 	end
 

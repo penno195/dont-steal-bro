@@ -552,6 +552,22 @@ local GameConfig: Validate.GameConfig = {
 		recheckCooldownSeconds = 10,
 	},
 
+	-- The first-time tutorial (design-decisions.md, "the first-time
+	-- tutorial"): a hub intro, then an offered guided practice round on
+	-- `mapId` against `botCount` bots. Finishing that round pays the
+	-- reward below once per account (DataService.claimTutorialReward).
+	-- The cosmetic is tutorial-only: nothing else may hand it out. While
+	-- it's disabled (no model yet) the coins and power-ups still pay and
+	-- the cap is skipped, so leave it disabled only until the model ships.
+	tutorial = {
+		enabled = true,
+		mapId = "Factory",
+		botCount = 5,
+		rewardCosmeticId = "hat-rookie-cap",
+		rewardCurrency = 100,
+		rewardPowerUps = { freeze = 1 },
+	},
+
 	-- The daily hunt (design-decisions.md Q1, "the daily hunt"): one
 	-- hidden pickup per player per UTC day, at one of the hub's
 	-- `spotTag` parts, picked from the user id and the date. Only its

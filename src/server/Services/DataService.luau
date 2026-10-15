@@ -840,6 +840,28 @@ local function claimDailyHunt(player: Player, dayKey: string, grant: StoreLogic.
 	return applyGrantsTo(d, { grant })
 end
 
+-- The tutorial reward's one write (design-decisions.md, "the first-time
+-- tutorial"): marks it paid and applies `grants` in the same mutation,
+-- then saves at once, since it can never be earned again. Returns the
+-- change lines, or nil when the profile isn't writable or it was
+-- already paid.
+local function claimTutorialReward(player: Player, grants: { StoreLogic.Grant }): { string }?
+	local d = writable(player)
+	local profile = profiles[player]
+	if d == nil or profile == nil or d.tutorialRewarded then
+		return nil
+	end
+	d.tutorialRewarded = true
+	local changes = applyGrantsTo(d, grants)
+	profile:Save()
+	return changes
+end
+
+local function hasTutorialReward(player: Player): boolean
+	local d = data(player)
+	return if d then d.tutorialRewarded else false
+end
+
 local function getStats(player: Player): ProfileLogic.Stats
 	local d = data(player)
 	if d == nil then
@@ -953,6 +975,8 @@ local DataService: Loader.Service = {
 	addCurrency = addCurrency,
 	getLastHuntDay = getLastHuntDay,
 	claimDailyHunt = claimDailyHunt,
+	claimTutorialReward = claimTutorialReward,
+	hasTutorialReward = hasTutorialReward,
 	getStats = getStats,
 	recordRoundStat = recordRoundStat,
 	getUnlockedTitles = getUnlockedTitles,

@@ -744,9 +744,26 @@ from Settings. This replaces onboarding.md's "no tutorial level": the
 in-round tip cards stay as well.
 - The guided round is a practice round (the case above), so it never
   touches a streak, a stat or a leaderboard.
-- Not built yet. The design (the intro's cards, the round's steps) is
-  still to be worked out, and anything it can't answer goes back to
-  the owner.
+- Design settled by the owner 2026-10-15:
+  - **Hub intro:** four cards, in this order: Race your tasks, Mess
+    with rivals (power-ups), Steal or Share (top 3, in secret), Your
+    streak (win and it climbs, lose once and it's 0). Then an offer:
+    "Try a practice round" or Skip. Skip points at Play.
+  - **Guided round:** a real practice round against 5 bots, always on
+    **Factory**. Each step waits for the player before moving on: go
+    to a station, do the task, grab the power-up, use it on a bot. The
+    bots go easy, so the player always reaches the top 3.
+  - **Its Decision Studio:** both bot finalists **Share**, every time,
+    so a first-timer learns the payoff without getting burned. "How it
+    works" is shown before they pick.
+  - **Reward:** finishing the guided round grants, **once per
+    account**, a tutorial-only **"Rookie" cap** (Common Hat, never
+    sold), **100 coins** and **1 Freeze** power-up. The server grants
+    it and remembers it was granted. Skipping gives nothing, but a
+    player can still earn it later from Settings. Replays give
+    nothing. This is a deliberate exception to practice rounds giving
+    no rewards: it's a one-off onboarding gift, not a round payout,
+    and it never touches a streak, a stat or a leaderboard.
 
 ## 8. Are starting power-ups sold for Robux?
 

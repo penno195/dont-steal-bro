@@ -163,6 +163,13 @@ export type ProfileData = {
 	-- kept here so it outlasts a match server and a closed game.
 	-- StaffGrantLogic.noteUnseen / markSeen keep it, capped.
 	unseenGifts: { UnseenGift },
+
+	-- ===== schema v13, the first-time tutorial ===========================
+
+	-- Whether this account has been paid for finishing the guided
+	-- practice round (design-decisions.md, "the first-time tutorial").
+	-- Set in the same mutation as the reward, so it pays once ever.
+	tutorialRewarded: boolean,
 }
 
 -- Structurally StaffGrantLogic.UnseenGift: a unique id, who gave it
@@ -196,7 +203,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 12
+local CURRENT_SCHEMA_VERSION = 13
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -227,6 +234,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		streakSaves = 0,
 		unlimitedNavigation = false,
 		unseenGifts = {},
+		tutorialRewarded = false,
 	}
 end
 
@@ -381,6 +389,15 @@ migrations[11] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 12
 	next.unseenGifts = (old.unseenGifts :: { any }?) or {}
+	return next
+end
+
+-- v12 -> v13 (the first-time tutorial): not yet rewarded. Nothing
+-- before this version could have paid it.
+migrations[12] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 13
+	next.tutorialRewarded = (old.tutorialRewarded :: boolean?) or false
 	return next
 end
 

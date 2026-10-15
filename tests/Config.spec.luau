@@ -216,6 +216,14 @@ local function validGameConfig(): Validate.GameConfig
 		},
 		doors = { openRadius = 10, closeRadius = 13, checkSeconds = 0.15, swingSeconds = 0.4, openAngle = 95 },
 		community = { groupId = 0, rewardCosmeticId = "hat-ltd", recheckCooldownSeconds = 10 },
+		tutorial = {
+			enabled = false,
+			mapId = "test-map",
+			botCount = 5,
+			rewardCosmeticId = "cap",
+			rewardCurrency = 100,
+			rewardPowerUps = { ["sprint-boost"] = 1 },
+		},
 		dailyHunt = { spotTag = "HubDailyHuntSpot", claimRadius = 12, powerUpChance = 0.5, coins = 25 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
 		telemetry = {
@@ -2852,6 +2860,64 @@ TestRunner.describe("Validate - community reward", function()
 		config.community.groupId = 1.5
 		config.community.recheckCooldownSeconds = 10
 		TestRunner.expect(#runCommunity(config) > 0):toBeTruthy()
+	end)
+end)
+
+-- ===== The first-time tutorial (2026-10-15) =============================
+
+TestRunner.describe("Validate - tutorial reward", function()
+	local function runTutorial(config: Validate.GameConfig, cosmetic: Validate.CosmeticDef?): { Validate.Issue }
+		return Validate.run({
+			gameConfig = config,
+			maps = { { fileName = "TestMap.luau", def = validMap("test-map", {}) } },
+			tasks = {},
+			powerUps = { { fileName = "SprintBoost.luau", def = validPowerUp("sprint-boost") } },
+			titles = {},
+			cosmetics = { { fileName = "Cap.luau", def = cosmetic or validCosmetic("cap", "Skin") } },
+		})
+	end
+	local function on(): Validate.GameConfig
+		local config = validGameConfig()
+		config.tutorial.enabled = true
+		return config
+	end
+	local function count(issues: { Validate.Issue }, field: string): number
+		local n = 0
+		for _, i in issues do
+			if string.find(i.field, field, 1, true) then
+				n += 1
+			end
+		end
+		return n
+	end
+
+	TestRunner.it("accepts a real map, a loadout power-up and an exclusive cosmetic", function()
+		TestRunner.expect(count(runTutorial(on()), "tutorial")):toBe(0)
+	end)
+
+	TestRunner.it("refuses an unknown map, power-up or cosmetic", function()
+		local config = on()
+		config.tutorial.mapId = "nope"
+		config.tutorial.rewardPowerUps = { nope = 1 }
+		config.tutorial.rewardCosmeticId = "nope"
+		TestRunner.expect(count(runTutorial(config), "tutorial")):toBe(3)
+	end)
+
+	TestRunner.it("refuses a cosmetic that is also a win drop or the community reward", function()
+		local cap = validCosmetic("cap", "Skin")
+		cap.winDrop = true
+		TestRunner.expect(count(runTutorial(on(), cap), "tutorial.rewardCosmeticId")):toBe(1)
+		local config = on()
+		config.community = { groupId = 1, rewardCosmeticId = "cap", recheckCooldownSeconds = 10 }
+		TestRunner.expect(count(runTutorial(config), "rewardCosmeticId")):toBe(2)
+	end)
+
+	TestRunner.it("checks the block's own fields even when switched off", function()
+		local config = validGameConfig()
+		config.tutorial.botCount = 6
+		config.tutorial.rewardCurrency = -1
+		config.tutorial.rewardPowerUps = { ["sprint-boost"] = 0 }
+		TestRunner.expect(count(runTutorial(config), "tutorial")):toBe(3)
 	end)
 end)
 
