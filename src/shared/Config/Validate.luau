@@ -738,6 +738,8 @@ export type TutorialConfig = {
 	rewardCosmeticId: string,
 	rewardCurrency: number,
 	rewardPowerUps: { [string]: number }, -- power-up id -> how many go into loadout stock
+	practicePickupPowerUpIds: { string }, -- the hub step's personal pickup: Aimed items, one at random
+	practicePickupClaimRadius: number, -- studs from the pickup a claim may be made from
 }
 
 -- The daily hunt (design-decisions.md Q1, "the daily hunt"): one hidden
@@ -3218,6 +3220,16 @@ local function checkTutorialConfig(tc: TutorialConfig, issues: { Issue })
 			end
 		end
 	end
+	if type(tc.practicePickupPowerUpIds) ~= "table" or #tc.practicePickupPowerUpIds == 0 then
+		bad("practicePickupPowerUpIds", "must list at least one power-up id")
+	end
+	if
+		type(tc.practicePickupClaimRadius) ~= "number"
+		or tc.practicePickupClaimRadius < 2
+		or tc.practicePickupClaimRadius > 20
+	then
+		bad("practicePickupClaimRadius", "must be a number from 2 to 20 studs")
+	end
 end
 
 local function checkDailyHuntConfig(dh: DailyHuntConfig, issues: { Issue })
@@ -4763,6 +4775,32 @@ function Validate.run(input: RegistryInput): { Issue }
 						"%q is not loadout-eligible, so granting it as stock does nothing",
 						tostring(powerUpId)
 					)
+				)
+			end
+		end
+	end
+	-- The hub step's pickup is there to aim and fire, so each item must
+	-- be a real Aimed one. Freeze is the Locker step's gift, not this.
+	if tutorialOn and type(tutorial.practicePickupPowerUpIds) == "table" then
+		for _, powerUpId in tutorial.practicePickupPowerUpIds do
+			local found: any = nil
+			for _, entry in input.powerUps do
+				if entry.def.id == powerUpId then
+					found = entry.def
+				end
+			end
+			local problem = if found == nil
+				then "is not a power-up id"
+				elseif found.target ~= "Aimed" then "is not an Aimed power-up"
+				elseif powerUpId == "freeze" then "is the Locker step's gift, not the pickup's"
+				else nil
+			if problem ~= nil then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"tutorial.practicePickupPowerUpIds",
+					string.format("%q %s", tostring(powerUpId), problem)
 				)
 			end
 		end

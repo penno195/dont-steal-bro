@@ -1244,6 +1244,31 @@ local function grantFor(racerId: number, powerUpId: string)
 	stateFor(racerId).inventory[1] = { powerUpId = powerUpId, acquiredAt = now() }
 end
 
+-- A pickup with no world part: the hub tutorial's personal one, which
+-- only its owner's client draws (PracticeService checks the claim). It
+-- lands by the same slot rules as tryClaimPickup. False if the gate
+-- refuses the player or no slot would take it.
+local function giveTo(racerId: number, powerUpId: string): boolean
+	local racer = Participants.get(racerId)
+	if powerUpDefsById[powerUpId] == nil or racer == nil or not EffectContext.mayAct(racerId) then
+		return false
+	end
+	local state = stateFor(racerId)
+	local acquiredAt: { [number]: number } = {}
+	for slotIndex, item in state.inventory do
+		acquiredAt[slotIndex] = item.acquiredAt
+	end
+	local slotIndex =
+		PowerUpLogic.slotForPickup(acquiredAt, GameConfig.powerUpInventorySlots, GameConfig.powerUpFullInventoryPolicy)
+	if slotIndex == nil then
+		return false
+	end
+	state.inventory[slotIndex] = { powerUpId = powerUpId, acquiredAt = now() }
+	broadcastInventory(racer)
+	Loader.get("Telemetry").powerUpCollected(racerId, powerUpId, "Pickup")
+	return true
+end
+
 -- ===== round lifecycle ======================================================
 
 -- Clears every pickup, timer and inventory, then spawns at every spawn
@@ -1367,6 +1392,7 @@ local PowerUpService: Loader.Service = {
 	-- P3-6's entry point into the one validated use path - see useFor.
 	useForRacer = useForRacer,
 	grantFor = grantFor,
+	giveTo = giveTo,
 	setSelectionBag = setSelectionBag,
 
 	-- P5-5: PracticeService runs the same pickup lifecycle in the hub.

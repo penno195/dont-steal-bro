@@ -36,6 +36,7 @@
 -- force a round in that place: beginRace's assertion will stop it.
 
 local CollectionService = game:GetService("CollectionService")
+local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -43,11 +44,13 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local ServerStorage = game:GetService("ServerStorage")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
+local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Participants = require(ServerScriptService.Server.Participants)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
+local TutorialLogic = require(ServerScriptService.Server.TutorialLogic)
 
 local config = GameConfig.practice
 
@@ -82,6 +85,18 @@ local function gate(id: number): boolean
 	end
 
 	return rootPosition(participant) ~= nil
+end
+
+-- Still in the hub tutorial (tutorial v2): read live from the saved
+-- settings, which the client sets once the tutorial ends.
+local function inTutorial(player: Player): boolean
+	local DataService = Loader.get("DataService") :: any
+	local loaded = DataService.isLoaded(player)
+	return TutorialLogic.inHubTutorial(
+		GameConfig.tutorial.enabled,
+		loaded,
+		loaded and DataService.getSettings(player).introSeen
+	)
 end
 
 -- Drops every effect and held item. Idempotent and cheap on someone who
@@ -332,6 +347,8 @@ local function throwAt(targets: { Target }, powerUpIds: { string }): boolean
 	return false
 end
 
+-- A player doing the hub tutorial is never a target (owner, 2026-10-15):
+-- a push mid-step would only get in the way of learning it.
 -- A player mid-task at the practice station only ever gets a task attack
 -- (Task Scramble), and gets it first: that's the one thing the station
 -- is there to show, and a push or freeze would just end the attempt.
@@ -343,7 +360,13 @@ local function dummyAttack()
 	for _, participant in Participants.all() do
 		local player = participant.player
 		local position = rootPosition(participant)
-		if player ~= nil and position ~= nil and gate(participant.id) and isInPracticeArea(position) then
+		if
+			player ~= nil
+			and position ~= nil
+			and gate(participant.id)
+			and isInPracticeArea(position)
+			and not inTutorial(player)
+		then
 			local list = if TaskHandlerService.isAtPracticeTask(player) then atTask else others
 			table.insert(list, { id = participant.id, position = position })
 		end
@@ -377,6 +400,94 @@ local function setUpTaskStation()
 	end)
 end
 
+-- THE TUTORIAL PICKUP (tutorial v2, "Mess with rivals"): a pickup that
+-- only the tutorial player sees and takes, always an Aimed item, so the
+-- next card can teach aim-and-fire on the dummies. Like the daily hunt:
+-- the server sends its owner a position (TutorialPickupState) and that
+-- client alone draws it; a claim is measured here, never believed. It
+-- stands on a HubTutorialPickup part if the hub has one, else in the
+-- middle of the practice area, on the floor.
+type TutorialPickup = { position: Vector3, powerUpId: string }
+local tutorialPickups: { [Player]: TutorialPickup } = {}
+local rng = Random.new()
+
+-- At about a character's root height, so standing in it is "at it":
+-- the claim is measured from here, and the client draws the orb here.
+local TUTORIAL_PICKUP_LIFT = 3
+
+local function tutorialPickupFloor(): Vector3?
+	local marker = findOne("HubTutorialPickup")
+	if marker ~= nil then
+		return marker.Position + Vector3.new(0, marker.Size.Y / 2, 0)
+	end
+	local area = practiceArea
+	if area == nil then
+		return nil
+	end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { area }
+	params.RespectCanCollide = true
+	local top = area.Position + Vector3.new(0, area.Size.Y / 2, 0)
+	local hit = Workspace:Raycast(top, Vector3.new(0, -area.Size.Y - 10, 0), params)
+	return if hit ~= nil then hit.Position else area.Position - Vector3.new(0, area.Size.Y / 2, 0)
+end
+
+local function tutorialPickupSpot(): Vector3?
+	local floor = tutorialPickupFloor()
+	return if floor ~= nil then floor + Vector3.new(0, TUTORIAL_PICKUP_LIFT, 0) else nil
+end
+
+local function sendTutorialPickup(player: Player)
+	local pickup = tutorialPickups[player]
+	Net.fireClient(
+		"TutorialPickupState",
+		player,
+		if pickup ~= nil then { position = pickup.position, powerUpId = pickup.powerUpId } else {}
+	)
+end
+
+local function onTutorialPickupIntent(player: Player, payload: any)
+	if not active or not inTutorial(player) then
+		return
+	end
+	local pickup = tutorialPickups[player]
+	if payload.claim ~= true then
+		-- Asked again (a replay, or a lost reply): the same one stands.
+		if pickup == nil then
+			local position = tutorialPickupSpot()
+			local LiveConfig = Loader.get("LiveConfig") :: any
+			local powerUpId = TutorialLogic.practicePickupId(
+				GameConfig.tutorial.practicePickupPowerUpIds,
+				function(id: string): boolean
+					return LiveConfig.isPowerUpEnabled(id)
+				end,
+				rng:NextNumber()
+			)
+			if position == nil or powerUpId == nil then
+				return
+			end
+			tutorialPickups[player] = { position = position, powerUpId = powerUpId }
+		end
+		sendTutorialPickup(player)
+		return
+	end
+
+	if pickup == nil then
+		sendTutorialPickup(player) -- a stale client; tell it there's none
+		return
+	end
+	local participant = Participants.get(player.UserId)
+	local root = if participant ~= nil then rootPosition(participant) else nil
+	if root == nil or (root - pickup.position).Magnitude > GameConfig.tutorial.practicePickupClaimRadius then
+		return
+	end
+	if (Loader.get("PowerUpService") :: any).giveTo(player.UserId, pickup.powerUpId) then
+		tutorialPickups[player] = nil
+		sendTutorialPickup(player)
+	end
+end
+
 local function isHubServer(): boolean
 	local hubPlaceId = GameConfig.matchmaking.hubPlaceId
 	if hubPlaceId == 0 then
@@ -394,6 +505,9 @@ local PracticeService: Loader.Service = {
 		"StatusEffects",
 		"MatchmakingService",
 		"TaskHandlerService",
+		"DataService",
+		"LiveConfig",
+		"NetGuard",
 	},
 
 	release = release,
@@ -420,6 +534,13 @@ function PracticeService:init()
 		maxActiveEffects = config.maxActiveEffects,
 	}, gate)
 	active = true
+
+	if GameConfig.tutorial.enabled then
+		(Loader.get("NetGuard") :: any).on("TutorialPickupIntent", onTutorialPickupIntent)
+		Players.PlayerRemoving:Connect(function(player: Player)
+			tutorialPickups[player] = nil
+		end)
+	end
 end
 
 function PracticeService:start()

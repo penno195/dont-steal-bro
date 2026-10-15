@@ -82,3 +82,35 @@ describe("TutorialLogic.easyProfile", function()
 		expect(profile.durationScale):toBe(0.9)
 	end)
 end)
+
+describe("TutorialLogic.practicePickupId", function()
+	local ids = { "push-trip", "blind", "task-scramble" }
+	local function all(_id: string): boolean
+		return true
+	end
+
+	it("spreads the roll over the list, ends included", function()
+		expect(TutorialLogic.practicePickupId(ids, all, 0)):toBe("push-trip")
+		expect(TutorialLogic.practicePickupId(ids, all, 0.5)):toBe("blind")
+		expect(TutorialLogic.practicePickupId(ids, all, 0.999)):toBe("task-scramble")
+	end)
+
+	it("skips switched-off items, and is nil when none is left", function()
+		local function noBlind(id: string): boolean
+			return id ~= "blind"
+		end
+		expect(TutorialLogic.practicePickupId(ids, noBlind, 0.6)):toBe("task-scramble")
+		expect(TutorialLogic.practicePickupId(ids, function()
+			return false
+		end, 0.5)):toBe(nil)
+	end)
+end)
+
+describe("TutorialLogic.inHubTutorial", function()
+	it("is only a loaded player who hasn't seen it, with the tutorial on", function()
+		expect(TutorialLogic.inHubTutorial(true, true, false)):toBe(true)
+		expect(TutorialLogic.inHubTutorial(true, true, true)):toBe(false)
+		expect(TutorialLogic.inHubTutorial(true, false, false)):toBe(false)
+		expect(TutorialLogic.inHubTutorial(false, true, false)):toBe(false)
+	end)
+end)

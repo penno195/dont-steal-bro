@@ -21,6 +21,10 @@
 -- BillboardGui only while Rival or Done. That's at most GameConfig.
 -- tasksPerPlayer of each, about 2 transparent draws per station, plus
 -- one engine-side tween. There is no per-frame Lua.
+--
+-- THE HUB'S PRACTICE STATION (HubPracticeTask) keeps a Ready marker for
+-- good, for everyone (tutorial v2, owner 2026-10-15): the hub tutorial
+-- sends new players to it, and the beam is what they're told to find.
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -330,6 +334,21 @@ local function onRoundState(payload: any)
 	refreshAll()
 end
 
+local practiceMarkers: { [BasePart]: Marker } = {}
+
+local function markPractice(instance: Instance)
+	local hub = Workspace:FindFirstChild("Hub")
+	if not instance:IsA("BasePart") or hub == nil or not instance:IsDescendantOf(hub) then
+		return
+	end
+	if practiceMarkers[instance] ~= nil then
+		return
+	end
+	local marker = build(instance)
+	apply(marker, "Ready")
+	practiceMarkers[instance] = marker
+end
+
 local StationMarkerController: Loader.Controller = {
 	name = "StationMarkerController",
 	dependencies = {},
@@ -346,6 +365,21 @@ function StationMarkerController:start()
 	end
 	CollectionService:GetInstanceAddedSignal("TaskStation"):Connect(trackStation)
 	CollectionService:GetInstanceRemovedSignal("TaskStation"):Connect(untrackStation)
+
+	for _, instance in CollectionService:GetTagged("HubPracticeTask") do
+		markPractice(instance)
+	end
+	CollectionService:GetInstanceAddedSignal("HubPracticeTask"):Connect(markPractice)
+	CollectionService:GetInstanceRemovedSignal("HubPracticeTask"):Connect(function(instance: Instance)
+		local marker = if instance:IsA("BasePart") then practiceMarkers[instance] else nil
+		if marker ~= nil then
+			practiceMarkers[instance :: BasePart] = nil
+			if marker.pulse ~= nil then
+				marker.pulse:Cancel()
+			end
+			marker.pad:Destroy()
+		end
+	end)
 end
 
 return StationMarkerController

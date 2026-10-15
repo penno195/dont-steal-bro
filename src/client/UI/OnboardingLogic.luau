@@ -180,20 +180,28 @@ function OnboardingLogic.dismiss(state: State)
 end
 
 -- THE HUB STEPS (tutorial v2, docs/onboarding.md "Tutorial v2"). On a
--- player's first visit to the Hub, in order: the welcome card, then the
--- later steps (the practice area and the inventory come in seams 2 and
--- 3), ending on "press Play" with only Play lit. Copy is the owner's
--- (2026-10-15, design-decisions.md "the tutorial, second version").
+-- player's first visit to the Hub, in order: the welcome card, the
+-- practice area (a power-up to grab and fire, then the task station),
+-- then (seam 3) the inventory, ending on "press Play" with only Play
+-- lit. The welcome and Play copy is the owner's (2026-10-15,
+-- design-decisions.md "the tutorial, second version"); the practice
+-- area's is Claude's draft.
 --
 --   kind "card"       a pop-up on a dimmed screen. `skip` adds the Skip
 --                     that ends the whole tutorial (the welcome only).
+--                     With `waitFor`, the step then stays up in the
+--                     corner card until the player has done it.
 --   kind "spotlight"  the screen dims except `target`, ringed, with the
 --                     title and body in a caption card beside it. The
 --                     step ends when the player uses the target.
 --
 -- `picture` is a Studio screenshot (0 = none yet).
-export type HubStepId = "welcome" | "play"
+export type HubStepId = "welcome" | "rivals" | "aim" | "station" | "task" | "play"
 export type HubTarget = "play"
+-- What a card waits for (hubWaitDone): holding an Aimed item (the
+-- personal pickup), a power-up used, standing at the practice station,
+-- and its task solved.
+export type HubWait = "pickup" | "use" | "station" | "solve"
 export type HubStep = {
 	id: HubStepId,
 	kind: "card" | "spotlight",
@@ -202,6 +210,7 @@ export type HubStep = {
 	picture: number,
 	skip: boolean?,
 	target: HubTarget?,
+	waitFor: HubWait?,
 }
 
 local HUB_STEPS: { HubStep } = {
@@ -212,6 +221,38 @@ local HUB_STEPS: { HubStep } = {
 		body = "Where your fate is decided by your own conscience!",
 		picture = 130263615284046,
 		skip = true,
+	},
+	{
+		id = "rivals",
+		kind = "card",
+		title = "Mess with rivals",
+		body = "Grab the glowing power-up in the practice area. Only you can see it.",
+		picture = 0,
+		waitFor = "pickup",
+	},
+	{
+		id = "aim",
+		kind = "card",
+		title = "Aim and fire",
+		body = "Drag from its slot (or hold click) to aim at a dummy. Let go to fire!",
+		picture = 0,
+		waitFor = "use",
+	},
+	{
+		id = "station",
+		kind = "card",
+		title = "Task station",
+		body = "Matches are a race through tasks. Head to the station under the beam of light.",
+		picture = 0,
+		waitFor = "station",
+	},
+	{
+		id = "task",
+		kind = "card",
+		title = "Do the task",
+		body = "Open the station and complete the task.",
+		picture = 0,
+		waitFor = "solve",
 	},
 	{
 		id = "play",
@@ -231,6 +272,29 @@ OnboardingLogic.HUB_BUTTONS = table.freeze({
 	next = "Next",
 	skip = "Skip",
 })
+
+-- Has the player done what a card waits for? `facts` is what the Hub
+-- has seen since that step began (HubIntroController keeps it), except
+-- holdsAimed and atStation, which are how things stand right now.
+export type HubFacts = {
+	holdsAimed: boolean,
+	used: boolean,
+	atStation: boolean,
+	solved: boolean,
+}
+
+function OnboardingLogic.hubWaitDone(wait: HubWait?, facts: HubFacts): boolean
+	if wait == "pickup" then
+		return facts.holdsAimed
+	elseif wait == "use" then
+		return facts.used
+	elseif wait == "station" then
+		return facts.atStation or facts.solved
+	elseif wait == "solve" then
+		return facts.solved
+	end
+	return true
+end
 
 -- Whether the intro should open now. Only in the Hub, only between
 -- rounds (nil or WaitingForPlayers), never over the loading screen,

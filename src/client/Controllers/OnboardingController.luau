@@ -28,6 +28,9 @@
 -- it, whatever the tips setting says (owner, 2026-10-15). A finalist
 -- gets How it works on their own as the Studio's talking starts, before
 -- they pick.
+--
+-- THE HUB TUTORIAL borrows the same corner card (`remind`): after one of
+-- its step cards, the step stays up there until the player has done it.
 
 local Players = game:GetService("Players")
 local ProximityPromptService = game:GetService("ProximityPromptService")
@@ -87,6 +90,8 @@ local explained = false -- How it works has opened by itself this round
 -- Steps whose pop-up has been read ("Got it") this round, and the one up.
 local acked: { [string]: boolean } = {}
 local popupId = source(nil :: string?)
+-- The hub tutorial's current step, set by HubIntroController.
+local hubReminder = source(nil :: { title: string, body: string }?)
 local closePopup: (() -> ())? = nil
 
 local function isTutorial(): boolean
@@ -201,6 +206,10 @@ local function card(): TextButton
 		local tipShown, stepShown = showing(), step()
 		if tipShown ~= nil then
 			return tipShown
+		end
+		local reminder = hubReminder()
+		if reminder ~= nil then
+			return { title = reminder.title, body = reminder.body }
 		end
 		-- The corner reminder waits until the step's pop-up is read.
 		if popupId() ~= nil then
@@ -423,6 +432,11 @@ function OnboardingController:init()
 			trigger("choose")
 		end
 	end)
+end
+
+-- Keeps a hub tutorial step in the corner card, or clears it (nil).
+function OnboardingController.remind(title: string?, body: string?)
+	hubReminder(if title ~= nil and body ~= nil then { title = title, body = body } else nil)
 end
 
 function OnboardingController:start()

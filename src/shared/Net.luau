@@ -1189,6 +1189,31 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server, Hub only: the hub tutorial's "Mess with rivals"
+	-- step. `claim = false` asks for this player's personal pickup,
+	-- `claim = true` says "I'm at it". PracticeService only answers a
+	-- player whose saved settings say the tutorial is still running
+	-- (introSeen false), and measures the claim itself.
+	TutorialPickupIntent = {
+		name = "TutorialPickupIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ claim = Net.boolean() }),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted at its owner only, never fireAllClients):
+	-- { position = Vector3?, powerUpId = string? }, the personal pickup
+	-- to draw, or no position once it's claimed. Only its owner's client
+	-- is told, so nobody else sees it, like the daily hunt's.
+	TutorialPickupState = {
+		name = "TutorialPickupState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: the gift pop-up showed everything up to and
 	-- including `upToId`, so those leave the queue. Hub only; it can
 	-- only clear pop-up records, never a gift (StaffGrantLogic.markSeen).

@@ -133,6 +133,36 @@ describe("OnboardingLogic hub intro", function()
 		end
 	end)
 
+	it("runs the practice area between the welcome and Play", function()
+		local order = {}
+		for _, step in OnboardingLogic.HUB_STEPS do
+			table.insert(order, step.id)
+		end
+		expect(table.concat(order, ",")):toBe("welcome,rivals,aim,station,task,play")
+		-- "aim" directly follows "rivals": with no pickup both are skipped.
+		expect(OnboardingLogic.HUB_STEPS[2].waitFor):toBe("pickup")
+		expect(OnboardingLogic.HUB_STEPS[3].waitFor):toBe("use")
+	end)
+
+	it("waits on what each practice step asks for", function()
+		local none = { holdsAimed = false, used = false, atStation = false, solved = false }
+		local function with(key: string): any
+			local f = table.clone(none) :: any
+			f[key] = true
+			return f
+		end
+		expect(OnboardingLogic.hubWaitDone("pickup", none)):toBe(false)
+		expect(OnboardingLogic.hubWaitDone("pickup", with("holdsAimed"))):toBe(true)
+		expect(OnboardingLogic.hubWaitDone("use", with("holdsAimed"))):toBe(false)
+		expect(OnboardingLogic.hubWaitDone("use", with("used"))):toBe(true)
+		expect(OnboardingLogic.hubWaitDone("station", with("atStation"))):toBe(true)
+		-- Solving it means they got there.
+		expect(OnboardingLogic.hubWaitDone("station", with("solved"))):toBe(true)
+		expect(OnboardingLogic.hubWaitDone("solve", with("atStation"))):toBe(false)
+		expect(OnboardingLogic.hubWaitDone("solve", with("solved"))):toBe(true)
+		expect(OnboardingLogic.hubWaitDone(nil, none)):toBe(true)
+	end)
+
 	it("is due for a new player idle in the Hub", function()
 		expect(OnboardingLogic.introDue(ctx({}))):toBe(true)
 		expect(OnboardingLogic.introDue(ctx({ roundState = "WaitingForPlayers" }))):toBe(true)

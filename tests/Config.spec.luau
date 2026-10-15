@@ -225,6 +225,8 @@ local function validGameConfig(): Validate.GameConfig
 			rewardCosmeticId = "cap",
 			rewardCurrency = 100,
 			rewardPowerUps = { ["sprint-boost"] = 1 },
+			practicePickupPowerUpIds = { "push-trip" },
+			practicePickupClaimRadius = 6,
 		},
 		dailyHunt = { spotTag = "HubDailyHuntSpot", claimRadius = 12, powerUpChance = 0.5, coins = 25 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
@@ -313,6 +315,15 @@ local function validPowerUp(id: string): Validate.PowerUpDef
 		hardControl = false,
 		acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = false, robuxPrice = nil },
 	}
+end
+
+-- An Aimed attack, for checks that want one (the tutorial's hub pickup).
+local function aimedPowerUp(id: string): Validate.PowerUpDef
+	local def = validPowerUp(id)
+	def.kind = "Debuff"
+	def.role = "Attack"
+	def.target = "Aimed"
+	return def
 end
 
 local function validTitle(id: string, minStreak: number): Validate.TitleDef
@@ -2873,7 +2884,10 @@ TestRunner.describe("Validate - tutorial reward", function()
 			gameConfig = config,
 			maps = { { fileName = "TestMap.luau", def = validMap("test-map", {}) } },
 			tasks = {},
-			powerUps = { { fileName = "SprintBoost.luau", def = validPowerUp("sprint-boost") } },
+			powerUps = {
+				{ fileName = "SprintBoost.luau", def = validPowerUp("sprint-boost") },
+				{ fileName = "PushTrip.luau", def = aimedPowerUp("push-trip") },
+			},
 			titles = {},
 			cosmetics = { { fileName = "Cap.luau", def = cosmetic or validCosmetic("cap", "Skin") } },
 		})
@@ -2920,6 +2934,15 @@ TestRunner.describe("Validate - tutorial reward", function()
 		config.tutorial.rewardCurrency = -1
 		config.tutorial.rewardPowerUps = { ["sprint-boost"] = 0 }
 		TestRunner.expect(count(runTutorial(config), "tutorial")):toBe(3)
+	end)
+
+	TestRunner.it("refuses a hub pickup that isn't a real Aimed item", function()
+		local config = on()
+		config.tutorial.practicePickupPowerUpIds = { "push-trip", "sprint-boost", "nope" }
+		TestRunner.expect(count(runTutorial(config), "tutorial.practicePickupPowerUpIds")):toBe(2)
+		config.tutorial.practicePickupPowerUpIds = {}
+		config.tutorial.practicePickupClaimRadius = 50
+		TestRunner.expect(count(runTutorial(config), "tutorial.practicePickup")):toBe(2)
 	end)
 
 	TestRunner.it("refuses bots that would go faster than usual", function()

@@ -238,7 +238,12 @@ leaves the game playable.
    is a Studio shot: two R15 characters facing the camera, a devil
    (red, horns) under a STEAL button and an angel (white, halo) under
    a SHARE button.
-2. **Practice-area steps.** Server: a personal, aimable pickup for the
+2. **Practice-area steps.** *Done (seen in Hub Play up to "Do the
+   task"; the solve -> Play hop is unseen). The pickup stands on a
+   `HubTutorialPickup` part if the Hub has one, else mid practice area.
+   "In the tutorial" = saved `introSeen` is false. Firing counts as the
+   use whether it lands or not (a Task Scramble does nothing to a
+   dummy). The practice-area card copy is Claude's draft.* Server: a personal, aimable pickup for the
    tutorial player in `HubPracticeArea`, visible only to its owner like
    the daily hunt's, drawn from the Aimed items other than Freeze
    (Push/Trip, Blind, Task Scramble). Dummies skip a player who is

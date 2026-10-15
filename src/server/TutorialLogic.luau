@@ -81,4 +81,28 @@ function TutorialLogic.easyProfile(profile: SkillProfile, durationScale: number,
 	}
 end
 
+-- THE HUB PICKUP (tutorial v2, "Mess with rivals"): which item the
+-- tutorial player's personal pickup holds. One of `ids` that LiveConfig
+-- hasn't switched off, picked by `roll` (0 <= roll < 1); nil if none is
+-- left, and then the step goes without a pickup.
+function TutorialLogic.practicePickupId(ids: { string }, isEnabled: (string) -> boolean, roll: number): string?
+	local open: { string } = {}
+	for _, id in ids do
+		if isEnabled(id) then
+			table.insert(open, id)
+		end
+	end
+	if #open == 0 then
+		return nil
+	end
+	return open[math.clamp(math.floor(roll * #open) + 1, 1, #open)]
+end
+
+-- A player counts as doing the hub tutorial until their saved settings
+-- say it's been seen (finished or skipped). The dummies hold fire on
+-- them, and only they may ask for the personal pickup.
+function TutorialLogic.inHubTutorial(enabled: boolean, loaded: boolean, introSeen: boolean): boolean
+	return enabled and loaded and not introSeen
+end
+
 return TutorialLogic
