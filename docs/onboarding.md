@@ -23,13 +23,15 @@ rounds, no menu open, not queued, loading screen gone),
 
 | # | Step | Kind | Copy |
 |---|---|---|---|
-| 1 | welcome | card, Next + Skip | **Welcome to Don't Steal Bro!** Where your fate is decided by your own conscience! |
+| 1 | welcome | card, Next + corner Skip | **Welcome to Don't Steal Bro!** Where your fate is decided by your own conscience! |
 | last | play | spotlight on Play | **Into a match!** Let's get straight into a match, press Play. |
 
 Seams 2 and 3 slot the practice-area and inventory steps in between.
 
-- A **card** is a Modal (picture above the body when `picture` isn't 0,
-  Next and Skip side by side). Only the welcome has Skip, and only it
+- A **card** is a Modal (picture above the body when `picture` isn't 0).
+  Next is centred, at the width it had as half of an inline pair; Skip
+  is a small text-only link in the card's bottom-right corner (owner,
+  2026-10-15; Modal `corner`). Only the welcome has Skip, and only it
   can be closed (close, B, tap outside = Skip), so the flow can't be
   stranded halfway.
 - A **spotlight** step uses `C.Spotlight`: the screen dims except the
@@ -227,7 +229,7 @@ leaves the game playable.
 
 1. **Spotlight + welcome.** *Done (seen in Hub Play: welcome, then the
    Play spotlight, whose tap queued the guided round). The welcome
-   picture isn't taken yet (`picture = 0`).* Add a reusable *spotlight*: the screen dims
+   picture is the owner's image, `assets/tutorial/welcome.png`.* Add a reusable *spotlight*: the screen dims
    and only one target GuiObject takes input, with a pulsing ring
    around it and its inside left clear. Then add the welcome card (with
    Skip) in place of the four intro cards and the offer. Replace

@@ -40,3 +40,13 @@ finished by `TaskService.recordCompletionFor`, the chat bar and header
 hidden and the STEAL/SHARE buttons moved in so they survive the 16:9
 crop. Streak: Hub Play, `StreakTagState` fired by hand (7, Wildfire
 flair) and the tag's BillboardGui enlarged so it reads at pop-up size.
+
+## Tutorial v2 hub steps
+
+| File | Step | Asset id |
+|---|---|---|
+| welcome.png | Welcome to Don't Steal Bro! | 130263615284046 |
+
+The welcome picture is the owner's own image (devil under STEAL, angel
+under SHARE), cropped to 16:9 clear of the Roblox corner icons and
+scaled to 960x540.

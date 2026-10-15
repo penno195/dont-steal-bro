@@ -210,7 +210,7 @@ local HUB_STEPS: { HubStep } = {
 		kind = "card",
 		title = "Welcome to Don't Steal Bro!",
 		body = "Where your fate is decided by your own conscience!",
-		picture = 0,
+		picture = 130263615284046,
 		skip = true,
 	},
 	{

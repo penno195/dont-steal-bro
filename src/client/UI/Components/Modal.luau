@@ -45,6 +45,11 @@ export type Action = {
 	loading: (boolean | Base.Source<boolean>)?,
 }
 
+export type CornerAction = {
+	label: string,
+	onActivate: () -> (),
+}
+
 export type Props = {
 	title: string,
 	body: string?,
@@ -54,6 +59,10 @@ export type Props = {
 	-- Two actions side by side instead (the hub intro's Next / Skip), so
 	-- a picture `content` keeps more of the height on a landscape phone.
 	actionsInline: boolean?,
+	-- A small text-only action in the card's bottom-right corner (the
+	-- tutorial welcome's Skip). The actions then sit centred in a row
+	-- beside it, each at the width an inline pair would have.
+	corner: CornerAction?,
 	-- The body's height in lines; 3 if unset. Short copy above a picture
 	-- can give a line back to it.
 	bodyLines: number?,
@@ -73,6 +82,8 @@ export type Props = {
 -- fits the smallest supported screen with the page still visible.
 local CARD_WIDTH = 360 - 2 * Theme.spacing.lg
 local ACTION_WIDTH = CARD_WIDTH - 2 * Theme.spacing.lg
+-- The corner link's visual width: room for a short word like "Skip".
+local CORNER_WIDTH = 56
 
 local Modal = {}
 
@@ -111,8 +122,9 @@ function Modal.card(props: Props): Frame
 		table.insert(children, content)
 	end
 	local inline = props.actionsInline == true and #props.actions > 1
-	local actionWidth = if inline
-		then (ACTION_WIDTH - Theme.spacing.sm * (#props.actions - 1)) / #props.actions
+	local actionWidth = if props.corner
+		then (ACTION_WIDTH - Theme.spacing.sm) / 2
+		elseif inline then (ACTION_WIDTH - Theme.spacing.sm * (#props.actions - 1)) / #props.actions
 		else ACTION_WIDTH
 	local buttons: { Instance } = {}
 	for i, action in props.actions do
@@ -130,7 +142,54 @@ function Modal.card(props: Props): Frame
 			})
 		)
 	end
-	if inline then
+	if props.corner then
+		-- No layout on the row itself: the buttons centre in a strip of
+		-- their own, and the corner link hangs off the right edge.
+		local corner = props.corner
+		local strip = create("Frame")({
+			Name = "Centre",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			BackgroundTransparency = 1,
+			Size = UDim2.fromScale(1, 1),
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+		})
+		for _, button in buttons do
+			button.Parent = strip
+		end
+		local row = create("Frame")({
+			Name = "Actions",
+			LayoutOrder = 10,
+			BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(ACTION_WIDTH, Theme.touch.primaryHeight),
+			strip,
+			Base.interactive({
+				name = "Corner",
+				size = Vector2.new(CORNER_WIDTH, Theme.type.body.size + Theme.spacing.sm),
+				onActivate = corner.onActivate,
+				order = #props.actions + 1,
+				anchorPoint = Vector2.new(1, 0.5),
+				position = UDim2.fromScale(1, 0.5),
+				visual = function()
+					return {
+						Base.text("body", {
+							Size = UDim2.fromScale(1, 1),
+							Text = corner.label,
+							TextColor3 = Theme.color.inkMuted,
+							TextXAlignment = Enum.TextXAlignment.Right,
+						}),
+					}
+				end,
+			}),
+		})
+		table.insert(children, row)
+	elseif inline then
 		local row = create("Frame")({
 			Name = "Actions",
 			LayoutOrder = 10,
@@ -197,7 +256,7 @@ function Modal.card(props: Props): Frame
 					icon = "close",
 					label = "Close",
 					onActivate = props.onDismiss,
-					order = #props.actions + 1,
+					order = #props.actions + (if props.corner then 2 else 1),
 					anchorPoint = Vector2.new(1, 0.5),
 					position = UDim2.fromScale(1, 0.5),
 				})
@@ -390,7 +449,8 @@ function Modal.open(props: Props): () -> ()
 	shown(true)
 	if UIScaleController.getInputMode() == Enum.PreferredInput.Gamepad then
 		local actions = card:FindFirstChild("Actions")
-		local first = (actions or card):FindFirstChild("Button")
+		local centre = actions and actions:FindFirstChild("Centre")
+		local first = (centre or actions or card):FindFirstChild("Button")
 		if first and first:IsA("GuiObject") then
 			GuiService.SelectedObject = first
 		end

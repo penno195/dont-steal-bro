@@ -68,18 +68,6 @@ local function showCard(index: number, step: OnboardingLogic.HubStep)
 			end,
 		},
 	}
-	if step.skip then
-		table.insert(
-			actions,
-			{
-				label = OnboardingLogic.HUB_BUTTONS.skip,
-				variant = "secondary",
-				onActivate = function()
-					finish(false)
-				end,
-			} :: any
-		)
-	end
 	closeCurrent = C.Modal.open({
 		title = step.title,
 		body = step.body,
@@ -89,8 +77,16 @@ local function showCard(index: number, step: OnboardingLogic.HubStep)
 			end
 			else nil,
 		bodyLines = 2,
-		actionsInline = true,
-		actions = actions :: any,
+		actions = actions,
+		-- Skip is a small text link in the corner, Next centred (owner).
+		corner = if step.skip
+			then {
+				label = OnboardingLogic.HUB_BUTTONS.skip,
+				onActivate = function()
+					finish(false)
+				end,
+			}
+			else nil,
 		-- Closing a card that can skip is a skip; one that can't just
 		-- carries on, so there's no way to strand the flow halfway.
 		dismissible = step.skip == true,
