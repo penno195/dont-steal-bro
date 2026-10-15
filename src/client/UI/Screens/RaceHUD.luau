@@ -595,7 +595,7 @@ local function powerUpSlot(
 	cancelling: () -> boolean,
 	press: (index: number, input: InputObject) -> (),
 	practice: boolean
-): TextButton
+): Frame
 	local empty = derive(function()
 		return slot().id == nil
 	end)
@@ -647,11 +647,9 @@ local function powerUpSlot(
 
 	local button = create("TextButton")({
 		Name = "Slot",
-		-- Rotation, not Position: the row's UIListLayout owns Position.
+		-- Rotation, not Position: the holder below sits in the row's
+		-- UIListLayout, which owns its Position.
 		Rotation = 0,
-		LayoutOrder = function()
-			return slot().index
-		end,
 		Size = UDim2.fromOffset(SLOT, SLOT),
 		Text = "",
 		AutoButtonColor = false,
@@ -739,7 +737,18 @@ local function powerUpSlot(
 			button.Rotation = 0
 		end)
 	end)
-	return button
+	-- The button shakes inside a plain holder, as the compass arrow does
+	-- (ArrowHolder): the row's UIListLayout drops the Rotation of its own
+	-- children, so a laid-out button never visibly turned.
+	return create("Frame")({
+		Name = "SlotHolder",
+		LayoutOrder = function()
+			return slot().index
+		end,
+		Size = UDim2.fromOffset(SLOT, SLOT),
+		BackgroundTransparency = 1,
+		button,
+	}) :: Frame
 end
 
 -- The bin a dragged item can be dropped on. Shown only mid-drag, and

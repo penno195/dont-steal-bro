@@ -48,18 +48,28 @@ local function pips(stealers: number, seats: number): Frame
 	for i = 1, seats do
 		local steal = i <= stealers
 		local spec = if steal then Tokens.decision.steal else Tokens.decision.share
+		-- The face turns inside a plain holder: the row's UIListLayout
+		-- drops the Rotation of its own children, so a laid-out diamond
+		-- drew as a square (see RaceHUD's ArrowHolder).
 		table.insert(
 			children,
 			create("Frame")({
 				Name = spec.label,
 				LayoutOrder = i,
 				Size = UDim2.fromOffset(PIP, PIP),
-				-- A diamond is a square turned 45 degrees; shrink it so its
-				-- corners stay inside the pip's box.
-				Rotation = if steal then 45 else 0,
-				BackgroundColor3 = Theme.color[spec.color],
-				create("UIScale")({ Scale = if steal then 0.72 else 1 }),
-				Base.corner(if steal then Theme.radius.none else Theme.radius.pill),
+				BackgroundTransparency = 1,
+				create("Frame")({
+					Name = "Face",
+					AnchorPoint = Vector2.new(0.5, 0.5),
+					Position = UDim2.fromScale(0.5, 0.5),
+					Size = UDim2.fromScale(1, 1),
+					-- A diamond is a square turned 45 degrees; shrink it so its
+					-- corners stay inside the pip's box.
+					Rotation = if steal then 45 else 0,
+					BackgroundColor3 = Theme.color[spec.color],
+					create("UIScale")({ Scale = if steal then 0.72 else 1 }),
+					Base.corner(if steal then Theme.radius.none else Theme.radius.pill),
+				}),
 			})
 		)
 	end
