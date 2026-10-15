@@ -11,11 +11,12 @@ C.Button({ label = "Ready", onActivate = ready })
 
 | File | Role | Tested |
 |---|---|---|
-| `ComponentLogic.luau` | Pure: state precedence, variant colours, hit-area size, ring maths, number formatting, tab stepping, toast queue | Headless (`tests/ComponentLogic.spec.luau`) |
+| `ComponentLogic.luau` | Pure: state precedence, variant colours, hit-area size, ring maths, number formatting, tab stepping, toast queue, spotlight panels and caption placement | Headless (`tests/ComponentLogic.spec.luau`) |
 | `Env.luau` | Vide sources for scale, input mode and reduced motion; `animate`, `duration`, `minTouchRef` | On device |
 | `Base.luau` | `interactive` (the one hit area), `text`, focus ring, spinner, corner, padding | On device |
 | `Icons.luau` | Icon registry by key (glyph stand-ins until there's art) | On device |
 | `Button`, `IconButton`, `Panel`, `Modal`, `ProgressBar`, `CountdownRing`, `Toast`, `TaskCard`, `PlayerRow`, `CurrencyPill`, `TabBar` | The components | Gallery screenshot |
+| `Spotlight` | Tutorial v2: dims the screen except one GuiObject (a getter, re-read each frame), with a pulsing ring and a caption card. Four Active dim panels around the hole, so taps on the target reach the real control. Not in the gallery | Hub Play (Studio) |
 | `UI/Screens/ComponentGallery.luau` | Every component in every state, on one screen | Screenshot |
 
 Components create Vide effects and cleanups, so call them inside a Vide
@@ -96,3 +97,4 @@ takes dark ink (5.24:1), because white on it is only 3.49:1.
 - **Icon art.** Fill in `image`/`rect` per key in `Icons.luau`. No component
   needs to change.
 - **One modal at a time.** A second `Modal.open` replaces the first.
+  The same goes for `Spotlight.open`.

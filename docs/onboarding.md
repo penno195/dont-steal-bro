@@ -15,29 +15,34 @@ Code: `UI/OnboardingLogic.luau` (copy and queue, pure, tested),
 
 ## The hub intro
 
-On a player's first visit to the Hub (between rounds, no menu open,
-not queued, loading screen gone), a modal steps through four cards,
-then the offer. `HubIntroController` draws it; the copy and the
-"is it due" check are `OnboardingLogic.INTRO`, `INTRO_OFFER` and
-`introDue` (tested).
+Tutorial v2 (below) replaced the four intro cards and the "Want a
+practice go?" offer. On a player's first visit to the Hub (between
+rounds, no menu open, not queued, loading screen gone),
+`HubIntroController` steps through `OnboardingLogic.HUB_STEPS` (tested;
+"is it due" is still `introDue`). Built so far:
 
-| # | Title | Body |
-|---|---|---|
-| 1 | Race your tasks | Follow the arrow, finish your tasks. Top 3 go to the finale. |
-| 2 | Mess with rivals | Grab power-ups and slow the others down. They'll do it to you too. |
-| 3 | Steal or Share | The top 3 pick in secret. Steal only pays if you're the only one. |
-| 4 | Your streak | Win and it goes up. Lose once and it's back to 0. |
-| Offer | Want a practice go? | A quick round against bots. Finish it for a Rookie Cap, 100 coins and a Freeze. **[Try a practice round] [Skip]** |
+| # | Step | Kind | Copy |
+|---|---|---|---|
+| 1 | welcome | card, Next + Skip | **Welcome to Don't Steal Bro!** Where your fate is decided by your own conscience! |
+| last | play | spotlight on Play | **Into a match!** Let's get straight into a match, press Play. |
 
-Each card shows its picture (a Studio screenshot, `picture`; ids and
-how they were taken in `assets/tutorial/README.md`) above the body.
-Next and Skip sit side by side (Modal `actionsInline`) and the body is
-two lines, so the picture keeps its size on a landscape phone; the
-pictures are preloaded once the intro is due.
-Every card has Next and Skip. Any way out (Skip, Try, close, B, tap
-outside) sets the `introSeen` setting, so it shows once. Skip pulses
-the Play button (not under reduced motion). Try queues the guided
-tutorial round (below).
+Seams 2 and 3 slot the practice-area and inventory steps in between.
+
+- A **card** is a Modal (picture above the body when `picture` isn't 0,
+  Next and Skip side by side). Only the welcome has Skip, and only it
+  can be closed (close, B, tap outside = Skip), so the flow can't be
+  stranded halfway.
+- A **spotlight** step uses `C.Spotlight`: the screen dims except the
+  target, with a pulsing ring (static under reduced motion) and the
+  copy in a caption card above it. Taps anywhere else are swallowed.
+  The Play step arms `QueueController.armTutorial`, so the real Play
+  button's tap queues the guided round; it stays armed (a refused join
+  can be retried) until the flow ends. The step ends once the player
+  is queued.
+- `introSeen` is set when the flow ends (Skip, or queued from the Play
+  step), so a player who leaves halfway sees it again. Skip gives
+  nothing and pulses Play (not under reduced motion).
+
 **Settings → Show the intro** (Hub only) clears `introSeen` and the
 intro opens again once the menu closes. "Reset to defaults" leaves
 `introSeen` alone. Like the tips, it's display-only: the reward is the
@@ -220,7 +225,9 @@ steps. The design is in design-decisions.md, "the tutorial, second
 version". Build it **one seam per session**, in this order; each seam
 leaves the game playable.
 
-1. **Spotlight + welcome.** Add a reusable *spotlight*: the screen dims
+1. **Spotlight + welcome.** *Done (seen in Hub Play: welcome, then the
+   Play spotlight, whose tap queued the guided round). The welcome
+   picture isn't taken yet (`picture = 0`).* Add a reusable *spotlight*: the screen dims
    and only one target GuiObject takes input, with a pulsing ring
    around it and its inside left clear. Then add the welcome card (with
    Skip) in place of the four intro cards and the offer. Replace

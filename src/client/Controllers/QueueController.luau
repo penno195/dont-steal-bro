@@ -111,6 +111,12 @@ end
 -- `mode`: "Practice" is the Practice button (or a party leader's only
 -- button), "Tutorial" the intro's guided round. The server decides what
 -- the line really is; a private hub is practice whatever this says.
+-- Set by the hub tutorial's "press Play" step (armTutorial): the next
+-- Play tap queues the guided round instead of a race.
+local tutorialArmed = false
+-- The live Play / Practice button, for the tutorial's spotlight.
+local mainButtonRef: GuiObject? = nil
+
 local function onTap(mode: ("Practice" | "Tutorial")?)
 	local nextState, intent = QueueLogic.tap(state(), os.clock())
 	state(nextState)
@@ -417,12 +423,24 @@ local function mountCard()
 							return view().busy
 						end,
 						onActivate = function()
-							onTap(if buttons().play then nil else "Practice")
+							-- Stays armed until the tutorial disarms it, so a
+							-- refused join can be tapped again.
+							if tutorialArmed and view().action == "Join" then
+								onTap("Tutorial")
+							else
+								onTap(if buttons().play then nil else "Practice")
+							end
 						end,
 						layoutOrder = 2,
 					}) :: GuiObject
 					button.ZIndex = 2
 					Feel.attach(button, PLAY_POINT)
+					mainButtonRef = button
+					vide.cleanup(function()
+						if mainButtonRef == button then
+							mainButtonRef = nil
+						end
+					end)
 					return button
 				end) :: any,
 				show(function()
@@ -548,12 +566,24 @@ local QueueController: Loader.Controller = {
 	end,
 }
 
--- The intro's "Try a practice round": the guided tutorial round, solo
--- against bots (TutorialService on the match server).
+-- The guided tutorial round, solo against bots (TutorialService on the
+-- match server): Settings' "Play the tutorial".
 function QueueController.startTutorial()
 	if view().action == "Join" then
 		onTap("Tutorial")
 	end
+end
+
+-- The hub tutorial's last step: Play is spotlit, and the tap on it
+-- queues the guided round (the same line as startTutorial). `false`
+-- disarms it, so Play goes back to a race.
+function QueueController.armTutorial(on: boolean)
+	tutorialArmed = on
+end
+
+-- The Play (or Practice) button on the queue card, while it's showing.
+function QueueController.playButton(): GuiObject?
+	return mainButtonRef
 end
 
 -- The intro's Skip: pulse the Play button so the player knows where to

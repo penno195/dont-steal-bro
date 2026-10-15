@@ -9,6 +9,7 @@ return table.freeze({
 	IconButton = require(script.IconButton),
 	Panel = require(script.Panel),
 	Modal = require(script.Modal),
+	Spotlight = require(script.Spotlight),
 	ProgressBar = require(script.ProgressBar),
 	CountdownRing = require(script.CountdownRing),
 	Toast = require(script.Toast),

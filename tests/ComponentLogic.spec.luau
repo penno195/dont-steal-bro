@@ -226,3 +226,53 @@ describe("ComponentLogic tabs and toasts", function()
 		expect(ComponentLogic.toastLabel("No target", 3)):toBe("No target  ×3")
 	end)
 end)
+
+describe("ComponentLogic spotlight", function()
+	local target = { x = 100, y = 300, w = 200, h = 50 }
+
+	it("dims everything but the padded hole, past the edges", function()
+		local p = ComponentLogic.spotlightPanels(target, 10, 800, 400, 50)
+		-- Top: from the bleed to the hole's top.
+		expect(p[1].y):toBe(-50)
+		expect(p[1].h):toBe(340)
+		expect(p[1].w):toBe(900)
+		-- Bottom: from the hole's bottom to the bleed.
+		expect(p[2].y):toBe(360)
+		expect(p[2].h):toBe(90)
+		-- Sides span only the hole's height.
+		expect(p[3].x):toBe(-50)
+		expect(p[3].w):toBe(140)
+		expect(p[3].h):toBe(70)
+		expect(p[4].x):toBe(310)
+		expect(p[4].w):toBe(540)
+	end)
+
+	it("meets at whole px, so fractional targets leave no seam", function()
+		local p = ComponentLogic.spotlightPanels({ x = 9.4, y = 412.6, w = 100.3, h = 50.2 }, 0, 800, 400, 0)
+		expect(p[1].h):toBe(p[3].y)
+		expect(p[3].y + p[3].h):toBe(p[2].y)
+		expect(p[3].h):toBe(p[4].h)
+	end)
+
+	it("never makes a negative panel for a target past the edge", function()
+		local p = ComponentLogic.spotlightPanels({ x = 780, y = 390, w = 100, h = 100 }, 10, 800, 400, 0)
+		for _, r in p do
+			expect(r.w >= 0 and r.h >= 0):toBe(true)
+		end
+	end)
+
+	it("puts the caption above the hole when it fits, else below", function()
+		local x, y = ComponentLogic.captionPosition(target, 100, 80, 800, 400, 12, 16)
+		expect(x):toBe(150)
+		expect(y):toBe(208)
+		local _, below = ComponentLogic.captionPosition({ x = 100, y = 20, w = 200, h = 50 }, 100, 80, 800, 400, 12, 16)
+		expect(below):toBe(82)
+	end)
+
+	it("keeps the caption on screen", function()
+		local x = ComponentLogic.captionPosition({ x = 0, y = 300, w = 40, h = 40 }, 300, 80, 800, 400, 12, 16)
+		expect(x):toBe(16)
+		local right = ComponentLogic.captionPosition({ x = 780, y = 300, w = 20, h = 40 }, 300, 80, 800, 400, 12, 16)
+		expect(right):toBe(484)
+	end)
+end)

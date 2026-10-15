@@ -279,4 +279,59 @@ function ComponentLogic.toastLabel(text: string, count: number): string
 	return if count > 1 then string.format("%s  ×%d", text, count) else text
 end
 
+-- SPOTLIGHT (tutorial v2) ----------------------------------------------
+
+export type Rect = { x: number, y: number, w: number, h: number }
+
+-- The four dim panels around a spotlight's hole, in screen px: top and
+-- bottom full width, left and right between them. Each reaches `bleed`
+-- past the screen edge, so the dim covers the notch strip of a screen
+-- that doesn't clip to the safe area. The hole is `pad` bigger than the
+-- target each side, so the ring sits outside the target, not on it.
+function ComponentLogic.spotlightPanels(
+	target: Rect,
+	pad: number,
+	screenW: number,
+	screenH: number,
+	bleed: number
+): { Rect }
+	-- Whole px, rounded outward: fractional edges round differently per
+	-- panel and leave a 1px bright seam between them.
+	local left = math.floor(target.x - pad)
+	local top = math.floor(target.y - pad)
+	local right = math.ceil(target.x + target.w + pad)
+	local bottom = math.ceil(target.y + target.h + pad)
+	local fullW = screenW + 2 * bleed
+	return {
+		{ x = -bleed, y = -bleed, w = fullW, h = math.max(0, top + bleed) },
+		{ x = -bleed, y = bottom, w = fullW, h = math.max(0, screenH + bleed - bottom) },
+		{ x = -bleed, y = top, w = math.max(0, left + bleed), h = bottom - top },
+		{ x = right, y = top, w = math.max(0, screenW + bleed - right), h = bottom - top },
+	}
+end
+
+-- Where a spotlight's caption card goes: centred on the hole, above it
+-- if it fits there, else below, and slid sideways to stay `margin` off
+-- each screen edge. Returns the card's top-left corner, in screen px.
+function ComponentLogic.captionPosition(
+	hole: Rect,
+	cardW: number,
+	cardH: number,
+	screenW: number,
+	screenH: number,
+	gap: number,
+	margin: number
+): (number, number)
+	local x = hole.x + hole.w / 2 - cardW / 2
+	x = math.clamp(x, margin, math.max(margin, screenW - margin - cardW))
+	local above = hole.y - gap - cardH
+	local y
+	if above >= margin then
+		y = above
+	else
+		y = math.min(hole.y + hole.h + gap, math.max(margin, screenH - margin - cardH))
+	end
+	return x, y
+end
+
 return table.freeze(ComponentLogic)

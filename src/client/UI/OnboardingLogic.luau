@@ -179,40 +179,56 @@ function OnboardingLogic.dismiss(state: State)
 	advance(state)
 end
 
--- THE HUB INTRO (tutorial seam 2, docs/onboarding.md). Four cards on a
--- player's first visit to the Hub, then the offer: a guided practice
--- round, or Skip. Titles and copy are the owner's (2026-10-15), in the
--- tips' voice and limits. `picture` is a Studio screenshot of the
--- thing the card talks about (0 = none), shown above the body.
-export type IntroCard = { title: string, body: string, picture: number }
+-- THE HUB STEPS (tutorial v2, docs/onboarding.md "Tutorial v2"). On a
+-- player's first visit to the Hub, in order: the welcome card, then the
+-- later steps (the practice area and the inventory come in seams 2 and
+-- 3), ending on "press Play" with only Play lit. Copy is the owner's
+-- (2026-10-15, design-decisions.md "the tutorial, second version").
+--
+--   kind "card"       a pop-up on a dimmed screen. `skip` adds the Skip
+--                     that ends the whole tutorial (the welcome only).
+--   kind "spotlight"  the screen dims except `target`, ringed, with the
+--                     title and body in a caption card beside it. The
+--                     step ends when the player uses the target.
+--
+-- `picture` is a Studio screenshot (0 = none yet).
+export type HubStepId = "welcome" | "play"
+export type HubTarget = "play"
+export type HubStep = {
+	id: HubStepId,
+	kind: "card" | "spotlight",
+	title: string,
+	body: string,
+	picture: number,
+	skip: boolean?,
+	target: HubTarget?,
+}
 
-OnboardingLogic.INTRO = table.freeze({
-	table.freeze({
-		title = "Race your tasks",
-		body = "Follow the arrow, finish your tasks. Top 3 go to the finale.",
-		picture = 91245205999536,
-	}),
-	table.freeze({
-		title = "Mess with rivals",
-		body = "Grab power-ups and slow the others down. They'll do it to you too.",
-		picture = 80687323402669,
-	}),
-	table.freeze({
-		title = "Steal or Share",
-		body = "The top 3 pick in secret. Steal only pays if you're the only one.",
-		picture = 114988782676873,
-	}),
-	table.freeze({
-		title = "Your streak",
-		body = "Win and it goes up. Lose once and it's back to 0.",
-		picture = 90491077637692,
-	}),
-} :: { IntroCard })
+local HUB_STEPS: { HubStep } = {
+	{
+		id = "welcome",
+		kind = "card",
+		title = "Welcome to Don't Steal Bro!",
+		body = "Where your fate is decided by your own conscience!",
+		picture = 0,
+		skip = true,
+	},
+	{
+		id = "play",
+		kind = "spotlight",
+		title = "Into a match!",
+		body = "Let's get straight into a match, press Play.",
+		picture = 0,
+		target = "play",
+	},
+}
+for _, step in HUB_STEPS do
+	table.freeze(step)
+end
+OnboardingLogic.HUB_STEPS = table.freeze(HUB_STEPS)
 
-OnboardingLogic.INTRO_OFFER = table.freeze({
-	title = "Want a practice go?",
-	body = "A quick round against bots. Finish it for a Rookie Cap, 100 coins and a Freeze.",
-	try = "Try a practice round",
+OnboardingLogic.HUB_BUTTONS = table.freeze({
+	next = "Next",
 	skip = "Skip",
 })
 

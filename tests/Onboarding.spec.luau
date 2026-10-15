@@ -108,16 +108,29 @@ describe("OnboardingLogic hub intro", function()
 		return c :: any
 	end
 
-	it("has the four cards, in the owner's order, inside the tip limits", function()
-		local titles = {}
-		for _, card in OnboardingLogic.INTRO do
-			table.insert(titles, card.title)
-			expect(#card.title <= 30):toBe(true)
-			expect(#card.body <= 90):toBe(true)
-			expect(typeof(card.picture)):toBe("number")
+	it("opens on the welcome, with Skip, and ends on Play lit", function()
+		local steps = OnboardingLogic.HUB_STEPS
+		expect(steps[1].id):toBe("welcome")
+		expect(steps[1].kind):toBe("card")
+		expect(steps[1].skip):toBe(true)
+		local last = steps[#steps]
+		expect(last.id):toBe("play")
+		expect(last.kind):toBe("spotlight")
+		expect(last.target):toBe("play")
+	end)
+
+	it("keeps every hub step inside the tip limits, ids unique", function()
+		local seen = {}
+		for i, step in OnboardingLogic.HUB_STEPS do
+			expect(seen[step.id]):toBe(nil)
+			seen[step.id] = true
+			expect(#step.title <= 30):toBe(true)
+			expect(#step.body <= 90):toBe(true)
+			expect(typeof(step.picture)):toBe("number")
+			-- A spotlight always names what it lights; only the welcome skips.
+			expect(step.kind ~= "spotlight" or step.target ~= nil):toBe(true)
+			expect(step.skip == nil or i == 1):toBe(true)
 		end
-		expect(table.concat(titles, "|")):toBe("Race your tasks|Mess with rivals|Steal or Share|Your streak")
-		expect(#OnboardingLogic.INTRO_OFFER.body <= 90):toBe(true)
 	end)
 
 	it("is due for a new player idle in the Hub", function()

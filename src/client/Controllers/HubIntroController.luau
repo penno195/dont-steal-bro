@@ -1,21 +1,19 @@
 --!strict
--- The hub intro (tutorial seam 2, docs/onboarding.md "The hub intro"):
--- on a player's first visit to the Hub, four cards (Race your tasks,
--- Mess with rivals, Steal or Share, Your streak), then the offer: "Try a
--- practice round" or Skip. Skip points at the Play button.
+-- The hub tutorial (tutorial v2, docs/onboarding.md "Tutorial v2"): on
+-- a player's first visit to the Hub, OnboardingLogic.HUB_STEPS in order.
+-- The welcome card first (with Skip), and last "press Play", with the
+-- screen dimmed and only Play lit (C.Spotlight). That Play tap queues
+-- the guided round (QueueController.armTutorial).
 --
 -- Display-only, like the tips. `introSeen` is a saved setting so the
--- intro doesn't come back on the next join; a client that fakes it only
--- changes its own screen. The tutorial's reward is the server's call
+-- tutorial doesn't come back on the next join; a client that fakes it
+-- only changes its own screen. The reward is the server's call
 -- (DataService.claimTutorialReward, on finishing the guided round).
 --
--- Each card has its picture (a Studio screenshot, `picture`) above the
--- body, like the guided round's step pop-ups.
---
--- One Modal per card: Next closes this one and opens the next, so each
--- card reads as a fresh page. Any way out (Skip, Try, the close button,
--- B, tapping outside) marks it seen. Settings' "Show the intro" sets
--- introSeen back to false, and it opens again from the first card.
+-- `introSeen` is set when the flow ends: Skip (or closing the welcome),
+-- or Play. A player who leaves halfway sees it again next time.
+-- Skip points at the Play button and gives nothing; Settings' "Show the
+-- intro" sets introSeen back to false, and it opens again from the top.
 
 local ContentProvider = game:GetService("ContentProvider")
 local Players = game:GetService("Players")
@@ -38,57 +36,53 @@ local roundState: string? = nil
 local open = false
 local closeCurrent: (() -> ())? = nil
 
-local function finish(try: boolean)
+local function closeStep()
 	if closeCurrent then
 		closeCurrent()
 		closeCurrent = nil
 	end
+end
+
+-- Ends the flow. `played`: the player pressed Play, and is queued for
+-- the guided round. Otherwise they skipped.
+local function finish(played: boolean)
+	closeStep()
 	open = false
+	queue.armTutorial(false)
 	settings.change({ introSeen = true })
-	if try then
-		queue.startTutorial()
-	else
+	if not played then
 		queue.pointAtPlay()
 	end
 end
 
-local function showOffer()
-	local O = OnboardingLogic.INTRO_OFFER
-	closeCurrent = C.Modal.open({
-		title = O.title,
-		body = O.body,
-		actions = {
+local showStep: (number) -> ()
+
+local function showCard(index: number, step: OnboardingLogic.HubStep)
+	local picture = step.picture
+	local actions = {
+		{
+			label = OnboardingLogic.HUB_BUTTONS.next,
+			onActivate = function()
+				closeStep()
+				showStep(index + 1)
+			end,
+		},
+	}
+	if step.skip then
+		table.insert(
+			actions,
 			{
-				label = O.try,
-				onActivate = function()
-					finish(true)
-				end,
-			},
-			{
-				label = O.skip,
+				label = OnboardingLogic.HUB_BUTTONS.skip,
 				variant = "secondary",
 				onActivate = function()
 					finish(false)
 				end,
-			},
-		},
-		dismissible = true,
-		onDismiss = function()
-			finish(false)
-		end,
-	})
-end
-
-local function showCard(index: number)
-	local card = OnboardingLogic.INTRO[index]
-	if card == nil then
-		showOffer()
-		return
+			} :: any
+		)
 	end
-	local picture = card.picture
 	closeCurrent = C.Modal.open({
-		title = string.format("%s  %d/%d", card.title, index, #OnboardingLogic.INTRO),
-		body = card.body,
+		title = step.title,
+		body = step.body,
 		content = if picture ~= 0
 			then function()
 				return C.Modal.picture(picture)
@@ -96,41 +90,61 @@ local function showCard(index: number)
 			else nil,
 		bodyLines = 2,
 		actionsInline = true,
-		actions = {
-			{
-				label = "Next",
-				onActivate = function()
-					if closeCurrent then
-						closeCurrent()
-					end
-					showCard(index + 1)
-				end,
-			},
-			{
-				label = OnboardingLogic.INTRO_OFFER.skip,
-				variant = "secondary",
-				onActivate = function()
-					finish(false)
-				end,
-			},
-		},
-		dismissible = true,
+		actions = actions :: any,
+		-- Closing a card that can skip is a skip; one that can't just
+		-- carries on, so there's no way to strand the flow halfway.
+		dismissible = step.skip == true,
 		onDismiss = function()
 			finish(false)
 		end,
 	})
 end
 
--- Fetches the cards' pictures while the Hub settles, so each card opens
--- with its picture already drawn rather than popping in a beat later.
+-- The "press Play" step: ends when the player is in the queue. The tap
+-- itself goes to the real Play button, armed to queue the guided round.
+local function showPlay(step: OnboardingLogic.HubStep)
+	queue.armTutorial(true)
+	closeCurrent = C.Spotlight.open({
+		target = queue.playButton,
+		title = step.title,
+		body = step.body,
+	})
+	task.spawn(function()
+		while open and not queue.queued() do
+			task.wait(0.1)
+		end
+		if open then
+			finish(true)
+		end
+	end)
+end
+
+function showStep(index: number)
+	local step = OnboardingLogic.HUB_STEPS[index]
+	if step == nil then
+		finish(false)
+	elseif step.kind == "card" then
+		showCard(index, step)
+	elseif step.target == "play" then
+		showPlay(step)
+	else
+		-- A spotlight step this build can't draw yet: skip it.
+		showStep(index + 1)
+	end
+end
+
+-- Fetches the pictures while the Hub settles, so each card opens with
+-- its picture already drawn rather than popping in a beat later.
 local function preloadPictures()
 	local ids: { string } = {}
-	for _, card in OnboardingLogic.INTRO do
-		if card.picture ~= 0 then
-			table.insert(ids, string.format("rbxassetid://%d", card.picture))
+	for _, step in OnboardingLogic.HUB_STEPS do
+		if step.picture ~= 0 then
+			table.insert(ids, string.format("rbxassetid://%d", step.picture))
 		end
 	end
-	pcall(ContentProvider.PreloadAsync, ContentProvider, ids)
+	if #ids > 0 then
+		pcall(ContentProvider.PreloadAsync, ContentProvider, ids)
+	end
 end
 
 local function due(): boolean
@@ -179,7 +193,7 @@ function HubIntroController:start()
 			elseif os.clock() - dueSince >= SETTLE then
 				dueSince = nil
 				open = true
-				showCard(1)
+				showStep(1)
 			end
 		end
 	end)
