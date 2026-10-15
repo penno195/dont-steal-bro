@@ -360,6 +360,9 @@ local chosenMapId: string? = nil
 -- design-decisions.md Q7, the practice-match case. Set when the arrival
 -- gate closes (startRound); false until then and on every hub.
 local practiceMatch = false
+-- The guided tutorial round (TeleportLogic.isTutorial). Set with
+-- practiceMatch, and like it never flips mid-round.
+local tutorialMatch = false
 
 local function sendHome(player: Player, reason: "Late" | "Stray")
 	local message = TeleportLogic.returnMessage({ returnReason = reason }) or "Please rejoin."
@@ -445,6 +448,7 @@ local function readManifest()
 					mapId = record.mapId,
 					practice = record.practice,
 					returnAccessCode = record.returnAccessCode,
+					tutorial = record.tutorial,
 				}
 			else
 				warn("MatchTeleportService: no group record for this server - running without a manifest")
@@ -503,6 +507,7 @@ local function startRound(present: number)
 	gateClosed = true
 	-- Settled once, here, with everyone admitted: it can't flip mid-round.
 	practiceMatch = TeleportLogic.isPractice(manifest, admittedHints)
+	tutorialMatch = practiceMatch and TeleportLogic.isTutorial(manifest)
 	local source: TeleportLogic.MapSource
 	chosenMapId, source = TeleportLogic.resolveMapId(manifest, firstHint, enabledMapIds(), roll)
 	print(
@@ -511,7 +516,10 @@ local function startRound(present: number)
 			present,
 			tostring(chosenMapId),
 			source,
-			if practiceMatch then ", PRACTICE (nothing at stake)" else ""
+			if tutorialMatch
+				then ", TUTORIAL (practice)"
+				elseif practiceMatch then ", PRACTICE (nothing at stake)"
+				else ""
 		)
 	)
 
@@ -643,6 +651,18 @@ local MatchTeleportService: Loader.Service = {
 			return workspace:GetAttribute("DebugPracticeMatch") == true
 		end
 		return practiceMatch
+	end,
+
+	-- The guided tutorial round (design-decisions.md, "the first-time
+	-- tutorial"); always a practice match too. TutorialService owns what
+	-- it changes. In Studio, DebugTutorialMatch stands in, and only
+	-- alongside DebugPracticeMatch.
+	isTutorialMatch = function(): boolean
+		if RunService:IsStudio() then
+			return workspace:GetAttribute("DebugPracticeMatch") == true
+				and workspace:GetAttribute("DebugTutorialMatch") == true
+		end
+		return tutorialMatch
 	end,
 }
 

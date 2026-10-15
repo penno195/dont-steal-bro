@@ -70,6 +70,10 @@ local STATE_DURATIONS: { [RoundState]: number? } = {
 	Cleanup = GameConfig.roundTimers.cleanupSeconds,
 }
 
+-- False only for the guided tutorial round (TutorialService), whose race
+-- has no clock: it ends when the third racer finishes, as any race can.
+local raceTimed = true
+
 local currentState: RoundState = "WaitingForPlayers"
 local currentEndsAt: number? = nil
 local exitRan = true -- nothing has been entered yet, so there's nothing pending to exit
@@ -178,7 +182,7 @@ local function enterState(state: RoundState)
 	exitRan = false
 	cancelPendingTimer()
 
-	local duration = STATE_DURATIONS[state]
+	local duration = if state == "Race" and not raceTimed then nil else STATE_DURATIONS[state]
 	currentEndsAt = if duration ~= nil then Workspace:GetServerTimeNow() + duration else nil
 
 	broadcastState()
@@ -311,6 +315,10 @@ local RoundService: Loader.Service = {
 		return playerLeaving:Connect(callback)
 	end,
 	requestTransition = requestTransition,
+	-- Takes effect at the next Race; a race already running keeps its clock.
+	setRaceTimed = function(timed: boolean)
+		raceTimed = timed
+	end,
 	debugForceTransition = debugForceTransition,
 	debugSkipTimer = debugSkipTimer,
 	debugReplayState = debugReplayState,

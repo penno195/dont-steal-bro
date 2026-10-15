@@ -1370,12 +1370,13 @@ Net.Remotes = {
 	-- MatchmakingService refuses both outside the hub place instead.
 	-- `mode`: the Practice button sends "Practice" (design-decisions.md
 	-- Q7, the practice-match case). Absent means ranked. On a private hub
-	-- every queue is practice, whatever this says.
+	-- every queue is practice, whatever this says. "Tutorial" is the
+	-- intro's guided round: solo, practice, always the tutorial map.
 	QueueJoinIntent = {
 		name = "QueueJoinIntent",
 		direction = "ServerIntent",
 		schema = Net.struct({
-			mode = Net.optional(Net.stringEnum({ "Ranked", "Practice" })),
+			mode = Net.optional(Net.stringEnum({ "Ranked", "Practice", "Tutorial" })),
 		}),
 		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
 		states = nil,

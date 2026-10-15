@@ -563,6 +563,12 @@ local GameConfig: Validate.GameConfig = {
 		enabled = true,
 		mapId = "Factory",
 		botCount = 5,
+		-- The guided round's bots go easy (owner, 2026-10-15): every one
+		-- works this much slower and walks this much slower than its
+		-- usual profile. TutorialLogic.botMayFinish also holds them off
+		-- the finish so the player always makes the top 3.
+		botDurationScale = 1.5,
+		botMoveSpeedScale = 0.85,
 		rewardCosmeticId = "hat-rookie-cap",
 		rewardCurrency = 100,
 		rewardPowerUps = { freeze = 1 },

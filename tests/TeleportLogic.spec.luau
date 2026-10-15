@@ -264,4 +264,16 @@ TestRunner.describe("TeleportLogic practice matches", function()
 		TestRunner.expect(TeleportLogic.isPracticeHub("")):toBe(false)
 		TestRunner.expect(TeleportLogic.isPracticeHub("abc-123")):toBe(true)
 	end)
+
+	TestRunner.it("only a practice manifest makes a tutorial; no manifest never does", function()
+		local tutorial = manifest(nil)
+		tutorial.practice = true
+		tutorial.tutorial = true
+		TestRunner.expect(TeleportLogic.isTutorial(tutorial)):toBe(true)
+
+		local rankedTutorial = manifest(nil)
+		rankedTutorial.tutorial = true
+		TestRunner.expect(TeleportLogic.isTutorial(rankedTutorial)):toBe(false)
+		TestRunner.expect(TeleportLogic.isTutorial(nil)):toBe(false)
+	end)
 end)

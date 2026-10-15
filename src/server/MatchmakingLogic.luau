@@ -104,11 +104,16 @@ export type GroupRecord = {
 	-- Where a practice group goes home to: its reserved practice lobby.
 	-- Server-only, like accessCode.
 	returnAccessCode: string?,
+	-- The guided tutorial round (design-decisions.md, "the first-time
+	-- tutorial"), always practice too. Like `practice`, trusted only
+	-- from here: TeleportData never carries it.
+	tutorial: boolean?,
 }
 
 -- What a private hub adds to its group record.
 export type PracticeInfo = {
 	returnAccessCode: string?,
+	tutorial: boolean?,
 }
 
 -- P5-2's reserved destination, handed to the former by
@@ -275,6 +280,7 @@ function MatchmakingLogic.decodeGroup(raw: any): GroupRecord?
 		result = decodeResult(raw.result),
 		practice = if raw.practice == true then true else nil,
 		returnAccessCode = if type(raw.returnAccessCode) == "string" then raw.returnAccessCode else nil,
+		tutorial = if raw.tutorial == true then true else nil,
 	}
 end
 
@@ -339,6 +345,7 @@ function MatchmakingLogic.newGroupRecord(
 		result = nil,
 		practice = if practice then true else nil,
 		returnAccessCode = if practice then practice.returnAccessCode else nil,
+		tutorial = if practice and practice.tutorial then true else nil,
 	}
 end
 

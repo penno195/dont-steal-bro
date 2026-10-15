@@ -733,6 +733,8 @@ export type TutorialConfig = {
 	enabled: boolean, -- false = no intro, no guided round, no reward (and no cross-checks)
 	mapId: string,
 	botCount: number,
+	botDurationScale: number, -- >= 1: how much longer each bot works at a station
+	botMoveSpeedScale: number, -- 0-1: how much slower each bot walks
 	rewardCosmeticId: string,
 	rewardCurrency: number,
 	rewardPowerUps: { [string]: number }, -- power-up id -> how many go into loadout stock
@@ -3185,6 +3187,14 @@ local function checkTutorialConfig(tc: TutorialConfig, issues: { Issue })
 	-- A practice round has 6 seats; the player takes one.
 	if type(tc.botCount) ~= "number" or tc.botCount < 1 or tc.botCount > 5 or tc.botCount % 1 ~= 0 then
 		bad("botCount", "must be a whole number from 1 to 5")
+	end
+	-- Easy means slower, never faster: the fairness floor already stops
+	-- a bot beating the median human, and this only adds to it.
+	if type(tc.botDurationScale) ~= "number" or tc.botDurationScale < 1 then
+		bad("botDurationScale", "must be a number, 1 or more")
+	end
+	if type(tc.botMoveSpeedScale) ~= "number" or tc.botMoveSpeedScale <= 0 or tc.botMoveSpeedScale > 1 then
+		bad("botMoveSpeedScale", "must be a number above 0 and at most 1")
 	end
 	if type(tc.rewardCosmeticId) ~= "string" or tc.rewardCosmeticId == "" then
 		bad("rewardCosmeticId", "must name a cosmetic id")

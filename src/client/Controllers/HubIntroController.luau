@@ -42,7 +42,7 @@ local function finish(try: boolean)
 	open = false
 	settings.change({ introSeen = true })
 	if try then
-		queue.startPractice()
+		queue.startTutorial()
 	else
 		queue.pointAtPlay()
 	end

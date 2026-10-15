@@ -51,6 +51,7 @@ local Tasks = require(ReplicatedStorage.Shared.Config.Tasks)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local Participants = require(ServerScriptService.Server.Participants)
 local NPCLogic = require(ServerScriptService.Server.NPCLogic)
+local TutorialLogic = require(ServerScriptService.Server.TutorialLogic)
 local NPCAnimator = require(ServerScriptService.Server.NPCAnimator)
 local StationOccupancy = require(ServerScriptService.Server.StationOccupancy)
 
@@ -466,6 +467,11 @@ local function spawnNPC(index: number): NPCRecord?
 	NPCAnimator.start(model, humanoid)
 
 	local profile = NPCLogic.pickSkillProfile(GameConfig.npc.skillProfiles, nextRandom())
+	-- The guided tutorial round's bots go easy (TutorialService).
+	if (Loader.get("TutorialService") :: any).isActive() then
+		local tutorial = GameConfig.tutorial
+		profile = TutorialLogic.easyProfile(profile, tutorial.botDurationScale, tutorial.botMoveSpeedScale)
+	end
 	humanoid.WalkSpeed = 16 * profile.moveSpeedScale
 
 	local record: NPCRecord = {
@@ -984,6 +990,15 @@ local function tickNPC(record: NPCRecord, nowValue: number)
 		local stationId = record.targetStationId
 		if endsAt ~= nil and nowValue >= endsAt and stationId ~= nil then
 			local TaskService = Loader.get("TaskService") :: any
+			-- The tutorial holds a bot on its last task while finishing
+			-- would take a top-3 seat the player still needs. It just
+			-- keeps working; the check runs again next tick.
+			if
+				#(TaskService.getRemainingStations(record.id) :: { any }) <= 1
+				and not (Loader.get("TutorialService") :: any).botMayFinish()
+			then
+				return
+			end
 			TaskService.recordCompletionFor(record.id, stationId)
 			StationOccupancy.leave(record.id)
 			record.targetStationId = nil

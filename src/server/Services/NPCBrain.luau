@@ -209,6 +209,10 @@ local function buildSituation(npcId: number, def: Validate.PowerUpDef): NPCBrain
 end
 
 local function considerPowerUp(npcId: number)
+	-- The guided round's bots never use power-ups (owner, 2026-10-15).
+	if (Loader.get("TutorialService") :: any).isActive() then
+		return
+	end
 	local PowerUpService = Loader.get("PowerUpService") :: any
 	-- Slot index -> id, with holes: slots are fixed positions, so `#`
 	-- can't be trusted to count them.
@@ -328,6 +332,12 @@ local function beginNegotiate(endsAt: number?)
 		-- does" (P3-6's own wording) is only true if nothing downstream
 		-- reads one to pick the other.
 		record.choice = NPCBrainLogic.rollChoice(record.personality, record.nextRandom())
+		-- The guided round's bot finalists always Share, so a first-timer
+		-- learns the payoff without getting burned. Still rolled first,
+		-- so the RNG stream (and so the lines) don't change.
+		if (Loader.get("TutorialService") :: any).isActive() then
+			record.choice = "Share"
+		end
 		record.saidLines = {}
 		record.lockedIn = false
 

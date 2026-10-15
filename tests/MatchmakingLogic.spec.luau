@@ -516,6 +516,31 @@ TestRunner.describe("MatchmakingLogic practice groups", function()
 		forged.practice = "yes"
 		TestRunner.expect((MatchmakingLogic.decodeGroup(forged) :: MatchmakingLogic.GroupRecord).practice):toBe(nil)
 	end)
+
+	TestRunner.it("round-trips the tutorial flag, only as a strict true", function()
+		local tutorial = MatchmakingLogic.newGroupRecord(
+			"T",
+			queue(1),
+			5,
+			NOW,
+			"jobA",
+			nil,
+			{ maps = {}, provisionalMapId = "Factory" },
+			{ tutorial = true }
+		)
+		local decoded = MatchmakingLogic.decodeGroup(tutorial) :: MatchmakingLogic.GroupRecord
+		TestRunner.expect(decoded.tutorial):toBe(true)
+		TestRunner.expect(decoded.practice):toBe(true)
+		TestRunner.expect(decoded.mapId):toBe("Factory")
+		TestRunner.expect(#decoded.ballot):toBe(0)
+
+		local plain = MatchmakingLogic.newGroupRecord("P", queue(2), 4, NOW, "jobA", nil, nil, {})
+		TestRunner.expect((MatchmakingLogic.decodeGroup(plain) :: MatchmakingLogic.GroupRecord).tutorial):toBe(nil)
+
+		local forged = table.clone(tutorial) :: any
+		forged.tutorial = 1
+		TestRunner.expect((MatchmakingLogic.decodeGroup(forged) :: MatchmakingLogic.GroupRecord).tutorial):toBe(nil)
+	end)
 end)
 
 TestRunner.describe("MatchmakingLogic practice parties", function()

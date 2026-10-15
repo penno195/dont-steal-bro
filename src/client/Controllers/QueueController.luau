@@ -108,14 +108,14 @@ local function isHubServer(): boolean
 	return game.PlaceId == hubPlaceId
 end
 
--- `practice`: the Practice button (or a party leader's only button).
--- The server decides what the line really is; a private hub is
--- practice whatever this says.
-local function onTap(practice: boolean?)
+-- `mode`: "Practice" is the Practice button (or a party leader's only
+-- button), "Tutorial" the intro's guided round. The server decides what
+-- the line really is; a private hub is practice whatever this says.
+local function onTap(mode: ("Practice" | "Tutorial")?)
 	local nextState, intent = QueueLogic.tap(state(), os.clock())
 	state(nextState)
 	if intent == "Join" then
-		Net.fireServer("QueueJoinIntent", if practice then { mode = "Practice" } else {})
+		Net.fireServer("QueueJoinIntent", if mode then { mode = mode } else {})
 	elseif intent == "Leave" then
 		Net.fireServer("QueueLeaveIntent", {})
 	end
@@ -417,7 +417,7 @@ local function mountCard()
 							return view().busy
 						end,
 						onActivate = function()
-							onTap(not buttons().play)
+							onTap(if buttons().play then nil else "Practice")
 						end,
 						layoutOrder = 2,
 					}) :: GuiObject
@@ -468,7 +468,7 @@ local function mountCard()
 								return view().busy
 							end,
 							onActivate = function()
-								onTap(true)
+								onTap("Practice")
 							end,
 							layoutOrder = 1,
 						}) :: any
@@ -548,12 +548,11 @@ local QueueController: Loader.Controller = {
 	end,
 }
 
--- The intro's "Try a practice round". Seam 3 points this at the guided
--- tutorial round; until then it queues an ordinary practice round, the
--- same as tapping Practice.
-function QueueController.startPractice()
+-- The intro's "Try a practice round": the guided tutorial round, solo
+-- against bots (TutorialService on the match server).
+function QueueController.startTutorial()
 	if view().action == "Join" then
-		onTap(true)
+		onTap("Tutorial")
 	end
 end
 

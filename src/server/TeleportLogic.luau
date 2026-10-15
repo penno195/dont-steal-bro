@@ -138,6 +138,8 @@ export type Manifest = {
 	-- design-decisions.md Q7, the practice-match case.
 	practice: boolean?,
 	returnAccessCode: string?,
+	-- The guided tutorial round. No hint ever carries it (isTutorial).
+	tutorial: boolean?,
 }
 
 -- Whether this match is a practice match (nothing at stake). The
@@ -159,6 +161,15 @@ function TeleportLogic.isPractice(manifest: Manifest?, rawHints: { any }): boole
 		end
 	end
 	return true
+end
+
+-- Whether this match is the guided tutorial round. The manifest alone
+-- decides, and only for a practice match: with no manifest it is an
+-- ordinary practice round, so no TeleportData can make one, and a
+-- MemoryStore outage costs only the tutorial's own rules (the reward
+-- is still there to earn next time).
+function TeleportLogic.isTutorial(manifest: Manifest?): boolean
+	return manifest ~= nil and manifest.practice == true and manifest.tutorial == true
 end
 
 -- A hub server that isn't public: a player's own private server, or a

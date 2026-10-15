@@ -77,6 +77,10 @@ type Ticket = {
 	-- practiceEntries, never in MemoryStore. Every ticket on a private
 	-- hub is one; on a public hub, the Practice button's are.
 	practice: boolean,
+	-- The guided tutorial round (design-decisions.md, "the first-time
+	-- tutorial"): a practice ticket that always leaves alone, held in
+	-- tutorialEntries rather than practiceEntries.
+	tutorial: boolean?,
 }
 
 local config = GameConfig.matchmaking
@@ -121,6 +125,9 @@ local consecutiveFailures = 0
 -- server, or a reserved practice lobby) every queue is practice.
 local practiceHub = TeleportLogic.isPracticeHub(game.PrivateServerId)
 local practiceEntries: { [Player]: Entry } = {}
+-- Tutorial tickets: never grouped with anyone, so never in the shared
+-- practice selector. Each leaves on the next tick.
+local tutorialEntries: { [Player]: Entry } = {}
 
 local function now(): number
 	return DateTime.now().UnixTimestampMillis / 1000
@@ -549,7 +556,9 @@ end
 -- formGroup's practice twin. No claims to make: the local entries are
 -- this server's alone, so writing the group record is the whole commit.
 -- On failure nobody is touched, and the next tick tries again.
-local function formPracticeGroup(group: MatchmakingLogic.FormedGroup): GroupRecord?
+-- `tutorial`: the guided round. Its map is fixed (no vote) and the
+-- record says so, which is the only place the match server learns it.
+local function formPracticeGroup(group: MatchmakingLogic.FormedGroup, tutorial: boolean?): GroupRecord?
 	local destination: MatchmakingLogic.Destination? = nil
 	if destinationProvider == nil and destinationRequired then
 		return nil
@@ -561,7 +570,9 @@ local function formPracticeGroup(group: MatchmakingLogic.FormedGroup): GroupReco
 		end
 	end
 	local groupId = if destination then destination.groupId else HttpService:GenerateGUID(false)
-	local ballot = (Loader.get("VoteService") :: any).drawBallot(group.members) :: MatchmakingLogic.Ballot
+	local ballot: MatchmakingLogic.Ballot = if tutorial
+		then { maps = {}, provisionalMapId = GameConfig.tutorial.mapId }
+		else (Loader.get("VoteService") :: any).drawBallot(group.members)
 	local record = MatchmakingLogic.newGroupRecord(
 		groupId,
 		group.members,
@@ -570,7 +581,7 @@ local function formPracticeGroup(group: MatchmakingLogic.FormedGroup): GroupReco
 		myJobId,
 		destination,
 		ballot,
-		{ returnAccessCode = if destination then destination.returnAccessCode else nil }
+		{ returnAccessCode = if destination then destination.returnAccessCode else nil, tutorial = tutorial }
 	)
 	local ok = pcall(function()
 		groupMap:SetAsync(groupId, record, config.groupRecordTtlSeconds)
@@ -583,7 +594,28 @@ local function partyUnitOf(userId: number): string
 	return (Loader.get("PartyService") :: any).unitOf(userId)
 end
 
+-- Each waiting tutorial ticket leaves alone, with GameConfig.tutorial's
+-- bots. A failed record write leaves it waiting for the next tick.
+local function tutorialTick()
+	for player, entry in tutorialEntries do
+		local ticket = tickets[player]
+		if ticket == nil or ticket.status ~= "Waiting" then
+			continue
+		end
+		local group = { members = { entry }, npcSlots = GameConfig.tutorial.botCount, partial = true }
+		local record = formPracticeGroup(group, true)
+		if record ~= nil then
+			ticket.status = "Departing"
+			tutorialEntries[player] = nil
+			dispatch({ [record.groupId] = { group = record, players = { player } } })
+		end
+	end
+end
+
 local function practiceTick()
+	if Loader.get("LiveConfig").flags().matchmakingEnabled then
+		tutorialTick()
+	end
 	local entries: { Entry } = {}
 	for player, entry in practiceEntries do
 		local ticket = tickets[player]
@@ -699,6 +731,25 @@ local function joinPractice(player: Player, preservedEnqueuedAt: number?, messag
 	end
 end
 
+-- The intro's "Try a practice round" (tutorial seam 3). Always solo:
+-- the guided round is one player and bots, so a party member is told to
+-- leave the party first. Replays are allowed; only the first finish
+-- pays (TutorialService, on the match server).
+local function joinTutorial(player: Player, preservedEnqueuedAt: number?, message: string?)
+	if not GameConfig.tutorial.enabled then
+		sendState(player, { status = "Unavailable", message = "The practice tutorial is off right now." })
+		return
+	end
+	if #(Loader.get("PartyService") :: any).membersOf(player) > 1 then
+		sendState(player, { status = "Unavailable", message = "Leave your party to play the tutorial round." })
+		return
+	end
+	local enqueuedAt = preservedEnqueuedAt or now()
+	tickets[player] = { status = "Waiting", enqueuedAt = enqueuedAt, claimSeen = nil, practice = true, tutorial = true }
+	tutorialEntries[player] = MatchmakingLogic.newEntry(player.UserId, myJobId, enqueuedAt, 0, {}, {})
+	sendState(player, { status = "Waiting", message = message, practice = true })
+end
+
 local leaveQueue: (player: Player, fromIntent: boolean) -> ()
 
 -- Drops these players' practice tickets that haven't departed yet: their
@@ -714,6 +765,7 @@ local function cancelPractice(players: { Player }, message: string?)
 		if ticket.practice then
 			tickets[player] = nil
 			practiceEntries[player] = nil
+			tutorialEntries[player] = nil
 			sendState(player, { status = "Idle", message = message })
 		elseif #PartyService.membersOf(player) > 1 then
 			leaveQueue(player, false)
@@ -724,8 +776,10 @@ end
 
 -- `message` explains a requeue (P5-2's failed teleport) and rides on the
 -- Joining and Waiting states so the client can show why they're back.
--- `practice`: the Practice button. Forced on a private hub.
-local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: string?, practice: boolean?)
+-- `mode`: "Practice" is the Practice button, forced on a private hub
+-- (the tutorial is practice anyway). Nil is ranked.
+type QueueMode = "Ranked" | "Practice" | "Tutorial"
+local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: string?, mode: QueueMode?)
 	if not active then
 		sendState(player, { status = "Unavailable", message = "Matchmaking isn't available on this server." })
 		return
@@ -745,7 +799,11 @@ local function joinQueue(player: Player, preservedEnqueuedAt: number?, message: 
 		return
 	end
 
-	if practiceHub or practice == true then
+	if mode == "Tutorial" then
+		joinTutorial(player, preservedEnqueuedAt, message)
+		return
+	end
+	if practiceHub or mode == "Practice" then
 		joinPractice(player, preservedEnqueuedAt, message)
 		return
 	end
@@ -800,6 +858,7 @@ function leaveQueue(player: Player, fromIntent: boolean)
 	tickets[player] = nil
 	if ticket.practice then
 		practiceEntries[player] = nil
+		tutorialEntries[player] = nil
 		-- The party queued as one, so it leaves as one.
 		local others: { Player } = {}
 		for _, userId in (Loader.get("PartyService") :: any).membersOf(player) do
@@ -839,13 +898,13 @@ end
 -- needn't pass it.
 local function requeue(player: Player, enqueuedAt: number?, message: string?)
 	local ticket = tickets[player]
-	local practice = false
+	local mode: QueueMode? = nil
 	if ticket ~= nil and ticket.status == "Departing" then
 		enqueuedAt = enqueuedAt or ticket.enqueuedAt
-		practice = ticket.practice
+		mode = if ticket.tutorial then "Tutorial" elseif ticket.practice then "Practice" else nil
 		tickets[player] = nil
 	end
-	task.spawn(joinQueue, player, enqueuedAt, message, practice)
+	task.spawn(joinQueue, player, enqueuedAt, message, mode)
 end
 
 local function isQueued(player: Player): boolean
@@ -915,7 +974,7 @@ function MatchmakingService:init()
 
 	local NetGuard = Loader.get("NetGuard") :: any
 	NetGuard.on("QueueJoinIntent", function(player: Player, payload: any)
-		task.spawn(joinQueue, player, nil, nil, payload.mode == "Practice")
+		task.spawn(joinQueue, player, nil, nil, payload.mode)
 	end)
 	NetGuard.on("QueueLeaveIntent", function(player: Player, _payload: any)
 		leaveQueue(player, true)

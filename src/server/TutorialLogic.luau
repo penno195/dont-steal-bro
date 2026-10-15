@@ -48,4 +48,37 @@ function TutorialLogic.rewardGrants(config: RewardConfig, cosmeticEnabled: boole
 	return grants
 end
 
+-- ===== the guided round (seam 3) ============================================
+--
+-- Owner's answers, 2026-10-15: the guided round has no race clock, the
+-- bots never use power-ups, and they go easy - slower than usual, and
+-- held off the finish line so the player always makes the top 3.
+
+-- May a bot complete its LAST task now? Only while that still leaves a
+-- top-3 seat for every human who hasn't finished. Once the humans are
+-- done (or gone), the bots finish freely, which is what ends a race
+-- with no clock. A held bot just keeps "working" at its station.
+function TutorialLogic.botMayFinish(botsFinished: number, humansUnfinished: number, qualifierCount: number): boolean
+	return humansUnfinished == 0 or botsFinished + humansUnfinished < qualifierCount
+end
+
+-- Structurally NPCLogic.SkillProfile (kept require-free).
+export type SkillProfile = {
+	id: string,
+	weight: number,
+	durationScale: number,
+	moveSpeedScale: number,
+}
+
+-- A bot's usual profile, slowed for the guided round. A copy: the
+-- shared config profile is never touched.
+function TutorialLogic.easyProfile(profile: SkillProfile, durationScale: number, moveSpeedScale: number): SkillProfile
+	return {
+		id = profile.id,
+		weight = profile.weight,
+		durationScale = profile.durationScale * durationScale,
+		moveSpeedScale = profile.moveSpeedScale * moveSpeedScale,
+	}
+end
+
 return TutorialLogic

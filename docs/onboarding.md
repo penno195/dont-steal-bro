@@ -31,12 +31,41 @@ then the offer. `HubIntroController` draws it; the copy and the
 
 Every card has Next and Skip. Any way out (Skip, Try, close, B, tap
 outside) sets the `introSeen` setting, so it shows once. Skip pulses
-the Play button (not under reduced motion). Try queues a practice
-round; the guided tutorial round replaces that in seam 3.
+the Play button (not under reduced motion). Try queues the guided
+tutorial round (below).
 **Settings → Show the intro** (Hub only) clears `introSeen` and the
 intro opens again once the menu closes. "Reset to defaults" leaves
 `introSeen` alone. Like the tips, it's display-only: the reward is the
 server's own once-per-account flag.
+
+## The guided round
+
+Try sends a `Tutorial` queue intent. `MatchmakingService` gives the
+player a solo practice ticket that leaves on the next tick with
+`GameConfig.tutorial`'s 5 bots, on its map (Factory) with no vote. The
+group record carries `tutorial`; only the record can make a round a
+tutorial (`TeleportLogic.isTutorial`), never TeleportData. A party
+member is asked to leave the party first.
+
+On the match server `TutorialService` owns what changes (owner's
+answers, design-decisions.md "the first-time tutorial"):
+
+- **No race clock** (`RoundService.setRaceTimed`). The race ends when
+  the third racer finishes.
+- **Easy bots.** Each is slowed by `botDurationScale` /
+  `botMoveSpeedScale` (`TutorialLogic.easyProfile`), and a bot is held
+  on its last task while finishing would take a top-3 seat the player
+  still needs (`TutorialLogic.botMayFinish`, tested). Bots use no
+  power-ups, and bot finalists always Share.
+- **The reward** is paid when the round reaches Results with the
+  player still there, once per account (`DataService.claimTutorialReward`).
+- The client sees Workspace attribute `TutorialMatch`. The step
+  prompts (go to a station, do the task, grab the power-up, use it on
+  a bot), hiding the race clock, "How it works" before picking and the
+  reward pop-up are seam 4.
+
+Studio: set Workspace `DebugPracticeMatch` and `DebugTutorialMatch`
+before the round loads, with `studioTest.mapId` on Factory.
 
 ## The flow
 

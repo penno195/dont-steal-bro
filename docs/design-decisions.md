@@ -755,6 +755,15 @@ in-round tip cards stay as well.
     **Factory**. Each step waits for the player before moving on: go
     to a station, do the task, grab the power-up, use it on a bot. The
     bots go easy, so the player always reaches the top 3.
+  - **How the guided round runs** (owner, 2026-10-15): it is always
+    solo (one player, 5 bots; a party member is asked to leave the
+    party first). **No race clock**: the race ends when the third
+    racer finishes. The steps are prompts that wait for the player.
+    Bots work and walk slower than usual, and **at most 2 bots may
+    finish ahead of an unfinished player**: the others hold on their
+    last task, so a slow or lost player can never miss the top 3.
+    **Bots never use power-ups** in the tutorial; getting hit is left
+    to the in-round tip in later rounds.
   - **Its Decision Studio:** both bot finalists **Share**, every time,
     so a first-timer learns the payoff without getting burned. "How it
     works" is shown before they pick.
@@ -763,7 +772,9 @@ in-round tip cards stay as well.
     sold), **100 coins** and **1 Freeze** power-up. The server grants
     it and remembers it was granted. Skipping gives nothing, but a
     player can still earn it later from Settings. Replays give
-    nothing. This is a deliberate exception to practice rounds giving
+    nothing. "Finishing" means the round reaches **Results with the
+    player still in it** (owner, 2026-10-15), so leaving mid-round
+    pays nothing. This is a deliberate exception to practice rounds giving
     no rewards: it's a one-off onboarding gift, not a round payout,
     and it never touches a streak, a stat or a leaderboard.
 

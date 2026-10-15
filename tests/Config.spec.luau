@@ -220,6 +220,8 @@ local function validGameConfig(): Validate.GameConfig
 			enabled = false,
 			mapId = "test-map",
 			botCount = 5,
+			botDurationScale = 1.5,
+			botMoveSpeedScale = 0.85,
 			rewardCosmeticId = "cap",
 			rewardCurrency = 100,
 			rewardPowerUps = { ["sprint-boost"] = 1 },
@@ -2918,6 +2920,13 @@ TestRunner.describe("Validate - tutorial reward", function()
 		config.tutorial.rewardCurrency = -1
 		config.tutorial.rewardPowerUps = { ["sprint-boost"] = 0 }
 		TestRunner.expect(count(runTutorial(config), "tutorial")):toBe(3)
+	end)
+
+	TestRunner.it("refuses bots that would go faster than usual", function()
+		local config = validGameConfig()
+		config.tutorial.botDurationScale = 0.9
+		config.tutorial.botMoveSpeedScale = 1.2
+		TestRunner.expect(count(runTutorial(config), "tutorial.bot")):toBe(2)
 	end)
 end)
 
