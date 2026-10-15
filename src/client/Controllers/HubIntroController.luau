@@ -259,7 +259,7 @@ end
 -- A spotlight step: ends when OnboardingLogic.spotlightDone says so.
 -- "press Play" ends the flow, its tap having gone to the real Play
 -- button, armed to queue the guided round. The others go on to the
--- next step NEXT_DELAY later.
+-- next step, NEXT_DELAY later unless that's a spotlight too.
 local function showSpotlight(index: number, step: OnboardingLogic.HubStep)
 	-- (Cast: the frozen step table widens its literals to string.)
 	local target: OnboardingLogic.HubTarget = step.target :: any
@@ -284,7 +284,13 @@ local function showSpotlight(index: number, step: OnboardingLogic.HubStep)
 			return
 		end
 		closeStep()
-		task.wait(NEXT_DELAY)
+		-- One spotlight straight into the next (the Freeze loaded, then
+		-- the X, owner 2026-10-15): a pause would lift the dim, and the
+		-- player could close the Locker on their own, skipping the X.
+		local nextStep = OnboardingLogic.HUB_STEPS[index + 1]
+		if nextStep == nil or nextStep.kind ~= "spotlight" then
+			task.wait(NEXT_DELAY)
+		end
 		if open then
 			showStep(index + 1)
 		end

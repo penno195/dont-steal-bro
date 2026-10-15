@@ -859,6 +859,10 @@ go?" offer. The plan and build order are in `onboarding.md`,
   practice task **opens**, and "Do the task" pops up over the open task;
   the task holds its start (Code Playback's flash) until that card is
   read.
+- **Locker pacing (owner, 2026-10-15, after seam 3):** once the Freeze
+  is in the loadout the player is prompted to press the X the same way,
+  straight away: one spotlight leads into the next with no 2 s gap, so
+  the dim never lifts between them.
 
 ## 8. Are starting power-ups sold for Robux?
 
