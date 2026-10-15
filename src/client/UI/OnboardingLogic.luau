@@ -183,9 +183,8 @@ end
 -- player's first visit to the Hub, in order: the welcome card, the
 -- practice area (a power-up to grab and fire, then the task station),
 -- then (seam 3) the inventory, ending on "press Play" with only Play
--- lit. The welcome and Play copy is the owner's (2026-10-15,
--- design-decisions.md "the tutorial, second version"); the practice
--- area's is Claude's draft.
+-- lit. Copy is the owner's (2026-10-15, design-decisions.md "the
+-- tutorial, second version"; the practice area's cards, same day).
 --
 --   kind "card"       a pop-up on a dimmed screen. `skip` adds the Skip
 --                     that ends the whole tutorial (the welcome only).
@@ -226,7 +225,7 @@ local HUB_STEPS: { HubStep } = {
 		id = "rivals",
 		kind = "card",
 		title = "Mess with rivals",
-		body = "Grab the glowing power-up in the practice area. Only you can see it.",
+		body = "Grab the glowing power-up in the middle of the practice area.",
 		picture = 0,
 		waitFor = "pickup",
 	},
@@ -234,7 +233,7 @@ local HUB_STEPS: { HubStep } = {
 		id = "aim",
 		kind = "card",
 		title = "Aim and fire",
-		body = "Drag from its slot (or hold click) to aim at a dummy. Let go to fire!",
+		body = "Drag from its slot (or left click) to aim at a dummy. Let's go fire!",
 		picture = 0,
 		waitFor = "use",
 	},
@@ -242,7 +241,7 @@ local HUB_STEPS: { HubStep } = {
 		id = "station",
 		kind = "card",
 		title = "Task station",
-		body = "Matches are a race through tasks. Head to the station under the beam of light.",
+		body = "Matches are a race through tasks. Your stations have a beam of light. Find the station and start the task.",
 		picture = 0,
 		waitFor = "station",
 	},
@@ -250,7 +249,7 @@ local HUB_STEPS: { HubStep } = {
 		id = "task",
 		kind = "card",
 		title = "Do the task",
-		body = "Open the station and complete the task.",
+		body = "Complete the task to move on to the next or the final.",
 		picture = 0,
 		waitFor = "solve",
 	},

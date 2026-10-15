@@ -4780,7 +4780,7 @@ function Validate.run(input: RegistryInput): { Issue }
 		end
 	end
 	-- The hub step's pickup is there to aim and fire, so each item must
-	-- be a real Aimed one. Freeze is the Locker step's gift, not this.
+	-- be a real Aimed one.
 	if tutorialOn and type(tutorial.practicePickupPowerUpIds) == "table" then
 		for _, powerUpId in tutorial.practicePickupPowerUpIds do
 			local found: any = nil
@@ -4792,7 +4792,6 @@ function Validate.run(input: RegistryInput): { Issue }
 			local problem = if found == nil
 				then "is not a power-up id"
 				elseif found.target ~= "Aimed" then "is not an Aimed power-up"
-				elseif powerUpId == "freeze" then "is the Locker step's gift, not the pickup's"
 				else nil
 			if problem ~= nil then
 				issue(

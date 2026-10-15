@@ -574,10 +574,10 @@ local GameConfig: Validate.GameConfig = {
 		rewardPowerUps = { freeze = 1 },
 		-- The hub tutorial's "Mess with rivals" step (tutorial v2): a
 		-- pickup only the tutorial player sees, in the practice area,
-		-- holding one of these at random. Aimed items only, and not
-		-- Freeze: the free Freeze comes with the Locker step (owner,
+		-- holding one of these at random. Aimed items only, each with
+		-- something to see on a dummy, so not Task Scramble (owner,
 		-- 2026-10-15). Claimed from within the radius, in studs.
-		practicePickupPowerUpIds = { "push-trip", "blind", "task-scramble" },
+		practicePickupPowerUpIds = { "push-trip", "blind", "freeze" },
 		practicePickupClaimRadius = 6,
 	},
 

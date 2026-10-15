@@ -125,7 +125,8 @@ describe("OnboardingLogic hub intro", function()
 			expect(seen[step.id]):toBe(nil)
 			seen[step.id] = true
 			expect(#step.title <= 30):toBe(true)
-			expect(#step.body <= 90):toBe(true)
+			-- Over 90 gets a third line on its card.
+			expect(#step.body <= 120):toBe(true)
 			expect(typeof(step.picture)):toBe("number")
 			-- A spotlight always names what it lights; only the welcome skips.
 			expect(step.kind ~= "spotlight" or step.target ~= nil):toBe(true)

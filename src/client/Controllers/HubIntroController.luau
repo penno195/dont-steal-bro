@@ -146,7 +146,8 @@ local function showCard(index: number, step: OnboardingLogic.HubStep)
 				return C.Modal.picture(picture)
 			end
 			else nil,
-		bodyLines = 2,
+		-- Short copy gives a line back to the picture.
+		bodyLines = if #step.body > 90 then 3 else 2,
 		actions = actions,
 		-- Skip is a small text link in the corner, Next centred (owner).
 		corner = if step.skip

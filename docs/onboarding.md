@@ -242,11 +242,11 @@ leaves the game playable.
    task"; the solve -> Play hop is unseen). The pickup stands on a
    `HubTutorialPickup` part if the Hub has one, else mid practice area.
    "In the tutorial" = saved `introSeen` is false. Firing counts as the
-   use whether it lands or not (a Task Scramble does nothing to a
-   dummy). The practice-area card copy is Claude's draft.* Server: a personal, aimable pickup for the
+   use whether it lands or not. The pickup holds Push/Trip, Blind or
+   Freeze, and the card copy is the owner's (2026-10-15).* Server: a personal, aimable pickup for the
    tutorial player in `HubPracticeArea`, visible only to its owner like
-   the daily hunt's, drawn from the Aimed items other than Freeze
-   (Push/Trip, Blind, Task Scramble). Dummies skip a player who is
+   the daily hunt's, drawn from Push/Trip, Blind and Freeze (owner
+   swapped Task Scramble, which does nothing to a dummy, for Freeze). Dummies skip a player who is
    doing the tutorial. Client: a "Mess with rivals" card to pick it up,
    then an aim-and-fire card. Then a "Task station" card. The
    `HubPracticeTask` station gets a permanent light beam (the race

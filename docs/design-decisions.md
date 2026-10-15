@@ -841,6 +841,17 @@ go?" offer. The plan and build order are in `onboarding.md`,
 - **Rewards:** the inventory Freeze is **in addition to** the end
   reward, so finishing still pays Rookie Cap + 100 coins + a Freeze,
   revealed back in the Hub. Then normal play.
+- **Practice-area details (owner, 2026-10-15, after seam 2):** the
+  personal pickup holds **Push/Trip, Blind or Freeze**. Task Scramble
+  was dropped because it does nothing to a dummy (no task), and Freeze
+  is allowed here even though the Locker step also gives one. Firing
+  the item counts as done, whether it lands or not. Card copy:
+  "Mess with rivals" / "Grab the glowing power-up in the middle of the
+  practice area."; "Aim and fire" / "Drag from its slot (or left click)
+  to aim at a dummy. Let's go fire!"; "Task station" / "Matches are a
+  race through tasks. Your stations have a beam of light. Find the
+  station and start the task."; "Do the task" / "Complete the task to
+  move on to the next or the final."
 
 ## 8. Are starting power-ups sold for Robux?
 
