@@ -59,10 +59,37 @@ answers, design-decisions.md "the first-time tutorial"):
   power-ups, and bot finalists always Share.
 - **The reward** is paid when the round reaches Results with the
   player still there, once per account (`DataService.claimTutorialReward`).
-- The client sees Workspace attribute `TutorialMatch`. The step
-  prompts (go to a station, do the task, grab the power-up, use it on
-  a bot), hiding the race clock, "How it works" before picking and the
-  reward pop-up are seam 4.
+- The client sees Workspace attribute `TutorialMatch`.
+
+On the client (seam 4):
+
+- **Step prompts** take the tip card's corner (`OnboardingController`;
+  copy and order are `OnboardingLogic.STEPS`, tested). One is up at a
+  time, through the race, and stays until the player does it; taps
+  don't close it. Each step is a fact that stays true once it is, and
+  the prompt is the first one not yet true, so a step done early is
+  skipped. Copy picked by the owner 2026-10-15:
+
+  | # | Done when | Title | Body |
+  |---|---|---|---|
+  | 1 | a task view opens (`TaskChallenge`) | Head to a station | Follow the arrow to your first task. |
+  | 2 | one task is done (own route) | Do the task | Finish the mini-game to tick it off. |
+  | 3 | a power-up is held | Grab a power-up | Run through one of the glowing orbs. |
+  | 4 | a use succeeds (`PowerUpUseResult`) | Use it on a bot | Tap the power-up button. It hits the nearest rival. |
+  | 5 | every task is done | Finish your tasks | Top 3 make the finale. Follow the arrow. |
+
+- **The tips stand down** for the whole tutorial round, so the
+  player's first real round still teaches the loop and turns them off.
+- **No clock**: the race HUD hides its countdown ring whenever
+  RoundState has no `endsAt`.
+- **How it works** opens by itself for a finalist as the Studio's
+  Negotiate (or Choose) phase starts, before they pick.
+- **The reward pop-up**: `TutorialService` fires `TutorialRewarded`
+  (the grants) to a player whose claim just paid, and `MenuController`
+  shows it with the season pass's claim pop-up over Results. A replay
+  hears nothing.
+- **Settings → Play the tutorial** (Hub only) queues the guided round
+  again (`QueueController.startTutorial`).
 
 Studio: set Workspace `DebugPracticeMatch` and `DebugTutorialMatch`
 before the round loads, with `studioTest.mapId` on Factory.

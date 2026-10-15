@@ -135,6 +135,49 @@ describe("OnboardingLogic hub intro", function()
 	end)
 end)
 
+describe("OnboardingLogic guided-round steps", function()
+	local function current(steps): string?
+		local step = OnboardingLogic.currentStep(steps)
+		return if step then step.id else nil
+	end
+
+	it("has the owner's five steps, in order, inside the tip limits", function()
+		local ids = {}
+		for _, step in OnboardingLogic.STEPS do
+			table.insert(ids, step.id)
+			expect(#step.title <= 30):toBe(true)
+			expect(#step.body <= 90):toBe(true)
+		end
+		expect(table.concat(ids, "|")):toBe("station|task|grab|use|finish")
+	end)
+
+	it("walks the steps in order, then shows nothing", function()
+		local steps = OnboardingLogic.newSteps()
+		expect(current(steps)):toBe("station")
+		for _, id in { "station", "task", "grab", "use" } :: { any } do
+			OnboardingLogic.completeStep(steps, id)
+		end
+		expect(current(steps)):toBe("finish")
+		OnboardingLogic.completeStep(steps, "finish")
+		expect(current(steps)):toBe(nil)
+	end)
+
+	it("skips a step the player already did out of order", function()
+		local steps = OnboardingLogic.newSteps()
+		OnboardingLogic.completeStep(steps, "grab")
+		expect(current(steps)):toBe("station")
+		OnboardingLogic.completeStep(steps, "task")
+		expect(current(steps)):toBe("use")
+	end)
+
+	it("counts a use as having grabbed one", function()
+		local steps = OnboardingLogic.newSteps()
+		OnboardingLogic.completeStep(steps, "task")
+		OnboardingLogic.completeStep(steps, "use")
+		expect(current(steps)):toBe("finish")
+	end)
+end)
+
 describe("DecisionLogic.explainerRows", function()
 	it("reads the three-seat table the way payoff-table.md does", function()
 		local rows = DecisionLogic.explainerRows(3)

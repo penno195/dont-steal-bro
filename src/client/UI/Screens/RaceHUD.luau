@@ -1279,6 +1279,15 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			return HudLogic.sufferingCategories(store.effects(), now())
 		end)
 
+		-- No end time means no clock: the guided tutorial round's race
+		-- runs until the third racer finishes (TutorialService), so the
+		-- ring hides rather than sit full.
+		local ring =
+			C.CountdownRing({ secondsLeft = secondsLeft, total = store.raceSeconds, size = RING, layoutOrder = 2 })
+		effect(function()
+			ring.Visible = store.endsAt() ~= nil
+		end)
+
 		-- Top stack: info bar, portrait task bar, effect chips.
 		local compactTasks = taskBar(done, total, TOP_WIDTH - 2 * PILL / 3, 2)
 		effect(function()
@@ -1336,7 +1345,7 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			}),
 			row(1, RING, {
 				placementCard(standing),
-				C.CountdownRing({ secondsLeft = secondsLeft, total = store.raceSeconds, size = RING, layoutOrder = 2 }),
+				ring,
 				-- Balances the tab, so the countdown stays centred. The tab
 				-- has no gap before it; the spacer's GAP comes off its width.
 				create("Frame")({

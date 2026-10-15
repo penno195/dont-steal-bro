@@ -17,9 +17,18 @@
 -- ON / OFF: the `tips` setting (SettingsLogic). Once the player has seen
 -- the whole loop, the tips switch themselves off at the end of the
 -- round. Turning them back on in Settings replays them from the start.
+--
+-- THE GUIDED ROUND (tutorial seam 4): in the tutorial round (Workspace
+-- TutorialMatch, set by TutorialService) the tips stand down, so a
+-- first real round still gets them. The same card shows the step
+-- prompts instead (OnboardingLogic.STEPS), each one up until the
+-- player has done it, whatever the tips setting says. A finalist gets
+-- How it works on their own as the Studio's talking starts, before
+-- they pick.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
@@ -36,6 +45,7 @@ local Theme = require(script.Parent.Parent.UI.Theme)
 local UIScaleController = require(script.Parent.UIScaleController)
 
 local create = vide.create
+local derive = vide.derive
 local source = vide.source
 
 local Env = C.Env
@@ -65,10 +75,22 @@ local isFinalist: boolean? = nil
 local seats = 3
 local timerToken = 0
 
+-- The guided round's steps. Shown only during its race.
+local steps = OnboardingLogic.newSteps()
+local step = source(nil :: OnboardingLogic.Step?)
+local racing = false
+local explained = false -- How it works has opened by itself this round
+
+local function isTutorial(): boolean
+	return Workspace:GetAttribute("TutorialMatch") == true
+end
+
 local dismiss: () -> ()
 
 local function sync()
-	local id = if enabled then state.showing else nil
+	local tutorial = isTutorial()
+	step(if tutorial and racing then OnboardingLogic.currentStep(steps) else nil)
+	local id = if enabled and not tutorial then state.showing else nil
 	local tip = if id then OnboardingLogic.tip(id) else nil
 	showing(tip)
 	timerToken += 1
@@ -88,7 +110,7 @@ dismiss = function()
 end
 
 local function trigger(id: OnboardingLogic.TipId)
-	if not enabled then
+	if not enabled or isTutorial() then
 		return
 	end
 	OnboardingLogic.trigger(state, id)
@@ -100,17 +122,35 @@ local function openExplainer()
 	PayoffExplainer.open(seats)
 end
 
+local function completeStep(id: OnboardingLogic.StepId)
+	if isTutorial() and not steps[id] then
+		OnboardingLogic.completeStep(steps, id)
+		sync()
+	end
+end
+
 -- The whole card is the close button: one big target, no hunting for an
 -- X. The inner "How it works" button sits on top and takes its own taps.
--- Not Selectable: a gamepad player's tip just times out.
+-- Not Selectable: a gamepad player's tip just times out. A step prompt
+-- uses the same card but ignores taps: it waits for the player.
 local function card(): TextButton
-	local tip = showing
+	local tip = derive(function(): { title: string, body: string, action: "explainer"? }?
+		local tipShown, stepShown = showing(), step()
+		if tipShown ~= nil then
+			return tipShown
+		end
+		return if stepShown then { title = stepShown.title, body = stepShown.body } else nil
+	end)
 	return create("TextButton")({
 		Name = "TipCard",
 		Text = "",
 		AutoButtonColor = false,
 		Selectable = false,
-		Activated = dismiss,
+		Activated = function()
+			if showing() ~= nil then
+				dismiss()
+			end
+		end,
 		AnchorPoint = Vector2.new(1, 0),
 		Position = function()
 			return UDim2.new(1, -Theme.spacing.md, if portrait() then PORTRAIT_TOP else 0, Theme.spacing.md)
@@ -188,6 +228,12 @@ local function mount()
 end
 
 local function onRoundState(payload: any)
+	-- Set before the stage's sync below, which shows the first step.
+	racing = payload.state == "Race"
+	if payload.state == "Loading" then
+		steps = OnboardingLogic.newSteps()
+		explained = false
+	end
 	local stage = STAGE_OF_ROUND[payload.state]
 	if stage ~= state.stage then
 		OnboardingLogic.enterStage(state, stage)
@@ -226,6 +272,33 @@ function OnboardingController:init()
 	Net.onClientEvent("PowerUpInventoryChanged", function(payload: any)
 		if type(payload.inventory) == "table" and payload.inventory[1] ~= nil then
 			trigger("powerUp")
+			completeStep("grab")
+		end
+	end)
+
+	-- The guided round's steps. A task view opening means they reached
+	-- a station; their own route says which tasks are done.
+	Net.onClientEvent("TaskChallenge", function()
+		completeStep("station")
+	end)
+	Net.onClientEvent("TaskAssignmentState", function(payload: any)
+		local assignments = (payload.assignments or {}) :: { any }
+		local done = 0
+		for _, entry in assignments do
+			if entry.completed then
+				done += 1
+			end
+		end
+		if done > 0 then
+			completeStep("task")
+		end
+		if done > 0 and done == #assignments then
+			completeStep("finish")
+		end
+	end)
+	Net.onClientEvent("PowerUpUseResult", function(payload: any)
+		if payload.success == true then
+			completeStep("use")
 		end
 	end)
 
@@ -265,6 +338,11 @@ function OnboardingController:init()
 		if isFinalist ~= true then
 			return
 		end
+		-- The guided round: How it works opens by itself before they pick.
+		if isTutorial() and not explained and (payload.phase == "Negotiate" or payload.phase == "Choose") then
+			explained = true
+			PayoffExplainer.open(seats)
+		end
 		if payload.phase == "Negotiate" then
 			trigger("negotiate")
 		elseif payload.phase == "Choose" then
@@ -275,6 +353,7 @@ end
 
 function OnboardingController:start()
 	mount()
+	Workspace:GetAttributeChangedSignal("TutorialMatch"):Connect(sync)
 	-- Follows the setting. Turning tips back on replays them.
 	local settings = Loader.get("SettingsController") :: any
 	Env.observe(function(): boolean

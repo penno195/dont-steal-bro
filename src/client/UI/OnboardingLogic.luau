@@ -229,6 +229,56 @@ function OnboardingLogic.introDue(c: IntroContext): boolean
 		and not c.queued
 end
 
+-- THE GUIDED ROUND'S STEPS (tutorial seam 4, docs/onboarding.md). In
+-- the tutorial round one step prompt is up at a time, and it stays up
+-- until the player has done it. Copy picked by the owner 2026-10-15.
+-- Each step is a fact about the round that, once true, stays true, and
+-- the prompt is the first fact in order not yet true. So a player who
+-- grabs a power-up on the way to their first station skips "Grab a
+-- power-up" when they get there.
+export type StepId = "station" | "task" | "grab" | "use" | "finish"
+export type Step = { id: StepId, title: string, body: string }
+
+local STEPS: { Step } = {
+	{ id = "station", title = "Head to a station", body = "Follow the arrow to your first task." },
+	{ id = "task", title = "Do the task", body = "Finish the mini-game to tick it off." },
+	{ id = "grab", title = "Grab a power-up", body = "Run through one of the glowing orbs." },
+	{
+		id = "use",
+		title = "Use it on a bot",
+		body = "Tap the power-up button. It hits the nearest rival.",
+	},
+	{ id = "finish", title = "Finish your tasks", body = "Top 3 make the finale. Follow the arrow." },
+}
+OnboardingLogic.STEPS = table.freeze(STEPS)
+
+export type Steps = { [string]: boolean }
+
+function OnboardingLogic.newSteps(): Steps
+	return {}
+end
+
+-- Marks a step done. Doing a task means the player reached a station,
+-- and using a power-up means they had one, so those latch too.
+function OnboardingLogic.completeStep(steps: Steps, id: StepId)
+	steps[id] = true
+	if id == "task" then
+		steps.station = true
+	elseif id == "use" then
+		steps.grab = true
+	end
+end
+
+-- The prompt to show, or nil once every step is done.
+function OnboardingLogic.currentStep(steps: Steps): Step?
+	for _, step in OnboardingLogic.STEPS do
+		if not steps[step.id] then
+			return step
+		end
+	end
+	return nil
+end
+
 -- True once the player has been taught the whole loop: the race, then
 -- either the Studio or seeing they missed it. That's when the tips turn
 -- themselves off. A player who joined mid-round and skipped the race

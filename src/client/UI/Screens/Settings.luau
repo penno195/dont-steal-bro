@@ -42,6 +42,10 @@ export type Store = {
 	-- The hub intro again (tutorial seam 2). Hub only; nil elsewhere,
 	-- and the button isn't shown.
 	showIntro: (() -> ())?,
+	-- The guided tutorial round again (tutorial seam 4). Hub only, like
+	-- showIntro. A replay pays nothing; a player who skipped it can
+	-- still earn its reward here (design-decisions.md).
+	playTutorial: (() -> ())?,
 }
 
 local function hint(text: string, order: number): TextLabel
@@ -297,6 +301,23 @@ local function body(store: Store, height: () -> number): { Instance }
 						variant = "secondary",
 						width = MenuShell.INNER,
 						onActivate = store.showIntro,
+						order = 198,
+						anchorPoint = Vector2.new(0.5, 0.5),
+						position = UDim2.fromScale(0.5, 0.5),
+					}),
+				})
+				else nil :: any,
+			if store.playTutorial
+				then create("Frame")({
+					Name = "TutorialSlot",
+					LayoutOrder = 12.6,
+					Size = UDim2.fromOffset(MenuShell.INNER, Theme.touch.primaryHeight),
+					BackgroundTransparency = 1,
+					C.Button({
+						label = "Play the tutorial",
+						variant = "secondary",
+						width = MenuShell.INNER,
+						onActivate = store.playTutorial,
 						order = 199,
 						anchorPoint = Vector2.new(0.5, 0.5),
 						position = UDim2.fromScale(0.5, 0.5),

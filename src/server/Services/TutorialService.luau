@@ -23,7 +23,8 @@
 -- Everything else is an ordinary practice round: nothing touches a
 -- streak, a stat or a leaderboard (ProgressionService's practice gate).
 -- The client learns it's a tutorial from Workspace's TutorialMatch
--- attribute (the step prompts are seam 4).
+-- attribute (OnboardingController's step prompts, RaceHUD's hidden
+-- clock), and hears about its reward from TutorialRewarded.
 --
 -- STUDIO: set Workspace attributes DebugPracticeMatch and
 -- DebugTutorialMatch before the round loads (MatchTeleportService's
@@ -35,6 +36,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
+local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Participants = require(ServerScriptService.Server.Participants)
@@ -86,6 +88,7 @@ local function payRewards()
 		local changes = DataService.claimTutorialReward(player, grants)
 		if changes ~= nil then
 			print(string.format("TutorialService: paid the tutorial reward to %d", player.UserId))
+			Net.fireClient("TutorialRewarded", player, { grants = grants })
 		end
 	end
 end

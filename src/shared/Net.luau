@@ -1155,6 +1155,16 @@ Net.Remotes = {
 		direction = "ServerBroadcast",
 	} :: RemoteDef,
 
+	-- Server -> client (targeted): the guided tutorial round just paid
+	-- its once-per-account reward (TutorialService, tutorial seam 4).
+	-- `{ grants = { { kind, amount?, powerUpId?, cosmeticId? } } }`,
+	-- TutorialLogic.rewardGrants, already applied. Only for the claim
+	-- that paid: a replay hears nothing. Shown as the claim pop-up.
+	TutorialRewarded = {
+		name = "TutorialRewarded",
+		direction = "ServerBroadcast",
+	} :: RemoteDef,
+
 	-- Client -> server: the gift pop-up showed everything up to and
 	-- including `upToId`, so those leave the queue. Hub only; it can
 	-- only clear pop-up records, never a gift (StaffGrantLogic.markSeen).

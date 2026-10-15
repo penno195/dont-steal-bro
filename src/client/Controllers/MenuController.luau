@@ -573,6 +573,14 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 					closeMenu()
 				end
 				else nil,
+			-- QueueController requires this controller, so it's fetched
+			-- at tap time.
+			playTutorial = if isHubServer()
+				then function()
+					closeMenu()
+					Loader.get("QueueController").startTutorial()
+				end
+				else nil,
 		})
 	end
 	syncLauncher()
@@ -871,6 +879,23 @@ function MenuController:init()
 			Loader.get("AudioController").play("SeasonClaim")
 		elseif type(status) == "string" and COMMUNITY_TEXT[status] then
 			communityText(COMMUNITY_TEXT[status])
+		end
+	end)
+	-- The guided round's once-only reward, over its Results screen.
+	Net.onClientEvent("TutorialRewarded", function(payload: any)
+		local grants = if type(payload) == "table" and type(payload.grants) == "table" then payload.grants else {}
+		local shown: { ClaimPopup.Reward } = {}
+		for _, grant in grants :: { any } do
+			table.insert(shown, {
+				premium = true,
+				text = grantText(grant),
+				icon = SeasonTrackLogic.iconFor(grant),
+				image = grantImage(grant),
+			})
+		end
+		if #shown > 0 then
+			ClaimPopup.open(shown, "TUTORIAL DONE!", "First round finished. These are yours.")
+			Loader.get("AudioController").play("SeasonClaim")
 		end
 	end)
 	Net.onClientEvent("GiftReceived", function(payload: any)
