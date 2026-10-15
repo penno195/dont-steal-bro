@@ -787,6 +787,60 @@ in-round tip cards stay as well.
     stays in the corner until the step is done. Pictures are **Studio
     screenshots** of the real game. The four **hub intro cards get a
     picture each** in the same style.
+  - **Where the reward is shown** (owner, 2026-10-15): **back in the
+    Hub**, not over the round's Results. It's still *paid* at Results
+    (so leaving before the teleport loses nothing); the reveal waits
+    in the profile until the next Hub visit. It's a "spin and win"
+    show: a suspense build (prize-wheel ticks slowing over a riser),
+    then the reward pop-up revealed with a flash and confetti.
+
+### Applied case: the tutorial, second version (2026-10-15, user decision)
+
+After playtesting the first version, the owner redesigned the flow.
+This **replaces** the four hub intro cards and the "Want a practice
+go?" offer. The plan and build order are in `onboarding.md`,
+"Tutorial v2".
+
+- **Hub, in order:**
+  1. **Welcome card**, "Welcome to Don't Steal Bro! Where your fate is
+     decided by your own conscience!" Its picture shows two Roblox
+     characters side by side facing the camera: a devil with a STEAL
+     button above it and an angel with a SHARE button. It **keeps a
+     Skip**: skipping gives nothing, and the tutorial can still be
+     replayed from Settings (unchanged).
+  2. **Mess with rivals**: pick up a power-up in the practice area,
+     then a card says how to aim and fire. The tutorial player gets a
+     **personal pickup** that only they can see and take, and it's
+     always an **aimable** item. The training dummies **never throw at
+     a player doing the tutorial**. Everyone else's practice is
+     unchanged.
+  3. **Task station**: go to the practice task station (the card shows
+     a station), which gets a **permanent light beam** like a race
+     station's. When it opens, a card says to complete the task.
+  4. **Inventory**: the screen dims and only the inventory button
+     works, with a pulsing ring around it and its inside left clear.
+  5. Once the inventory opens, a card says "Here is a free power up to
+     get you started!" and grants a **free Freeze**. Then the same dim
+     lands on the Freeze item ("Click to add to your load out for a
+     match!"). Once it's in the loadout, the same dim allows only the
+     close button.
+  6. A card, "Let's get straight into a match, press Play", with the
+     same dim allowing only Play. Play starts the **guided round** as
+     now (Factory, easy bots that always Share).
+- **Guided round:** keeps "Head to a station", "Do the task" and
+  "Finish your tasks" and drops "Grab a power-up" and "Use it on a
+  bot". It **adds a step where the player must use their loadout
+  Freeze** on a bot, with a card and a mechanic that forces the use.
+- **Explainer overlays** stay up as long as the player wants. In the
+  tutorial **no timer runs while one is up**, and after 10 s its OK
+  button gets a glowing pulse.
+- **Decision Studio, tutorial:** at Negotiate, a card says "This is
+  where you can talk to the opponents to see if you trust them to
+  share! Wait till the timer runs down." At Choose: "Now you decide
+  whether you are going to STEAL or SHARE! Press and hold your choice."
+- **Rewards:** the inventory Freeze is **in addition to** the end
+  reward, so finishing still pays Rookie Cap + 100 coins + a Freeze,
+  revealed back in the Hub. Then normal play.
 
 ## 8. Are starting power-ups sold for Robux?
 

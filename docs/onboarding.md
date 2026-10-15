@@ -96,10 +96,17 @@ On the client (seam 4):
   RoundState has no `endsAt`.
 - **How it works** opens by itself for a finalist as the Studio's
   Negotiate (or Choose) phase starts, before they pick.
-- **The reward pop-up**: `TutorialService` fires `TutorialRewarded`
-  (the grants) to a player whose claim just paid, and `MenuController`
-  shows it with the season pass's claim pop-up over Results. A replay
-  hears nothing.
+- **The reward reveal** (owner, 2026-10-15): paid at Results, shown
+  back in the **Hub**. The claim sets the profile's
+  `tutorialRewardUnseen` (schema v14); the Hub's `TutorialService`
+  fires `TutorialRewarded` (the grants) when the profile loads, and
+  `TutorialRewardSeenIntent` clears it. `MenuController` waits for the
+  loading screen and any dialog, then plays the spin
+  (`Screens/PrizeReveal`: dimmed screen, gold rays, a "?" prize that
+  punches on each `PrizeTick`, on `PrizeRevealLogic`'s slowing
+  timeline over `RevealRiser`), then a flash, confetti and the
+  season pass's claim pop-up with `SeasonClaim`. A replay pays
+  nothing, so it never sets the flag.
 - **Settings → Play the tutorial** (Hub only) queues the guided round
   again (`QueueController.startTutorial`).
 
@@ -205,3 +212,47 @@ right cases. The Studio passes its real seat count.
 - The payoff table's heading row grew from about 14 px to 28 px for
   the (i). Check that the Studio's Choose layout still fits a
   landscape phone.
+
+## Tutorial v2 (owner, 2026-10-15): build plan
+
+This replaces the hub intro cards above and drops two guided-round
+steps. The design is in design-decisions.md, "the tutorial, second
+version". Build it **one seam per session**, in this order; each seam
+leaves the game playable.
+
+1. **Spotlight + welcome.** Add a reusable *spotlight*: the screen dims
+   and only one target GuiObject takes input, with a pulsing ring
+   around it and its inside left clear. Then add the welcome card (with
+   Skip) in place of the four intro cards and the offer. Replace
+   `OnboardingLogic.INTRO` with the new hub step list (pure and
+   tested), and have `HubIntroController` drive it. The welcome picture
+   is a Studio shot: two R15 characters facing the camera, a devil
+   (red, horns) under a STEAL button and an angel (white, halo) under
+   a SHARE button.
+2. **Practice-area steps.** Server: a personal, aimable pickup for the
+   tutorial player in `HubPracticeArea`, visible only to its owner like
+   the daily hunt's, drawn from the Aimed items other than Freeze
+   (Push/Trip, Blind, Task Scramble). Dummies skip a player who is
+   doing the tutorial. Client: a "Mess with rivals" card to pick it up,
+   then an aim-and-fire card. Then a "Task station" card. The
+   `HubPracticeTask` station gets a permanent light beam (the race
+   station's), and a card says to complete the task when it opens.
+3. **Inventory + Play.** Spotlight the inventory (Locker) button. On
+   open, a card grants the free Freeze. That needs a server grant, once
+   per account, with its own profile flag (a schema bump). Then
+   spotlight the Freeze item until it's in the loadout, spotlight the
+   close button, and show the "press Play" card with Play spotlit.
+   Play starts the guided round (`QueueController.startTutorial`).
+4. **Guided round.** `OnboardingLogic.STEPS` keeps station, task and
+   finish, and drops grab and use. Add a **"Use your Freeze"** step:
+   the round stays frozen (as for the other step pop-ups) until the
+   player uses their loadout Freeze on a bot. In the tutorial,
+   explainer overlays pause the Studio timers while they're up, and
+   their OK button pulses after 10 s. Add the Negotiate and Choose
+   cards.
+5. **Pictures.** Upload the owner's screenshots (Desktop folder `Tutorial Screenshots`) and wire the ids in:
+   `Power UP` for the pickup card, `Aim and shoot` for aim-and-fire,
+   `Station` for the task station card, `Follow Arrow` for "Head to a
+   station", and `Task Progress` for "Finish your tasks". Add the
+   welcome picture from seam 1. Ask the owner for any other shots
+   (the inventory button, the Freeze in the Locker, the Studio).
