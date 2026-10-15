@@ -46,8 +46,10 @@ local WAIT_POLL = 0.2
 -- With no pickup from the server by then (no practice area on this
 -- server), the power-up steps are skipped rather than left hanging.
 local PICKUP_TIMEOUT = 8
--- A done step's pause before the next pop-up (owner, 2026-10-15).
-local NEXT_DELAY = 2
+-- The one pause in the flow: after the power-up is fired, so the
+-- player sees it land before the next pop-up. Every other step goes
+-- straight on (owner, 2026-10-15).
+local FIRE_DELAY = 3
 -- How long the Locker's gift card waits for the server's answer (and
 -- the stock it brings) before skipping itself.
 local GIFT_TIMEOUT = 6
@@ -108,8 +110,8 @@ end
 local showStep: (number) -> ()
 
 -- After a waiting card is read: the step sits in the corner card until
--- it's done, then the next one opens NEXT_DELAY later, so the player
--- sees what they did (a power-up landing) before the next pop-up.
+-- it's done, then the next one opens: at once, or FIRE_DELAY later
+-- after firing, so the player sees the power-up land.
 local function awaitStep(index: number, step: OnboardingLogic.HubStep)
 	onboarding.remind(step.title, step.body)
 	waiting = step.waitFor
@@ -130,7 +132,9 @@ local function awaitStep(index: number, step: OnboardingLogic.HubStep)
 		waiting = nil
 		if open then
 			onboarding.remind(nil, nil)
-			task.wait(NEXT_DELAY)
+			if step.waitFor == "use" then
+				task.wait(FIRE_DELAY)
+			end
 		end
 		if open then
 			showStep(nextIndex)
@@ -252,14 +256,15 @@ local function targetGui(target: OnboardingLogic.HubTarget): GuiObject?
 		return nil
 	end
 	local header = screen:FindFirstChild("Header", true)
-	local close = if header then header:FindFirstChild("IconButton") else nil
+	-- IconButton names itself after its label ("IconButton_Close").
+	local close = if header then header:FindFirstChild("IconButton_Close") else nil
 	return if close and close:IsA("GuiObject") then onScreen(close) else nil
 end
 
 -- A spotlight step: ends when OnboardingLogic.spotlightDone says so.
 -- "press Play" ends the flow, its tap having gone to the real Play
--- button, armed to queue the guided round. The others go on to the
--- next step, NEXT_DELAY later unless that's a spotlight too.
+-- button, armed to queue the guided round. The others go straight on
+-- to the next step, so the dim never lifts between two spotlights.
 local function showSpotlight(index: number, step: OnboardingLogic.HubStep)
 	-- (Cast: the frozen step table widens its literals to string.)
 	local target: OnboardingLogic.HubTarget = step.target :: any
@@ -284,16 +289,7 @@ local function showSpotlight(index: number, step: OnboardingLogic.HubStep)
 			return
 		end
 		closeStep()
-		-- One spotlight straight into the next (the Freeze loaded, then
-		-- the X, owner 2026-10-15): a pause would lift the dim, and the
-		-- player could close the Locker on their own, skipping the X.
-		local nextStep = OnboardingLogic.HUB_STEPS[index + 1]
-		if nextStep == nil or nextStep.kind ~= "spotlight" then
-			task.wait(NEXT_DELAY)
-		end
-		if open then
-			showStep(index + 1)
-		end
+		showStep(index + 1)
 	end)
 end
 

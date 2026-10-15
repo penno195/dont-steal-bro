@@ -194,17 +194,9 @@ local function slotTile(locker: Locker, slot: () -> LockerLogic.Slot, index: num
 							iconFor(locker, id, SLOT_ICON, function()
 								return Theme.color.ink
 							end, { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0) }),
-							-- Owned stock always shows its count; a practice item never has one.
-							Base.text("caption", {
-								Name = "Count",
-								AnchorPoint = Vector2.new(1, 0),
-								Position = UDim2.fromScale(1, 0),
-								Size = UDim2.fromOffset(32, Theme.type.caption.size + Theme.spacing.xxs),
-								Text = function()
-									return "×" .. slot().stock
-								end,
-								TextXAlignment = Enum.TextXAlignment.Right,
-							}),
+							-- No count here: a slot always holds one, and "×2" on it
+							-- read as two loaded (owner, 2026-10-15). What's owned
+							-- shows on the stock grid.
 							Base.text("caption", {
 								Name = "Name",
 								AnchorPoint = Vector2.new(0, 1),

@@ -861,8 +861,10 @@ go?" offer. The plan and build order are in `onboarding.md`,
   read.
 - **Locker pacing (owner, 2026-10-15, after seam 3):** once the Freeze
   is in the loadout the player is prompted to press the X the same way,
-  straight away: one spotlight leads into the next with no 2 s gap, so
-  the dim never lifts between them.
+  straight away. This **replaces the 2 s pause above**: no step waits
+  before the next pop-up except the one after firing the power-up,
+  which waits **3 s**. A loadout slot never shows how many are owned
+  (a "×2" on it read as two loaded); a slot always holds one.
 
 ## 8. Are starting power-ups sold for Robux?
 
