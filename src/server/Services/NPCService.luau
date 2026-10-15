@@ -740,15 +740,34 @@ end
 --     canWalkStraight), where the direct path takes a long detour.
 -- Up to one ComputeAsync per hop, so NavigationService asks only when
 -- the target changes or the player strays off the line.
-local function walkableRoute(from: Vector3, to: Vector3): { Vector3 }
+--
+-- A hop that is neither walkable straight nor pathfindable is a guess:
+-- a straight line through whatever is between. That line is short, so
+-- it used to win on length and the path ran through walls and floors
+-- (playtest, 2026-10-15). Now a NavNode route with a guessed hop never
+-- beats a sound navmesh one. The last hop, onto the station itself, is
+-- let off when it's short: the station's centre sits inside its own
+-- solid part, which nothing can path to. The second result says whether
+-- the route is sound, so NavigationService can prefer a station it can
+-- really route to.
+local STATION_REACH_STUDS = 16
+local function walkableRoute(from: Vector3, to: Vector3): ({ Vector3 }, boolean)
 	local direct = navmeshPath(from, to)
 
 	local viaNodes: { Vector3 } = {}
+	local viaSound = true
 	local previous = from
 	local hops = routeBetween(from, to)
 	table.insert(hops, to)
-	for _, hop in hops do
-		local leg = if canWalkStraight(previous, hop) then nil else navmeshPath(previous, hop)
+	for index, hop in hops do
+		local straight = canWalkStraight(previous, hop)
+		local leg = if straight then nil else navmeshPath(previous, hop)
+		if not straight and leg == nil then
+			local onto = index == #hops and (hop - previous).Magnitude <= STATION_REACH_STUDS
+			if not onto then
+				viaSound = false
+			end
+		end
 		local legPoints: { Vector3 } = if leg ~= nil then leg else { hop }
 		for _, point in legPoints do
 			table.insert(viaNodes, point)
@@ -761,10 +780,17 @@ local function walkableRoute(from: Vector3, to: Vector3): { Vector3 }
 		previous = hop
 	end
 
-	if direct ~= nil and #direct > 0 and routeLength(from, direct) <= routeLength(from, viaNodes) then
-		return direct
+	if direct ~= nil and #direct > 0 then
+		-- The navmesh path ends near the station, not in it; finish it the
+		-- way the NavNode route does.
+		if (direct[#direct] - to).Magnitude > 1 then
+			table.insert(direct, to)
+		end
+		if not viaSound or routeLength(from, direct) <= routeLength(from, viaNodes) then
+			return direct, true
+		end
 	end
-	return viaNodes
+	return viaNodes, viaSound
 end
 
 -- ===== the race =============================================================

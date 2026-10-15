@@ -343,9 +343,12 @@ local function placementCard(standing: () -> HudLogic.Standing?): Frame
 	return placement
 end
 
--- The compass. A station a floor up or down turns the arrow, the
--- distance and the card's edge blue or orange, and adds a chevron
--- pointing that way, so it's told by shape as well as colour (P6-8).
+-- The compass: the arrow and distance side by side, the floor row under
+-- them. A station a floor up or down turns the card blue or orange and
+-- the floor row to an arrow and "UP" or "DOWN"; on your floor that row
+-- is a plain line. So it's told by shape and words as well as colour
+-- (P6-8).
+local FLOOR_ROW = 14
 local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean): Frame
 	local level = derive(function(): HudLogic.Level
 		local o = objective()
@@ -355,34 +358,60 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 		local l = level()
 		return if l == "above" then Theme.color.above elseif l == "below" then Theme.color.below else Theme.color.ink
 	end
-	local arrow = Icons.view("arrow", 28, tint)
-	arrow.LayoutOrder = 1
-	local done = Icons.view("check", 28, Theme.color.success)
+	local inner = PILL - 2 * Theme.spacing.xs
+	local top = RING - 2 * Theme.spacing.xs - FLOOR_ROW - Theme.spacing.xxs
+	-- The arrow turns inside a plain holder: a UIListLayout drops the
+	-- Rotation of its own children (AbsoluteRotation stays 0), which left
+	-- the compass pointing straight up whatever the bearing (playtest,
+	-- 2026-10-15). The holder is laid out; the arrow inside it is not.
+	local arrow = Icons.view("arrow", top, tint)
+	local arrowHolder = create("Frame")({
+		Name = "ArrowHolder",
+		LayoutOrder = 1,
+		BackgroundTransparency = 1,
+		Size = UDim2.fromOffset(top, top),
+		arrow,
+	}) :: Frame
+	local done = Icons.view("check", top, Theme.color.success)
 	done.LayoutOrder = 1
-	local chevron = Icons.view("chevron", 14, tint)
-	chevron.LayoutOrder = 1
+	-- The floor row swaps icons rather than turning one, for the same
+	-- reason.
+	local floorUp = Icons.view("arrow", FLOOR_ROW - 2, tint)
+	floorUp.LayoutOrder = 1
+	local floorDown = Icons.view("down", FLOOR_ROW - 2, tint)
+	floorDown.LayoutOrder = 1
+	local floorLine = create("Frame")({
+		Name = "SameFloor",
+		LayoutOrder = 1,
+		Size = UDim2.fromOffset(inner - 4 * Theme.spacing.xs, 2),
+		BackgroundColor3 = Theme.color.ink,
+		BackgroundTransparency = 0.3,
+		BorderSizePixel = 0,
+		Base.corner(Theme.radius.pill),
+	}) :: Frame
 	effect(function()
 		local o = objective()
+		local l = level()
 		arrow.Rotation = if o then o.bearing else 0
-		arrow.Visible = o ~= nil and not allDone()
+		arrowHolder.Visible = o ~= nil and not allDone()
 		done.Visible = allDone()
-		chevron.Visible = level() ~= "level" and not allDone()
-		chevron.Rotation = if level() == "below" then 180 else 0
+		floorUp.Visible = l == "above" and not allDone()
+		floorDown.Visible = l == "below" and not allDone()
+		floorLine.Visible = l == "level" and o ~= nil and not allDone()
 	end)
 	local panel = card("Objective", 3, UDim2.fromOffset(PILL, RING), {
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Vertical,
 			HorizontalAlignment = Enum.HorizontalAlignment.Center,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
+			Padding = UDim.new(0, Theme.spacing.xxs),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
-		arrow,
-		done,
 		create("Frame")({
 			Name = "Reading",
-			LayoutOrder = 2,
+			LayoutOrder = 1,
 			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(PILL - 2 * Theme.spacing.xs, 20),
+			Size = UDim2.fromOffset(inner, top),
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Horizontal,
 				HorizontalAlignment = Enum.HorizontalAlignment.Center,
@@ -390,11 +419,14 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 				Padding = UDim.new(0, Theme.spacing.xxs),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
-			chevron,
+			arrowHolder,
+			done,
 			Base.text("label", {
 				Name = "Distance",
 				LayoutOrder = 2,
-				Size = UDim2.fromOffset(40, 20),
+				Size = UDim2.fromOffset(inner - top - Theme.spacing.xxs, top),
+				TextWrapped = false,
+				TextXAlignment = Enum.TextXAlignment.Left,
 				TextColor3 = function(): Color3
 					return if allDone() then Theme.color.ink else tint()
 				end,
@@ -405,6 +437,36 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 					end
 					return if o then tostring(math.floor(o.distance)) else "-"
 				end),
+			}),
+		}),
+		create("Frame")({
+			Name = "Floor",
+			LayoutOrder = 2,
+			BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(inner, FLOOR_ROW),
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, Theme.spacing.xxs),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			floorUp,
+			floorDown,
+			floorLine,
+			Base.text("caption", {
+				Name = "FloorWord",
+				LayoutOrder = 2,
+				Size = UDim2.fromOffset(34, FLOOR_ROW),
+				TextWrapped = false,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextColor3 = tint,
+				Visible = function()
+					return level() ~= "level" and not allDone()
+				end,
+				Text = function()
+					return if level() == "below" then "DOWN" else "UP"
+				end,
 			}),
 		}),
 	})

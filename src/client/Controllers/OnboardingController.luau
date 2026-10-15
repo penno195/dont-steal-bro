@@ -268,6 +268,14 @@ local function botNear(): boolean
 	return OnboardingLogic.botInReach(distances, BOT_REACH)
 end
 
+-- The pause after the Freeze is fired: the next pop-up waits FIRE_DELAY.
+local function startFirePause()
+	if isTutorial() and racing and not steps.freeze then
+		firedAt = os.clock()
+		task.delay(FIRE_DELAY, sync)
+	end
+end
+
 -- The Freeze step's gate. Its pop-up opens when a bot is in reach; a
 -- player with no Freeze left by then (or after) skips it, so the round
 -- is never held for an item they can't fire.
@@ -280,7 +288,14 @@ local function pollGate()
 		return
 	end
 	if not holdsFreeze then
-		if opened[current.id] or botNear() then
+		if opened[current.id] then
+			-- Gone after its pop-up opened: almost always because it was
+			-- just fired. The inventory change lands before
+			-- PowerUpUseResult, so the pause has to start here too, or
+			-- the next pop-up opened at once (playtest, 2026-10-15).
+			startFirePause()
+			completeStep(current.id)
+		elseif botNear() then
 			completeStep(current.id)
 		end
 	elseif not opened[current.id] and botNear() then
@@ -522,10 +537,7 @@ function OnboardingController:init()
 	-- Firing the Freeze counts, whether it lands or not (owner).
 	Net.onClientEvent("PowerUpUseResult", function(payload: any)
 		if payload.success == true and payload.powerUpId == GameConfig.tutorial.lockerGiftPowerUpId then
-			if isTutorial() and racing and not steps.freeze then
-				firedAt = os.clock()
-				task.delay(FIRE_DELAY, sync)
-			end
+			startFirePause()
 			completeStep("freeze")
 		end
 	end)

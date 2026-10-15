@@ -53,8 +53,11 @@ local SMOOTH_PASSES = 3 -- corner-cutting rounds; more = wider curves
 local SMOOTH_STEP = 1.5 -- studs between the points it cuts, which caps how wide
 local RESHAPE_SECONDS = 0.15 -- how often the dots re-anchor to the player
 -- How far down to look for the floor under a waypoint (NavNodes and
--- station parts sit at whatever height they were placed).
-local FLOOR_REACH = 14
+-- station parts sit at whatever height they were placed). Kept under a
+-- storey: at 14 a waypoint on a ledge's edge missed its own floor and
+-- found the one below, and the line dived through it (playtest,
+-- 2026-10-15). Over a gap the waypoint is used as it is.
+local FLOOR_REACH = 8
 
 local selfId = Players.LocalPlayer.UserId
 
@@ -169,8 +172,9 @@ end
 -- Waist-high dots along the route, its corners rounded off, with a pulse
 -- running from the player towards the station (owner, 2026-10-08). The
 -- dots are pooled: a new route or a step forward moves them rather than
--- rebuilding them. A Highlight drawn on top of everything keeps them
--- showing, faintly, through a floor or a wall in the way.
+-- rebuilding them. The Highlight's glow is hidden behind walls and floors
+-- like the dots themselves (owner, 2026-10-15): drawn on top, a route
+-- on the floor below read as a line through your own floor.
 
 local lineModel: Model? = nil
 local pool: { BasePart } = {}
@@ -219,7 +223,7 @@ local function ensureModel(): Model
 	local model = Instance.new("Model")
 	model.Name = "NavigationPath"
 	local highlight = Instance.new("Highlight")
-	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 	highlight.FillColor = Theme.color.brand
 	highlight.FillTransparency = 0.6
 	highlight.OutlineTransparency = 1

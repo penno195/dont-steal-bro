@@ -178,13 +178,15 @@ local function refresh(player: Player)
 	local bestId: string? = nil
 	local bestRoute: { Vector3 } = {}
 	local bestLength = math.huge
+	local bestSound = false
 	-- pcall: a throw mid-route must not leave `computing` stuck on.
 	pcall(function()
 		for _, stationId in NavigationLogic.shortlist(toPoint(from), candidates, SHORTLIST) do
-			local points = NPCService.walkableRoute(from, remaining[stationId]) :: { Vector3 }
-			local length = PathLogic.length(toPoint(from), toPoints(points))
-			if length < bestLength then
-				bestId, bestRoute, bestLength = stationId, points, length
+			local points, sound = NPCService.walkableRoute(from, remaining[stationId])
+			local length = PathLogic.length(toPoint(from), toPoints(points :: { Vector3 }))
+			-- A route that really runs beats a shorter guess through a wall.
+			if (sound and not bestSound) or (sound == bestSound and length < bestLength) then
+				bestId, bestRoute, bestLength, bestSound = stationId, points :: { Vector3 }, length, sound :: boolean
 			end
 		end
 	end)
