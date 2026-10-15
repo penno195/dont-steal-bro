@@ -227,7 +227,8 @@ local function validGameConfig(): Validate.GameConfig
 			rewardPowerUps = { ["sprint-boost"] = 1 },
 			practicePickupPowerUpIds = { "push-trip" },
 			practicePickupClaimRadius = 6,
-			lockerGiftPowerUpId = "sprint-boost",
+			lockerGiftPowerUpId = "push-trip",
+			explainerGlowSeconds = 10,
 		},
 		dailyHunt = { spotTag = "HubDailyHuntSpot", claimRadius = 12, powerUpChance = 0.5, coins = 25 },
 		studioTest = { enabled = true, mapId = "GrayBoxTest", minHumans = 1, startDelaySeconds = 3 },
@@ -2952,6 +2953,17 @@ TestRunner.describe("Validate - tutorial reward", function()
 		TestRunner.expect(count(runTutorial(config), "tutorial.lockerGiftPowerUpId")):toBe(1)
 		config.tutorial.lockerGiftPowerUpId = ""
 		TestRunner.expect(count(runTutorial(config), "lockerGiftPowerUpId")):toBe(1)
+		-- The guided round fires it at a bot.
+		config.tutorial.lockerGiftPowerUpId = "sprint-boost"
+		TestRunner.expect(count(runTutorial(config), "tutorial.lockerGiftPowerUpId")):toBe(1)
+	end)
+
+	TestRunner.it("refuses an explainer glow outside 1 to 60 seconds", function()
+		local config = validGameConfig()
+		config.tutorial.explainerGlowSeconds = 0
+		TestRunner.expect(count(runTutorial(config), "tutorial.explainerGlowSeconds")):toBe(1)
+		config.tutorial.explainerGlowSeconds = 61
+		TestRunner.expect(count(runTutorial(config), "tutorial.explainerGlowSeconds")):toBe(1)
 	end)
 
 	TestRunner.it("refuses bots that would go faster than usual", function()

@@ -22,6 +22,7 @@
 
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
@@ -43,6 +44,10 @@ export type Action = {
 	variant: ("primary" | "secondary" | "danger")?,
 	disabled: (boolean | Base.Source<boolean>)?,
 	loading: (boolean | Base.Source<boolean>)?,
+	-- Seconds after opening until a glowing ring starts pulsing round
+	-- the button (the guided round's explainers, owner 2026-10-15): a
+	-- nudge for a player who's stuck on a pop-up.
+	glowAfter: number?,
 }
 
 export type CornerAction = {
@@ -85,9 +90,58 @@ local ACTION_WIDTH = CARD_WIDTH - 2 * Theme.spacing.lg
 -- The corner link's visual width: room for a short word like "Skip".
 local CORNER_WIDTH = 56
 
+local GLOW_PAD = 4 -- px the ring sits outside the button
+local GLOW_PULSE_SECONDS = 0.8
+
 local Modal = {}
 
 Modal.CONTENT_WIDTH = ACTION_WIDTH
+
+-- A brand ring round `button` that breathes, from `after` seconds on.
+-- Inside the modal's Vide scope, so it stops with the modal. Under
+-- reduced motion it just appears, steady.
+local function glow(button: Instance, after: number)
+	local ring = create("Frame")({
+		Name = "Glow",
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Size = UDim2.new(1, 2 * GLOW_PAD, 1, 2 * GLOW_PAD),
+		BackgroundTransparency = 1,
+		Visible = false,
+		ZIndex = 5,
+		Base.corner(UDim.new(Theme.radius.lg.Scale, Theme.radius.lg.Offset + GLOW_PAD)),
+		create("UIStroke")({
+			Name = "Stroke",
+			Color = Theme.color.brand,
+			Thickness = 3,
+			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+		}),
+		Parent = button,
+	}) :: Frame
+	local stroke = ring:FindFirstChild("Stroke") :: UIStroke
+	local conn: RBXScriptConnection? = nil
+	local timer = task.delay(after, function()
+		ring.Visible = true
+		if Env.reducedMotion() then
+			return
+		end
+		local start = os.clock()
+		conn = RunService.RenderStepped:Connect(function()
+			local pulse = math.abs(math.sin((os.clock() - start) / GLOW_PULSE_SECONDS * math.pi))
+			local grow = GLOW_PAD + 3 * pulse
+			ring.Size = UDim2.new(1, 2 * grow, 1, 2 * grow)
+			stroke.Transparency = 0.5 * pulse
+		end)
+	end)
+	cleanup(function()
+		if coroutine.status(timer) ~= "dead" then
+			task.cancel(timer)
+		end
+		if conn ~= nil then
+			conn:Disconnect()
+		end
+	end)
+end
 
 -- A 16:9 picture as `content` (the tutorial's step and intro pictures):
 -- a Studio screenshot, full content width, shrunk by fitToScreen on a
@@ -128,19 +182,20 @@ function Modal.card(props: Props): Frame
 		else ACTION_WIDTH
 	local buttons: { Instance } = {}
 	for i, action in props.actions do
-		table.insert(
-			buttons,
-			Button({
-				label = action.label,
-				onActivate = action.onActivate,
-				variant = action.variant or (if i == 1 then "primary" else "secondary"),
-				disabled = action.disabled,
-				loading = action.loading,
-				width = actionWidth,
-				order = i,
-				layoutOrder = 10 + i,
-			})
-		)
+		local button = Button({
+			label = action.label,
+			onActivate = action.onActivate,
+			variant = action.variant or (if i == 1 then "primary" else "secondary"),
+			disabled = action.disabled,
+			loading = action.loading,
+			width = actionWidth,
+			order = i,
+			layoutOrder = 10 + i,
+		})
+		if action.glowAfter ~= nil then
+			glow(button, action.glowAfter)
+		end
+		table.insert(buttons, button)
 	end
 	if props.corner then
 		-- No layout on the row itself: the buttons centre in a strip of

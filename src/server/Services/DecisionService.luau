@@ -185,6 +185,10 @@ type PersonalResult = { streakBefore: number, streakAfter: number, won: boolean,
 local personalResults: { [number]: PersonalResult } = {}
 
 local pendingPhaseTimerThread: thread? = nil
+-- What the pending timer will do and when; kept through a tutorial pause
+-- (setTimerPaused), with the seconds it had left.
+local pendingPhaseTimer: { endsAt: number, onEnd: () -> () }? = nil
+local pausedSecondsLeft: number? = nil
 
 -- The Intro's ready-up (FinaleRoster.allReady): who has tapped "Got it",
 -- and when the Intro began, for the introMinSeconds floor.
@@ -235,6 +239,44 @@ local function cancelPendingPhaseTimer()
 	if pendingPhaseTimerThread ~= nil then
 		task.cancel(pendingPhaseTimerThread)
 		pendingPhaseTimerThread = nil
+	end
+	pendingPhaseTimer = nil
+	pausedSecondsLeft = nil
+end
+
+-- Every phase timer goes through here, so a pause (setTimerPaused) knows
+-- what to run and when.
+local function startPhaseTimer(duration: number, onEnd: () -> ())
+	cancelPendingPhaseTimer()
+	pendingPhaseTimer = { endsAt = now() + duration, onEnd = onEnd }
+	pendingPhaseTimerThread = task.delay(duration, function()
+		pendingPhaseTimerThread = nil
+		pendingPhaseTimer = nil
+		onEnd()
+	end)
+end
+
+-- The guided tutorial round only (TutorialService): while an explainer
+-- pop-up is up, Negotiate's or Choose's clock stands still (owner,
+-- 2026-10-15). Clients get the phase again with no endsAt (the ring
+-- hides under the pop-up), then the new endsAt on resume. Not
+-- broadcastPhase: that would re-fire the phase's enter signal. Locking
+-- in still works, and a reveal cancels the pause with the timer.
+local function setTimerPaused(paused: boolean)
+	if currentPhase ~= "Negotiate" and currentPhase ~= "Choose" then
+		return
+	end
+	if paused and pendingPhaseTimer ~= nil and pausedSecondsLeft == nil then
+		local timer = pendingPhaseTimer
+		local left = math.max(0, timer.endsAt - now())
+		cancelPendingPhaseTimer()
+		pendingPhaseTimer = timer
+		pausedSecondsLeft = left
+		Net.fireAllClients("DecisionPhaseChanged", { phase = currentPhase, endsAt = nil })
+	elseif not paused and pendingPhaseTimer ~= nil and pausedSecondsLeft ~= nil then
+		local left = pausedSecondsLeft :: number
+		startPhaseTimer(left, pendingPhaseTimer.onEnd)
+		Net.fireAllClients("DecisionPhaseChanged", { phase = currentPhase, endsAt = now() + left })
 	end
 end
 
@@ -433,10 +475,7 @@ enterReveal = function(outcome: Outcomes.OutcomeResult)
 		end
 	end
 
-	pendingPhaseTimerThread = task.delay(duration, function()
-		pendingPhaseTimerThread = nil
-		enterResolve()
-	end)
+	startPhaseTimer(duration, enterResolve)
 end
 
 -- Steps 1-4, the one function both the Choose timer AND an early
@@ -471,20 +510,14 @@ enterChoose = function()
 	local duration = GameConfig.studioTimers.chooseSeconds
 	broadcastPhase("Choose", now() + duration)
 
-	pendingPhaseTimerThread = task.delay(duration, function()
-		pendingPhaseTimerThread = nil
-		resolveAndReveal()
-	end)
+	startPhaseTimer(duration, resolveAndReveal)
 end
 
 enterNegotiate = function()
 	local duration = GameConfig.studioTimers.negotiateSeconds
 	broadcastPhase("Negotiate", now() + duration)
 
-	pendingPhaseTimerThread = task.delay(duration, function()
-		pendingPhaseTimerThread = nil
-		enterChoose()
-	end)
+	startPhaseTimer(duration, enterChoose)
 end
 
 -- The Intro is the loading card's reading time. Its length is set for
@@ -513,10 +546,7 @@ enterIntro = function()
 	broadcastPhase("Intro", introStartedAt + duration)
 	broadcastReady()
 
-	pendingPhaseTimerThread = task.delay(duration, function()
-		pendingPhaseTimerThread = nil
-		enterNegotiate()
-	end)
+	startPhaseTimer(duration, enterNegotiate)
 end
 
 -- Ends the Intro now if every finalist is ready, or at the floor if
@@ -536,10 +566,7 @@ local function checkIntroReady()
 	-- Not broadcastPhase: that would re-fire Intro's enter signal and
 	-- re-run staging.
 	Net.fireAllClients("DecisionPhaseChanged", { phase = "Intro", endsAt = now() + wait })
-	pendingPhaseTimerThread = task.delay(wait, function()
-		pendingPhaseTimerThread = nil
-		enterNegotiate()
-	end)
+	startPhaseTimer(wait, enterNegotiate)
 end
 
 -- Same silent-drop stance as lockIn: nothing goes back to the sender.
@@ -942,6 +969,9 @@ local DecisionService: Loader.Service = {
 	getPhase = function(): Phase?
 		return currentPhase
 	end,
+
+	-- The guided tutorial round's explainer pause (TutorialService).
+	setTimerPaused = setTimerPaused,
 
 	getQualifierIds = function(): { number }
 		return table.clone(qualifierIds)

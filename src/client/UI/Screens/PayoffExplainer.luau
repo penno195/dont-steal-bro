@@ -154,22 +154,49 @@ function PayoffExplainer.content(seats: number): ScrollingFrame
 	}) :: ScrollingFrame
 end
 
+-- The guided tutorial round's hooks (OnboardingController sets them
+-- while Workspace's TutorialMatch is on, nil otherwise): every opening,
+-- from the Studio's (i) or the auto-open, pauses the Studio's clock
+-- until closed, and its button glows after `glowAfter` seconds.
+export type TutorialHooks = { glowAfter: number, onOpen: () -> (), onClose: () -> () }
+local tutorial: TutorialHooks? = nil
+
+function PayoffExplainer.setTutorial(hooks: TutorialHooks?)
+	tutorial = hooks
+end
+
 -- Opens the sheet. Returns `close`. `seats` is the finalist count; the
 -- default 3 is every real Studio (NPCs fill empty seats, Q2).
 function PayoffExplainer.open(seats: number?, onClosed: (() -> ())?): () -> ()
-	local close: () -> ()
+	local hooks = tutorial
+	local closeModal: () -> ()
+	local closed = false
+	local function close()
+		closeModal()
+		if not closed then
+			closed = true
+			if hooks ~= nil then
+				hooks.onClose()
+			end
+		end
+	end
 	local function done()
 		close()
 		if onClosed then
 			onClosed()
 		end
 	end
-	close = C.Modal.open({
+	if hooks ~= nil then
+		hooks.onOpen()
+	end
+	closeModal = C.Modal.open({
 		title = DecisionLogic.EXPLAINER.title,
 		content = function()
 			return PayoffExplainer.content(seats or 3)
 		end,
-		actions = { { label = "Got it", onActivate = done } },
+		actions = {
+			{ label = "Got it", onActivate = done, glowAfter = if hooks ~= nil then hooks.glowAfter else nil },
+		},
 		dismissible = true,
 		onDismiss = done,
 	})

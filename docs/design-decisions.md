@@ -866,6 +866,16 @@ go?" offer. The plan and build order are in `onboarding.md`,
   which waits **3 s**. A loadout slot never shows how many are owned
   (a "×2" on it read as two loaded); a slot always holds one.
 
+- **Guided round answers (owner, 2026-10-15, before seam 4):** the
+  "Use your Freeze" step comes **after the first task, once a bot is
+  within Freeze's reach**; a player with no Freeze loaded gets a
+  **round-only Freeze** in an empty slot (stock untouched); **firing
+  counts**, landing or not; the Negotiate and Choose cards act like the
+  explainers (**clock paused while up, OK glows after 10 s**), and at
+  Negotiate the card follows How it works. Claude's calls: a player who
+  has no Freeze left when the step comes (fired or discarded early)
+  skips it, and the next pop-up waits 3 s after firing, as in the hub.
+
 ## 8. Are starting power-ups sold for Robux?
 
 **Decision:** Power-ups may be purchased with Robux, provided **every**

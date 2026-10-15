@@ -740,7 +740,8 @@ export type TutorialConfig = {
 	rewardPowerUps: { [string]: number }, -- power-up id -> how many go into loadout stock
 	practicePickupPowerUpIds: { string }, -- the hub step's personal pickup: Aimed items, one at random
 	practicePickupClaimRadius: number, -- studs from the pickup a claim may be made from
-	lockerGiftPowerUpId: string, -- the hub Locker step's free power-up, once per account
+	lockerGiftPowerUpId: string, -- the hub Locker step's free power-up, once per account; also the guided round's Freeze step
+	explainerGlowSeconds: number, -- the guided round's explainer pop-ups glow their button after this long
 }
 
 -- The daily hunt (design-decisions.md Q1, "the daily hunt"): one hidden
@@ -3234,6 +3235,9 @@ local function checkTutorialConfig(tc: TutorialConfig, issues: { Issue })
 	if type(tc.lockerGiftPowerUpId) ~= "string" or tc.lockerGiftPowerUpId == "" then
 		bad("lockerGiftPowerUpId", "must name a power-up id")
 	end
+	if type(tc.explainerGlowSeconds) ~= "number" or tc.explainerGlowSeconds < 1 or tc.explainerGlowSeconds > 60 then
+		bad("explainerGlowSeconds", "must be a number from 1 to 60 seconds")
+	end
 end
 
 local function checkDailyHuntConfig(dh: DailyHuntConfig, issues: { Issue })
@@ -4785,6 +4789,8 @@ function Validate.run(input: RegistryInput): { Issue }
 	end
 	-- The Locker step's gift goes into loadout stock, and the step has
 	-- the player put it in their loadout: it must exist and be eligible.
+	-- The guided round's "Use your Freeze" step then fires it at a bot,
+	-- so it must be Aimed too.
 	if tutorialOn and type(tutorial.lockerGiftPowerUpId) == "string" and tutorial.lockerGiftPowerUpId ~= "" then
 		local found: any = nil
 		for _, entry in input.powerUps do
@@ -4792,13 +4798,13 @@ function Validate.run(input: RegistryInput): { Issue }
 				found = entry.def
 			end
 		end
-		if found == nil or not (found.acquisition and found.acquisition.loadoutEligible) then
+		if found == nil or not (found.acquisition and found.acquisition.loadoutEligible) or found.target ~= "Aimed" then
 			issue(
 				issues,
 				"GameConfig",
 				"GameConfig.luau",
 				"tutorial.lockerGiftPowerUpId",
-				string.format("%q is not a loadout-eligible power-up id", tutorial.lockerGiftPowerUpId)
+				string.format("%q is not a loadout-eligible Aimed power-up id", tutorial.lockerGiftPowerUpId)
 			)
 		end
 	end

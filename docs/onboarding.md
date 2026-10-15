@@ -265,7 +265,21 @@ leaves the game playable.
    spotlight the Freeze item until it's in the loadout, spotlight the
    close button, and show the "press Play" card with Play spotlit.
    Play starts the guided round (`QueueController.startTutorial`).
-4. **Guided round.** `OnboardingLogic.STEPS` keeps station, task and
+4. **Guided round.** *Done (not yet seen in Studio). STEPS are station,
+   task, freeze, finish. The Freeze step's pop-up waits for a bot within
+   reach (`powerUpUseRangeStuds` less the lock-on slack) after the first
+   task, then the round stays frozen (a `step` hold) until the Freeze is
+   fired; firing counts, and the next pop-up waits 3 s as in the hub. A
+   player holding no Freeze by then skips the step. TutorialService puts
+   a round-only Freeze (`lockerGiftPowerUpId`, now required to be Aimed)
+   in an empty slot at Race if none was loaded. In the Studio, How it
+   works and the Negotiate/Choose cards (`OnboardingLogic.STUDIO_CARDS`,
+   titles "Talk it out"/"Steal or Share?" are Claude's draft) pause the
+   phase clock through the same TutorialPause intent
+   (`DecisionService.setTimerPaused`), and their button glows after
+   `tutorial.explainerGlowSeconds` (Modal action `glowAfter`). The Freeze
+   step's copy is Claude's draft and it has no picture yet (seam 5).*
+   `OnboardingLogic.STEPS` keeps station, task and
    finish, and drops grab and use. Add a **"Use your Freeze"** step:
    the round stays frozen (as for the other step pop-ups) until the
    player uses their loadout Freeze on a bot. In the tutorial,

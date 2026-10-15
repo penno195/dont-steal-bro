@@ -29,6 +29,15 @@
 -- gets How it works on their own as the Studio's talking starts, before
 -- they pick.
 --
+-- Tutorial v2 (owner, 2026-10-15): the "Use your Freeze" step waits for
+-- a bot in reach after the first task, then keeps the round frozen
+-- past "Got it" until the Freeze is fired (a player holding no Freeze
+-- by then skips it). In the Studio, How it works and the Negotiate and
+-- Choose cards pause its clock while up, and their button glows after
+-- GameConfig.tutorial.explainerGlowSeconds. Every reason to pause is a
+-- `hold`; TutorialPause goes out when the first starts and the last
+-- ends, and the server applies it to whichever part of the round it is.
+--
 -- THE HUB TUTORIAL borrows the same corner card (`remind`): after one of
 -- its step cards, the step stays up there until the player has done it.
 
@@ -93,9 +102,46 @@ local popupId = source(nil :: string?)
 -- The hub tutorial's current step, set by HubIntroController.
 local hubReminder = source(nil :: { title: string, body: string }?)
 local closePopup: (() -> ())? = nil
+-- Gated steps (OnboardingLogic.Step.gate) whose gate has opened.
+local opened: { [string]: boolean } = {}
+local holdsFreeze = false
+-- A bot this close (studs) opens the Freeze step: a little inside the
+-- power-up's reach, so the lock-on still finds it.
+local BOT_REACH = GameConfig.powerUpUseRangeStuds - GameConfig.powerUpLockOnSlackStuds
+local GATE_POLL_SECONDS = 0.25
+-- After the Freeze is fired the round runs this long before the next
+-- pop-up, so the player sees it land (the hub tutorial's pause after
+-- firing, owner 2026-10-15).
+local FIRE_DELAY = 3
+local firedAt: number? = nil
+-- The Studio cards: the one up, and the phases already shown this round.
+local closeStudioCard: (() -> ())? = nil
+local studioCardsShown: { [string]: boolean } = {}
 
 local function isTutorial(): boolean
 	return Workspace:GetAttribute("TutorialMatch") == true
+end
+
+-- Why the round is paused right now (tutorial only), by reason.
+local holds: { [string]: boolean } = {}
+
+local function anyHold(): boolean
+	return next(holds) ~= nil
+end
+
+local function setHold(reason: string, on: boolean)
+	if (holds[reason] == true) == on then
+		return
+	end
+	local before = anyHold()
+	if on then
+		holds[reason] = true
+	else
+		holds[reason] = nil
+	end
+	if anyHold() ~= before then
+		Net.fireServer("TutorialPause", { paused = on })
+	end
 end
 
 local dismiss: () -> ()
@@ -107,8 +153,8 @@ local function hidePopup()
 	end
 	if popupId() ~= nil then
 		popupId(nil)
-		Net.fireServer("TutorialPause", { paused = false })
 	end
+	setHold("popup", false)
 end
 
 -- A step not yet read gets its pop-up, and the round freezes under it.
@@ -147,17 +193,24 @@ local function syncPopup(current: OnboardingLogic.Step?)
 		dismissible = true,
 		onDismiss = gotIt,
 	})
-	if popupId() == nil then
-		Net.fireServer("TutorialPause", { paused = true })
-	end
+	setHold("popup", true)
 	popupId(id)
 end
 
 local function sync()
 	local tutorial = isTutorial()
 	local current = if tutorial and racing then OnboardingLogic.currentStep(steps) else nil
+	-- A gated step shows nothing, not even the corner card, until its
+	-- gate opens.
+	if current ~= nil and current.gate ~= nil and not opened[current.id] then
+		current = nil
+	end
+	if firedAt ~= nil and os.clock() - firedAt < FIRE_DELAY then
+		current = nil
+	end
 	step(current)
 	syncPopup(current)
+	setHold("step", current ~= nil and current.holdUntilDone == true)
 	local id = if enabled and not tutorial then state.showing else nil
 	local tip = if id then OnboardingLogic.tip(id) else nil
 	showing(tip)
@@ -195,6 +248,79 @@ local function completeStep(id: OnboardingLogic.StepId)
 		OnboardingLogic.completeStep(steps, id)
 		sync()
 	end
+end
+
+-- Is any bot within BOT_REACH of the player?
+local function botNear(): boolean
+	local character = Players.LocalPlayer.Character
+	local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
+	local folder = Workspace:FindFirstChild("NPCs")
+	if root == nil or not root:IsA("BasePart") or folder == nil then
+		return false
+	end
+	local distances: { number } = {}
+	for _, bot in folder:GetChildren() do
+		if bot:IsA("Model") then
+			table.insert(distances, (bot:GetPivot().Position - root.Position).Magnitude)
+		end
+	end
+	return OnboardingLogic.botInReach(distances, BOT_REACH)
+end
+
+-- The Freeze step's gate. Its pop-up opens when a bot is in reach; a
+-- player with no Freeze left by then (or after) skips it, so the round
+-- is never held for an item they can't fire.
+local function pollGate()
+	if not (isTutorial() and racing) then
+		return
+	end
+	local current = OnboardingLogic.currentStep(steps)
+	if current == nil or current.gate ~= "botNear" then
+		return
+	end
+	if not holdsFreeze then
+		if opened[current.id] or botNear() then
+			completeStep(current.id)
+		end
+	elseif not opened[current.id] and botNear() then
+		opened[current.id] = true
+		sync()
+	end
+end
+
+-- The guided round's Negotiate and Choose cards, once each, with the
+-- clock paused while up. At Negotiate it follows How it works.
+local function showStudioCard(phase: string)
+	local cardCopy = OnboardingLogic.STUDIO_CARDS[phase]
+	if cardCopy == nil or studioCardsShown[phase] then
+		return
+	end
+	studioCardsShown[phase] = true
+	if closeStudioCard ~= nil then
+		closeStudioCard()
+	end
+	local close: () -> ()
+	local function gotIt()
+		close()
+	end
+	local modalClose = C.Modal.open({
+		title = cardCopy.title,
+		body = cardCopy.body,
+		actions = {
+			{ label = "Got it", onActivate = gotIt, glowAfter = GameConfig.tutorial.explainerGlowSeconds },
+		},
+		dismissible = true,
+		onDismiss = gotIt,
+	})
+	close = function()
+		modalClose()
+		if closeStudioCard == close then
+			closeStudioCard = nil
+			setHold("studioCard", false)
+		end
+	end
+	closeStudioCard = close
+	setHold("studioCard", true)
 end
 
 -- The whole card is the close button: one big target, no hunting for an
@@ -309,7 +435,14 @@ local function onRoundState(payload: any)
 	if payload.state == "Loading" then
 		steps = OnboardingLogic.newSteps()
 		acked = {}
+		opened = {}
+		firedAt = nil
 		explained = false
+		studioCardsShown = {}
+	end
+	-- Studio pop-ups never outlive the Studio.
+	if payload.state ~= "DecisionStudio" and payload.state ~= "Qualified" and closeStudioCard ~= nil then
+		closeStudioCard()
 	end
 	local stage = STAGE_OF_ROUND[payload.state]
 	if stage ~= state.stage then
@@ -349,8 +482,13 @@ function OnboardingController:init()
 	Net.onClientEvent("PowerUpInventoryChanged", function(payload: any)
 		if type(payload.inventory) == "table" and payload.inventory[1] ~= nil then
 			trigger("powerUp")
-			completeStep("grab")
 		end
+		local held = false
+		for _, item in (if type(payload.inventory) == "table" then payload.inventory else {}) :: { any } do
+			held = held or item.powerUpId == GameConfig.tutorial.lockerGiftPowerUpId
+		end
+		holdsFreeze = held
+		pollGate()
 	end)
 
 	-- The guided round's steps. A station's prompt showing means they
@@ -379,9 +517,14 @@ function OnboardingController:init()
 			completeStep("finish")
 		end
 	end)
+	-- Firing the Freeze counts, whether it lands or not (owner).
 	Net.onClientEvent("PowerUpUseResult", function(payload: any)
-		if payload.success == true then
-			completeStep("use")
+		if payload.success == true and payload.powerUpId == GameConfig.tutorial.lockerGiftPowerUpId then
+			if isTutorial() and racing and not steps.freeze then
+				firedAt = os.clock()
+				task.delay(FIRE_DELAY, sync)
+			end
+			completeStep("freeze")
 		end
 	end)
 
@@ -421,10 +564,24 @@ function OnboardingController:init()
 		if isFinalist ~= true then
 			return
 		end
-		-- The guided round: How it works opens by itself before they pick.
-		if isTutorial() and not explained and (payload.phase == "Negotiate" or payload.phase == "Choose") then
-			explained = true
-			PayoffExplainer.open(seats)
+		local phase = payload.phase
+		local running = phase == "Negotiate" or phase == "Choose"
+		-- A pause asked for before the clock could stop (an explainer
+		-- opened in the Intro) is asked again once it can.
+		if isTutorial() and running and payload.endsAt ~= nil and anyHold() then
+			Net.fireServer("TutorialPause", { paused = true })
+		end
+		-- The guided round: How it works opens by itself before they
+		-- pick, then the phase's card.
+		if isTutorial() and running then
+			if not explained then
+				explained = true
+				PayoffExplainer.open(seats, function()
+					showStudioCard(phase)
+				end)
+			elseif not studioCardsShown[phase] and not anyHold() then
+				showStudioCard(phase)
+			end
 		end
 		if payload.phase == "Negotiate" then
 			trigger("negotiate")
@@ -439,9 +596,31 @@ function OnboardingController.remind(title: string?, body: string?)
 	hubReminder(if title ~= nil and body ~= nil then { title = title, body = body } else nil)
 end
 
+local function syncTutorial()
+	PayoffExplainer.setTutorial(if isTutorial()
+		then {
+			glowAfter = GameConfig.tutorial.explainerGlowSeconds,
+			onOpen = function()
+				setHold("explainer", true)
+			end,
+			onClose = function()
+				setHold("explainer", false)
+			end,
+		}
+		else nil)
+	sync()
+end
+
 function OnboardingController:start()
 	mount()
-	Workspace:GetAttributeChangedSignal("TutorialMatch"):Connect(sync)
+	Workspace:GetAttributeChangedSignal("TutorialMatch"):Connect(syncTutorial)
+	syncTutorial()
+	task.spawn(function()
+		while true do
+			task.wait(GATE_POLL_SECONDS)
+			pollGate()
+		end
+	end)
 	-- Follows the setting. Turning tips back on replays them.
 	local settings = Loader.get("SettingsController") :: any
 	Env.observe(function(): boolean

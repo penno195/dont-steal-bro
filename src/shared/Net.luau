@@ -1157,9 +1157,10 @@ Net.Remotes = {
 
 	-- Client -> server: a guided-round step pop-up opened (`paused =
 	-- true`) or its "Got it" was tapped (false). TutorialService freezes
-	-- the round meanwhile: bots stop and the player is held still. Only
-	-- honoured in a tutorial round's race, which is solo, so a client
-	-- spamming it only stalls its own round.
+	-- the round meanwhile: bots stop and the player is held still. In
+	-- the Decision Studio it's an explainer pop-up instead, and the
+	-- phase clock stands still. Only honoured in a tutorial round, which
+	-- is solo, so a client spamming it only stalls its own round.
 	TutorialPause = {
 		name = "TutorialPause",
 		direction = "ServerIntent",

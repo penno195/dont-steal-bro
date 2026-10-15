@@ -585,6 +585,12 @@ local GameConfig: Validate.GameConfig = {
 		-- has the player put it in their loadout, so it must be
 		-- loadout-eligible.
 		lockerGiftPowerUpId = "freeze",
+		-- The guided round's explainer pop-ups (How it works, the Studio's
+		-- Negotiate and Choose cards) pause the Studio's timer while up,
+		-- and their button starts to glow after this many seconds (owner,
+		-- 2026-10-15). The round's "Use your Freeze" step uses
+		-- lockerGiftPowerUpId too, given for the round if not loaded.
+		explainerGlowSeconds = 10,
 	},
 
 	-- The daily hunt (design-decisions.md Q1, "the daily hunt"): one

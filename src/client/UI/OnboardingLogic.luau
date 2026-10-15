@@ -412,14 +412,29 @@ end
 -- until the player has done it. Copy picked by the owner 2026-10-15.
 -- Each step is a fact about the round that, once true, stays true, and
 -- the prompt is the first fact in order not yet true. So a player who
--- grabs a power-up on the way to their first station skips "Grab a
--- power-up" when they get there.
+-- fires their Freeze on the way to their first station skips "Use your
+-- Freeze" when they get there.
 --
 -- Each step opens as a pop-up on a dimmed, frozen screen first (owner,
 -- 2026-10-15), with `picture`: a Studio screenshot of what to look for
 -- (0 = none yet, the pop-up just has the text).
-export type StepId = "station" | "task" | "grab" | "use" | "finish"
-export type Step = { id: StepId, title: string, body: string, picture: number }
+--
+-- Tutorial v2 (owner, 2026-10-15) dropped "Grab a power-up" and "Use it
+-- on a bot" for "Use your Freeze": the loadout Freeze (or a round-only
+-- one, TutorialService) must be fired at a bot. Its pop-up waits for
+-- `gate` "botNear" (a bot in Freeze's reach, after the first task), and
+-- with `holdUntilDone` the round stays frozen after "Got it" until it's
+-- fired. Firing counts, whether it lands or not. Its copy is Claude's
+-- draft.
+export type StepId = "station" | "task" | "freeze" | "finish"
+export type Step = {
+	id: StepId,
+	title: string,
+	body: string,
+	picture: number,
+	gate: "botNear"?,
+	holdUntilDone: boolean?,
+}
 
 local STEPS: { Step } = {
 	{
@@ -430,16 +445,12 @@ local STEPS: { Step } = {
 	},
 	{ id = "task", title = "Do the task", body = "Finish the mini-game to tick it off.", picture = 110568131773173 },
 	{
-		id = "grab",
-		title = "Grab a power-up",
-		body = "Run through one of the glowing orbs.",
-		picture = 103735767545857,
-	},
-	{
-		id = "use",
-		title = "Use it on a bot",
-		body = "Tap the power-up button. It hits the nearest rival.",
-		picture = 77015988624200,
+		id = "freeze",
+		title = "Use your Freeze",
+		body = "A bot is close! Drag from your Freeze (or left click) to fire it at them.",
+		picture = 0,
+		gate = "botNear",
+		holdUntilDone = true,
 	},
 	{
 		id = "finish",
@@ -457,13 +468,11 @@ function OnboardingLogic.newSteps(): Steps
 end
 
 -- Marks a step done. Doing a task means the player reached a station,
--- and using a power-up means they had one, so those latch too.
+-- so that latches too.
 function OnboardingLogic.completeStep(steps: Steps, id: StepId)
 	steps[id] = true
 	if id == "task" then
 		steps.station = true
-	elseif id == "use" then
-		steps.grab = true
 	end
 end
 
@@ -476,6 +485,36 @@ function OnboardingLogic.currentStep(steps: Steps): Step?
 	end
 	return nil
 end
+
+-- Is any bot within `reach` studs? A little short of the power-up's
+-- real range, so the lock-on still finds them by the time the pop-up
+-- is read.
+function OnboardingLogic.botInReach(distances: { number }, reach: number): boolean
+	for _, distance in distances do
+		if distance <= reach then
+			return true
+		end
+	end
+	return false
+end
+
+-- THE STUDIO CARDS (tutorial v2): in the guided round, a finalist's
+-- Negotiate and Choose each open with one of these as a pop-up. Bodies
+-- are the owner's (2026-10-15); titles are Claude's draft. Like the
+-- explainer, the Studio's timer is paused while one is up, and its
+-- button glows after GameConfig.tutorial.explainerGlowSeconds.
+export type StudioCard = { title: string, body: string }
+
+OnboardingLogic.STUDIO_CARDS = table.freeze({
+	Negotiate = table.freeze({
+		title = "Talk it out",
+		body = "This is where you can talk to the opponents to see if you trust them to share! Wait till the timer runs down.",
+	}),
+	Choose = table.freeze({
+		title = "Steal or Share?",
+		body = "Now you decide whether you are going to STEAL or SHARE! Press and hold your choice.",
+	}),
+}) :: { [string]: StudioCard }
 
 -- True once the player has been taught the whole loop: the race, then
 -- either the Studio or seeing they missed it. That's when the tips turn

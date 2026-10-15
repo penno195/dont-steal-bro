@@ -226,20 +226,32 @@ describe("OnboardingLogic guided-round steps", function()
 		return if step then step.id else nil
 	end
 
-	it("has the owner's five steps, in order, inside the tip limits", function()
+	it("has the v2 steps, in order, inside the tip limits", function()
 		local ids = {}
 		for _, step in OnboardingLogic.STEPS do
 			table.insert(ids, step.id)
 			expect(#step.title <= 30):toBe(true)
 			expect(#step.body <= 90):toBe(true)
 		end
-		expect(table.concat(ids, "|")):toBe("station|task|grab|use|finish")
+		expect(table.concat(ids, "|")):toBe("station|task|freeze|finish")
+	end)
+
+	it("gates the Freeze step on a bot in reach and holds it until fired", function()
+		local freeze = OnboardingLogic.STEPS[3]
+		expect(freeze.gate):toBe("botNear")
+		expect(freeze.holdUntilDone):toBe(true)
+		for _, step in OnboardingLogic.STEPS do
+			if step.id ~= "freeze" then
+				expect(step.gate):toBe(nil)
+				expect(step.holdUntilDone):toBe(nil)
+			end
+		end
 	end)
 
 	it("walks the steps in order, then shows nothing", function()
 		local steps = OnboardingLogic.newSteps()
 		expect(current(steps)):toBe("station")
-		for _, id in { "station", "task", "grab", "use" } :: { any } do
+		for _, id in { "station", "task", "freeze" } :: { any } do
 			OnboardingLogic.completeStep(steps, id)
 		end
 		expect(current(steps)):toBe("finish")
@@ -249,17 +261,32 @@ describe("OnboardingLogic guided-round steps", function()
 
 	it("skips a step the player already did out of order", function()
 		local steps = OnboardingLogic.newSteps()
-		OnboardingLogic.completeStep(steps, "grab")
+		OnboardingLogic.completeStep(steps, "freeze")
 		expect(current(steps)):toBe("station")
 		OnboardingLogic.completeStep(steps, "task")
-		expect(current(steps)):toBe("use")
+		expect(current(steps)):toBe("finish")
 	end)
 
-	it("counts a use as having grabbed one", function()
+	it("counts a task as having reached a station", function()
 		local steps = OnboardingLogic.newSteps()
 		OnboardingLogic.completeStep(steps, "task")
-		OnboardingLogic.completeStep(steps, "use")
-		expect(current(steps)):toBe("finish")
+		expect(current(steps)):toBe("freeze")
+	end)
+
+	it("finds a bot in reach", function()
+		expect(OnboardingLogic.botInReach({}, 36)):toBe(false)
+		expect(OnboardingLogic.botInReach({ 80, 37 }, 36)):toBe(false)
+		expect(OnboardingLogic.botInReach({ 80, 36 }, 36)):toBe(true)
+	end)
+
+	it("has the owner's Studio card bodies", function()
+		local cards = OnboardingLogic.STUDIO_CARDS
+		expect(cards.Negotiate.body):toBe(
+			"This is where you can talk to the opponents to see if you trust them to share! Wait till the timer runs down."
+		)
+		expect(cards.Choose.body):toBe(
+			"Now you decide whether you are going to STEAL or SHARE! Press and hold your choice."
+		)
 	end)
 end)
 

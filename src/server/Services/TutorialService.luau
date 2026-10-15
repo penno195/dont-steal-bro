@@ -20,7 +20,16 @@
 --   says when one opens and when "Got it" is tapped (TutorialPause);
 --   meanwhile the bots stop (NPCService.setPaused) and the player is
 --   anchored. Only during the race, and it's solo, so a lying client
---   only stalls its own round.
+--   only stalls its own round. The "Use your Freeze" step keeps it
+--   frozen past "Got it" until the Freeze is fired (tutorial v2).
+--
+--   A Freeze for that step. The player's loadout Freeze if they loaded
+--   one; else one goes into an empty slot as the race starts, for this
+--   round only, with no stock touched (owner, 2026-10-15).
+--
+--   The Studio's clock pauses under an explainer pop-up (How it works,
+--   the Negotiate and Choose cards), on the same TutorialPause intent:
+--   DecisionService.setTimerPaused (owner, 2026-10-15).
 --
 --   The reward, once per account, when the round reaches Results with
 --   the player still here. DataService.claimTutorialReward makes the
@@ -118,10 +127,35 @@ end
 
 local function handlePause(_player: Player, paused: boolean)
 	local RoundService = Loader.get("RoundService") :: any
-	if not isActive() or RoundService.getState() ~= "Race" then
+	if not isActive() then
 		return
 	end
-	setFrozen(paused)
+	local state = RoundService.getState()
+	if state == "Race" then
+		setFrozen(paused)
+	elseif state == "DecisionStudio" then
+		(Loader.get("DecisionService") :: any).setTimerPaused(paused)
+	end
+end
+
+-- The "Use your Freeze" step's item, for anyone who didn't load one.
+-- Deferred: PowerUpService fills the loadout on the same Race signal,
+-- in no set order with this handler.
+local function giveRoundFreezes()
+	local PowerUpService = Loader.get("PowerUpService") :: any
+	local powerUpId = config.lockerGiftPowerUpId
+	for _, player in Players:GetPlayers() do
+		local loaded = false
+		for _, id in PowerUpService.getInventoryFor(player.UserId) or {} do
+			loaded = loaded or id == powerUpId
+		end
+		if loaded then
+			continue
+		end
+		if PowerUpService.giveTo(player.UserId, powerUpId) then
+			print(string.format("TutorialService: gave %d a round-only %s", player.UserId, powerUpId))
+		end
+	end
 end
 
 local function rewardGrants()
@@ -182,6 +216,8 @@ local TutorialService: Loader.Service = {
 		"DataService",
 		"NPCService",
 		"StoreService",
+		"PowerUpService",
+		"DecisionService",
 	},
 
 	-- True for the whole of a tutorial round.
@@ -208,6 +244,12 @@ function TutorialService:start()
 	local NetGuard = Loader.get("NetGuard") :: any
 	NetGuard.on("TutorialPause", function(player: Player, payload: any)
 		handlePause(player, payload.paused)
+	end)
+
+	RoundService.onEnter("Race", function()
+		if isActive() then
+			task.defer(giveRoundFreezes)
+		end
 	end)
 
 	RoundService.onEnter("Results", function()
