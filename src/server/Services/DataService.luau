@@ -36,7 +36,12 @@ local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 local StaffGrantLogic = require(ServerScriptService.Server.StaffGrantLogic)
 
-local STORE_NAME = if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData"
+-- Versioned: a new name starts every player fresh, leaving the old
+-- store intact. v2 = the owner's full reset before soft launch
+-- (2026-10-16); the pre-reset data is still in "PlayerData" and
+-- "PlayerData_Studio", and switching back restores it.
+local STORE_VERSION = "_v2"
+local STORE_NAME = (if RunService:IsStudio() then "PlayerData_Studio" else "PlayerData") .. STORE_VERSION
 
 local PlayerStore = ProfileStoreLib.New(STORE_NAME, ProfileLogic.newProfileTemplate())
 
