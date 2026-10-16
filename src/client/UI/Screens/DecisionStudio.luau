@@ -752,7 +752,7 @@ local function holdFace(choice: Choice, store: Store): Frame
 		}),
 		stakesLine("Drop", 5, "gift", STAKES_LINE_H, "caption", ink, function()
 			local s = stakes()
-			return if s then PayoutLogic.dropChanceLine(s) else ""
+			return if s then PayoutLogic.dropChanceLine(s, choice) else ""
 		end, hasStakes, outlined),
 		create("Frame")({
 			Name = "HoldChip",

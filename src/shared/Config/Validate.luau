@@ -816,6 +816,8 @@ export type WinDropConfig = {
 	baseChance: number, -- chance of any drop at rung 0, 0-1
 	perRungChance: number, -- added per rung
 	maxChance: number, -- cap, 0-1
+	stealChanceScale: number, -- a sole stealer's chance = the chance above x this
+	stealMaxChance: number, -- a sole stealer's cap, 0-1
 	rarityWeights: { Common: DropRarityWeight, Uncommon: DropRarityWeight, Rare: DropRarityWeight },
 	powerUpAmount: number, -- loadout stock granted by a power-up drop
 	duplicateCurrency: PowerUpRarityWeights, -- paid instead of a cosmetic the winner already owns
@@ -3802,7 +3804,7 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	end
 
 	local drop = config.winRewards.drop
-	for _, field in { "baseChance", "maxChance" } do
+	for _, field in { "baseChance", "maxChance", "stealMaxChance" } do
 		local value = (drop :: any)[field] :: number
 		if value < 0 or value > 1 then
 			issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop." .. field, "must be between 0 and 1")
@@ -3813,6 +3815,12 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 	end
 	if drop.perRungChance < 0 then
 		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop.perRungChance", "must not be negative")
+	end
+	if drop.stealChanceScale < 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop.stealChanceScale", "must be at least 1")
+	end
+	if drop.stealMaxChance < drop.maxChance then
+		issue(issues, "GameConfig", "GameConfig.luau", "winRewards.drop.stealMaxChance", "must not be below maxChance")
 	end
 	local totalWeight = 0
 	for _, rarity in { "Common", "Uncommon", "Rare" } do

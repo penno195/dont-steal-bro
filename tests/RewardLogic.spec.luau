@@ -14,6 +14,8 @@ local function config(): RewardLogic.WinRewardsConfig
 			baseChance = 0.1,
 			perRungChance = 0.02,
 			maxChance = 0.5,
+			stealChanceScale = 2,
+			stealMaxChance = 0.75,
 			rarityWeights = {
 				Common = { weight = 70, perRungGrowth = 0 },
 				Uncommon = { weight = 25, perRungGrowth = 0.05 },
@@ -81,9 +83,24 @@ end)
 
 TestRunner.describe("RewardLogic drop odds", function()
 	TestRunner.it("raises the drop chance per rung up to the cap", function()
-		TestRunner.expect(RewardLogic.dropChanceFor(config(), 0)):toBeCloseTo(0.1)
-		TestRunner.expect(RewardLogic.dropChanceFor(config(), 10)):toBeCloseTo(0.3)
-		TestRunner.expect(RewardLogic.dropChanceFor(config(), 21)):toBeCloseTo(0.5)
+		TestRunner.expect(RewardLogic.dropChanceFor(config(), 0, "AllShare")):toBeCloseTo(0.1)
+		TestRunner.expect(RewardLogic.dropChanceFor(config(), 10, "LoneSharer")):toBeCloseTo(0.3)
+		TestRunner.expect(RewardLogic.dropChanceFor(config(), 21, "AllShare")):toBeCloseTo(0.5)
+	end)
+
+	TestRunner.it("doubles a sole stealer's chance, under its own cap", function()
+		TestRunner.expect(RewardLogic.dropChanceFor(config(), 0, "SoleStealer")):toBeCloseTo(0.2)
+		TestRunner.expect(RewardLogic.dropChanceFor(config(), 10, "SoleStealer")):toBeCloseTo(0.6)
+		TestRunner.expect(RewardLogic.dropChanceFor(config(), 21, "SoleStealer")):toBeCloseTo(0.75)
+	end)
+
+	TestRunner.it("rolls a sole stealer's drop at the higher chance", function()
+		-- 0.15 misses a sharer's 10% but lands inside a stealer's 20%.
+		TestRunner.expect(RewardLogic.rollDrop(config(), 0, "AllShare", POOL, {}, scripted({ 0.15 }))):toBe(nil)
+		TestRunner.expect(
+			RewardLogic.rollDrop(config(), 0, "SoleStealer", POOL, {}, scripted({ 0.15, 0.5, 0.9 })) ~= nil
+		)
+			:toBe(true)
 	end)
 
 	TestRunner.it("shifts the rarity weights toward Rare as the rung climbs", function()
@@ -120,16 +137,16 @@ end)
 
 TestRunner.describe("RewardLogic.rollDrop", function()
 	TestRunner.it("drops nothing when the chance roll misses, using one roll", function()
-		TestRunner.expect(RewardLogic.rollDrop(config(), 0, POOL, {}, scripted({ 0.1 }))):toBe(nil)
+		TestRunner.expect(RewardLogic.rollDrop(config(), 0, "AllShare", POOL, {}, scripted({ 0.1 }))):toBe(nil)
 	end)
 
 	TestRunner.it("drops nothing from an empty pool, without rolling", function()
-		TestRunner.expect(RewardLogic.rollDrop(config(), 0, {}, {}, scripted({}))):toBe(nil)
+		TestRunner.expect(RewardLogic.rollDrop(config(), 0, "AllShare", {}, {}, scripted({}))):toBe(nil)
 	end)
 
 	TestRunner.it("picks a Common power-up and grants loadout stock", function()
 		-- rarity roll 0.5 * 100 = 50 < 70 -> Common; item roll 0.9 -> the 2nd Common
-		local drop = RewardLogic.rollDrop(config(), 0, POOL, {}, scripted({ 0.05, 0.5, 0.9 }))
+		local drop = RewardLogic.rollDrop(config(), 0, "AllShare", POOL, {}, scripted({ 0.05, 0.5, 0.9 }))
 		assert(drop ~= nil)
 		TestRunner.expect(drop.item.id):toBe("task-insight")
 		TestRunner.expect(drop.duplicate):toBe(false)
@@ -139,14 +156,15 @@ TestRunner.describe("RewardLogic.rollDrop", function()
 	end)
 
 	TestRunner.it("grants a Rare cosmetic the winner doesn't own", function()
-		local drop = RewardLogic.rollDrop(config(), 0, POOL, {}, scripted({ 0.05, 0.99, 0 }))
+		local drop = RewardLogic.rollDrop(config(), 0, "AllShare", POOL, {}, scripted({ 0.05, 0.99, 0 }))
 		assert(drop ~= nil)
 		TestRunner.expect(drop.grant.kind):toBe("Cosmetic")
 		TestRunner.expect(drop.grant.cosmeticId):toBe("nameplate-gilded")
 	end)
 
 	TestRunner.it("pays currency by rarity for a cosmetic already owned", function()
-		local drop = RewardLogic.rollDrop(config(), 0, POOL, { "nameplate-gilded" }, scripted({ 0.05, 0.99, 0 }))
+		local drop =
+			RewardLogic.rollDrop(config(), 0, "AllShare", POOL, { "nameplate-gilded" }, scripted({ 0.05, 0.99, 0 }))
 		assert(drop ~= nil)
 		TestRunner.expect(drop.duplicate):toBe(true)
 		TestRunner.expect(drop.grant.kind):toBe("Currency")
@@ -155,7 +173,7 @@ TestRunner.describe("RewardLogic.rollDrop", function()
 
 	TestRunner.it("never rolls a rarity the pool has no items for", function()
 		local commonsOnly: { RewardLogic.PoolItem } = { { kind = "PowerUp", id = "sprint-boost", rarity = "Common" } }
-		local drop = RewardLogic.rollDrop(config(), 21, commonsOnly, {}, scripted({ 0, 0.999, 0 }))
+		local drop = RewardLogic.rollDrop(config(), 21, "AllShare", commonsOnly, {}, scripted({ 0, 0.999, 0 }))
 		assert(drop ~= nil)
 		TestRunner.expect(drop.item.id):toBe("sprint-boost")
 	end)

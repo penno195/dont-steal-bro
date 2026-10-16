@@ -37,6 +37,8 @@ export type WinRewardsConfig = {
 		baseChance: number,
 		perRungChance: number,
 		maxChance: number,
+		stealChanceScale: number,
+		stealMaxChance: number,
 		rarityWeights: { Common: DropRarityWeight, Uncommon: DropRarityWeight, Rare: DropRarityWeight },
 		powerUpAmount: number,
 		duplicateCurrency: RarityNumbers,
@@ -117,9 +119,14 @@ end
 
 -- ===== the drop =============================================================
 
-function RewardLogic.dropChanceFor(config: WinRewardsConfig, rung: number): number
+-- A sole stealer's win scales the chance and has its own cap.
+function RewardLogic.dropChanceFor(config: WinRewardsConfig, rung: number, outcomeTag: OutcomeTag): number
 	local drop = config.drop
-	return math.min(drop.maxChance, drop.baseChance + drop.perRungChance * rung)
+	local chance = drop.baseChance + drop.perRungChance * rung
+	if outcomeTag == "SoleStealer" then
+		return math.min(drop.stealMaxChance, chance * drop.stealChanceScale)
+	end
+	return math.min(drop.maxChance, chance)
 end
 
 function RewardLogic.rarityWeightsFor(config: WinRewardsConfig, rung: number): RarityNumbers
@@ -189,11 +196,12 @@ end
 function RewardLogic.rollDrop(
 	config: WinRewardsConfig,
 	rung: number,
+	outcomeTag: OutcomeTag,
 	pool: { PoolItem },
 	ownedCosmetics: { string },
 	rng: () -> number
 ): Drop?
-	if #pool == 0 or rng() >= RewardLogic.dropChanceFor(config, rung) then
+	if #pool == 0 or rng() >= RewardLogic.dropChanceFor(config, rung, outcomeTag) then
 		return nil
 	end
 
@@ -251,7 +259,7 @@ function RewardLogic.rollWinReward(
 ): WinReward
 	local rung = RewardLogic.rungFor(thresholds, streakAfter)
 	local currency = RewardLogic.currencyFor(config, outcomeTag, rung)
-	local drop = RewardLogic.rollDrop(config, rung, pool, ownedCosmetics, rng)
+	local drop = RewardLogic.rollDrop(config, rung, outcomeTag, pool, ownedCosmetics, rng)
 
 	local grants: { Grant } = { { kind = "Currency", amount = currency } }
 	if drop ~= nil then

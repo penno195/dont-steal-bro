@@ -37,6 +37,8 @@ local function validGameConfig(): Validate.GameConfig
 				baseChance = 0.1,
 				perRungChance = 0.02,
 				maxChance = 0.5,
+				stealChanceScale = 2,
+				stealMaxChance = 0.75,
 				rarityWeights = {
 					Common = { weight = 70, perRungGrowth = 0 },
 					Uncommon = { weight = 25, perRungGrowth = 0.05 },
@@ -1087,6 +1089,12 @@ TestRunner.describe("Validate.checkGameConfig (win rewards)", function()
 			end,
 			function(c)
 				c.winRewards.drop.perRungChance = -0.01
+			end,
+			function(c)
+				c.winRewards.drop.stealChanceScale = 0.5
+			end,
+			function(c)
+				c.winRewards.drop.stealMaxChance = 0.4 -- below maxChance
 			end,
 			function(c)
 				c.winRewards.drop.rarityWeights.Rare.perRungGrowth = -1

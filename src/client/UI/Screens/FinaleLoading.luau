@@ -2,14 +2,19 @@
 --# selene: allow(mixed_table) -- Vide props + children, see Components/Base.luau
 -- The finale loading card (2026-09-26). Covers the gap between the race
 -- ending and the Decision Studio opening: Qualified, the move onto the
--- set, and the Studio's Intro. Everyone sees it, finalist or not.
--- Mounted by DecisionStudioController, which owns when it comes down.
+-- set, and the Studio's Intro. Everyone sees it, finalist or not. A
+-- finalist sees it sooner, the moment they finish their last task,
+-- with the button reading "Waiting for other players to finish" until
+-- the top 3 are through (owner, 2026-10-16). Mounted by
+-- DecisionStudioController, which owns when it comes down.
 --
 -- What it shows, top to bottom: who made the final, the prizes on the
 -- table (one tile each, from DecisionLogic.rewardTiles, so it can't
--- disagree with the resolver), the one-line lesson, and a spinner that
--- becomes a "Got it" button once the Intro starts (2026-09-28).
--- Words only for the prizes, never amounts (DecisionLogic.prizeFor).
+-- disagree with the resolver), the one-line lesson, and the button
+-- (2026-09-28). Each prize box also carries YOUR coins and drop chance
+-- for it once your stakes arrive (PayoutLogic.tileLine; your own
+-- numbers only, design-decisions.md Q1's 2026-10-08 case); without
+-- them it's the tier word alone.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -18,6 +23,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
 local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
+local PayoutLogic = require(script.Parent.Parent.PayoutLogic)
 local Layout = require(script.Parent.Parent.Layout)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -34,8 +40,10 @@ export type Finalist = { id: number, name: string }
 export type Store = {
 	selfId: number,
 	finalists: () -> { Finalist }, -- empty until the server names them
-	canDismiss: (() -> boolean)?, -- true once the Studio's Intro is up
+	canDismiss: (() -> boolean)?, -- "Got it" is up (else the spinner)
 	onDismiss: (() -> ())?, -- "Got it"
+	waiting: (() -> boolean)?, -- you've finished; the race hasn't resolved
+	stakes: (() -> PayoutLogic.Stakes?)?, -- your own, nil until sent
 }
 
 local COLUMN = 344
@@ -45,6 +53,7 @@ local TILE_W = (COLUMN - Theme.spacing.sm) / 2
 -- bottom (playtest 2026-10-04). The rest of the card stays COLUMN wide.
 local WIDE = 4 * TILE_W + 3 * Theme.spacing.sm
 local TILE_H = 88
+local STAKES_H = Theme.type.caption.size + Theme.spacing.xxs -- the box's coins line
 local ICON = 32
 local CHIP_H = 32
 local SPINNER = 24
@@ -87,7 +96,7 @@ local function list(direction: Enum.FillDirection, gap: number): Instance
 	})
 end
 
-local function tile(entry: () -> DecisionLogic.RewardTile, order: number): Frame
+local function tile(entry: () -> DecisionLogic.RewardTile, order: number, stakes: () -> PayoutLogic.Stakes?): Frame
 	local nothing = function()
 		return entry().prize == "Nothing"
 	end
@@ -106,10 +115,13 @@ local function tile(entry: () -> DecisionLogic.RewardTile, order: number): Frame
 	local prize = derive(function(): string
 		return entry().prize
 	end)
+	local stakesLine = derive(function(): string?
+		local s = stakes()
+		return if s then PayoutLogic.tileLine(s, entry().prize) else nil
+	end)
 	return create("Frame")({
 		Name = "Reward",
 		LayoutOrder = order,
-		Size = UDim2.fromOffset(TILE_W, TILE_H),
 		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		Base.stage(),
 		BackgroundTransparency = function()
@@ -134,6 +146,19 @@ local function tile(entry: () -> DecisionLogic.RewardTile, order: number): Frame
 				return if nothing() then Theme.color.inkMuted else Theme.color.ink
 			end,
 			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+		Base.text("caption", {
+			Name = "Stakes",
+			Position = UDim2.fromOffset(0, ICON + Theme.spacing.xxs),
+			Size = UDim2.new(1, 0, 0, STAKES_H),
+			Text = function()
+				return stakesLine() or ""
+			end,
+			TextColor3 = Theme.color.warning,
+			TextXAlignment = Enum.TextXAlignment.Left,
+			Visible = function()
+				return stakesLine() ~= nil
+			end,
 		}),
 		Base.text("caption", {
 			Name = "How",
@@ -166,9 +191,21 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 	})
 
 	local destroy = vide.root(function()
+		local waiting = derive(function()
+			return store.waiting ~= nil and store.waiting()
+		end)
+		local stakes = derive(function(): PayoutLogic.Stakes?
+			return if store.stakes ~= nil then store.stakes() else nil
+		end)
 		local seats = derive(function()
 			local n = #store.finalists()
-			return if n == 0 then 3 else n -- NPCs fill empty seats (Q2), so 3 until told otherwise
+			-- NPCs fill empty seats (Q2), so 3 until told otherwise. While
+			-- you wait, the list is only you so far.
+			return if n == 0 or waiting() then 3 else n
+		end)
+		-- Taller boxes once there are numbers to fit.
+		local tileH = derive(function()
+			return if stakes() ~= nil then TILE_H + STAKES_H else TILE_H
 		end)
 		local tiles = derive(function()
 			return DecisionLogic.rewardTiles(seats())
@@ -177,6 +214,9 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 			return store.canDismiss ~= nil and store.canDismiss()
 		end)
 		local isFinalist = derive(function()
+			if waiting() then
+				return true
+			end
 			for _, f in store.finalists() do
 				if f.id == store.selfId then
 					return true
@@ -276,13 +316,15 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				end,
 				AutomaticSize = Enum.AutomaticSize.Y,
 				create("UIGridLayout")({
-					CellSize = UDim2.fromOffset(TILE_W, TILE_H),
+					CellSize = function()
+						return UDim2.fromOffset(TILE_W, tileH())
+					end,
 					CellPadding = UDim2.fromOffset(Theme.spacing.sm, Theme.spacing.sm),
 					SortOrder = Enum.SortOrder.LayoutOrder,
 					HorizontalAlignment = Enum.HorizontalAlignment.Center,
 				}),
 				indexes(tiles, function(entry: () -> DecisionLogic.RewardTile, i: number)
-					return tile(entry, i)
+					return tile(entry, i, stakes)
 				end) :: any,
 			}),
 			Base.text("label", {
@@ -293,19 +335,24 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				TextColor3 = Theme.color.steal,
 				TextWrapped = true,
 			}),
-			-- Once the Studio's Intro starts, "Got it" closes the card. It
-			-- saves nothing on its own: the Intro only ends early when
-			-- every finalist is ready (FinaleRoster.allReady).
+			-- "Waiting for other players to finish" while you wait, then
+			-- "Got it" once the top 3 are through. It saves nothing on its
+			-- own: the Intro only ends early when every finalist is ready
+			-- (FinaleRoster.allReady).
 			create("Frame")({
 				Name = "Dismiss",
 				LayoutOrder = 8,
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1, 0, 0, BUTTON_H),
-				Visible = canDismiss,
+				Visible = function()
+					return canDismiss() or waiting()
+				end,
 				C.Button({
-					label = "Got it",
+					label = function()
+						return if waiting() then "Waiting for other players to finish" else "Got it"
+					end,
 					onActivate = function()
-						if store.onDismiss then
+						if not waiting() and store.onDismiss then
 							store.onDismiss()
 						end
 					end,
@@ -320,7 +367,7 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1, 0, 0, SPINNER),
 				Visible = function()
-					return not canDismiss()
+					return not canDismiss() and not waiting()
 				end,
 				list(Enum.FillDirection.Horizontal, Theme.spacing.sm),
 				create("Frame")({

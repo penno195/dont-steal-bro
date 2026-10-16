@@ -82,6 +82,14 @@ local finalists = source({} :: { FinaleLoading.Finalist })
 -- finalist's tap is sent).
 local readyIds = source({} :: { [number]: boolean })
 local dismissed = source(false)
+-- You've finished your tasks and the race hasn't resolved yet: the card
+-- is already up, its button waiting (owner, 2026-10-16).
+local waiting = source(false)
+-- "Got it" tapped after the race resolved but before the Intro started:
+-- the card stays up (the move onto the set is behind it) and closes, as
+-- if tapped, the moment the Intro starts.
+local early = source(false)
+local roundState: string? = nil
 
 local ids: { number } = {}
 local leftIds: { [number]: boolean } = {}
@@ -460,6 +468,10 @@ local function dismissLoading()
 	if dismissed() then
 		return
 	end
+	if phase() ~= "Intro" then
+		early(true)
+		return
+	end
 	dismissed(true)
 	hideLoading()
 	if isFinalist() then
@@ -473,9 +485,11 @@ local function showLoading()
 			selfId = selfId,
 			finalists = finalists,
 			canDismiss = function()
-				return phase() == "Intro"
+				return not early()
 			end,
 			onDismiss = dismissLoading,
+			waiting = waiting,
+			stakes = stakes,
 		})
 	end
 end
@@ -546,15 +560,23 @@ local DecisionStudioController: Loader.Controller = {
 
 function DecisionStudioController:init()
 	Net.onClientEvent("RoundState", function(payload: any)
+		roundState = payload.state
 		if payload.state == "Qualified" then
 			dismissed(false)
+			waiting(false)
+			early(false)
+			phase(nil) -- last round's; the Intro sets it
 			readyIds({})
 			showLoading()
-		elseif payload.state ~= "DecisionStudio" then
+		-- A re-sent Race state (the tutorial's untimed race) keeps the
+		-- card you finished into.
+		elseif payload.state ~= "DecisionStudio" and not (payload.state == "Race" and waiting()) then
+			waiting(false)
 			hideLoading()
 			-- Not at Qualified: TaskQualificationResult fires just before it.
 			if payload.state == "Race" then
 				finalists({})
+				stakes(nil) -- last round's; this round's come when you finish
 			end
 		end
 		if payload.state == "DecisionStudio" then
@@ -612,11 +634,37 @@ function DecisionStudioController:init()
 		rebuildSeats()
 	end)
 
+	-- Your last task done: the card comes up now, not at Qualified. Every
+	-- finisher makes the final (the race resolves at the 3rd), so it's
+	-- the finalist's card from the start.
+	Net.onClientEvent("TaskAssignmentState", function(payload: any)
+		if roundState ~= "Race" or unmountLoading ~= nil or type(payload) ~= "table" then
+			return
+		end
+		local assignments = (payload.assignments or {}) :: { any }
+		if #assignments == 0 then
+			return
+		end
+		for _, entry in assignments do
+			if not entry.completed then
+				return
+			end
+		end
+		waiting(true)
+		dismissed(false)
+		early(false)
+		setFinalists({ selfId })
+		showLoading()
+	end)
+
 	Net.onClientEvent("DecisionPhaseChanged", function(payload: any)
 		phase(payload.phase)
 		endsAt(payload.endsAt)
 		if payload.phase ~= "Intro" then
 			hideLoading()
+		elseif early() then
+			early(false)
+			dismissLoading()
 		end
 	end)
 

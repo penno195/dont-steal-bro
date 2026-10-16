@@ -122,7 +122,8 @@ export type Stakes = {
 	soleStealer: number,
 	loneSharer: number,
 	allShare: number,
-	dropChance: number, -- 0..1
+	stealDropChance: number, -- 0..1, a sole stealer's win
+	shareDropChance: number, -- 0..1, a sharer's win
 }
 
 export type StakesCopy = {
@@ -136,7 +137,7 @@ function PayoutLogic.parseStakes(raw: any): Stakes?
 	if type(raw) ~= "table" then
 		return nil
 	end
-	for _, key in { "soleStealer", "loneSharer", "allShare", "dropChance" } do
+	for _, key in { "soleStealer", "loneSharer", "allShare", "stealDropChance", "shareDropChance" } do
 		if type(raw[key]) ~= "number" then
 			return nil
 		end
@@ -145,7 +146,8 @@ function PayoutLogic.parseStakes(raw: any): Stakes?
 		soleStealer = raw.soleStealer,
 		loneSharer = raw.loneSharer,
 		allShare = raw.allShare,
-		dropChance = math.clamp(raw.dropChance, 0, 1),
+		stealDropChance = math.clamp(raw.stealDropChance, 0, 1),
+		shareDropChance = math.clamp(raw.shareDropChance, 0, 1),
 	})
 end
 
@@ -161,9 +163,32 @@ function PayoutLogic.stakesCopy(stakes: Stakes, choice: string): StakesCopy
 	})
 end
 
--- "10% item drop". Rounded, so a 0.3 that floats as 0.29999 still reads 30.
-function PayoutLogic.dropChanceLine(stakes: Stakes): string
-	return string.format("%d%% item drop", math.floor(stakes.dropChance * 100 + 0.5))
+-- "10% item drop", for the win that choice can bring: a sole stealer's
+-- roll is the higher one (owner, 2026-10-16). Rounded, so a 0.3 that
+-- floats as 0.29999 still reads 30.
+function PayoutLogic.dropChanceLine(stakes: Stakes, choice: string): string
+	local chance = if choice == "Steal" then stakes.stealDropChance else stakes.shareDropChance
+	return string.format("%d%% item drop", math.floor(chance * 100 + 0.5))
+end
+
+-- A finale-card prize box's own numbers (owner, 2026-10-16): the same
+-- stakes as the hold buttons, up earlier so there's longer to study
+-- them. BIG is the sole stealer's win, MEDIUM the lone sharer's, SMALL
+-- everyone sharing. nil for NOTHING, or any prize it doesn't know.
+local TILE_STAKES: { [string]: { coins: string, steal: boolean } } = {
+	Big = { coins = "soleStealer", steal = true },
+	Medium = { coins = "loneSharer", steal = false },
+	Small = { coins = "allShare", steal = false },
+}
+
+function PayoutLogic.tileLine(stakes: Stakes, prize: string): string?
+	local entry = TILE_STAKES[prize]
+	if entry == nil then
+		return nil
+	end
+	local coins = (stakes :: any)[entry.coins] :: number
+	local chance = if entry.steal then stakes.stealDropChance else stakes.shareDropChance
+	return string.format("%d coins · %d%% drop", coins, math.floor(chance * 100 + 0.5))
 end
 
 return PayoutLogic

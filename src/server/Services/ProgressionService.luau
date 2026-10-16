@@ -43,6 +43,7 @@
 -- indefinitely. `sweepNonQualifiers` below closes that, and it is a
 -- genuine rule fix rather than a refactor - see its own comment.
 
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
@@ -517,6 +518,37 @@ local function sendRecaps()
 	end
 end
 
+-- ===== the stakes ==========================================================
+
+-- What each outcome would pay `player`, and its drop chance, at the
+-- rung a win would put them on: the Studio's stakes panel and the
+-- finale card's prize boxes (design-decisions.md Q1, "a much bigger
+-- reason to steal"). The same RewardLogic calls rollReward makes, so
+-- neither can promise a different number from the one a win pays.
+local function stakesFor(player: Player): { [string]: number }
+	local DataService = Loader.get("DataService") :: any
+	local rung = RewardLogic.rungFor(rungThresholds, (DataService.getStreak(player) :: number) + 1)
+	local config = GameConfig.winRewards
+	return {
+		soleStealer = RewardLogic.currencyFor(config, "SoleStealer", rung),
+		loneSharer = RewardLogic.currencyFor(config, "LoneSharer", rung),
+		allShare = RewardLogic.currencyFor(config, "AllShare", rung),
+		stealDropChance = RewardLogic.dropChanceFor(config, rung, "SoleStealer"),
+		shareDropChance = RewardLogic.dropChanceFor(config, rung, "AllShare"),
+	}
+end
+
+-- A human finalist's own stakes, to them alone (Q1's 2026-10-08 case):
+-- at their last task (the finale card comes up then, owner 2026-10-16),
+-- again as the race resolves, and at the Studio's start. None in a
+-- practice match, which pays nothing.
+local function sendStakes(racerId: number)
+	local player = Players:GetPlayerByUserId(racerId)
+	if player ~= nil and not isPracticeMatch() then
+		Net.fireClient("DecisionStakes", player, stakesFor(player))
+	end
+end
+
 -- ===== service =============================================================
 
 local ProgressionService: Loader.Service = {
@@ -534,22 +566,8 @@ local ProgressionService: Loader.Service = {
 		return RewardLogic.rungFor(rungThresholds, streak + 1)
 	end,
 
-	-- What each outcome would pay `player`, and their drop chance, at
-	-- the rung a win would put them on: the Studio's stakes panel
-	-- (design-decisions.md Q1, "a much bigger reason to steal"). The
-	-- same RewardLogic calls rollReward makes, so the panel can't
-	-- promise a different number from the one a win pays.
-	stakesFor = function(player: Player): { [string]: number }
-		local DataService = Loader.get("DataService") :: any
-		local rung = RewardLogic.rungFor(rungThresholds, (DataService.getStreak(player) :: number) + 1)
-		local config = GameConfig.winRewards
-		return {
-			soleStealer = RewardLogic.currencyFor(config, "SoleStealer", rung),
-			loneSharer = RewardLogic.currencyFor(config, "LoneSharer", rung),
-			allShare = RewardLogic.currencyFor(config, "AllShare", rung),
-			dropChance = RewardLogic.dropChanceFor(config, rung),
-		}
-	end,
+	stakesFor = stakesFor,
+	sendStakes = sendStakes,
 
 	-- Re-exported so a caller (DecisionService) maps an outcome branch
 	-- to a reason code through the same function the tests cover,

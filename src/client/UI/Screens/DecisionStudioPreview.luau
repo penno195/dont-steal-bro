@@ -24,7 +24,13 @@ local DecisionLogic = require(script.Parent.Parent.DecisionLogic)
 local DecisionStudio = require(script.Parent.DecisionStudio)
 local PayoutLogic = require(script.Parent.Parent.PayoutLogic)
 
-local PREVIEW_STAKES = PayoutLogic.parseStakes({ soleStealer = 300, loneSharer = 60, allShare = 30, dropChance = 0.14 })
+local PREVIEW_STAKES = PayoutLogic.parseStakes({
+	soleStealer = 300,
+	loneSharer = 60,
+	allShare = 30,
+	stealDropChance = 0.28,
+	shareDropChance = 0.14,
+})
 
 local source = vide.source
 

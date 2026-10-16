@@ -899,7 +899,8 @@ Net.Remotes = {
 	} :: RemoteDef,
 
 	-- Server -> one finalist: their own stakes for the stakes panel -
-	-- {soleStealer, loneSharer, allShare, dropChance} at the rung a win
+	-- {soleStealer, loneSharer, allShare, stealDropChance, shareDropChance}
+	-- at the rung a win
 	-- would put them on (design-decisions.md Q1's 2026-10-08 case).
 	-- Fired once, with DecisionParticipants. Targeted (fireClient), never
 	-- broadcast: the amounts scale with the streak (Q7 condition 1).

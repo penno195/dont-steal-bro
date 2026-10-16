@@ -920,10 +920,7 @@ local function beginDecisionStudio()
 	-- pre-lock-in exception to Q7, and only because nobody else gets it.
 	local ProgressionService = Loader.get("ProgressionService") :: any
 	for _, id in qualifierIds do
-		local player = Players:GetPlayerByUserId(id)
-		if player ~= nil and not ProgressionService.isPracticeMatch() then
-			Net.fireClient("DecisionStakes", player, ProgressionService.stakesFor(player))
-		end
+		ProgressionService.sendStakes(id)
 	end
 
 	-- "With a clear announcement to the others" (P3-7 case 1's own

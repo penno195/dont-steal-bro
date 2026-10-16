@@ -56,6 +56,10 @@ local GameConfig: Validate.GameConfig = {
 			baseChance = 0.1,
 			perRungChance = 0.02,
 			maxChance = 0.5,
+			-- A sole stealer's win rolls at double the chance, capped
+			-- higher: 20% at rung 0, 75% by rung ~17 (owner, 2026-10-16).
+			stealChanceScale = 2,
+			stealMaxChance = 0.75,
 			-- At rung 0: 70/25/5. At rung 21: about 48/35/18.
 			rarityWeights = {
 				Common = { weight = 70, perRungGrowth = 0 },

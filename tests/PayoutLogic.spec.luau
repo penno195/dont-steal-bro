@@ -83,26 +83,33 @@ describe("PayoutLogic wording", function()
 end)
 
 describe("PayoutLogic stakes", function()
-	local raw = { soleStealer = 275, loneSharer = 55, allShare = 27, dropChance = 0.3 }
+	local raw = { soleStealer = 275, loneSharer = 55, allShare = 27, stealDropChance = 0.6, shareDropChance = 0.3 }
 
 	it("reads a whole stakes packet", function()
 		local s = PayoutLogic.parseStakes(raw) :: PayoutLogic.Stakes
 		expect(s.soleStealer):toBe(275)
-		expect(s.dropChance):toBeCloseTo(0.3)
+		expect(s.stealDropChance):toBeCloseTo(0.6)
+		expect(s.shareDropChance):toBeCloseTo(0.3)
 	end)
 
 	it("rejects a packet missing any number", function()
 		expect(PayoutLogic.parseStakes(nil)):toBe(nil)
 		expect(PayoutLogic.parseStakes({ soleStealer = 250, loneSharer = 50, allShare = 25 })):toBe(nil)
-		expect(PayoutLogic.parseStakes({ soleStealer = "250", loneSharer = 50, allShare = 25, dropChance = 0.1 })):toBe(
+		expect(PayoutLogic.parseStakes({ soleStealer = "250", loneSharer = 50, allShare = 25, stealDropChance = 0.2 })):toBe(
 			nil
 		)
 	end)
 
 	it("clamps the drop chance into 0..1", function()
-		local s =
-			PayoutLogic.parseStakes({ soleStealer = 1, loneSharer = 1, allShare = 1, dropChance = 3 }) :: PayoutLogic.Stakes
-		expect(s.dropChance):toBe(1)
+		local s = PayoutLogic.parseStakes({
+			soleStealer = 1,
+			loneSharer = 1,
+			allShare = 1,
+			stealDropChance = 3,
+			shareDropChance = -1,
+		}) :: PayoutLogic.Stakes
+		expect(s.stealDropChance):toBe(1)
+		expect(s.shareDropChance):toBe(0)
 	end)
 
 	it("words Steal and Share", function()
@@ -117,9 +124,23 @@ describe("PayoutLogic stakes", function()
 
 	it("rounds the drop chance to a whole percent", function()
 		local s = PayoutLogic.parseStakes(raw) :: PayoutLogic.Stakes
-		expect(PayoutLogic.dropChanceLine(s)):toBe("30% item drop")
-		local low =
-			PayoutLogic.parseStakes({ soleStealer = 1, loneSharer = 1, allShare = 1, dropChance = 0.1 }) :: PayoutLogic.Stakes
-		expect(PayoutLogic.dropChanceLine(low)):toBe("10% item drop")
+		expect(PayoutLogic.dropChanceLine(s, "Steal")):toBe("60% item drop")
+		expect(PayoutLogic.dropChanceLine(s, "Share")):toBe("30% item drop")
+		local low = PayoutLogic.parseStakes({
+			soleStealer = 1,
+			loneSharer = 1,
+			allShare = 1,
+			stealDropChance = 0.2,
+			shareDropChance = 0.1,
+		}) :: PayoutLogic.Stakes
+		expect(PayoutLogic.dropChanceLine(low, "Share")):toBe("10% item drop")
+	end)
+
+	it("gives each finale prize box its coins and drop chance", function()
+		local s = PayoutLogic.parseStakes(raw) :: PayoutLogic.Stakes
+		expect(PayoutLogic.tileLine(s, "Big")):toBe("275 coins · 60% drop")
+		expect(PayoutLogic.tileLine(s, "Medium")):toBe("55 coins · 30% drop")
+		expect(PayoutLogic.tileLine(s, "Small")):toBe("27 coins · 30% drop")
+		expect(PayoutLogic.tileLine(s, "Nothing")):toBe(nil)
 	end)
 end)

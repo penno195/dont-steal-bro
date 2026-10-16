@@ -288,8 +288,11 @@ local function emitQualification()
 	lastQualificationResult = result
 	Net.fireAllClients("TaskQualificationResult", result)
 	local Telemetry = Loader.get("Telemetry") :: any
+	local ProgressionService = Loader.get("ProgressionService") :: any
 	for _, id in result.qualifiers do
 		Telemetry.qualified(id)
+		-- A qualifier the race clock picked hasn't had theirs yet.
+		ProgressionService.sendStakes(id)
 	end
 
 	print(
@@ -409,6 +412,9 @@ local function recordCompletionFor(racerId: number, stationId: string, durationS
 	if state.tasksCompleted >= #state.assignments then
 		table.insert(finishOrder, racerId)
 		Telemetry.finished(racerId)
+		-- For the finale card, which comes up at their last task.
+		local ProgressionService = Loader.get("ProgressionService") :: any
+		ProgressionService.sendStakes(racerId)
 		if #finishOrder >= GameConfig.qualifierCount and not qualificationEmitted then
 			emitQualification()
 			local RoundService = Loader.get("RoundService") :: any

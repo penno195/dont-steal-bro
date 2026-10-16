@@ -257,6 +257,29 @@ step 7a). Every amount is still unconfirmed until a playtest.
   captioned with the lone-sharer amount** ("50 if both steal"). Steal is
   captioned "only if both share".
 
+*Applied (2026-10-16, user decision):* **the stakes on the finale card,
+from your last task, and a bigger drop for a steal.**
+- **The finale card comes up the moment you finish your last task**,
+  not when the race resolves. Its button reads "Waiting for other
+  players to finish" until the top 3 are through, then "Got it". The
+  Intro's timers and ready-up work as before; a "Got it" tapped before
+  the Intro starts takes effect when it does. Players who don't qualify
+  still see the card when the race resolves. Every round, the tutorial
+  included.
+- **Each prize box shows your own coins and drop chance** for that prize
+  ("250 coins · 20% drop"), the same numbers as the Steal/Share
+  buttons, just earlier, so there's longer to study them. Your own
+  screen only, as in the 2026-10-08 case above: `DecisionStakes` is now
+  also sent at your last task and when the race resolves. A practice
+  match (the tutorial round too) sends none, so its boxes keep the tier
+  words alone.
+- **A sole stealer's win rolls for a drop at double the chance**, with
+  its own cap: 20% at rung 0, +4% per rung, up to 75%
+  (`winRewards.drop.stealChanceScale` 2, `stealMaxChance` 0.75). A
+  sharer's win is unchanged at 10% +2% per rung, up to 50%. The Steal
+  button and the BIG box show the steal chance; Share, MEDIUM and SMALL
+  show the share chance.
+
 *Applied (2026-10-09, user decision):* **the daily hunt.**
 - **One hidden pickup per player per UTC day**, at one of a set of
   tagged spots (`HubDailyHuntSpot`) in the hotel's rooms and in
