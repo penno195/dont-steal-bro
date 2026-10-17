@@ -171,11 +171,34 @@ DecisionLogic.NO_HISTORY = "No history yet"
 
 -- QUICK CHAT -----------------------------------------------------------
 
--- One-tap lines under the Studio's chat box, for a finalist who'd
--- rather not type on a phone. Sent as ordinary chat - the same channel,
--- filter and rate limit as anything typed - so a button can say nothing
--- a keyboard couldn't. Four fit one row at the chat line's width.
-DecisionLogic.QUICK_PHRASES = table.freeze({ "Share", "Steal", "Please", "Don't" })
+-- One-tap lines for a finalist who'd rather not type on a phone, in
+-- the Quick pop-up beside the Studio's chat box (payoff-loop step 3;
+-- design-decisions.md Q1's "a payoff for every round", quick-chat).
+-- Sent as ordinary chat - the same channel, filter and rate limit as
+-- anything typed - so a button can say nothing a keyboard couldn't.
+-- One column per set in the pop-up, so keep each line short enough for
+-- a third of the chat line's width. Wording is PLACEHOLDER.
+export type QuickSet = { name: string, color: string, lines: { string } }
+
+DecisionLogic.QUICK_LINE_MAX = 22
+
+DecisionLogic.QUICK_CHAT = table.freeze({
+	table.freeze({
+		name = "Promise",
+		color = "share", -- Theme.color key, the header's tint
+		lines = table.freeze({ "I'll share, promise", "Share and we all win", "Trust me", "I always share" }),
+	}),
+	table.freeze({
+		name = "Threat",
+		color = "steal",
+		lines = table.freeze({ "Steal and I steal too", "Don't test me", "Last chance", "I'm stealing" }),
+	}),
+	table.freeze({
+		name = "Emote",
+		color = "rim",
+		lines = table.freeze({ "Please!", "Seriously?", "Nice try", "Ha!" }),
+	}),
+} :: { QuickSet })
 
 -- PAYOFF TABLE -------------------------------------------------------
 

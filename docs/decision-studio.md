@@ -344,9 +344,11 @@ Studio markers; the map validator treats them as optional.
   also pointed at the Negotiate channel while it's open
   (`StudioChatController`), so typing there reaches the other finalists
   instead of the general channel, which finalists are cut out of.
-  Under the box, four quick buttons (`DecisionLogic.QUICK_PHRASES`:
-  Share, Steal, Please, Don't) send that word in one tap, through the
-  same send as typed text, so the filter and rate limit still apply.
+  Left of the box, a Quick button opens a pop-up of one-tap lines
+  (`DecisionLogic.QUICK_CHAT`: Promise, Threat and Emote columns of four
+  short phrases each; payoff-loop step 3). A tap sends that line and
+  closes the pop-up, through the same send as typed text, so the filter
+  and rate limit still apply.
 
 ## After the finale
 

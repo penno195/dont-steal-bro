@@ -83,9 +83,16 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     held under the streak card. The Hub shows a shield pill between the
     level badge and coins once one is held (StoreState's new
     `streakShields`). Unseen in Studio when built: check it on device.
-- [ ] **3. Quick-chat rewording and restyle.** Quick-chat buttons already
+- [x] **3. Quick-chat rewording and restyle.** Quick-chat buttons already
   exist. Reword them for the negotiation (promises, threats, emotes)
-  and restyle them to the HUD art pass.
+  and restyle them to the HUD art pass. Done (owner's answers in Q1's
+  applied case): the four-word row is replaced by a Quick button left
+  of the Studio's chat box that opens a stage-panel pop-up of three
+  columns, Promise / Threat / Emote, four short phrases each
+  (`DecisionLogic.QUICK_CHAT`, PLACEHOLDER wording). "Emotes" are
+  phrases, not animations or emoji. A tap sends the line as ordinary
+  chat and closes the pop-up. Unseen in Studio when built: check the
+  pop-up's fit on a phone.
 - [ ] **4. Cash out the streak.** In the Hub, from streak 3, a player can
   bank their streak: coins that grow steeply with the streak, a
   permanent "best banked" record shown in the Hub, and the streak resets

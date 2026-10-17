@@ -399,6 +399,16 @@ From the 2026-10-17 game review: only wins paid anything, so roughly
   pass is a developer product recorded on the profile, so the game can
   grant it). Q8 isn't affected: everything on the track was already
   earnable free.
+- **Quick-chat for the negotiation** (payoff-loop step 3, user
+  decision 2026-10-17). Three sets of short one-tap phrases for mobile
+  players: Promise, Threat and Emote. "Emotes" are short phrases like
+  the four quick words before, **not animations or emoji**. One Quick
+  button beside the chat box opens a pop-up with every line, grouped
+  by set; a tap sends the line as ordinary chat and closes it (two
+  taps per send, accepted for room to grow). Lines are still plain
+  chat, so a button says nothing a keyboard couldn't. Wording is
+  PLACEHOLDER: the owner approved the draft Promise and Threat lines;
+  the Emote lines were written after emoji were ruled out.
 
 All amounts are PLACEHOLDER, to be tuned in playtest.
 

@@ -1126,12 +1126,20 @@ local DecisionStudio = {}
 -- easy to miss (closed by default, behind a top-bar icon) and on a phone
 -- often isn't open at all, so the Studio carries its own: a text field
 -- and a Send button, at the bottom between the hold buttons, lifted with the rest of this stack when the on-screen keyboard opens.
--- Enter sends too. What's sent goes through the Negotiate channel
+-- Enter sends too. A Quick button left of the field opens the one-tap
+-- lines (promises, threats, emotes) for a phone player who'd rather
+-- not type. What's sent goes through the Negotiate channel
 -- exactly as the chat bar's would, so bubbles, filtering and the
 -- spectators' read-only view all apply unchanged.
 local CHAT_H = 56 -- a primary Button's own height, so the row fits it
 local SEND_W = 88
+-- The Quick button left of the box, and its pop-up of one-tap lines
+-- (payoff-loop step 3): one column per DecisionLogic.QUICK_CHAT set,
+-- each line a compact button that wraps to two lines.
+local QUICK_W = 80
 local QUICK_GAP = Theme.spacing.xs
+local QUICK_COL_W = 112
+local QUICK_HEAD_H = 20
 local WATCH_W = 150
 -- TextChatService's own per-message limit.
 local MAX_MESSAGE = 200
@@ -1140,7 +1148,7 @@ local function chatBox(store: Store, order: number): Frame
 	local input = create("TextBox")({
 		Name = "Input",
 		ClearTextOnFocus = false,
-		PlaceholderText = "Type to the others…",
+		PlaceholderText = "Type here…",
 		PlaceholderColor3 = Theme.color.inkMuted,
 		Text = "",
 		TextColor3 = Theme.color.ink,
@@ -1151,7 +1159,7 @@ local function chatBox(store: Store, order: number): Frame
 		-- A dark well, not a panel: it's where you type (UI art pass).
 		BackgroundColor3 = Theme.color.background,
 		LayoutOrder = 1,
-		Size = UDim2.fromOffset(CHAT_W - SEND_W - Theme.spacing.sm, CHAT_H),
+		Size = UDim2.fromOffset(CHAT_W - SEND_W - QUICK_W - 2 * Theme.spacing.sm, CHAT_H),
 		Base.corner(Theme.radius.md),
 		Base.padding(Theme.spacing.sm),
 		create("UIStroke")({
@@ -1185,35 +1193,90 @@ local function chatBox(store: Store, order: number): Frame
 		changed:Disconnect()
 	end)
 
+	-- The Quick pop-up: every one-tap line, grouped by set. A tap sends
+	-- it through the same store.send as the box (so it's just chat) and
+	-- closes the pop-up; the Quick button toggles it.
+	local quickOpen = source(false)
+	local sets = DecisionLogic.QUICK_CHAT
+	local columns: { any } = {}
+	for setIndex, set in sets do
+		local lines: { any } = {
+			Base.text("label", {
+				Name = "Heading",
+				LayoutOrder = 0,
+				Size = UDim2.fromOffset(QUICK_COL_W, QUICK_HEAD_H),
+				Text = string.upper(set.name),
+				TextColor3 = Theme.color[set.color],
+				TextWrapped = false,
+			}),
+		}
+		for lineIndex, line in set.lines do
+			table.insert(
+				lines,
+				C.Button({
+					label = line,
+					variant = "secondary",
+					compact = true,
+					width = QUICK_COL_W,
+					layoutOrder = lineIndex,
+					order = 800 + setIndex * 10 + lineIndex,
+					onActivate = function()
+						quickOpen(false)
+						store.send(line)
+					end,
+				})
+			)
+		end
+		local column = stack(set.name, QUICK_COL_W, QUICK_GAP, lines)
+		column.LayoutOrder = setIndex
+		table.insert(columns, column)
+	end
+	local popupW = #sets * QUICK_COL_W + (#sets - 1) * QUICK_GAP + 2 * Theme.spacing.sm
+	local popup = create("Frame")({
+		Name = "QuickPopup",
+		-- Above the Quick button, its left edge on the chat line's.
+		AnchorPoint = Vector2.new(0, 1),
+		Position = UDim2.new(0, 0, 0, -Theme.spacing.sm),
+		Size = UDim2.fromOffset(popupW, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		BackgroundColor3 = Base.STAGE_BACKGROUND,
+		ZIndex = 10,
+		Visible = quickOpen,
+		Base.corner(Theme.radius.md),
+		Base.stage(),
+		Base.padding(Theme.spacing.sm),
+		create("UIListLayout")({
+			FillDirection = Enum.FillDirection.Horizontal,
+			Padding = UDim.new(0, QUICK_GAP),
+			SortOrder = Enum.SortOrder.LayoutOrder,
+		}),
+		columns :: any, -- Vide takes a nested array of children
+	}) :: Frame
+
+	local quickButton = C.Button({
+		label = function()
+			return if quickOpen() then "Close" else "Quick"
+		end,
+		variant = "secondary",
+		width = QUICK_W,
+		layoutOrder = 1,
+		order = 790,
+		onActivate = function()
+			quickOpen(not quickOpen())
+		end,
+	})
+	quickButton.ZIndex = 10
+	popup.Parent = quickButton
+	input.LayoutOrder = 2
+
 	local row = hrow("Line", 1, CHAT_H, Theme.spacing.sm, {
+		quickButton,
 		input,
-		C.Button({ label = "Send", variant = "primary", width = SEND_W, layoutOrder = 2, onActivate = submit }),
+		C.Button({ label = "Send", variant = "primary", width = SEND_W, layoutOrder = 3, onActivate = submit }),
 	})
 	row.Size = UDim2.fromOffset(CHAT_W, CHAT_H)
 
-	-- One tap sends a stock line (DecisionLogic.QUICK_PHRASES) through
-	-- the same store.send as the box, so it's just chat.
-	local phrases = DecisionLogic.QUICK_PHRASES
-	local quickW = (CHAT_W - (#phrases - 1) * QUICK_GAP) / #phrases
-	local quick: { any } = {}
-	for index, phrase in phrases do
-		table.insert(
-			quick,
-			C.Button({
-				label = phrase,
-				variant = "secondary",
-				width = quickW,
-				layoutOrder = index,
-				onActivate = function()
-					store.send(phrase)
-				end,
-			})
-		)
-	end
-	local quickRow = hrow("QuickChat", 2, Theme.touch.primaryHeight, QUICK_GAP, quick)
-	quickRow.Size = UDim2.fromOffset(CHAT_W, Theme.touch.primaryHeight)
-
-	local block = stack("Chat", CHAT_W, Theme.spacing.xs, { row, quickRow })
+	local block = stack("Chat", CHAT_W, Theme.spacing.xs, { row })
 	block.LayoutOrder = order
 	return block
 end

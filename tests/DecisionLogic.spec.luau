@@ -508,3 +508,26 @@ describe("DecisionLogic.revealStageX (playtest 2026-10-04)", function()
 		expect(DecisionLogic.revealStageX(700, 368, 130, 16, 112)):toBe(458)
 	end)
 end)
+
+describe("DecisionLogic.QUICK_CHAT (payoff-loop step 3)", function()
+	it("has the Promise, Threat and Emote sets, four lines each", function()
+		local names = {}
+		for _, set in DecisionLogic.QUICK_CHAT do
+			table.insert(names, set.name)
+			expect(#set.lines):toBe(4)
+		end
+		expect(table.concat(names, ",")):toBe("Promise,Threat,Emote")
+	end)
+
+	it("keeps every line short and plain, with no repeats", function()
+		local seen: { [string]: boolean } = {}
+		for _, set in DecisionLogic.QUICK_CHAT do
+			for _, line in set.lines do
+				assert(#line > 0 and #line <= DecisionLogic.QUICK_LINE_MAX, "too long: " .. line)
+				assert(string.find(line, "[\128-\255]") == nil, "not plain text: " .. line)
+				assert(not seen[line], "repeated: " .. line)
+				seen[line] = true
+			end
+		end
+	end)
+end)
