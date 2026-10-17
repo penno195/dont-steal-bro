@@ -42,6 +42,16 @@ TestRunner.describe("ProgressionLogic.isWin", function()
 	end)
 end)
 
+TestRunner.describe("ProgressionLogic.reachedStudio", function()
+	TestRunner.it("is true for every result but failing to qualify", function()
+		TestRunner.expect(ProgressionLogic.reachedStudio("FailedToQualify")):toBe(false)
+		TestRunner.expect(ProgressionLogic.reachedStudio("StudioLoss")):toBe(true)
+		TestRunner.expect(ProgressionLogic.reachedStudio("ForfeitDisconnect")):toBe(true)
+		TestRunner.expect(ProgressionLogic.reachedStudio("QualifiedWin")):toBe(true)
+		TestRunner.expect(ProgressionLogic.reachedStudio("StudioWinAllShare")):toBe(true)
+	end)
+end)
+
 TestRunner.describe("ProgressionLogic.applyResult - a five-round win chain", function()
 	TestRunner.it("increments the streak once per win, and tracks bestStreak with it", function()
 		local state = FRESH

@@ -313,12 +313,20 @@ export type SeasonStep = (
 	progress: { [string]: ProfileLogic.SeasonProgress }
 ) -> ({ [string]: ProfileLogic.SeasonProgress }, { StoreLogic.Grant })
 
+-- Every round, win or lose, pays XP, place coins, level-up coins and
+-- any level cosmetics now due (design-decisions.md Q1, "a payoff for
+-- every round"; LevelLogic). Same shape as SeasonStep and for the same
+-- reason: the step gets the stored lifetime XP and owned cosmetics, and
+-- returns the new XP and the grants, in this one mutation.
+export type LevelStep = (xp: number, ownedCosmetics: { string }) -> (number, { StoreLogic.Grant })
+
 export type ProgressionWriter = (
 	player: Player,
 	state: ProfileLogic.ProgressionState,
 	buyBackOffer: ProfileLogic.BuyBackOffer?,
 	reward: WinRewardWrite?,
-	seasonStep: SeasonStep?
+	seasonStep: SeasonStep?,
+	levelStep: LevelStep?
 ) -> { string }
 
 local progressionWriterClaimedBy: string? = nil
@@ -342,7 +350,8 @@ local function writeProgressionState(
 	state: ProfileLogic.ProgressionState,
 	buyBackOffer: ProfileLogic.BuyBackOffer?,
 	reward: WinRewardWrite?,
-	seasonStep: SeasonStep?
+	seasonStep: SeasonStep?,
+	levelStep: LevelStep?
 ): { string }
 	local d = writable(player)
 	if d == nil then
@@ -366,6 +375,12 @@ local function writeProgressionState(
 		end
 		-- Not merged into `changes`: those are the win reward's lines,
 		-- and the step logs its own track items (SeasonLogic.describePaid).
+		applyGrantsTo(d, grants)
+	end
+	if levelStep ~= nil then
+		local xpAfter, grants = levelStep((d.xp :: number?) or 0, table.clone(d.ownedCosmetics))
+		d.xp = xpAfter
+		-- Not merged either: ProgressionService logs the round's award.
 		applyGrantsTo(d, grants)
 	end
 	return changes

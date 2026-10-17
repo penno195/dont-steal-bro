@@ -126,8 +126,8 @@ function LevelLogic.placeCurrency(config: RoundRewardsConfig, place: number?): n
 end
 
 -- Everything one round pays a participant. `milestones` is every level
--- that unlocks something (CosmeticDefs with a level unlock, step 1b);
--- the ones crossed this round come back in `milestonesReached`.
+-- that unlocks something (LevelLogic.milestoneLevels below); the ones
+-- crossed this round come back in `milestonesReached`.
 function LevelLogic.award(
 	config: RoundRewardsConfig,
 	xpBefore: number,
@@ -157,6 +157,48 @@ function LevelLogic.award(
 		levelUpCurrency = config.level.levelUpCurrency * (levelAfter - levelBefore),
 		milestonesReached = reached,
 	}
+end
+
+-- ===== level-only cosmetics =================================================
+
+-- A cosmetic a level unlocks (CosmeticDef.unlockLevel). Built by the
+-- caller from the Cosmetics registry, enabled ones only.
+export type LevelUnlock = {
+	id: string,
+	level: number,
+}
+
+-- Every level that unlocks something, once each, ascending.
+function LevelLogic.milestoneLevels(unlocks: { LevelUnlock }): { number }
+	local seen: { [number]: boolean } = {}
+	local levels = {}
+	for _, unlock in unlocks do
+		if not seen[unlock.level] then
+			seen[unlock.level] = true
+			table.insert(levels, unlock.level)
+		end
+	end
+	table.sort(levels)
+	return levels
+end
+
+-- The ids `level` has unlocked that `owned` doesn't hold yet. Every one
+-- at or below the level, not just the ones crossed this round, so a
+-- cosmetic added at level 5 later still reaches a player already past
+-- it, at their next round.
+function LevelLogic.unlocksDue(unlocks: { LevelUnlock }, level: number, owned: { string }): { string }
+	local have: { [string]: boolean } = {}
+	for _, id in owned do
+		have[id] = true
+	end
+	local due = {}
+	for _, unlock in unlocks do
+		if unlock.level <= level and not have[unlock.id] then
+			have[unlock.id] = true
+			table.insert(due, unlock.id)
+		end
+	end
+	return due
 end
 
 return LevelLogic

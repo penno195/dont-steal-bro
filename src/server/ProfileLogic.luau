@@ -186,6 +186,15 @@ export type ProfileData = {
 	-- v2 seam 3). Set in the same mutation as the grant, so it gives
 	-- once ever, however often the tutorial is replayed.
 	tutorialGiftGiven: boolean,
+
+	-- ===== schema v16, XP and account level ===============================
+
+	-- Lifetime XP (design-decisions.md Q1, "a payoff for every round";
+	-- payoff-loop-roadmap.md step 1). Only the XP is stored: the level is
+	-- always LevelLogic.progressFor(xp), so the two can never disagree.
+	-- Never resets. Written by the progression writer, in the same
+	-- mutation as the round's streak result.
+	xp: number,
 }
 
 -- Structurally StaffGrantLogic.UnseenGift: a unique id, who gave it
@@ -219,7 +228,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 15
+local CURRENT_SCHEMA_VERSION = 16
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -253,6 +262,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		tutorialRewarded = false,
 		tutorialRewardUnseen = false,
 		tutorialGiftGiven = false,
+		xp = 0,
 	}
 end
 
@@ -434,6 +444,15 @@ migrations[14] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 15
 	next.tutorialGiftGiven = (old.tutorialGiftGiven :: boolean?) or false
+	return next
+end
+
+-- v15 -> v16 (XP and account level): no XP. Nothing before this version
+-- earned any, so every account starts at level 1.
+migrations[15] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 16
+	next.xp = (old.xp :: number?) or 0
 	return next
 end
 

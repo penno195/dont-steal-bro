@@ -3285,3 +3285,37 @@ TestRunner.describe("Validate.checkEvent (staff tools step 5)", function()
 		})):toBe(1)
 	end)
 end)
+
+TestRunner.describe("Validate - level cosmetics", function()
+	local function levelHat(level: any): Validate.CosmeticDef
+		local hat = validCosmetic("hat-ltd", "Skin")
+		hat.unlockLevel = level
+		return hat
+	end
+
+	TestRunner.it("accepts a level cosmetic nothing else hands out", function()
+		TestRunner.expect(#runSelling({}, levelHat(10))):toBe(0)
+	end)
+
+	TestRunner.it("refuses a level below 2, a fraction, or past maxLevel", function()
+		TestRunner.expect(#runSelling({}, levelHat(1)) > 0):toBeTruthy()
+		TestRunner.expect(#runSelling({}, levelHat(5.5)) > 0):toBeTruthy()
+		TestRunner.expect(#runSelling({}, levelHat(100000)) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a level cosmetic that is also sold", function()
+		TestRunner.expect(#runSelling({ { fileName = "T.luau", def = limitedHat() } }, levelHat(10)) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a level cosmetic that is also a win drop", function()
+		local hat = levelHat(10)
+		hat.winDrop = true
+		TestRunner.expect(#runSelling({}, hat) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("refuses a level cosmetic that is also the community reward", function()
+		local config = validGameConfig()
+		config.community.groupId = 1
+		TestRunner.expect(#runSelling({}, levelHat(10), config) > 0):toBeTruthy()
+	end)
+end)

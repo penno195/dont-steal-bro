@@ -128,3 +128,29 @@ TestRunner.describe("LevelLogic.award", function()
 		TestRunner.expect(award.levelUpCurrency):toBe(0)
 	end)
 end)
+
+TestRunner.describe("LevelLogic level unlocks", function()
+	local unlocks: { LevelLogic.LevelUnlock } = {
+		{ id = "trail-ten", level = 10 },
+		{ id = "hat-five", level = 5 },
+		{ id = "card-five", level = 5 },
+	}
+
+	TestRunner.it("lists each milestone level once, ascending", function()
+		local levels = LevelLogic.milestoneLevels(unlocks)
+		TestRunner.expect(#levels):toBe(2)
+		TestRunner.expect(levels[1]):toBe(5)
+		TestRunner.expect(levels[2]):toBe(10)
+	end)
+
+	TestRunner.it("is due nothing below the first milestone", function()
+		TestRunner.expect(#LevelLogic.unlocksDue(unlocks, 4, {})):toBe(0)
+	end)
+
+	TestRunner.it("is due every unlock at or below the level, owned ones skipped", function()
+		local due = LevelLogic.unlocksDue(unlocks, 10, { "hat-five" })
+		TestRunner.expect(#due):toBe(2)
+		TestRunner.expect(table.find(due, "trail-ten") ~= nil):toBe(true)
+		TestRunner.expect(table.find(due, "card-five") ~= nil):toBe(true)
+	end)
+end)

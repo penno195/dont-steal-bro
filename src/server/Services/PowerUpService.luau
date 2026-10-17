@@ -144,6 +144,11 @@ local livePickups: { [SpawnPointRecord]: LivePickup } = {}
 local pickupParts: { [SpawnPointRecord]: BasePart } = {}
 local pendingRespawnThreads: { [SpawnPointRecord]: thread } = {}
 local racerStates: { [number]: RacerState } = {}
+-- Power-ups each racer landed on a rival this race (LevelLogic's hit XP,
+-- read at round end by ProgressionService). Kept apart from racerStates
+-- because a leaver's state is dropped on PlayerRemoving, and a Studio
+-- leaver's forfeit is still paid for what they did. Reset per race.
+local hitsThisRace: { [number]: number } = {}
 local pickupsFolder: Folder? = nil
 local mapRarityWeights: Validate.PowerUpRarityWeights? = nil
 
@@ -1007,6 +1012,11 @@ local function useFor(
 		audit(racer, def.id, resolvedTargetId, "Applied", description)
 		sendResult(racer, true, def.id, resolvedTargetId, description)
 		Telemetry.powerUpUsed(racer.id, def.id, true)
+		-- A hit is a landed use on a rival. Self items and Area zones
+		-- (no single target) don't count.
+		if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then
+			hitsThisRace[racer.id] = (hitsThisRace[racer.id] or 0) + 1
+		end
 
 		-- Only a hit that landed shoves: a Shield or an immunity window
 		-- blocks the push along with the effect.
@@ -1211,6 +1221,7 @@ end
 
 local function beginRace()
 	EffectContext.assertRound("PowerUpService.beginRace")
+	hitsThisRace = {}
 	startPickups(true)
 	grantLoadouts()
 end
@@ -1287,6 +1298,11 @@ local PowerUpService: Loader.Service = {
 			return false
 		end
 		return PowerUpLogic.isOnCooldown(state.lastUsedAt[powerUpId], cooldownSecondsFor(racerId, def), now())
+	end,
+
+	-- Power-ups this racer landed on a rival in the current race.
+	getHitsFor = function(racerId: number): number
+		return hitsThisRace[racerId] or 0
 	end,
 
 	-- Same shape as getInventoryFor.

@@ -54,6 +54,7 @@ local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
+local LevelLogic = require(ReplicatedStorage.Shared.LevelLogic)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local ProgressionLogic = require(ServerScriptService.Server.ProgressionLogic)
@@ -86,6 +87,9 @@ type LedgerEntry = {
 	dropAmount: number?,
 	-- A practice match's result: recorded, never written (applyRoundResult).
 	practice: boolean?,
+	-- What the round paid in XP, coins and levels (LevelLogic.award),
+	-- set by the write's level step. nil if the write never ran it.
+	levelAward: LevelLogic.RoundAward?,
 }
 
 -- ===== season tracks (rewards-roadmap.md step 5) ===========================
@@ -112,6 +116,86 @@ local function seasonStepFor(): (progress: { [string]: any }) -> ({ [string]: an
 			end
 		end
 		return updates, grants
+	end
+end
+
+-- ===== every round's payoff (payoff-loop-roadmap.md step 1) ================
+
+-- A service this file doesn't depend on, or nil if this server has none.
+-- A missing source only means that part of the round pays nothing.
+local function optionalService(name: string): any
+	local ok, service = pcall(Loader.get, name)
+	return if ok then service else nil
+end
+
+-- What `player` did this round, from the server's own records - nothing
+-- here comes from a client. Read at the result, so a Studio leaver's
+-- forfeit still counts their race.
+local function performanceFor(player: Player, reason: ReasonCode): LevelLogic.RoundPerformance
+	local tasksDone = 0
+	local place: number? = nil
+	local TaskService = optionalService("TaskService")
+	if TaskService ~= nil then
+		local progress = TaskService.getProgressFor(player.UserId)
+		if progress ~= nil then
+			tasksDone = progress.tasksCompleted
+		end
+		local qualification = TaskService.getLastQualificationResult()
+		for _, entry in (if qualification ~= nil then qualification.ranked else {}) :: { any } do
+			if entry.playerId == player.UserId then
+				place = entry.rank
+				-- A forfeit's leaver may have finished their tasks
+				-- before the race state was read here; the ranking
+				-- recorded them either way.
+				tasksDone = math.max(tasksDone, entry.tasksCompleted)
+			end
+		end
+	end
+	local PowerUpService = optionalService("PowerUpService")
+	return {
+		tasksDone = tasksDone,
+		place = place,
+		reachedStudio = ProgressionLogic.reachedStudio(reason),
+		won = ProgressionLogic.isWin(reason),
+		hits = if PowerUpService ~= nil then PowerUpService.getHitsFor(player.UserId) else 0,
+	}
+end
+
+-- Every enabled level-only cosmetic (CosmeticDef.unlockLevel). Built per
+-- round, like dropPool, so it reads the registry as it stands.
+local function levelUnlocks(): { LevelLogic.LevelUnlock }
+	local unlocks: { LevelLogic.LevelUnlock } = {}
+	for _, entry in Cosmetics do
+		local def = entry.def :: any
+		if def.enabled and type(def.unlockLevel) == "number" then
+			table.insert(unlocks, { id = def.id, level = def.unlockLevel })
+		end
+	end
+	return unlocks
+end
+
+-- The progression writer's LevelStep: runs LevelLogic.award on the
+-- stored XP, inside the write, and hands the award to `onAward` for the
+-- ledger and the audit line. Place coins and level-up coins are one
+-- Currency grant; each level cosmetic now due is a Cosmetic grant.
+local function levelStepFor(
+	performance: LevelLogic.RoundPerformance,
+	onAward: (award: LevelLogic.RoundAward, cosmetics: { string }) -> ()
+): (xp: number, owned: { string }) -> (number, { RewardLogic.Grant })
+	return function(xp, owned)
+		local unlocks = levelUnlocks()
+		local award = LevelLogic.award(GameConfig.roundRewards, xp, performance, LevelLogic.milestoneLevels(unlocks))
+		local grants: { RewardLogic.Grant } = {}
+		local coins = award.placeCurrency + award.levelUpCurrency
+		if coins > 0 then
+			table.insert(grants, { kind = "Currency", amount = coins })
+		end
+		local cosmetics = LevelLogic.unlocksDue(unlocks, award.levelAfter, owned)
+		for _, id in cosmetics do
+			table.insert(grants, { kind = "Cosmetic", cosmeticId = id })
+		end
+		onAward(award, cosmetics)
+		return award.xpAfter, grants
 	end
 end
 
@@ -197,13 +281,14 @@ end
 local ledger: { [string]: LedgerEntry } = {}
 
 -- DataService.ProgressionWriter's shape: the reward is its WinRewardWrite
--- and the step its SeasonStep.
+-- and the steps its SeasonStep and LevelStep.
 local writeProgressionState: ((
 	player: Player,
 	state: ProfileLogic.ProgressionState,
 	buyBackOffer: ProfileLogic.BuyBackOffer?,
 	reward: any,
-	seasonStep: any
+	seasonStep: any,
+	levelStep: any
 ) -> { string })? =
 	nil
 
@@ -324,13 +409,14 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	-- rollWinReward lists the currency grant first, then the drop's.
 	local dropGrant = if rewardRecord ~= nil and rewardRecord.drop ~= nil then rewardGrants[2] else nil
 	local dropAmount = if dropGrant ~= nil then dropGrant.amount else nil
-	ledger[key] = {
+	local entry: LedgerEntry = {
 		reason = result.reason,
 		after = after,
 		before = before,
 		reward = rewardRecord,
 		dropAmount = dropAmount,
 	}
+	ledger[key] = entry
 
 	local write = writeProgressionState
 	if write == nil then
@@ -340,7 +426,13 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	local rewardWrite = if rewardRecord ~= nil then { record = rewardRecord, grants = rewardGrants } else nil
 	local seasonStep = if ProgressionLogic.isWin(result.reason) then seasonStepFor() else nil
 	local buyBackOffer = ProgressionLogic.buyBackOffer(result.roundId, before, result.reason)
-	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep)
+	-- Every round pays, win or lose (Q1, "a payoff for every round").
+	local levelCosmetics: { string } = {}
+	local levelStep = levelStepFor(performanceFor(player, result.reason), function(award, cosmetics)
+		entry.levelAward = award
+		levelCosmetics = cosmetics
+	end)
+	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep, levelStep)
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
 	if ProgressionLogic.isWin(result.reason) then
@@ -362,6 +454,24 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 				)
 			)
 		end
+	end
+
+	local award = entry.levelAward
+	if award ~= nil then
+		print(
+			string.format(
+				"Progression: %s round=%s xp +%d (%d) level %d->%d coins +%d (place) +%d (level-ups)%s",
+				player.Name,
+				result.roundId,
+				award.xpGained,
+				award.xpAfter,
+				award.levelBefore,
+				award.levelAfter,
+				award.placeCurrency,
+				award.levelUpCurrency,
+				if #levelCosmetics > 0 then " cosmetics " .. table.concat(levelCosmetics, ",") else ""
+			)
+		)
 	end
 
 	-- No client message here. The RoundRecap is sent on entering

@@ -418,6 +418,15 @@ export type CosmeticDef = {
 	-- stay out of the win pool unless their own file says otherwise.
 	-- Disabled cosmetics never drop, whatever this says.
 	winDrop: boolean?,
+
+	-- A level-only cosmetic: reaching this account level gives it
+	-- (design-decisions.md Q1, "a payoff for every round"; LevelLogic).
+	-- Level-only means nothing else hands it out - not sold, not a drop,
+	-- not a prize or a track item. Validate.run checks that, and that
+	-- the level is reachable (<= roundRewards.level.maxLevel). Given at
+	-- the player's next round end once enabled, so a disabled one can
+	-- wait for its asset.
+	unlockLevel: number?,
 }
 
 -- ===== StoreItemDef: P4-5 ================================================
@@ -1714,6 +1723,12 @@ function Validate.checkCosmeticItem(fileName: string, def: CosmeticDef, issues: 
 	end
 	if not isNonEmptyString(def.description) then
 		issue(issues, "Cosmetic", fileName, "description", "description must be a non-empty string")
+	end
+	if
+		def.unlockLevel ~= nil
+		and (type(def.unlockLevel) ~= "number" or def.unlockLevel ~= math.floor(def.unlockLevel) or def.unlockLevel < 2)
+	then
+		issue(issues, "Cosmetic", fileName, "unlockLevel", "must be a whole level of 2 or more, or nil")
 	end
 	if not inSet(def.rarity, POWERUP_RARITIES) then
 		issue(
@@ -4846,14 +4861,25 @@ function Validate.run(input: RegistryInput): { Issue }
 		end
 	end
 
-	-- The community reward and the tutorial reward are each exclusive: a
-	-- cosmetic that nothing else hands out (not sold, not a drop, not a
-	-- leaderboard prize, not on a season track, not the other reward). It
-	-- may be disabled while its asset is being made: nothing grants it
-	-- until it's enabled.
-	local function checkExclusiveCosmetic(id: string, field: string, only: string, otherId: string?)
+	-- The community reward, the tutorial reward and each level cosmetic
+	-- are exclusive: a cosmetic that nothing else hands out (not sold,
+	-- not a drop, not a leaderboard prize, not on a season track, not the
+	-- other reward). It may be disabled while its asset is being made:
+	-- nothing grants it until it's enabled. `cosmeticFile` files the
+	-- issue under that cosmetic rather than GameConfig.
+	local function checkExclusiveCosmetic(
+		id: string,
+		field: string,
+		only: string,
+		otherId: string?,
+		cosmeticFile: string?
+	)
 		local function bad(message: string)
-			issue(issues, "GameConfig", "GameConfig.luau", field, message)
+			if cosmeticFile ~= nil then
+				issue(issues, "Cosmetic", cosmeticFile, field, message)
+			else
+				issue(issues, "GameConfig", "GameConfig.luau", field, message)
+			end
 		end
 		local cosmetic: CosmeticDef? = nil
 		local registry: { { fileName: string, def: CosmeticDef } } = cosmetics or {}
@@ -4931,6 +4957,41 @@ function Validate.run(input: RegistryInput): { Issue }
 			"the tutorial reward is tutorial-only",
 			communityId
 		)
+	end
+
+	-- Level-only cosmetics (Q1, "a payoff for every round"): nothing else
+	-- hands one out, and its level is one an account can reach.
+	local maxLevel = if input.gameConfig.roundRewards ~= nil
+			and type(input.gameConfig.roundRewards.level) == "table"
+		then input.gameConfig.roundRewards.level.maxLevel
+		else nil
+	for _, entry in (cosmetics or {}) :: { { fileName: string, def: CosmeticDef } } do
+		local level = entry.def.unlockLevel
+		if type(level) ~= "number" then
+			continue
+		end
+		local function bad(message: string)
+			issue(issues, "Cosmetic", entry.fileName, "unlockLevel", message)
+		end
+		if type(maxLevel) == "number" and level > maxLevel then
+			bad(
+				string.format(
+					"level %d is past roundRewards.level.maxLevel (%d), so no one can reach it",
+					level,
+					maxLevel
+				)
+			)
+		end
+		if entry.def.id == communityId or entry.def.id == tutorialId then
+			bad(
+				string.format(
+					"cosmetic %q is also the community or tutorial reward; a level cosmetic is level-only",
+					entry.def.id
+				)
+			)
+		elseif type(entry.def.id) == "string" then
+			checkExclusiveCosmetic(entry.def.id, "unlockLevel", "a level cosmetic is level-only", nil, entry.fileName)
+		end
 	end
 
 	-- The tutorial pays power-ups into loadout stock, so each must exist

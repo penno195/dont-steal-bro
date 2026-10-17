@@ -26,10 +26,15 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     milestones crossed). The profile stores only lifetime `xp`, and the
     level is always worked out from it. No Roblox APIs, so it's
     unit-tested in Lune.
-  - [ ] 1b. Profile fields (`xp`, `level`) through a ProfileLogic
-    migration; award at round end alongside `applyRoundResult`
-    (`ProgressionService` / `RewardLogic`); level-milestone cosmetics as
-    one Cosmetics config each.
+  - [x] 1b. Profile field `xp` (schema v16; the level is derived, per
+    1a); awarded in `applyRoundResult`'s single progression write
+    (DataService's `LevelStep`): XP, place + level-up coins, and every
+    enabled level cosmetic now due. Inputs are server-side only:
+    TaskService's tasks and qualification rank, PowerUpService's landed
+    hits on a rival (`getHitsFor`). Level cosmetics are a
+    `CosmeticDef.unlockLevel` (level-only, validated). Three disabled
+    PLACEHOLDERS await assets and the owner's say on levels/looks:
+    ClimberTrail (5), VeteranNameplate (10), OldHandStreakFlair (25).
   - [ ] 1c. UI: XP bar + level on the results screen and Hub menu,
     level-up pop-up.
 - [ ] **2. Finale guesses for knocked-out players.** Each non-finalist

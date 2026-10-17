@@ -63,6 +63,14 @@ function ProgressionLogic.isWin(reason: ReasonCode): boolean
 	return WIN_REASONS[reason] == true
 end
 
+-- Whether this result means the player sat in the Decision Studio
+-- (LevelLogic's Studio XP). Every code but FailedToQualify does: a
+-- forfeit is a leave from the Studio, and QualifiedWin is the last
+-- finalist standing there.
+function ProgressionLogic.reachedStudio(reason: ReasonCode): boolean
+	return reason ~= "FailedToQualify"
+end
+
 -- Maps an Outcomes.luau branch plus "did this player win it" onto the
 -- reason code that gets recorded. Total over every branch Outcomes can
 -- return (P3-1: the three-, two- and one-finalist sets), because a
