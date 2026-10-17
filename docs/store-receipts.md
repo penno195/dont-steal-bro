@@ -343,8 +343,8 @@ Roughly in order of how much they cost:
 3. **Make the free path fast enough to be real.** Q8's rule is only true
    if "also earnable" means earnable on a comparable timescale. There
    are targets now (design-decisions.md Q1, "pricing", 2026-10-02): one
-   power-up is one rung-0 win, or about 23-29 Robux, so ten Sprint
-   Boosts are ten wins or 249 Robux. Playtest still has to confirm how
+   Common power-up is one rung-0 win, or about 15 Robux (repriced
+   2026-10-17), so ten Sprint Boosts are ten wins or 105 Robux. Playtest still has to confirm how
    long a win takes. **Whoever sets those numbers is the
    person who decides whether this design is pay-to-win, not whoever
    wrote Q8.** If ten Sprint Boosts cost 79 Robux or forty minutes of

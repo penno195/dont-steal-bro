@@ -239,6 +239,28 @@ step 7a). Every amount is still unconfirmed until a playtest.
 - Not addressed: high-rung snowball (a rung-21 stealer earns 12
   power-ups a win). Left for playtest.
 
+*Applied (2026-10-17, user decision):* **repricing after the field
+cap.** A round now puts out only 12 field power-ups (§13), so a loadout
+is most of a player's power-ups and a Rare is scarce. Prices now go by
+rarity.
+- **Coin prices: Common 25, Uncommon 50, Rare 100.** Common is
+  unchanged, so every "N power-ups" figure above (win payouts, season
+  track, leaderboards, the daily hunt) still holds in Commons.
+- **Robux: a Common costs about 15 R$.** The Small Coin Pouch sets the
+  base rate: 75 coins for **45 R$** (was 79). The owner chose to reprice
+  the coin packs rather than sell single power-ups for Robux. At that
+  rate an Uncommon is about 30 R$ and a Rare about 60 R$.
+- **Bundles are about 30% off that rate:** Large Coin Chest 250 coins
+  for **105 R$** (was 249), Sprint Boost x10 **105 R$** (was 249),
+  Starter Loadout Bundle (15 Commons) **159 R$** (was 349).
+  Each shows the full rate as a struck-through "was" price (150, 150
+  and 225 R$), once its live dashboard price is really lower.
+- **No limit on Rares in a loadout.** Price alone controls it.
+- **A duplicate cosmetic drop pays one power-up of its rarity:**
+  25 / 50 / 100 coins (was 10 / 20 / 50).
+- The Robux prices in the store files are display only. The owner sets
+  the real ones on each developer product in the Creator Dashboard.
+
 *Applied (2026-10-08, user decision):* **a much bigger reason to steal.**
 - **Win payouts are now 250 / 50 / 25** (sole stealer / lone sharer /
   all share), up from 100 / 50 / 25. At rung 0, a sole steal now buys

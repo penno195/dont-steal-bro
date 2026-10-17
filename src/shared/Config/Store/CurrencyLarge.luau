@@ -13,11 +13,12 @@ local CurrencyLarge: Validate.StoreItemDef = {
 	enabled = true,
 	displayName = "Large Coin Chest",
 	description = "250 coins. The same coins you earn from playing - these just arrive sooner.",
-	robuxPrice = 249, -- ten power-ups at about 25 R$ each; display only
+	robuxPrice = 105, -- 30% off the Small Coin Pouch's rate (2026-10-17); display only
+	wasPrice = 150, -- 250 coins at the Small Coin Pouch rate: the ~30% saving, struck through
 	sortOrder = 31,
 	imageAssetId = 80999045340262, -- assets/store/currency-large.png (art pass 2026-10-10)
 	grants = {
-		{ kind = "Currency", amount = 250 }, -- ten power-ups (Q1 pricing, 2026-10-02)
+		{ kind = "Currency", amount = 250 }, -- ten Commons (Q1 pricing, 2026-10-17)
 	},
 }
 

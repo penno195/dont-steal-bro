@@ -22,11 +22,11 @@ local CurrencySmall: Validate.StoreItemDef = {
 	enabled = true,
 	displayName = "Small Coin Pouch",
 	description = "75 coins. The same coins you earn from playing - these just arrive sooner.",
-	robuxPrice = 79, -- three power-ups at about 26 R$ each; display only
+	robuxPrice = 45, -- the base coin rate: 25 coins (a Common) = 15 R$ (2026-10-17); display only
 	sortOrder = 30,
 	imageAssetId = 127992599227124, -- assets/store/currency-small.png (art pass 2026-10-10)
 	grants = {
-		{ kind = "Currency", amount = 75 }, -- three power-ups (Q1 pricing, 2026-10-02)
+		{ kind = "Currency", amount = 75 }, -- three Commons (Q1 pricing, 2026-10-17)
 	},
 }
 

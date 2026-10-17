@@ -67,7 +67,7 @@ local GameConfig: Validate.GameConfig = {
 				Rare = { weight = 5, perRungGrowth = 0.2 },
 			},
 			powerUpAmount = 1,
-			duplicateCurrency = { Common = 10, Uncommon = 20, Rare = 50 }, -- 0.4, 0.8 and 2 power-ups
+			duplicateCurrency = { Common = 25, Uncommon = 50, Rare = 100 }, -- one power-up of the same rarity (2026-10-17)
 		},
 	},
 
