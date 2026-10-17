@@ -280,6 +280,13 @@ from your last task, and a bigger drop for a steal.**
   button and the BIG box show the steal chance; Share, MEDIUM and SMALL
   show the share chance.
 
+*Applied (2026-10-17, user decision):* **you can close the finale card
+while you wait.** The card still comes up at your last task, now reading
+"Waiting for other players to finish" beside a spinner, with a "Got it"
+button that closes it so you can roam the map while the others finish.
+It comes back for everyone when the race resolves (Qualified), and from
+there "Got it" works as before.
+
 *Applied (2026-10-09, user decision):* **the daily hunt.**
 - **One hidden pickup per player per UTC day**, at one of a set of
   tagged spots (`HubDailyHuntSpot`) in the hotel's rooms and in

@@ -83,7 +83,7 @@ local finalists = source({} :: { FinaleLoading.Finalist })
 local readyIds = source({} :: { [number]: boolean })
 local dismissed = source(false)
 -- You've finished your tasks and the race hasn't resolved yet: the card
--- is already up, its button waiting (owner, 2026-10-16).
+-- is up (or closed with "Got it") until Qualified (owner, 2026-10-16/17).
 local waiting = source(false)
 -- "Got it" tapped after the race resolved but before the Intro started:
 -- the card stays up (the move onto the set is behind it) and closes, as
@@ -468,6 +468,12 @@ local function dismissLoading()
 	if dismissed() then
 		return
 	end
+	-- Still racing: just close it and let them roam. Qualified brings it
+	-- back, as for everyone (owner, 2026-10-17).
+	if waiting() then
+		hideLoading()
+		return
+	end
 	if phase() ~= "Intro" then
 		early(true)
 		return
@@ -638,7 +644,7 @@ function DecisionStudioController:init()
 	-- finisher makes the final (the race resolves at the 3rd), so it's
 	-- the finalist's card from the start.
 	Net.onClientEvent("TaskAssignmentState", function(payload: any)
-		if roundState ~= "Race" or unmountLoading ~= nil or type(payload) ~= "table" then
+		if roundState ~= "Race" or waiting() or unmountLoading ~= nil or type(payload) ~= "table" then
 			return
 		end
 		local assignments = (payload.assignments or {}) :: { any }

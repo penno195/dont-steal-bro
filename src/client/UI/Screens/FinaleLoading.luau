@@ -4,8 +4,9 @@
 -- ending and the Decision Studio opening: Qualified, the move onto the
 -- set, and the Studio's Intro. Everyone sees it, finalist or not. A
 -- finalist sees it sooner, the moment they finish their last task,
--- with the button reading "Waiting for other players to finish" until
--- the top 3 are through (owner, 2026-10-16). Mounted by
+-- reading "Waiting for other players to finish" until the top 3 are
+-- through (owner, 2026-10-16); "Got it" closes it meanwhile so they can
+-- roam, and it comes back at Qualified (owner, 2026-10-17). Mounted by
 -- DecisionStudioController, which owns when it comes down.
 --
 -- What it shows, top to bottom: who made the final, the prizes on the
@@ -335,9 +336,10 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				TextColor3 = Theme.color.steal,
 				TextWrapped = true,
 			}),
-			-- "Waiting for other players to finish" while you wait, then
-			-- "Got it" once the top 3 are through. It saves nothing on its
-			-- own: the Intro only ends early when every finalist is ready
+			-- "Got it". While you wait for the others it just closes the
+			-- card so you can roam (owner, 2026-10-17); it's back at
+			-- Qualified. After that it saves nothing on its own: the Intro
+			-- only ends early when every finalist is ready
 			-- (FinaleRoster.allReady).
 			create("Frame")({
 				Name = "Dismiss",
@@ -348,11 +350,9 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 					return canDismiss() or waiting()
 				end,
 				C.Button({
-					label = function()
-						return if waiting() then "Waiting for other players to finish" else "Got it"
-					end,
+					label = "Got it",
 					onActivate = function()
-						if not waiting() and store.onDismiss then
+						if store.onDismiss then
 							store.onDismiss()
 						end
 					end,
@@ -367,7 +367,7 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				BackgroundTransparency = 1,
 				Size = UDim2.new(1, 0, 0, SPINNER),
 				Visible = function()
-					return not canDismiss() and not waiting()
+					return not canDismiss() or waiting()
 				end,
 				list(Enum.FillDirection.Horizontal, Theme.spacing.sm),
 				create("Frame")({
@@ -382,8 +382,12 @@ function FinaleLoading.mount(controller: any, store: Store): () -> ()
 				Base.text("caption", {
 					Name = "Status",
 					LayoutOrder = 2,
-					Size = UDim2.fromOffset(180, SPINNER),
-					Text = "Heading to the Studio…",
+					Size = UDim2.fromOffset(COLUMN - SPINNER - Theme.spacing.sm, SPINNER),
+					Text = function()
+						return if waiting()
+							then "Waiting for other players to finish…"
+							else "Heading to the Studio…"
+					end,
 					TextColor3 = Theme.color.inkMuted,
 					TextXAlignment = Enum.TextXAlignment.Left,
 				}),

@@ -74,9 +74,10 @@ one tile per prize on the table (`DecisionLogic.rewardTiles`, read from
 `prizeFor`), the one-line lesson, and a spinner. Every prize is coins,
 so each tile's icon is a pile of three, two or one coin, or a cross for
 nothing (rewards step 3). **Since 2026-10-16** (design-decisions.md Q1's
-case of that date) a finalist's card comes up at their last task, its
-button reading "Waiting for other players to finish" until the race
-resolves, and each tile adds that finalist's own coins and drop chance
+case of that date) a finalist's card comes up at their last task,
+reading "Waiting for other players to finish" until the race resolves
+("Got it" closes it meanwhile so they can roam; it's back at Qualified,
+2026-10-17), and each tile adds that finalist's own coins and drop chance
 (`PayoutLogic.tileLine`, from `DecisionStakes`, now also sent at the
 last task and at qualification). Without stakes (a spectator, a
 practice match) a tile shows the tier word alone.
