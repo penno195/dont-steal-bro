@@ -372,6 +372,49 @@ function Base.bevel(): Instance
 	return create("UIGradient")({ Name = "Bevel", Rotation = 90, Color = BEVEL })
 end
 
+-- The trim round a rimmed panel (HUD art pass, 2026-10-17): a dark
+-- outline outside its edge, which parts it from a bright map, and a fine
+-- dark line just inside its `rim`-wide stroke, so the rim stands off the
+-- panel like a frame. `inset` is the panel's own padding, which both
+-- step back out of to sit on its edge. Assumes Theme.radius.md corners.
+--
+-- A UIStroke per object, so each line rides on its own empty Frame.
+-- The Folder keeps them out of any UIListLayout in the panel, which lays
+-- out direct children only; they still draw as the panel's.
+function Base.trim(inset: number, rim: number): Instance
+	return create("Folder")({
+		Name = "OutlineHolder",
+		create("Frame")({
+			Name = "Outline",
+			Position = UDim2.fromOffset(-inset, -inset),
+			Size = UDim2.new(1, 2 * inset, 1, 2 * inset),
+			BackgroundTransparency = 1,
+			Base.corner(Theme.radius.md),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Outer,
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.color.outline,
+				Thickness = 2,
+				Transparency = 0.15,
+			}),
+		}),
+		create("Frame")({
+			Name = "InnerLine",
+			Position = UDim2.fromOffset(rim - inset, rim - inset),
+			Size = UDim2.new(1, 2 * (inset - rim), 1, 2 * (inset - rim)),
+			BackgroundTransparency = 1,
+			Base.corner(UDim.new(0, math.max(0, Theme.radius.md.Offset - rim))),
+			create("UIStroke")({
+				BorderStrokePosition = Enum.BorderStrokePosition.Inner,
+				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+				Color = Theme.color.outline,
+				Thickness = 1.5,
+				Transparency = 0.35,
+			}),
+		}),
+	})
+end
+
 export type StageProps = {
 	-- Rim colour; default the gold panel rim.
 	rim: (Color3 | Source<Color3>)?,
@@ -379,10 +422,8 @@ export type StageProps = {
 	thickness: (number | Source<number>)?,
 	-- The gradient; default the stage panel's (Tokens.fill.panel).
 	gradient: ColorSequence?,
-	-- Draw the dark outline round the rim, which parts a panel from a
-	-- bright map behind it. Its value is the panel's own Base.padding
-	-- (0 for none), which the outline steps back out of to sit on the
-	-- panel's edge.
+	-- Add Base.trim round the rim. Its value is the panel's own
+	-- Base.padding (0 for none).
 	outline: number?,
 }
 
@@ -406,52 +447,10 @@ function Base.stage(props: StageProps?): any
 			Base.bevel(),
 		}),
 	}
-	local inset = p.outline
-	-- The rim's own width, for the inner line; a reactive thickness
-	-- (none today) would leave it at the default.
-	local rim = if type(p.thickness) == "number" then p.thickness else 2
-	if inset ~= nil then
-		-- A UIStroke per object, so the outline rides on its own empty
-		-- Frame, stepped back out of the padding to match the panel. It
-		-- hangs outside the panel's edge, so it never covers the content.
-		-- The Folder keeps it out of any UIListLayout in the panel, which
-		-- lays out direct children only; it still draws as the panel's.
-		table.insert(
-			children,
-			create("Folder")({
-				Name = "OutlineHolder",
-				create("Frame")({
-					Name = "Outline",
-					Position = UDim2.fromOffset(-inset, -inset),
-					Size = UDim2.new(1, 2 * inset, 1, 2 * inset),
-					BackgroundTransparency = 1,
-					Base.corner(Theme.radius.md),
-					create("UIStroke")({
-						BorderStrokePosition = Enum.BorderStrokePosition.Outer,
-						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-						Color = Theme.color.outline,
-						Thickness = 2,
-						Transparency = 0.15,
-					}),
-				}),
-				-- A fine dark line just inside the rim, so the trim stands
-				-- off the panel like a frame round it.
-				create("Frame")({
-					Name = "InnerLine",
-					Position = UDim2.fromOffset(rim - inset, rim - inset),
-					Size = UDim2.new(1, 2 * (inset - rim), 1, 2 * (inset - rim)),
-					BackgroundTransparency = 1,
-					Base.corner(UDim.new(0, math.max(0, Theme.radius.md.Offset - rim))),
-					create("UIStroke")({
-						BorderStrokePosition = Enum.BorderStrokePosition.Inner,
-						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-						Color = Theme.color.outline,
-						Thickness = 1.5,
-						Transparency = 0.35,
-					}),
-				}),
-			}) :: Instance
-		)
+	if p.outline ~= nil then
+		-- The rim's own width, for the inner line; a reactive thickness
+		-- (none today) would leave it at the default.
+		table.insert(children, Base.trim(p.outline, if type(p.thickness) == "number" then p.thickness else 2))
 	end
 	return children
 end

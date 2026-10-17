@@ -679,19 +679,25 @@ local function powerUpSlot(
 					else ColorSequence.new(top, bottom)
 			end,
 		}),
+		-- The HUD panels' trim: a bevelled rim, gold at rest, with the
+		-- outline and inner line round it. Selection turns the rim the
+		-- brand pink and a step heavier (gold-on-orange was too close to
+		-- tell apart); a cancelling drag turns it red.
 		create("UIStroke")({
 			BorderStrokePosition = Enum.BorderStrokePosition.Inner, -- see Base.focusRing
 			ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 			Color = function(): Color3
 				if not isSelected() then
-					return Theme.color.line
+					return Theme.fill.panel.rim
 				end
-				return if cancelling() then Theme.color.danger else Theme.color.warning
+				return if cancelling() then Theme.color.danger else Theme.color.brand
 			end,
 			Thickness = function()
-				return if isSelected() then 3 else 2
+				return if isSelected() then RIM + 1 else RIM
 			end,
+			Base.bevel(),
 		}),
+		Base.trim(0, RIM),
 		icon,
 		practiceTag,
 		Base.text("label", {
@@ -708,7 +714,7 @@ local function powerUpSlot(
 		}),
 		Base.text("label", {
 			Name = "Number",
-			Position = UDim2.fromOffset(Theme.spacing.xxs, 0),
+			Position = UDim2.fromOffset(RIM + Theme.spacing.xxs, RIM), -- clear of the rim
 			Size = UDim2.fromOffset(SLOT_LABEL, SLOT_LABEL),
 			TextColor3 = Theme.color.inkMuted,
 			TextXAlignment = Enum.TextXAlignment.Left,
