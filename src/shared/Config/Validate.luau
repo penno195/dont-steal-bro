@@ -31,6 +31,17 @@ export type PowerUpRarityWeights = {
 	Rare: number,
 }
 
+-- GameConfig.powerUpRoundDeal: how many of each rarity a round's start
+-- batch and mid-race drops hold (whole counts, not weights), and the
+-- slice of the race the drops land in.
+export type PowerUpRoundDealConfig = {
+	startBatch: PowerUpRarityWeights,
+	dropBatch: PowerUpRarityWeights,
+	earliestFraction: number, -- 0-1 of raceDurationSeconds
+	latestFraction: number, -- earliestFraction-1
+	retrySeconds: number,
+}
+
 -- ===== MapDef: docs/map-kit-spec.md §2 ==================================
 -- `taskStationCount` is NOT part of the original map-kit-spec.md type -
 -- added here so this validator has a declared number to cross-check
@@ -875,7 +886,8 @@ export type GameConfig = {
 	powerUpLockOnSlackStuds: number, -- extra range allowed when re-checking the client's locked target (latency)
 	powerUpLockOnSlackDegrees: number, -- extra cone width allowed for the same re-check
 	powerUpThrow: PowerUpThrowConfig, -- the projectile, explosion, recoil and shunt of a thrown item
-	powerUpRotationTimers: PowerUpRarityWeights, -- base respawn seconds per rarity tier; a MapDef may multiply these (see PowerUpRarityWeights' own doc comment)
+	powerUpRotationTimers: PowerUpRarityWeights, -- base respawn seconds per rarity tier, hub practice only; a MapDef may multiply these (see PowerUpRarityWeights' own doc comment)
+	powerUpRoundDeal: PowerUpRoundDealConfig, -- a round's fixed, never-respawned field pickups
 
 	-- P2-9: MovementWatch's thresholds - "configurable... not hard-coded"
 	-- (the task's own requirement, verbatim). All PLACEHOLDER, same
@@ -3526,6 +3538,45 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 				"powerUpRotationTimers." .. rarity,
 				"must be a positive number"
 			)
+		end
+	end
+	local deal = config.powerUpRoundDeal
+	if type(deal) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "powerUpRoundDeal", "must be a table")
+	else
+		for _, batchKey in { "startBatch", "dropBatch" } do
+			local batch = (deal :: any)[batchKey]
+			for _, rarity in { "Common", "Uncommon", "Rare" } do
+				local n = if type(batch) == "table" then batch[rarity] else nil
+				if type(n) ~= "number" or n < 0 or n % 1 ~= 0 then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						string.format("powerUpRoundDeal.%s.%s", batchKey, rarity),
+						"must be a non-negative whole number"
+					)
+				end
+			end
+		end
+		local earliest, latest = deal.earliestFraction, deal.latestFraction
+		if
+			type(earliest) ~= "number"
+			or type(latest) ~= "number"
+			or earliest < 0
+			or latest > 1
+			or earliest > latest
+		then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"powerUpRoundDeal.earliestFraction/latestFraction",
+				"must satisfy 0 <= earliestFraction <= latestFraction <= 1"
+			)
+		end
+		if type(deal.retrySeconds) ~= "number" or deal.retrySeconds <= 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", "powerUpRoundDeal.retrySeconds", "must be positive")
 		end
 	end
 

@@ -102,10 +102,25 @@ local GameConfig: Validate.GameConfig = {
 	-- (Validate.PowerUpRarityWeights' own doc comment). Ordered so a
 	-- rarer tier respawns more slowly by default, without any map needing
 	-- to override anything.
+	-- Since 2026-10-17 only the hub practice area respawns pickups; a
+	-- round deals powerUpRoundDeal instead.
 	powerUpRotationTimers = {
 		Common = 10,
 		Uncommon = 20,
 		Rare = 35,
+	},
+
+	-- A round's field pickups (design-decisions.md "Field power-ups per
+	-- round", owner 2026-10-17): 12 at most, never respawned, loadouts
+	-- not counted. 6 at random spawn points when the race starts, 6 more
+	-- at random spawn points and random times, all out by half the race.
+	-- `earliestFraction` is PLACEHOLDER (the owner set only the 50%).
+	powerUpRoundDeal = {
+		startBatch = { Common = 3, Uncommon = 2, Rare = 1 },
+		dropBatch = { Common = 3, Uncommon = 2, Rare = 1 },
+		earliestFraction = 0.1, -- of raceDurationSeconds: 30s
+		latestFraction = 0.5, -- 150s
+		retrySeconds = 3, -- a drop with no free spawn point tries again this often
 	},
 
 	-- P2-9: MovementWatch's thresholds. All PLACEHOLDER - no real logged
@@ -767,6 +782,7 @@ local GameConfig: Validate.GameConfig = {
 			"game.studioTimers.*",
 			"game.winRewards.**",
 			"game.powerUpRotationTimers.*",
+			"game.powerUpRoundDeal.**",
 			"game.powerUpUseRangeStuds",
 			"game.npc.**",
 			"game.npcBrain.**",

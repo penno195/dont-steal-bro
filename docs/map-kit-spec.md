@@ -89,7 +89,9 @@ A field pickup location for one of the 10 power-ups in `powerups.md`.
 - **Attributes:**
   - `Rarity` (string enum: `"Common"` / `"Uncommon"` / `"Rare"`) —
     matches a power-up's own rarity field; governs which items are
-    eligible to roll here.
+    eligible to roll here in the hub practice area. A round ignores it:
+    it deals its own rarities to random points (`design-decisions.md`
+    §13), but it still has to be valid.
   - `AllowedPowerUpIds` (string, comma-separated, **optional**, default
     empty) — restricts this pad to specific power-up ids if a level
     designer wants a thematic fit (e.g. a `slow-field` pad next to a

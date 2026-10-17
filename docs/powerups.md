@@ -108,11 +108,17 @@ coexist (`store-receipts.md` §5).
 
 **Role** is the colour family on the HUD slot and pickup orb: Attack red
 (exactly the Debuffs, enforced by `Validate.checkPowerUp`), Defence blue,
-Utility yellow. Rarity is a small ring on top, never the main colour.
-Cooldowns were halved on 2026-09-28, and field respawn timers with them
-(`GameConfig.powerUpRotationTimers`: 10/20/35s). Items are consumed on
-use, so a cooldown only matters on a duplicate pickup; respawn timers are
-the real pacing lever.
+Utility yellow. Rarity is a small ring above the orb (Common grey-lilac,
+Uncommon green, Rare pink, as in the Store), never the main colour.
+Cooldowns were halved on 2026-09-28. Items are consumed on use, so a
+cooldown only matters on a duplicate pickup.
+
+**Field pickups per round** (`design-decisions.md` §13, 2026-10-17): a
+round deals at most 12 and never respawns them. 6 appear when the race
+starts and 6 at random times by half the race, each batch 3 Common /
+2 Uncommon / 1 Rare (`GameConfig.powerUpRoundDeal`). That cap is the
+real pacing lever. Only the hub practice area still respawns, on
+`GameConfig.powerUpRotationTimers` (10/20/35s).
 
 ### Explaining them in play
 

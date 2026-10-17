@@ -67,6 +67,64 @@ TestRunner.describe("PowerUpLogic.aimForward", function()
 	end)
 end)
 
+TestRunner.describe("PowerUpLogic.planRoundDeal", function()
+	local function rolls(values: { number }): () -> number
+		local i = 0
+		return function(): number
+			i += 1
+			return values[(i - 1) % #values + 1]
+		end
+	end
+
+	TestRunner.it("expands each batch into its exact rarity counts", function()
+		local start, drops = PowerUpLogic.planRoundDeal(
+			{ Common = 3, Uncommon = 2, Rare = 1 },
+			{ Common = 3, Uncommon = 2, Rare = 1 },
+			30,
+			150,
+			rolls({ 0.5 })
+		)
+		TestRunner.expect(#start):toBe(6)
+		TestRunner.expect(#drops):toBe(6)
+		local counts: { [string]: number } = {}
+		for _, rarity in start do
+			counts[rarity] = (counts[rarity] or 0) + 1
+		end
+		TestRunner.expect(counts.Common):toBe(3)
+		TestRunner.expect(counts.Uncommon):toBe(2)
+		TestRunner.expect(counts.Rare):toBe(1)
+	end)
+
+	TestRunner.it("times every drop inside the window, soonest first", function()
+		local _, drops = PowerUpLogic.planRoundDeal(
+			{ Common = 0, Uncommon = 0, Rare = 0 },
+			{ Common = 2, Uncommon = 1, Rare = 1 },
+			30,
+			150,
+			rolls({ 0.9, 0, 0.5, 0.999 })
+		)
+		TestRunner.expect(drops[1].atSeconds):toBe(30)
+		for i, drop in drops do
+			TestRunner.expect(drop.atSeconds >= 30 and drop.atSeconds < 150):toBe(true)
+			if i > 1 then
+				TestRunner.expect(drop.atSeconds >= drops[i - 1].atSeconds):toBe(true)
+			end
+		end
+	end)
+
+	TestRunner.it("deals nothing for an empty batch", function()
+		local start, drops = PowerUpLogic.planRoundDeal(
+			{ Common = 0, Uncommon = 0, Rare = 0 },
+			{ Common = 0, Uncommon = 0, Rare = 0 },
+			0,
+			10,
+			rolls({ 0.5 })
+		)
+		TestRunner.expect(#start):toBe(0)
+		TestRunner.expect(#drops):toBe(0)
+	end)
+end)
+
 TestRunner.describe("PowerUpLogic.selectUniform", function()
 	TestRunner.it("picks the first element at roll = 0", function()
 		TestRunner.expect(PowerUpLogic.selectUniform({ "a", "b", "c" }, 0)):toBe("a")

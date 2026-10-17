@@ -22,6 +22,7 @@ delivering something specific, says so explicitly.
 | 10 | Which tasks ship at launch? *(added 2026-10-03, not from GDD §7)* | All eight: the four built plus `alarm-killswitch`, `breaker-sequence`, `reactor-sync` and `airlock-cycle`. |
 | 11 | Which way up is the game played on a phone? *(added 2026-10-04, not from GDD §7)* | Landscape only, in both the Hub and the Match. |
 | 12 | How long do Freeze and Push/Trip last? *(added 2026-10-06, not from GDD §7)* | Freeze 3.5s, Push/Trip 2s (with a ragdoll). Blind stays 4s. |
+| 13 | How many field power-ups does a round put out? *(added 2026-10-17, not from GDD §7)* | 12 at most, never respawned: 6 at the start, 6 more at random times by half the race, each batch 3 Common / 2 Uncommon / 1 Rare. Loadouts don't count. |
 
 ---
 
@@ -1102,3 +1103,39 @@ victim; it shouldn't also cost the attacker.
 Scramble's per-round cap (rule 5) still spend the caster's item.
 Diminishing returns and the 15s rolling cap still land, shortened or
 softened, so they spend it too.
+
+## 13. How many field power-ups does a round put out?
+
+*Added 2026-10-17 (user decision). Not from GDD §7.*
+
+**Decision:** a round deals **at most 12 field pickups** and never
+respawns them. Players' own loadouts don't count toward the 12.
+
+- **6 when the race starts**, at random `PowerUpSpawn` points.
+- **6 more during the race**, each at a random empty spawn point and a
+  random time. All are out **by 50% of the race** (150s of 300s). The
+  window's start, 10% (30s), is a placeholder: the owner set only the
+  end.
+- **Each batch is 3 Common, 2 Uncommon, 1 Rare**, so a round holds
+  6 / 4 / 2. Which item of that rarity is rolled uniformly from the
+  enabled power-ups.
+- **Rarity shows on the pickup** as a small ring above the orb, in the
+  Store's rarity colours (grey-lilac, green, pink). The orb's main
+  colour stays its role.
+
+**Why:** power-ups were too common. Every spawn point respawned on a
+10/20/35s timer for the whole race, so a round put out far more than
+any player could use. Fewer, rarer pickups make each one worth racing
+for, and make a bought loadout matter more. That feeds into the store
+cost review.
+
+**How it's built:** `GameConfig.powerUpRoundDeal` holds the counts and
+the window (live-tunable). `PowerUpLogic.planRoundDeal` plans the
+batches, and `PowerUpService` deals them. A spawn point's own `Rarity`
+attribute no longer matters in a round, but its `AllowedPowerUpIds`
+still applies. A drop with no free spawn point waits and tries again,
+so it arrives late rather than being lost. Drops still to come stop
+when the race ends.
+
+**Unchanged:** the hub practice area still respawns every point on its
+timer (`powerUpRotationTimers`), so practice never runs dry.

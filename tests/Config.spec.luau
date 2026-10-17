@@ -64,6 +64,13 @@ local function validGameConfig(): Validate.GameConfig
 			recoilSpeed = 10,
 		},
 		powerUpRotationTimers = { Common = 20, Uncommon = 35, Rare = 60 },
+		powerUpRoundDeal = {
+			startBatch = { Common = 3, Uncommon = 2, Rare = 1 },
+			dropBatch = { Common = 3, Uncommon = 2, Rare = 1 },
+			earliestFraction = 0.1,
+			latestFraction = 0.5,
+			retrySeconds = 3,
+		},
 		movementSampleIntervalSeconds = 0.5,
 		movementSpeedTolerance = 1.25,
 		movementViolationDecayPerSecond = 0.5,
@@ -841,6 +848,20 @@ TestRunner.describe("Validate.checkGameConfig (P2-7 power-up fields)", function(
 		config.powerUpRotationTimers = { Common = 20, Uncommon = 35, Rare = -1 }
 		Validate.checkGameConfig(config, issues)
 		TestRunner.expect(#issues > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a fractional round-deal count and a drop window past the race", function()
+		local issues = {}
+		local config = validGameConfig()
+		config.powerUpRoundDeal.dropBatch.Rare = 1.5
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(1)
+
+		issues = {}
+		config = validGameConfig()
+		config.powerUpRoundDeal.latestFraction = 1.2
+		Validate.checkGameConfig(config, issues)
+		TestRunner.expect(#issues):toBe(1)
 	end)
 end)
 

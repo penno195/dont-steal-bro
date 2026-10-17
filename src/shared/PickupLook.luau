@@ -21,7 +21,10 @@
 -- halo and a fast-turning `Vortex` swirl, both the engine's own legacy
 -- ForceField textures (shipped in every client's content folder, so no
 -- upload and no moderation). No model for an id is fine: the haze alone
--- still reads as a pickup.
+-- still reads as a pickup. A race pickup also wears a flat `RarityRing`
+-- floating above the shell in its rarity colour (PowerUpLogic.
+-- RARITY_RGB): a hollow CylinderHandleAdornment, so no extra part and no
+-- texture. The tutorial's pickup passes no rarity and shows none.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -37,6 +40,10 @@ local KEY_LIGHT_WHITENESS = 0.7 -- lerp from role colour toward white
 local MOTE_TEXTURE = "rbxasset://textures/particles/sparkles_main.dds"
 local GLOW_TEXTURE = "rbxasset://textures/particles/forcefield_glow_main.dds"
 local VORTEX_TEXTURE = "rbxasset://textures/particles/forcefield_vortex_main.dds"
+local RING_HEIGHT = 3.1 -- studs above the orb centre, clear of the shell's top
+local RING_RADIUS = 1.1
+local RING_INNER_RADIUS = 0.8
+local RING_THICKNESS = 0.18
 
 local PickupLook = {}
 
@@ -154,6 +161,17 @@ function PickupLook.build(cframe: CFrame): BasePart
 	-- sit just outside the rim instead of drawing a second ring.
 	shieldSprite(core, "Glow", GLOW_TEXTURE, HAZE_DIAMETER - 0.2, 0.6, 20, 3)
 	shieldSprite(core, "Vortex", VORTEX_TEXTURE, 3.6, 0.85, 120, 5)
+
+	-- A cylinder runs along its CFrame's Z, so turn it to lie flat.
+	local ring = Instance.new("CylinderHandleAdornment")
+	ring.Name = "RarityRing"
+	ring.Adornee = part
+	ring.CFrame = CFrame.new(0, RING_HEIGHT, 0) * CFrame.Angles(math.rad(90), 0, 0)
+	ring.Radius = RING_RADIUS
+	ring.InnerRadius = RING_INNER_RADIUS
+	ring.Height = RING_THICKNESS
+	ring.Visible = false
+	ring.Parent = part
 	return part
 end
 
@@ -165,9 +183,18 @@ local function clearVisual(part: BasePart)
 end
 
 -- Lights the orb up in `color` and puts a clone of `source` (the item's
--- icon model, if there is one) inside it as `Visual`.
-function PickupLook.show(part: BasePart, color: Color3, source: Instance?)
+-- icon model, if there is one) inside it as `Visual`. `rarity` lights
+-- the ring; nil leaves it off.
+function PickupLook.show(part: BasePart, color: Color3, source: Instance?, rarity: string?)
 	part.Color = color
+	local ring = part:FindFirstChild("RarityRing")
+	if ring ~= nil and ring:IsA("CylinderHandleAdornment") then
+		local rgb = if rarity ~= nil then PowerUpLogic.RARITY_RGB[rarity] else nil
+		ring.Visible = rgb ~= nil
+		if rgb ~= nil then
+			ring.Color3 = Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+		end
+	end
 	local shieldColor = color:Lerp(Color3.new(1, 1, 1), HAZE_WHITENESS)
 	local haze = part:FindFirstChild("Haze")
 	if haze ~= nil and haze:IsA("BasePart") then
@@ -225,8 +252,12 @@ function PickupLook.show(part: BasePart, color: Color3, source: Instance?)
 	visual.Parent = part
 end
 
--- Puts the orb out again: shell, lights, sprites and icon.
+-- Puts the orb out again: shell, ring, lights, sprites and icon.
 function PickupLook.hide(part: BasePart)
+	local ring = part:FindFirstChild("RarityRing")
+	if ring ~= nil and ring:IsA("CylinderHandleAdornment") then
+		ring.Visible = false
+	end
 	local haze = part:FindFirstChild("Haze")
 	if haze ~= nil and haze:IsA("BasePart") then
 		haze.Transparency = 1

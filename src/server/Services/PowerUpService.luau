@@ -1,6 +1,7 @@
 --!strict
 -- Power-up pickups, inventory and use validation (P2-7). Owns the
--- field-pickup lifecycle (spawn/claim/respawn), a player's held
+-- field-pickup lifecycle (spawn/claim; a round deals a fixed set,
+-- GameConfig.powerUpRoundDeal, and only practice respawns), a player's held
 -- inventory, and the use-intent validation pipeline. The pure targeting/
 -- cooldown/pool math lives in src/shared/PowerUpLogic.luau; this is the
 -- thin Roblox-touching wrapper that supplies real Players/Characters/
@@ -350,7 +351,8 @@ local function debugTargetFilter(): string?
 	return if typeof(target) == "string" and target ~= "" then target else nil
 end
 
-local function eligiblePool(point: SpawnPointRecord): { Validate.PowerUpDef }
+-- `rarity` is the point's own in practice and the dealt one in a round.
+local function eligiblePool(point: SpawnPointRecord, rarity: string): { Validate.PowerUpDef }
 	local pool: { Validate.PowerUpDef } = {}
 	local debugTarget = debugTargetFilter()
 	for _, def in powerUpDefsById do
@@ -360,7 +362,7 @@ local function eligiblePool(point: SpawnPointRecord): { Validate.PowerUpDef }
 			end
 			continue
 		end
-		if def.rarity ~= point.rarity then
+		if def.rarity ~= rarity then
 			continue
 		end
 		if not Loader.get("LiveConfig").isPowerUpEnabled(def.id) then
@@ -402,7 +404,12 @@ end
 
 -- ===== spawning + claiming =================================================
 
-local spawnAt: (point: SpawnPointRecord) -> ()
+local spawnAt: (point: SpawnPointRecord, rarity: string?) -> boolean
+
+-- A round deals GameConfig.powerUpRoundDeal and never respawns; the hub
+-- practice area (dealing false) respawns every point on its timer.
+local dealing = false
+local dealThreads: { thread } = {}
 
 -- Hidden rather than destroyed (see pickupParts). CanTouch and CanQuery
 -- go off with the visuals, so a hidden pickup can't be claimed or hit by
@@ -549,11 +556,16 @@ tryClaimPickup = function(point: SpawnPointRecord, live: LivePickup, hitPart: Ba
 	Loader.get("Telemetry").powerUpCollected(racer.id, live.def.id, "Pickup")
 
 	hideLivePickup(point)
-	scheduleRespawn(point)
+	if not dealing then
+		scheduleRespawn(point)
+	end
 end
 
-spawnAt = function(point: SpawnPointRecord)
+-- Returns false if nothing was eligible, so the round deal can try
+-- another point.
+spawnAt = function(point: SpawnPointRecord, dealtRarity: string?): boolean
 	hideLivePickup(point) -- defensive idempotency guard; shouldn't normally find one live
+	local rarity = dealtRarity or point.rarity
 
 	local def: Validate.PowerUpDef
 	local copiesByRole = bagCopiesByRole
@@ -566,23 +578,57 @@ spawnAt = function(point: SpawnPointRecord)
 		end
 		def = powerUpDefsById[PowerUpLogic.drawFromBag(bag, contents, math.random(), onField)]
 	else
-		local pool = eligiblePool(point)
+		local pool = eligiblePool(point, rarity)
 		if #pool == 0 then
-			warn(
-				string.format("PowerUpService: no eligible power-up defs for a %s spawn point - skipped", point.rarity)
-			)
-			return
+			if dealtRarity == nil then
+				warn(string.format("PowerUpService: no eligible power-up defs for a %s spawn point - skipped", rarity))
+			end
+			return false
 		end
 		def = PowerUpLogic.selectUniform(pool, math.random())
 	end
 
 	local part = pickupPartFor(point)
 	part.Name = string.format("PowerUpPickup_%s", def.id)
-	PickupLook.show(part, PickupLook.roleColor(def.role), modelFor(def.id))
+	PickupLook.show(part, PickupLook.roleColor(def.role), modelFor(def.id), def.rarity)
 	part.CanTouch = true
 	part.CanQuery = true
 
 	livePickups[point] = { part = part, def = def, claimed = false }
+	return true
+end
+
+-- One dealt pickup: a random spawn point that's empty and can hold this
+-- rarity (a point's AllowedPowerUpIds still applies; its own Rarity
+-- doesn't). Every point full or unable: wait and try again, so a drop
+-- is late rather than lost.
+local function dealOne(rarity: string)
+	local free: { SpawnPointRecord } = {}
+	for _, point in spawnPoints do
+		if livePickups[point] == nil and #eligiblePool(point, rarity) > 0 then
+			table.insert(free, point)
+		end
+	end
+	if #free > 0 and spawnAt(PowerUpLogic.selectUniform(free, math.random()), rarity) then
+		return
+	end
+	table.insert(
+		dealThreads,
+		task.delay(GameConfig.powerUpRoundDeal.retrySeconds, function()
+			if dealing then
+				dealOne(rarity)
+			end
+		end)
+	)
+end
+
+local function cancelDeal()
+	for _, thread in dealThreads do
+		if coroutine.status(thread) == "suspended" then
+			task.cancel(thread)
+		end
+	end
+	dealThreads = {}
 end
 
 -- ===== use-intent validation pipeline ======================================
@@ -1059,9 +1105,10 @@ end
 
 -- ===== round lifecycle ======================================================
 
--- Clears every pickup, timer and inventory, then spawns at every spawn
--- point. A round runs it on Race; PracticeService runs it once at boot.
-local function startPickups()
+-- Clears every pickup, timer and inventory, then spawns: at every spawn
+-- point (PracticeService, once at boot), or the round deal's start
+-- batch with its drops scheduled (`deal`, a round on Race).
+local function startPickups(deal: boolean?)
 	-- Idempotent reset - a real server only ever runs one round
 	-- (architecture.md), but Studio's debug interface can replay Race
 	-- repeatedly on the same server (see TaskHandlerService.luau's
@@ -1070,6 +1117,8 @@ local function startPickups()
 	for point in pendingRespawnThreads do
 		cancelPendingRespawn(point)
 	end
+	cancelDeal()
+	dealing = deal == true
 	for point in livePickups do
 		hideLivePickup(point)
 	end
@@ -1099,8 +1148,34 @@ local function startPickups()
 		return
 	end
 
-	for _, point in spawnPoints do
-		spawnAt(point)
+	if not dealing then
+		for _, point in spawnPoints do
+			spawnAt(point)
+		end
+		return
+	end
+
+	local config = GameConfig.powerUpRoundDeal
+	local race = GameConfig.raceDurationSeconds
+	local startRarities, drops = PowerUpLogic.planRoundDeal(
+		config.startBatch,
+		config.dropBatch,
+		race * config.earliestFraction,
+		race * config.latestFraction,
+		math.random
+	)
+	for _, rarity in startRarities do
+		dealOne(rarity)
+	end
+	for _, drop in drops do
+		table.insert(
+			dealThreads,
+			task.delay(drop.atSeconds, function()
+				if dealing then
+					dealOne(drop.rarity)
+				end
+			end)
+		)
 	end
 end
 
@@ -1136,7 +1211,7 @@ end
 
 local function beginRace()
 	EffectContext.assertRound("PowerUpService.beginRace")
-	startPickups()
+	startPickups(true)
 	grantLoadouts()
 end
 
@@ -1250,6 +1325,10 @@ function PowerUpService:init()
 	local RoundService = Loader.get("RoundService") :: any
 	RoundService.onEnter("Race", function()
 		beginRace()
+	end)
+	-- Drops still to come stop with the race; what's out stays put.
+	RoundService.onExit("Race", function()
+		cancelDeal()
 	end)
 end
 

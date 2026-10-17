@@ -31,6 +31,15 @@ PowerUpLogic.ROLE_RGB = table.freeze({
 	Utility = table.freeze({ 250, 200, 55 }),
 }) :: { [string]: { number } }
 
+-- The rarity ring on the pickup orb (powerups.md: "Rarity is a small
+-- ring on top, never the main colour"). Same three colours as the
+-- Store's and Locker's rarity rims (Tokens inkMuted/success/brand).
+PowerUpLogic.RARITY_RGB = table.freeze({
+	Common = table.freeze({ 201, 189, 240 }),
+	Uncommon = table.freeze({ 60, 203, 127 }),
+	Rare = table.freeze({ 255, 79, 163 }),
+}) :: { [string]: { number } }
+
 local function subtract(a: Vec3, b: Vec3): Vec3
 	return { x = a.x - b.x, y = a.y - b.y, z = a.z - b.z }
 end
@@ -177,6 +186,47 @@ function PowerUpLogic.drawFromBag(bag: Bag, contents: { string }, roll: number, 
 	bag.remaining = remaining
 	bag.last = id
 	return id
+end
+
+-- ===== the round deal =====================================================
+
+-- A round puts out a fixed number of field pickups, never respawned
+-- (design-decisions.md, "Field power-ups per round", 2026-10-17): one
+-- batch at the start, one dealt at random times while the race runs.
+export type RarityCounts = { Common: number, Uncommon: number, Rare: number }
+export type PlannedDrop = { rarity: string, atSeconds: number }
+
+local RARITY_ORDER = { "Common", "Uncommon", "Rare" }
+
+local function expandCounts(counts: RarityCounts): { string }
+	local out: { string } = {}
+	for _, rarity in RARITY_ORDER do
+		for _ = 1, (counts :: any)[rarity] do
+			table.insert(out, rarity)
+		end
+	end
+	return out
+end
+
+-- Pure: the start batch's rarities, and the mid-race drops with a time
+-- each, uniform in [earliestSeconds, latestSeconds] and sorted soonest
+-- first. `roll` returns [0, 1) (math.random in the service).
+function PowerUpLogic.planRoundDeal(
+	startBatch: RarityCounts,
+	dropBatch: RarityCounts,
+	earliestSeconds: number,
+	latestSeconds: number,
+	roll: () -> number
+): ({ string }, { PlannedDrop })
+	local drops: { PlannedDrop } = {}
+	for _, rarity in expandCounts(dropBatch) do
+		local at = earliestSeconds + roll() * (latestSeconds - earliestSeconds)
+		table.insert(drops, { rarity = rarity, atSeconds = at })
+	end
+	table.sort(drops, function(a, b)
+		return a.atSeconds < b.atSeconds
+	end)
+	return expandCounts(startBatch), drops
 end
 
 -- ===== targeting ==========================================================
