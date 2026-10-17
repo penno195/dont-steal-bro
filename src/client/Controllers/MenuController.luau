@@ -13,7 +13,9 @@
 -- clear of Roblox's jump button below. Hidden while a round is in play
 -- (RaceHUD and the Decision Studio own the screen then), and while a
 -- menu is open. Staff (liveOps.adminUserIds) get a fifth, the staff
--- gift panel (staff-tools.md step 4).
+-- gift panel (staff-tools.md step 4). On the Hub a Bank streak button
+-- opens CashOutController's card (payoff-loop step 4), shown once
+-- StoreState carries it.
 --
 -- THE COIN BALANCE: hub only, top-right under Roblox's top bar - where
 -- players look for a currency. The "+" says it's a button: it opens the
@@ -58,6 +60,7 @@ local StoreOffers = require(ReplicatedStorage.Shared.StoreOffers)
 local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local BoardLogic = require(script.Parent.Parent.UI.BoardLogic)
 local C = require(script.Parent.Parent.UI.Components)
+local CashOutViewLogic = require(script.Parent.Parent.UI.CashOutViewLogic)
 local ResultsLogic = require(script.Parent.Parent.UI.ResultsLogic)
 local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
 local SeasonTrackLogic = require(script.Parent.Parent.UI.SeasonTrackLogic)
@@ -792,8 +795,9 @@ local function mountLauncher()
 	end)
 
 	vide.root(function()
-		-- Staff get a fifth button, under Settings, for the staff panel.
-		local buttons = if isStaff then 5 else 4
+		-- The Hub adds a bank button under Settings (payoff-loop step 4),
+		-- and staff get one more under that, for the staff panel.
+		local buttons = 4 + (if inHub then 1 else 0) + (if isStaff then 1 else 0)
 		local button, gap = Theme.touch.iconButton, Theme.spacing.md
 		-- Usable height in reference px (the column sits under the scale).
 		local rect = source(UIScaleController.getUsableRect())
@@ -879,6 +883,26 @@ local function mountLauncher()
 			}),
 			Parent = gui,
 		}) :: Frame
+		if inHub then
+			-- Banking the streak (payoff-loop step 4): Hub only, and only
+			-- once StoreState has brought the card (its owner's alone).
+			local bankButton = C.IconButton({
+				icon = "flame",
+				label = "Bank streak",
+				variant = "secondary",
+				onActivate = function()
+					closeMenu()
+					Loader.get("CashOutController").open()
+				end,
+				order = 5,
+				layoutOrder = 5,
+			})
+			vide.effect(function()
+				local s = storeState()
+				bankButton.Visible = CashOutViewLogic.parse(if s then s.cashOut else nil) ~= nil
+			end)
+			bankButton.Parent = column
+		end
 		if isStaff then
 			C.IconButton({
 				icon = "gift",
@@ -887,8 +911,8 @@ local function mountLauncher()
 				onActivate = function()
 					open("Staff")
 				end,
-				order = 5,
-				layoutOrder = 5,
+				order = 6,
+				layoutOrder = 6,
 			}).Parent =
 				column
 		end

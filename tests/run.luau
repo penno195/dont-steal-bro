@@ -80,5 +80,6 @@ require("./StaffPanelLogic.spec")
 require("./PrizeRevealLogic.spec")
 require("./GuessViewLogic.spec")
 require("./CashOutLogic.spec")
+require("./CashOutViewLogic.spec")
 
 TestRunner.run()

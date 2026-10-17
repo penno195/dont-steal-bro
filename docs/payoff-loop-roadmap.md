@@ -93,7 +93,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
   phrases, not animations or emoji. A tap sends the line as ordinary
   chat and closes the pop-up. Unseen in Studio when built: check the
   pop-up's fit on a phone.
-- [ ] **4. Cash out the streak.** In the Hub, from streak 3, a player can
+- [x] **4. Cash out the streak.** In the Hub, from streak 3, a player can
   bank their streak: coins that grow steeply with the streak, a
   permanent "best banked" record shown in the Hub, and the streak resets
   to 0. `bestStreak`, titles and the leaderboard are untouched.
@@ -110,8 +110,13 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     (schema v18), `StreakCashOutIntent`/`StreakCashOutResult`,
     `ProgressionService.cashOut` through the one progression writer
     (Hub only, audit line), StoreState's `cashOut` offer (Hub only).
-  - [ ] 4c. UI: the Hub launcher's bank button and its card, with a
-    confirm step.
+  - [x] 4c. UI: the Hub launcher's bank button and its card, with a
+    confirm step. A "Bank streak" launcher button (Hub only, once
+    StoreState carries the card) opens `CashOutController`'s card (the
+    streak, what banking pays or why not yet, the best banked), then a
+    "Bank your 5-win streak?" confirm; StreakCashOutResult toasts the
+    outcome. Copy in `UI/CashOutViewLogic`. Unseen in Studio when built:
+    check it on device.
 
 ## Also approved (after the four above)
 

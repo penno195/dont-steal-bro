@@ -77,6 +77,10 @@ export type StoreState = {
 	level: { level: number, xpIntoLevel: number, xpForNext: number }?,
 	-- Streak shields held (payoff-loop step 2c): the Hub's shield pill.
 	streakShields: number?,
+	-- The Hub's bank card (payoff-loop step 4): CashOutViewLogic.Card's
+	-- shape, loose here because this module has no requires. nil off
+	-- the Hub.
+	cashOut: { [string]: any }?,
 }
 
 export type Category = "Season" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"
