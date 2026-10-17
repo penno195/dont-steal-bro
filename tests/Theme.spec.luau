@@ -285,3 +285,26 @@ describe("Layout thumb zones", function()
 		expect(Layout.hitsReserved({ x = 520, y = 300, width = 50, height = 50 }, usable)):toBeFalsy()
 	end)
 end)
+
+describe("Layout.buttonGrid", function()
+	it("keeps one column while it fits", function()
+		local grid = Layout.buttonGrid(400, 5, 44, 12)
+		expect(grid.rows):toBe(5)
+		expect(grid.columns):toBe(1)
+	end)
+
+	it("wraps into even columns when it doesn't", function()
+		-- 160 fits 3 (3*44 + 2*12 = 156): 5 buttons go 3 + 2.
+		local grid = Layout.buttonGrid(160, 5, 44, 12)
+		expect(grid.rows):toBe(3)
+		expect(grid.columns):toBe(2)
+		-- 4 rows fit, but 5 split 3 + 2 rather than 4 + 1.
+		expect(Layout.buttonGrid(220, 5, 44, 12).rows):toBe(3)
+	end)
+
+	it("still draws a row with no room", function()
+		local grid = Layout.buttonGrid(0, 4, 44, 12)
+		expect(grid.rows):toBe(1)
+		expect(grid.columns):toBe(4)
+	end)
+end)

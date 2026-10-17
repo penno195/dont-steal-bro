@@ -55,6 +55,7 @@ local ResultsLogic = require(script.Parent.Parent.UI.ResultsLogic)
 local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
 local SeasonTrackLogic = require(script.Parent.Parent.UI.SeasonTrackLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local Layout = require(script.Parent.Parent.UI.Layout)
 local LeaderboardsScreen = require(script.Parent.Parent.UI.Screens.Leaderboards)
 local LockerScreen = require(script.Parent.Parent.UI.Screens.Locker)
 local DropNames = require(script.Parent.Parent.UI.DropNames)
@@ -599,6 +600,28 @@ end
 
 -- ===== launcher ==============================================================
 
+-- The launcher's room, in reference px, between the coin pill above it
+-- (CurrencyPill's 32 at md from the top, then a gap) and what's below:
+-- on touch the jump button (THUMB_ZONES' ReservedJump), else the
+-- power-up slots in the corner (RaceHUD: 60 slots, 14 key hints, 2 gap,
+-- 8 margin) plus a gap. A short phone gets a second column instead of
+-- buttons over the slots (playtest, 2026-10-17).
+local LAUNCHER_TOP = Theme.spacing.md + Theme.spacing.xxl + Theme.spacing.sm
+local LAUNCHER_SLOTS = 60 + 14 + 2 + Theme.spacing.sm + Theme.spacing.sm
+local JUMP_TOP = (function(): number
+	for _, zone in Layout.THUMB_ZONES["Landscape" :: Layout.Orientation] do
+		if zone.kind == "ReservedJump" then
+			return zone.rect.y
+		end
+	end
+	return 1
+end)()
+
+local function launcherRoom(height: number, touch: boolean): (number, number)
+	local bottom = if touch then height * JUMP_TOP - Theme.spacing.sm else height - LAUNCHER_SLOTS
+	return LAUNCHER_TOP, math.max(0, bottom - LAUNCHER_TOP)
+end
+
 local function mountLauncher()
 	local gui = UIScaleController.createScreen("MenuLauncher", { displayOrder = Theme.displayOrder.hud })
 	local visible = source(true)
@@ -637,23 +660,46 @@ local function mountLauncher()
 	vide.root(function()
 		-- Staff get a fifth button, under Settings, for the staff panel.
 		local buttons = if isStaff then 5 else 4
+		local button, gap = Theme.touch.iconButton, Theme.spacing.md
+		-- Usable height in reference px (the column sits under the scale).
+		local rect = source(UIScaleController.getUsableRect())
+		vide.cleanup(UIScaleController.observeUsableRect(rect))
+		local room = vide.derive(function()
+			local top, tall = launcherRoom(
+				rect().height / math.max(C.Env.scale(), 0.01),
+				C.Env.inputMode() == Enum.PreferredInput.Touch
+			)
+			return { top = top, tall = tall, grid = Layout.buttonGrid(tall, buttons, button, gap) }
+		end)
 		local column = create("Frame")({
 			Name = "Launcher",
 			AnchorPoint = Vector2.new(1, 0.5),
-			Position = UDim2.new(1, -Theme.spacing.sm, 0.45, 0),
-			Size = UDim2.fromOffset(
-				Theme.touch.iconButton,
-				buttons * Theme.touch.iconButton + (buttons - 1) * Theme.spacing.md
-			),
+			-- Centred in its room, growing left as columns are added.
+			Position = function()
+				local r = room()
+				return UDim2.new(1, -Theme.spacing.sm, 0, r.top + r.tall / 2)
+			end,
+			Size = function()
+				local grid = room().grid
+				return UDim2.fromOffset(
+					grid.columns * button + (grid.columns - 1) * gap,
+					grid.rows * button + (grid.rows - 1) * gap
+				)
+			end,
 			BackgroundTransparency = 1,
 			Visible = visible,
-			create("UIListLayout")({
+			create("UIGridLayout")({
+				CellSize = UDim2.fromOffset(button, button),
+				CellPadding = UDim2.fromOffset(gap, gap),
 				FillDirection = Enum.FillDirection.Vertical,
-				Padding = UDim.new(0, Theme.spacing.md),
+				FillDirectionMaxCells = function()
+					return room().grid.rows
+				end,
+				StartCorner = Enum.StartCorner.TopRight,
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
 			(function()
-				local button = C.IconButton({
+				local lockerButton = C.IconButton({
 					icon = "locker",
 					label = "Locker",
 					variant = "secondary",
@@ -663,8 +709,8 @@ local function mountLauncher()
 					order = 1,
 					layoutOrder = 1,
 				})
-				lockerButtonRef = button
-				return button
+				lockerButtonRef = lockerButton
+				return lockerButton
 			end)(),
 			C.IconButton({
 				icon = "shop",

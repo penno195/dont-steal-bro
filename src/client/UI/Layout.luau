@@ -179,4 +179,16 @@ function Layout.hitsReserved(rect: Rect, usable: Rect): boolean
 	return false
 end
 
+export type Grid = { rows: number, columns: number }
+
+-- A stack of `count` square buttons `button` px with `gap` between, in a
+-- column `room` px tall: one column if it fits, else as few columns as
+-- fit, filled evenly (5 in 3 rows is 3 + 2, not 4 + 1). Always at least
+-- one row, so a room too short for even one button still draws them.
+function Layout.buttonGrid(room: number, count: number, button: number, gap: number): Grid
+	local fit = math.clamp(math.floor((room + gap) / (button + gap)), 1, math.max(count, 1))
+	local columns = math.ceil(count / fit)
+	return { rows = math.ceil(count / columns), columns = columns }
+end
+
 return Layout
