@@ -347,6 +347,11 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 	-- DataService could genuinely allow.
 	outcomeWritten = true
 
+	-- Payoff-loop step 2b: the knocked-out players' guesses shut here,
+	-- before DecisionReveal, and the correct ones earn their shields
+	-- before Results sweeps the non-qualifiers' losses.
+	Loader.get("GuessService").resolve(outcome)
+
 	for _, finalist in finalists do
 		local player = Players:GetPlayerByUserId(finalist.playerId)
 		if player == nil then
@@ -915,6 +920,10 @@ local function beginDecisionStudio()
 
 	Net.fireAllClients("DecisionParticipants", { qualifierIds = qualifierIds, reputation = reputation })
 
+	-- Everyone knocked out now holds a Guess Token for this roster
+	-- (payoff-loop step 2b). The roster above is what they pick from.
+	Loader.get("GuessService").openWindow(qualifierIds)
+
 	-- Each human finalist's own stakes, to them alone (design-decisions.md
 	-- Q1's 2026-10-08 case). Rung-scaled, so they carry a level: the one
 	-- pre-lock-in exception to Q7, and only because nobody else gets it.
@@ -958,6 +967,7 @@ local DecisionService: Loader.Service = {
 		"TaskService",
 		"DataService",
 		"ProgressionService",
+		"GuessService",
 		"Telemetry",
 	},
 

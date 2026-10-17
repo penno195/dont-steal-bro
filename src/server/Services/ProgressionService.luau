@@ -92,6 +92,9 @@ type LedgerEntry = {
 	levelAward: LevelLogic.RoundAward?,
 	-- The level cosmetics that award granted, for the recap's pop-up.
 	levelCosmetics: { string }?,
+	-- A streak shield took this loss instead of the streak (payoff-loop
+	-- step 2): `after` kept the streak, and one shield was spent.
+	shieldSpent: boolean?,
 }
 
 -- ===== season tracks (rewards-roadmap.md step 5) ===========================
@@ -290,7 +293,8 @@ local writeProgressionState: ((
 	buyBackOffer: ProfileLogic.BuyBackOffer?,
 	reward: any,
 	seasonStep: any,
-	levelStep: any
+	levelStep: any,
+	spendShield: boolean?
 ) -> { string })? =
 	nil
 
@@ -377,7 +381,12 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 
 	-- A real player's result always counts, however many seats were
 	-- bots (design-decisions.md Q5's 2026-10-02 applied case).
-	local after = ProgressionLogic.applyResult(before, result.reason)
+	-- A held streak shield takes a loss of a streak of 1 or more instead
+	-- of the streak (design-decisions.md Q7, "finale guesses"). Read and
+	-- spent with nothing yielding in between: the write below is the
+	-- spend, in the same mutation as the streak it keeps.
+	local shielded = ProgressionLogic.spendsShield(before, result.reason, DataService.getStreakShields(player))
+	local after = ProgressionLogic.applyResult(before, result.reason, shielded)
 
 	-- Every win pays (design-decisions.md Q1 revision). Rolled before
 	-- the ledger entry so the entry carries it.
@@ -417,6 +426,7 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		before = before,
 		reward = rewardRecord,
 		dropAmount = dropAmount,
+		shieldSpent = if shielded then true else nil,
 	}
 	ledger[key] = entry
 
@@ -427,7 +437,7 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	end
 	local rewardWrite = if rewardRecord ~= nil then { record = rewardRecord, grants = rewardGrants } else nil
 	local seasonStep = if ProgressionLogic.isWin(result.reason) then seasonStepFor() else nil
-	local buyBackOffer = ProgressionLogic.buyBackOffer(result.roundId, before, result.reason)
+	local buyBackOffer = ProgressionLogic.buyBackOffer(result.roundId, before, result.reason, shielded)
 	-- Every round pays, win or lose (Q1, "a payoff for every round").
 	local levelCosmetics: { string } = {}
 	local levelStep = levelStepFor(performanceFor(player, result.reason), function(award, cosmetics)
@@ -435,13 +445,27 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 		entry.levelCosmetics = cosmetics
 		levelCosmetics = cosmetics
 	end)
-	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep, levelStep)
+	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep, levelStep, shielded)
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
 	if ProgressionLogic.isWin(result.reason) then
 		Loader.get("Telemetry").streakWin(player, after.currentStreak)
-	else
+	elseif not shielded then
+		-- A shielded loss lost no streak, so it isn't a streakLoss.
 		Loader.get("Telemetry").streakLoss(player, before.currentStreak, result.reason)
+	end
+
+	if shielded then
+		print(
+			string.format(
+				"Progression: %s round=%s reason=%s streak shield spent (%d left), streak %d kept",
+				player.Name,
+				result.roundId,
+				result.reason,
+				DataService.getStreakShields(player),
+				before.currentStreak
+			)
+		)
 	end
 
 	-- One audit line per grant, beside the Progression: line below.
@@ -628,6 +652,8 @@ end
 -- treats that as "you were watching".
 local function sendRecaps()
 	local roundId = currentRoundId()
+	local DataService = Loader.get("DataService") :: any
+	local guesses = optionalService("GuessService")
 	for _, participant in Participants.humans() do
 		local player = participant.player
 		local entry = ledger[ledgerKey(roundId, participant.id)]
@@ -644,6 +670,12 @@ local function sendRecaps()
 			reward = rewardPayload(entry),
 			level = levelPayload(entry),
 			practice = entry.practice,
+			-- Payoff-loop step 2: whether a shield kept this streak, this
+			-- player's finale guess (nil if they placed none), and the
+			-- shields they now hold. All their own, to them alone.
+			shieldSpent = entry.shieldSpent,
+			guess = if guesses ~= nil then guesses.recapFor(player) else nil,
+			streakShields = DataService.getStreakShields(player),
 		})
 		-- The win's coins, drop and season progress, now that Results is
 		-- on screen. Not from the write itself, for the reason RoundRecap

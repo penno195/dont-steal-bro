@@ -320,13 +320,18 @@ export type SeasonStep = (
 -- returns the new XP and the grants, in this one mutation.
 export type LevelStep = (xp: number, ownedCosmetics: { string }) -> (number, { StoreLogic.Grant })
 
+-- `spendShield` is ProgressionLogic.spendsShield's answer for this
+-- result (payoff-loop step 2): one streak shield goes in the same
+-- mutation as the streak it kept, so a profile can't keep the streak
+-- and the shield both, or lose the shield and the streak both.
 export type ProgressionWriter = (
 	player: Player,
 	state: ProfileLogic.ProgressionState,
 	buyBackOffer: ProfileLogic.BuyBackOffer?,
 	reward: WinRewardWrite?,
 	seasonStep: SeasonStep?,
-	levelStep: LevelStep?
+	levelStep: LevelStep?,
+	spendShield: boolean?
 ) -> { string }
 
 local progressionWriterClaimedBy: string? = nil
@@ -351,7 +356,8 @@ local function writeProgressionState(
 	buyBackOffer: ProfileLogic.BuyBackOffer?,
 	reward: WinRewardWrite?,
 	seasonStep: SeasonStep?,
-	levelStep: LevelStep?
+	levelStep: LevelStep?,
+	spendShield: boolean?
 ): { string }
 	local d = writable(player)
 	if d == nil then
@@ -359,6 +365,9 @@ local function writeProgressionState(
 	end
 	d.currentStreak = state.currentStreak
 	d.bestStreak = state.bestStreak
+	if spendShield then
+		d.streakShields = math.max(0, d.streakShields - 1)
+	end
 	-- Written even when nil: a result that opens no offer closes any
 	-- older one (ProgressionLogic.buyBackOffer).
 	d.buyBackOffer = buyBackOffer
@@ -397,6 +406,45 @@ local function claimProgressionWriter(claimantName: string): ProgressionWriter
 	progressionWriterClaimedBy = claimantName
 	print(string.format("DataService: progression writer claimed by %s", claimantName))
 	return writeProgressionState
+end
+
+-- ===== streak shields (payoff-loop step 2) ================================
+
+-- A correct finale guess earns one streak shield (design-decisions.md
+-- Q7, "finale guesses"). Granting one is handed out once, to
+-- GuessService, the same gate as the progression writer: a shield
+-- saves a streak, so only the one service that judges guesses may
+-- make them. Spending is the progression writer's (`spendShield`).
+-- Returns the count now held, or nil if nothing was written (profile
+-- not loaded, read-only mode).
+export type ShieldGranter = (player: Player) -> number?
+
+local shieldGranterClaimedBy: string? = nil
+
+local function grantStreakShield(player: Player): number?
+	local d = writable(player)
+	if d == nil then
+		return nil
+	end
+	d.streakShields += 1
+	return d.streakShields
+end
+
+local function claimShieldGranter(claimantName: string): ShieldGranter
+	assert(
+		shieldGranterClaimedBy == nil,
+		string.format(
+			"DataService.claimShieldGranter: already claimed by %q - streak shields are only ever granted by GuessService (payoff-loop step 2).",
+			tostring(shieldGranterClaimedBy)
+		)
+	)
+	shieldGranterClaimedBy = claimantName
+	return grantStreakShield
+end
+
+local function getStreakShields(player: Player): number
+	local d = data(player)
+	return if d then d.streakShields else 0
 end
 
 -- ===== the receipt write gate (P4-5) =====================================
@@ -1004,6 +1052,9 @@ local DataService: Loader.Service = {
 	-- P4-1: incrementStreak/resetStreak/setPendingBounty used to live
 	-- here. They are deliberately gone - see the write gate above.
 	claimProgressionWriter = claimProgressionWriter,
+	-- Payoff-loop step 2: handed out once, to GuessService.
+	claimShieldGranter = claimShieldGranter,
+	getStreakShields = getStreakShields,
 
 	-- P4-5: see the receipt write gate above. Handed out once, to
 	-- StoreService, because ProcessReceipt needs durability facts no

@@ -59,10 +59,15 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     shield held spends exactly one), and `applyResult`/`buyBackOffer`
     take that answer: a covered loss keeps the streak and leaves no
     buy-back offer.
-  - [ ] 2b. Server: profile field `streakShields` (schema bump), a guess
-    intent remote (validated by `GuessLogic.validate`, open only until
-    the reveal), shields granted after the Studio resolves, and spent in
-    `applyRoundResult`'s single write with an audit line.
+  - [x] 2b. Server: profile field `streakShields` (schema v17), a guess
+    intent remote (`FinaleGuessIntent`, validated by `GuessLogic.validate`,
+    open from `DecisionParticipants` until the outcome is committed, which
+    is before the reveal), shields granted then by the new
+    `GuessService` (before Results, so a shield saves the guesser's own
+    not-qualifying loss this round), and spent in `applyRoundResult`'s
+    single write with an audit line. `FinaleGuessAccepted` acks the
+    guesser; `RoundRecap` gains `shieldSpent`, `guess` and
+    `streakShields`. Practice matches judge guesses but grant nothing.
   - [ ] 2c. UI: the Guess Token picker for knocked-out players, the
     result ("You called it: +1 shield"), and the held shield count on
     the player's own Hub/results screens only (Q7 condition 1).

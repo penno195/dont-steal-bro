@@ -949,6 +949,33 @@ Net.Remotes = {
 		states = { "DecisionStudio" },
 	} :: RemoteDef,
 
+	-- Payoff-loop step 2's finale guesses. Client -> server: a knocked-
+	-- out player spends their Guess Token on the finalist they think
+	-- walks out. Only the target's id travels: who is guessing is the
+	-- sender. GuessService judges it (GuessLogic.validate: not a
+	-- finalist, target is one, NPC seats included, one final guess per
+	-- round) and refuses it once the Studio has resolved, which is
+	-- before DecisionReveal, so no guess can be placed knowing the result.
+	FinaleGuessIntent = {
+		name = "FinaleGuessIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ targetId = Net.number({ integer = true }) }),
+		rateLimit = { capacity = 3, refillPerSecond = 0.5 },
+		states = { "DecisionStudio" },
+	} :: RemoteDef,
+
+	-- Server -> client (targeted): your guess was taken, { targetId }.
+	-- To the guesser alone: nobody else is told who guessed whom, and it
+	-- says nothing about a choice or a streak. Whether it was right
+	-- arrives with your RoundRecap (`guess`), after the reveal.
+	FinaleGuessAccepted = {
+		name = "FinaleGuessAccepted",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Server -> client (broadcast): { readyIds } - which finalists are
 	-- ready during the Intro, for the "Waiting for 2 more…" notice. Not
 	-- secret: it says who has finished reading, nothing about a choice.

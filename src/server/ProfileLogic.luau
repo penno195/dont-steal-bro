@@ -195,6 +195,15 @@ export type ProfileData = {
 	-- Never resets. Written by the progression writer, in the same
 	-- mutation as the round's streak result.
 	xp: number,
+
+	-- ===== schema v17, streak shields =====================================
+
+	-- Streak shields held (design-decisions.md Q7, "finale guesses";
+	-- payoff-loop-roadmap.md step 2). One is earned by a correct finale
+	-- guess and spent by the progression writer on a loss of a streak of
+	-- 1 or more, which then keeps the streak (ProgressionLogic
+	-- .spendsShield). Stacks with no cap. Only ever shown to its owner.
+	streakShields: number,
 }
 
 -- Structurally StaffGrantLogic.UnseenGift: a unique id, who gave it
@@ -228,7 +237,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 16
+local CURRENT_SCHEMA_VERSION = 17
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -263,6 +272,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		tutorialRewardUnseen = false,
 		tutorialGiftGiven = false,
 		xp = 0,
+		streakShields = 0,
 	}
 end
 
@@ -453,6 +463,15 @@ migrations[15] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 16
 	next.xp = (old.xp :: number?) or 0
+	return next
+end
+
+-- v16 -> v17 (streak shields): none held. Nothing before this version
+-- could have earned one.
+migrations[16] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 17
+	next.streakShields = (old.streakShields :: number?) or 0
 	return next
 end
 

@@ -988,6 +988,11 @@ From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
     kept.
   - Claude's reading (step 2a): one token means **one guess per round,
     final once placed**. A guess can't be changed or withdrawn.
+  - **Owner's answer (2026-10-17, step 2b):** a shield won this round
+    **saves the guesser's own loss this round**. Guessers are knocked
+    out, so the round is a not-qualifying loss for them; the shield is
+    granted when the Studio resolves, before that loss is written, and
+    is spent on it if their streak is 1 or more. At streak 0 it's kept.
 
 ## 8. Are starting power-ups sold for Robux?
 
