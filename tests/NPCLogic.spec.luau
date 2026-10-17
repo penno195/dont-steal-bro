@@ -375,6 +375,35 @@ TestRunner.describe("NPCLogic.trimRoute", function()
 	end)
 end)
 
+TestRunner.describe("NPCLogic.laneTarget", function()
+	local FROM: NPCLogic.Point = { x = 0, y = 3, z = 0 }
+	local NODE: NPCLogic.Point = { x = 0, y = 5, z = 20 }
+
+	TestRunner.it("steps sideways off the line, never along it", function()
+		-- Heading +z, so right is -x.
+		local right = NPCLogic.laneTarget(FROM, NODE, 2, 0, 0, 0)
+		TestRunner.expect(right.x):toBe(-2)
+		TestRunner.expect(right.z):toBe(20)
+		TestRunner.expect(right.y):toBe(5)
+		TestRunner.expect(NPCLogic.laneTarget(FROM, NODE, -2, 0, 0, 0).x):toBe(2)
+	end)
+
+	TestRunner.it("scatters within the jitter radius", function()
+		local rng = NPCLogic.newRng(7)
+		for _ = 1, 200 do
+			local p = NPCLogic.laneTarget(FROM, NODE, 0, 1.5, rng(), rng())
+			local off = math.sqrt(p.x * p.x + (p.z - 20) ^ 2)
+			assert(off <= 1.5 + 1e-9, string.format("scattered %.3f studs", off))
+		end
+	end)
+
+	TestRunner.it("still scatters when the bot stands on the node", function()
+		local p = NPCLogic.laneTarget(NODE, NODE, 2, 1, 0, 1)
+		TestRunner.expect(p.x):toBe(1)
+		TestRunner.expect(p.z):toBe(20)
+	end)
+end)
+
 TestRunner.describe("NPCLogic.isContinuousFloor", function()
 	TestRunner.it("accepts flat floor and a ramp's steady climb", function()
 		TestRunner.expect(NPCLogic.isContinuousFloor({ 0, 0, 0, 0 }, 1.2)):toBe(true)

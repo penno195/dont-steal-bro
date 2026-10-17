@@ -1138,6 +1138,15 @@ export type NPCConfig = {
 	-- stalling the round forever.
 	repathAfterStuckSeconds: number,
 	maxRepathsPerStation: number,
+	-- What keeps bots from walking in lockstep: a lane to one side of the
+	-- nav line and a scatter around each node (studs), a pause before
+	-- setting off (seconds), and a fraction shaved off the walk speed.
+	humanise: {
+		laneStuds: number,
+		nodeJitterStuds: number,
+		pauseSeconds: { min: number, max: number },
+		walkSpeedShave: number,
+	},
 	-- How many past finales a bot's rolled reputation covers (inclusive).
 	historyFinales: { min: number, max: number },
 	appearance: NPCAppearance,
@@ -2343,6 +2352,29 @@ local function checkNPCConfig(npc: NPCConfig, issues: { Issue })
 	end
 	if npc.maxRepathsPerStation < 1 then
 		issue(issues, "GameConfig", "GameConfig.luau", "npc.maxRepathsPerStation", "must be at least 1")
+	end
+
+	local humanise = npc.humanise
+	if humanise == nil then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.humanise", "the NPC humanise block is missing")
+	else
+		if humanise.laneStuds < 0 or humanise.nodeJitterStuds < 0 then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"npc.humanise",
+				"laneStuds and nodeJitterStuds must not be negative"
+			)
+		end
+		local pause = humanise.pauseSeconds
+		if pause == nil or pause.min < 0 or pause.max < pause.min then
+			issue(issues, "GameConfig", "GameConfig.luau", "npc.humanise.pauseSeconds", "must have 0 <= min <= max")
+		end
+		-- Shaving only ever slows a bot; 0.5 and up would halve its speed.
+		if humanise.walkSpeedShave < 0 or humanise.walkSpeedShave >= 0.5 then
+			issue(issues, "GameConfig", "GameConfig.luau", "npc.humanise.walkSpeedShave", "must be in [0, 0.5)")
+		end
 	end
 
 	local history = npc.historyFinales

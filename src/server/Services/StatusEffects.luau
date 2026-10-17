@@ -143,7 +143,11 @@ local function applyResolvedStats(racerId: number, stats: StatusEffectResolver.R
 	-- Bots idle until Race on their own, and keep a per-profile speed
 	-- this function doesn't know, so the gate only holds humans.
 	local locked = stats.ControlLock or (startGateHeld and participant ~= nil and participant.player ~= nil)
-	humanoid.WalkSpeed = if locked then 0 else BASE_WALK_SPEED * stats.MoveSpeed
+	-- A bot's own pace (NPCService sets BaseWalkSpeed), so an effect
+	-- wearing off hands it back that pace rather than a human's 16.
+	local base = humanoid:GetAttribute("BaseWalkSpeed")
+	local walkSpeed = if type(base) == "number" then base else BASE_WALK_SPEED
+	humanoid.WalkSpeed = if locked then 0 else walkSpeed * stats.MoveSpeed
 	humanoid.JumpPower = if locked then 0 else BASE_JUMP_POWER * stats.JumpPower
 end
 

@@ -93,6 +93,12 @@ local function validGameConfig(): Validate.GameConfig
 			nextStationTopK = 2,
 			repathAfterStuckSeconds = 1.5,
 			maxRepathsPerStation = 5,
+			humanise = {
+				laneStuds = 2.5,
+				nodeJitterStuds = 1.5,
+				pauseSeconds = { min = 0.2, max = 1.2 },
+				walkSpeedShave = 0.04,
+			},
 			historyFinales = { min = 1, max = 8 },
 			appearance = {
 				hair = { 63690008 },
@@ -1056,6 +1062,18 @@ TestRunner.describe("Validate.checkGameConfig (P3-5 npc block)", function()
 			end,
 			function(config)
 				config.npc.maxRepathsPerStation = 0
+			end,
+			function(config)
+				config.npc.humanise.laneStuds = -1
+			end,
+			function(config)
+				config.npc.humanise.pauseSeconds = { min = 2, max = 1 }
+			end,
+			function(config)
+				config.npc.humanise.walkSpeedShave = 0.5
+			end,
+			function(config)
+				config.npc.humanise.walkSpeedShave = -0.1
 			end,
 			function(config)
 				config.npc.historyFinales = { min = 5, max = 2 }

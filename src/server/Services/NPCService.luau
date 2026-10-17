@@ -125,6 +125,12 @@ type NPCRecord = {
 	workEndsAt: number?,
 	lastPosition: Vector3?,
 	lastProgressAt: number,
+
+	-- GameConfig.npc.humanise: this bot's side of a corridor (studs right
+	-- of the nav line, negative is left), and when its pause before
+	-- setting off ends (nil while it isn't pausing).
+	lane: number,
+	idleUntil: number?,
 }
 
 local navNodes: { [string]: NavNodeRecord } = {}
@@ -478,7 +484,12 @@ local function spawnNPC(index: number): NPCRecord?
 		local tutorial = GameConfig.tutorial
 		profile = TutorialLogic.easyProfile(profile, tutorial.botDurationScale, tutorial.botMoveSpeedScale)
 	end
-	humanoid.WalkSpeed = 16 * profile.moveSpeedScale
+	local humanise = GameConfig.npc.humanise
+	-- Shaved a touch below its profile, so no two bots walk at exactly
+	-- the same pace. Never above it (GameConfig.npc.humanise).
+	humanoid.WalkSpeed = 16 * profile.moveSpeedScale * (1 - nextRandom() * humanise.walkSpeedShave)
+	-- StatusEffects scales slows from this, not from a human's 16.
+	humanoid:SetAttribute("BaseWalkSpeed", humanoid.WalkSpeed)
 
 	local record: NPCRecord = {
 		id = id,
@@ -503,6 +514,9 @@ local function spawnNPC(index: number): NPCRecord?
 		workEndsAt = nil,
 		lastPosition = nil,
 		lastProgressAt = now(),
+
+		lane = (nextRandom() * 2 - 1) * humanise.laneStuds,
+		idleUntil = nil,
 	}
 
 	npcs[id] = record
@@ -624,6 +638,31 @@ local function canWalkStraight(from: Vector3, to: Vector3): boolean
 	return NPCLogic.isContinuousFloor(heights, DIRECT_WALK_MAX_STEP_STUDS)
 end
 
+-- Where this bot aims for the nav node `node` on its way past: its own
+-- side of the corridor, a little scattered (NPCLogic.laneTarget). Falls
+-- back to half the offset, then the node itself, if the spot has no
+-- clear floor to walk to from the node: a narrow ramp or a doorway node
+-- leaves no room to either side.
+local function laneTarget(record: NPCRecord, node: Vector3): Vector3
+	local humanise = GameConfig.npc.humanise
+	local p = NPCLogic.laneTarget(
+		toPoint(record.root.Position),
+		toPoint(node),
+		record.lane,
+		humanise.nodeJitterStuds,
+		record.nextRandom(),
+		record.nextRandom()
+	)
+	local offset = Vector3.new(p.x, p.y, p.z) - node
+	for _, share in { 1, 0.5 } do
+		local spot = node + offset * share
+		if canWalkStraight(node, spot) then
+			return spot
+		end
+	end
+	return node
+end
+
 -- One ComputeAsync per hop, and only when something actually needs one:
 -- a new hop, a Blocked signal, or the stuck timer. Never per tick and
 -- never per frame - architecture.md §4's "recompute only when blocked."
@@ -631,6 +670,12 @@ local function computePath(record: NPCRecord): boolean
 	local target = currentTargetPosition(record)
 	if target == nil then
 		return false
+	end
+	-- Passing a nav node, aim for this bot's own side of it. Never at the
+	-- station itself, and never once stuck: a repath takes the node's own
+	-- centre, which the map kit puts on walkable floor.
+	if record.nodeRoute[record.nodeIndex] ~= nil and record.repathsThisStation == 0 then
+		target = laneTarget(record, target)
 	end
 
 	if record.blockedConnection ~= nil then
@@ -1014,6 +1059,18 @@ local function tickNPC(record: NPCRecord, nowValue: number)
 	end
 
 	if record.phase == "Idle" then
+		-- A beat before setting off, at GO and after each task, as a
+		-- player takes a moment to spot the next station. Rolled per
+		-- pause, so a pack that starts together drifts apart.
+		local idleUntil = record.idleUntil
+		if idleUntil == nil then
+			local pause = GameConfig.npc.humanise.pauseSeconds
+			record.idleUntil = nowValue + pause.min + record.nextRandom() * (pause.max - pause.min)
+			return
+		elseif nowValue < idleUntil then
+			return
+		end
+		record.idleUntil = nil
 		chooseNextStation(record)
 	elseif record.phase == "Walking" then
 		tickWalking(record, nowValue)

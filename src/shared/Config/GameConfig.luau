@@ -198,6 +198,22 @@ local GameConfig: Validate.GameConfig = {
 		repathAfterStuckSeconds = 1.5,
 		maxRepathsPerStation = 5,
 
+		-- PLACEHOLDER, all four. What stops a pack of bots moving as one
+		-- (playtest 2026-10-17: they walked in single file, each on the
+		-- one in front's exact line). Each bot keeps to its own side of a
+		-- corridor, up to `laneStuds` off the nav graph's line, and aims
+		-- within `nodeJitterStuds` of each nav node, not its centre
+		-- (NPCLogic.laneTarget). It takes a beat of `pauseSeconds` before
+		-- setting off, at GO and after each task. And it walks up to
+		-- `walkSpeedShave` slower than its profile: only ever slower, so
+		-- architecture.md §4's fairness rule is untouched.
+		humanise = {
+			laneStuds = 2.5,
+			nodeJitterStuds = 1.5,
+			pauseSeconds = { min = 0.2, max = 1.2 },
+			walkSpeedShave = 0.04,
+		},
+
 		-- PLACEHOLDER. How many past finales a bot's reputation line
 		-- shows, each one rolled from its personality (NPCBrainLogic.
 		-- staticHistory). Kept small so a bot reads as a fairly new

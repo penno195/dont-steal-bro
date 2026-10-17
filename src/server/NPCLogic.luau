@@ -265,6 +265,35 @@ function NPCLogic.trimRoute(route: { string }, positions: { [string]: Point }, f
 	return trimmed
 end
 
+-- Where a bot aims for a nav node it's walking past: `lane` studs to the
+-- right of the line from `from` to the node (negative is left), then
+-- scattered `jitterRadius` at most, by two rolls in [0, 1). So a pack of
+-- bots spreads across a corridor instead of filing through the node's
+-- exact centre, each on the one in front's line (playtest, 2026-10-17).
+-- Height is left alone; NPCService checks the point still has floor.
+function NPCLogic.laneTarget(
+	from: Point,
+	node: Point,
+	lane: number,
+	jitterRadius: number,
+	angleRoll: number,
+	radiusRoll: number
+): Point
+	local x, z = node.x, node.z
+	local dx, dz = node.x - from.x, node.z - from.z
+	local length = math.sqrt(dx * dx + dz * dz)
+	if length > 1e-3 then
+		-- Right of a heading (dx, dz) on the ground is (-dz, dx).
+		x += -dz / length * lane
+		z += dx / length * lane
+	end
+	-- sqrt keeps the scatter even across the disc, not bunched at its
+	-- centre.
+	local angle = angleRoll * 2 * math.pi
+	local radius = jitterRadius * math.sqrt(radiusRoll)
+	return { x = x + math.cos(angle) * radius, y = node.y, z = z + math.sin(angle) * radius }
+end
+
 -- Whether floor heights sampled in order along a straight line make one
 -- continuous walkable surface: at least two samples, and no neighbouring
 -- pair further apart than `maxStep`. A ramp passes (each sample a little
