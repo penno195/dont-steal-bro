@@ -51,6 +51,10 @@ export type ReasonCode =
 	-- Left mid-Studio. design-decisions.md Q4: the leaver always
 	-- personally takes the loss regardless of what the table said.
 	| "ForfeitDisconnect"
+	-- Banked the streak in the Hub (payoff-loop step 4, CashOutLogic).
+	-- Neither a win nor a loss: it never goes through applyResult or
+	-- statForReason, only ProgressionService.cashOut's own write.
+	| "CashOut"
 
 local WIN_REASONS: { [string]: boolean } = {
 	QualifiedWin = true,

@@ -85,6 +85,10 @@ export type GrantState = {
 	-- Streak Saves held (ProfileLogic schema v10). Optional for the same
 	-- reason as navigationRounds; a StreakSave grant reads nil as 0.
 	streakSaves: number?,
+	-- The streak the last restore brought back (ProfileLogic schema
+	-- v18): a buy-back or Streak Save sets it, so banking that streak
+	-- pays only for the wins since (CashOutLogic). Optional as above.
+	streakRestoredAt: number?,
 }
 
 -- ===== receipts ===========================================================
@@ -239,6 +243,7 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 		currentStreak = state.currentStreak,
 		buyBackOffer = state.buyBackOffer,
 		streakSaves = state.streakSaves,
+		streakRestoredAt = state.streakRestoredAt,
 	}
 	local lines: { string } = {}
 
@@ -330,6 +335,7 @@ function StoreLogic.applyGrants(state: GrantState, grants: { Grant }): (GrantSta
 				)
 			)
 			updated.currentStreak = offer.streak
+			updated.streakRestoredAt = offer.streak
 			updated.buyBackOffer = nil
 		elseif grant.kind == "StreakSave" then
 			local amount = grant.amount
@@ -429,6 +435,7 @@ function StoreLogic.useStreakSave(state: GrantState): (GrantState?, string)
 	local updated = table.clone(state)
 	updated.streakSaves = held - 1
 	updated.currentStreak = offer.streak
+	updated.streakRestoredAt = offer.streak
 	updated.buyBackOffer = nil
 	return updated,
 		string.format(

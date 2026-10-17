@@ -99,6 +99,16 @@ local GameConfig: Validate.GameConfig = {
 		},
 	},
 
+	-- Banking a streak in the Hub (payoff-loop step 4; design-decisions
+	-- .md Q7's "streak cash-out" case). Pays coinsPerWinSquared * w^2,
+	-- where w is the wins paid for: the whole streak, or only the wins
+	-- since a buy-back or Streak Save restored it. PLACEHOLDER: 3 -> 225,
+	-- 5 -> 625, 10 -> 2,500, 20 -> 10,000 (owner, 2026-10-17).
+	streakCashOut = {
+		minStreak = 3, -- checks the full streak, restored or not
+		coinsPerWinSquared = 25,
+	},
+
 	-- P2-7: PowerUpService's in-round inventory. The pre-game loadout
 	-- starts in these slots and field pickups fill whatever is empty
 	-- (powerups.md "Inventory and aiming", decided 2026-09-25). Range,

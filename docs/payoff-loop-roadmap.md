@@ -98,7 +98,20 @@ All amounts are PLACEHOLDER until a playtest tunes them.
   permanent "best banked" record shown in the Hub, and the streak resets
   to 0. `bestStreak`, titles and the leaderboard are untouched.
   Server-validated through the same single streak writer
-  (`applyRoundResult`'s claimant), with its own reason code.
+  (`applyRoundResult`'s claimant), with its own reason code. Owner's
+  answers (Q7's applied case): a restored streak pays only for wins
+  since the restore; 25 × s² coins; a new Hub launcher button + card.
+  - [x] 4a. Pure logic + config + specs: `GameConfig.streakCashOut`
+    (minStreak, coinsPerWinSquared), `src/server/CashOutLogic.luau`
+    (the offer: streak, wins paid for, coins, whether and why not), the
+    `CashOut` reason code, and StoreLogic's restores recording
+    `streakRestoredAt`.
+  - [ ] 4b. Server: profile fields `bestBanked` and `streakRestoredAt`
+    (schema v18), `StreakCashOutIntent`/`StreakCashOutResult`,
+    `ProgressionService.cashOut` through the one progression writer
+    (Hub only, audit line), StoreState's `cashOut` offer (Hub only).
+  - [ ] 4c. UI: the Hub launcher's bank button and its card, with a
+    confirm step.
 
 ## Also approved (after the four above)
 

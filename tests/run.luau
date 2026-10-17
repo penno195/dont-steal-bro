@@ -79,5 +79,6 @@ require("./EventLogic.spec")
 require("./StaffPanelLogic.spec")
 require("./PrizeRevealLogic.spec")
 require("./GuessViewLogic.spec")
+require("./CashOutLogic.spec")
 
 TestRunner.run()

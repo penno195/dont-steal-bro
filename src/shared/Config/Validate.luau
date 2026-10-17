@@ -875,6 +875,12 @@ export type RoundRewardsConfig = {
 	level: LevelCurveConfig,
 }
 
+-- Banking a streak (payoff-loop step 4): CashOutLogic's config.
+export type StreakCashOutConfig = {
+	minStreak: number,
+	coinsPerWinSquared: number,
+}
+
 export type StudioTimers = {
 	introSeconds: number,
 	introNewPlayerSeconds: number,
@@ -912,6 +918,7 @@ export type GameConfig = {
 	roundTimers: RoundTimers,
 	winRewards: WinRewardsConfig,
 	roundRewards: RoundRewardsConfig,
+	streakCashOut: StreakCashOutConfig,
 
 	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
 	-- loadout (StoreService) starts in these slots; field pickups fill
@@ -4041,6 +4048,27 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 				"roundRewards.level." .. field,
 				"must be a whole number, at least " .. minimum
 			)
+		end
+	end
+
+	-- Banking a streak (payoff-loop step 4). A minimum of 1 or more, so
+	-- a streak of 0 can never be banked; a positive whole coin rate.
+	local cashOut = config.streakCashOut
+	if type(cashOut) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "streakCashOut", "is missing")
+	else
+		local minimums: { [string]: number } = { minStreak = 1, coinsPerWinSquared = 1 }
+		for field, minimum in minimums do
+			local value = (cashOut :: any)[field]
+			if type(value) ~= "number" or value < minimum or value % 1 ~= 0 then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"streakCashOut." .. field,
+					"must be a whole number, at least " .. minimum
+				)
+			end
 		end
 	end
 end

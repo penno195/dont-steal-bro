@@ -53,6 +53,7 @@ local function validGameConfig(): Validate.GameConfig
 			currencyByPlace = { 12, 10, 8, 6, 4, 2 },
 			level = { firstLevelXp = 100, perLevelXp = 25, maxLevel = 200, levelUpCurrency = 50 },
 		},
+		streakCashOut = { minStreak = 3, coinsPerWinSquared = 25 },
 		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
 		powerUpUseRangeStuds = 24,
@@ -1203,6 +1204,15 @@ TestRunner.describe("Validate.checkGameConfig (round rewards)", function()
 			end,
 			function(c)
 				c.roundRewards.level.levelUpCurrency = -50
+			end,
+			function(c)
+				c.streakCashOut.minStreak = 0 -- a streak of 0 could be banked
+			end,
+			function(c)
+				c.streakCashOut.coinsPerWinSquared = 2.5
+			end,
+			function(c)
+				c.streakCashOut = nil
 			end,
 		}
 		for _, mutate in cases do

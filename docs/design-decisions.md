@@ -973,6 +973,22 @@ From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
   untouched. Hub-only, so it shows nothing in a live round. It's a
   streak change, so it goes through the single streak writer with its
   own reason code. Claude's placeholder: available from streak 3.
+  **Owner's answers (2026-10-17, step 4):**
+  - **A restored streak pays only for the wins since the restore.** A
+    buy-back or Streak Save brings a lost streak back for Robux or a
+    held save. Paying the full streak on banking would let "lose at 20,
+    restore, cash out 20" buy coins far cheaper than the coin packs. So
+    the profile records the streak a restore brought back, and banking
+    pays for `streak - restored` wins. The streak-3 minimum still checks
+    the full streak. Claude's calls: a bank that would pay 0 coins (no
+    win since the restore) is refused, since it would only throw the
+    streak away; and "best banked" records the full streak banked,
+    because the streak itself was legitimately restored.
+  - **The curve is 25 × s²** (PLACEHOLDER), where s is the wins paid
+    for: 3 → 225, 5 → 625, 10 → 2,500, 20 → 10,000.
+  - **The Hub gets a new launcher button** (bank) that opens a card:
+    your streak, what banking it pays, your best banked, and Bank with
+    a confirm step. Only its owner sees it.
 - **Own-streak indicator.** In the Decision Studio a finalist sees
   **their own** streak at stake. Condition 1 is about other players
   seeing it, so it's sent only to that finalist (targeted), the same way

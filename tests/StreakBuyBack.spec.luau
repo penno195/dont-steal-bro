@@ -69,6 +69,8 @@ TestRunner.describe("StoreLogic.applyGrants and StreakBuyBack", function()
 		TestRunner.expect(after.currentStreak):toBe(4)
 		TestRunner.expect(after.buyBackOffer == nil):toBe(true)
 		TestRunner.expect(string.find(lines[1], "bought back 0 -> 4", 1, true) ~= nil):toBeTruthy()
+		-- Recorded, so banking it later pays only for wins since (step 4).
+		TestRunner.expect(after.streakRestoredAt):toBe(4)
 	end)
 
 	TestRunner.it("buys nothing with no offer open", function()
@@ -133,6 +135,7 @@ TestRunner.describe("Streak Saves", function()
 		TestRunner.expect(after ~= nil):toBe(true)
 		local saved = after :: StoreLogic.GrantState
 		TestRunner.expect(saved.currentStreak):toBe(7)
+		TestRunner.expect(saved.streakRestoredAt):toBe(7)
 		TestRunner.expect(saved.streakSaves):toBe(1)
 		TestRunner.expect(saved.buyBackOffer == nil):toBe(true)
 		TestRunner.expect(line):toBe("streak saved 0 -> 7 with a Streak Save (round srv:3, 1 left)")
