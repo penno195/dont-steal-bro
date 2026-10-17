@@ -971,12 +971,15 @@ From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
   **Guess Token** and picks the finalist who walks out. A correct guess
   earns a **streak credit**, but only when the result is **a single
   stealer or a single sharer**. Every other guess, and every all-share
-  or all-steal result, wins nothing. **Still to ask the owner before
-  building (roadmap step 2):** what a streak credit does mechanically
-  (+1 to the current streak, which a non-qualifier has just lost?),
-  whether it counts toward `bestStreak` / titles / the leaderboard, and
-  whether NPC-heavy lobbies limit it (threat-model.md §8's NPC-seat
-  rule).
+  or all-steal result, wins nothing. **Owner's answers (2026-10-17):**
+  - A streak credit is a **streak shield**: it's banked, and on the
+    holder's **next loss** it is spent instead of the streak resetting.
+  - The shield is the whole prize: a correct guess pays nothing else
+    (no coins, XP or streak points). A shield only stops a reset, never
+    adds to the streak, so `bestStreak`, titles and the leaderboard
+    still only move on real wins.
+  - **No NPC limit**: Guess Tokens are offered in every lobby, however
+    many finalist seats are NPCs.
 
 ## 8. Are starting power-ups sold for Robux?
 

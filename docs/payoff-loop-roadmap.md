@@ -46,8 +46,10 @@ All amounts are PLACEHOLDER until a playtest tunes them.
   gets one **Guess Token** per round and picks who walks out. A correct
   guess earns a **streak credit**, but only when the result is a single
   stealer or a single sharer. Every other guess (and an all-share or
-  all-steal result) wins nothing. Open sub-questions to ask before
-  building: see Q7's applied case.
+  all-steal result) wins nothing. The owner's answers (Q7's applied
+  case): the credit is a **streak shield**, spent on the holder's next
+  loss instead of a reset. It's the whole prize and never adds to the
+  streak. No NPC-lobby limit.
 - [ ] **3. Quick-chat rewording and restyle.** Quick-chat buttons already
   exist. Reword them for the negotiation (promises, threats, emotes)
   and restyle them to the HUD art pass.
