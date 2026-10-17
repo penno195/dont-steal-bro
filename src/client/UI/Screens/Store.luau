@@ -229,9 +229,14 @@ local function card(
 	})
 end
 
+-- Where a panel button sits: by default full width along the panel's
+-- bottom; the Season tab's pass bar places its two side by side.
+-- `icon` false drops the button's icon, when the label needs the room.
+type Place = { width: number, anchorPoint: Vector2, position: UDim2, compact: boolean, icon: boolean }
+
 -- The buy button's label and state for the selected item, from its
 -- ItemState and the purchase flow.
-local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?, pane: number): Instance
+local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?, pane: number, place: Place?): Instance
 	local itemState = derive(function()
 		local i = item()
 		return if i then StoreScreenLogic.itemState(i, store.state()) else nil
@@ -259,13 +264,15 @@ local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?, pane:
 		elseif mine() and store.flow().phase == "Processing" then
 			return "Processing..."
 		end
-		return "Buy · " .. priceText(store, i)
+		-- The bar's half-width button: the cart icon already says buy.
+		return (if place then "" else "Buy · ") .. priceText(store, i)
 	end)
 	return C.Button({
 		label = label,
 		variant = "primary",
-		icon = "shop",
-		width = pane - 2 * Theme.spacing.md,
+		icon = if place == nil or place.icon then "shop" else nil,
+		compact = place ~= nil and place.compact,
+		width = if place then place.width else pane - 2 * Theme.spacing.md,
 		-- Any purchase in flight disables every Buy: one prompt at a time.
 		disabled = derive(function()
 			return itemState() ~= "Buyable" or (busy() and not mine())
@@ -280,8 +287,8 @@ local function buyButton(store: Store, item: () -> StoreScreenLogic.Item?, pane:
 			end
 		end,
 		order = 100,
-		anchorPoint = Vector2.new(0.5, 1),
-		position = UDim2.fromScale(0.5, 1),
+		anchorPoint = if place then place.anchorPoint else Vector2.new(0.5, 1),
+		position = if place then place.position else UDim2.fromScale(0.5, 1),
 	})
 end
 
@@ -344,7 +351,7 @@ end
 -- Claim All, on the season pass's panel (user decision 2026-10-09): pays
 -- everything reached on both rows. It sits in the row the Equip buttons
 -- use, which a pass never fills.
-local function claimAllButton(store: Store, item: () -> StoreScreenLogic.Item?, pane: number): Instance
+local function claimAllButton(store: Store, item: () -> StoreScreenLogic.Item?, pane: number, place: Place?): Instance
 	local count = derive(function(): number?
 		local i = item()
 		local season = store.seasonView()
@@ -355,8 +362,11 @@ local function claimAllButton(store: Store, item: () -> StoreScreenLogic.Item?, 
 	end)
 	return create("Frame")({
 		Name = "ClaimAll",
-		Position = UDim2.fromOffset(0, PREVIEW + Theme.spacing.sm),
-		Size = UDim2.new(1, 0, 0, Theme.touch.iconButton),
+		AnchorPoint = if place then place.anchorPoint else Vector2.zero,
+		Position = if place then place.position else UDim2.fromOffset(0, PREVIEW + Theme.spacing.sm),
+		Size = if place
+			then UDim2.fromOffset(place.width, Theme.touch.iconButton)
+			else UDim2.new(1, 0, 0, Theme.touch.iconButton),
 		BackgroundTransparency = 1,
 		Visible = function()
 			return count() ~= nil
@@ -364,12 +374,16 @@ local function claimAllButton(store: Store, item: () -> StoreScreenLogic.Item?, 
 		C.Button({
 			label = derive(function()
 				local n = count() or 0
-				return if n > 0 then string.format("Claim all · %d", n) else "Nothing to claim"
+				return if n > 0 and place
+					then string.format("Claim · %d", n)
+					elseif n > 0 then string.format("Claim all · %d", n)
+					elseif place then "Claimed"
+					else "Nothing to claim"
 			end),
 			variant = "secondary",
-			icon = "gift",
+			icon = if place == nil or place.icon then "gift" else nil,
 			compact = true,
-			width = pane - 2 * Theme.spacing.md,
+			width = if place then place.width else pane - 2 * Theme.spacing.md,
 			disabled = derive(function()
 				return (count() or 0) == 0
 			end),
@@ -379,6 +393,18 @@ local function claimAllButton(store: Store, item: () -> StoreScreenLogic.Item?, 
 			order = 95,
 		}),
 	})
+end
+
+-- "SALE <s>was</s> · " in rich text while the item is on sale, else "".
+local function saleText(store: Store, i: StoreScreenLogic.Item?): string
+	local was = if i then store.priceOf(i).was else nil
+	return if i and was
+		then string.format(
+			'<font color="#%s">SALE</font> <s>%s</s> · ',
+			Theme.color.warning:ToHex(),
+			StoreScreenLogic.priceText(i, { now = was })
+		)
+		else ""
 end
 
 local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: MenuShell.BodyLayout): Instance
@@ -457,7 +483,7 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 				end,
 				TextXAlignment = Enum.TextXAlignment.Left,
 			}),
-			Base.text("caption", {
+			Base.text("body", {
 				Name = "Contents",
 				Position = UDim2.fromOffset(PREVIEW + Theme.spacing.md, Theme.type.title.size + Theme.spacing.sm),
 				Size = UDim2.new(
@@ -469,17 +495,8 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 				-- On sale, it opens with the struck-through "was" price.
 				RichText = true,
 				Text = function()
-					local i = item()
 					local r = rarity()
-					local was = if i then store.priceOf(i).was else nil
-					local sale = if i and was
-						then string.format(
-							'<font color="#%s">SALE</font> <s>%s</s> · ',
-							Theme.color.warning:ToHex(),
-							StoreScreenLogic.priceText(i, { now = was })
-						)
-						else ""
-					return sale .. (if r then r .. " · " else "") .. contents()
+					return saleText(store, item()) .. (if r then r .. " · " else "") .. contents()
 				end,
 				TextColor3 = Theme.color.inkMuted,
 				TextWrapped = true,
@@ -538,13 +555,16 @@ end
 local GUTTER_W = 76 -- the two row cards left of the strip
 local COLUMN_W = 88
 local STRIDE = COLUMN_W + Theme.spacing.sm
-local CHIP_H = 20 -- the wins tab and the status banner
-local NAME_H = Theme.type.caption.size + Theme.spacing.xxs
+local CHIP_H = 18 -- the wins tab and the status banner
+-- The item's name, in the body size: at caption size it was hard to read
+-- on a phone (playtest, 2026-10-17).
+local NAME_H = Theme.type.body.size + Theme.spacing.xxs
 local CORNER_ICON = 16
 local TILE_MIN = 72
 local LIP = Theme.lip.small
 local INDICATOR_H = 6
 local INDICATOR_ROW = INDICATOR_H + 2 * Theme.spacing.xs
+local INFO_ROW = Theme.type.body.size + Theme.spacing.sm -- the info line, with the indicator beside it
 local ARROW = 40
 
 -- Stands in for an empty slot (a tier only the other row pays at), so a
@@ -557,25 +577,36 @@ local function withRim(fill: Theme.Fill, rim: Color3): Theme.Fill
 	return { top = fill.top, bottom = fill.bottom, lip = fill.lip, rim = rim, ink = fill.ink, gradient = fill.gradient }
 end
 
-type Banner = { text: string, back: Color3, ink: Color3, icon: string? }
+-- `shown`: a banner only where it says something the tile doesn't already
+-- (playtest, 2026-10-17: two text strips per tile left the picture tiny
+-- on a phone). A plain locked tier needs none, a claimed one has its
+-- check and dimming.
+type Banner = { text: string, back: Color3, ink: Color3, icon: string?, shown: boolean }
 
 -- The banner: status is a word as well as a colour.
 local function banner(row: SeasonTrackLogic.Row, passLocked: boolean): Banner
 	if row.status == "Claimable" then
-		return { text = "CLAIM", back = Theme.color.share, ink = Theme.color.onShare }
+		return { text = "CLAIM", back = Theme.color.share, ink = Theme.color.onShare, shown = true }
 	elseif row.status == "Claimed" then
-		return { text = "CLAIMED", back = Theme.color.outline, ink = Theme.color.success, icon = "check" }
+		return { text = "CLAIMED", back = Theme.color.outline, ink = Theme.color.success, icon = "check", shown = false }
 	elseif row.status == "Next" then
-		return { text = "NEXT", back = Theme.color.outline, ink = Theme.color.primary }
+		return { text = "NEXT", back = Theme.color.outline, ink = Theme.color.primary, shown = true }
 	elseif passLocked and row.reached then
 		-- Buying the pass makes this one claimable at once.
-		return { text = "REACHED", back = Theme.color.outline, ink = Theme.color.primary, icon = "lock" }
+		return {
+			text = "REACHED",
+			back = Theme.color.outline,
+			ink = Theme.color.primary,
+			icon = "lock",
+			shown = true,
+		}
 	end
 	return {
 		text = "LOCKED",
 		back = Theme.color.outline,
 		ink = Theme.color.ink,
 		icon = if passLocked then "lock" else nil,
+		shown = false,
 	}
 end
 
@@ -657,8 +688,13 @@ local function tile(
 		return row().image
 	end, base.ink)
 	picture.AnchorPoint = Vector2.new(0.5, 0)
-	picture.Position = UDim2.new(0.5, 0, 0, CHIP_H + Theme.spacing.xs)
-	picture.Size = UDim2.new(1, 0, 1, -(2 * CHIP_H + NAME_H + 3 * Theme.spacing.xs))
+	picture.Position = UDim2.fromScale(0.5, 0)
+	-- The status banner overlaps only the picture's foot (half its
+	-- height); with no banner the picture takes that room too.
+	effect(function()
+		local foot = if status().shown then CHIP_H / 2 else 0
+		picture.Size = UDim2.new(1, 0, 1, -(NAME_H + Theme.spacing.xxs + foot))
+	end)
 	create("UIAspectRatioConstraint")({ AspectRatio = 1, Parent = picture })
 	local cornerIcon = derive(function()
 		return status().icon or "none"
@@ -700,15 +736,6 @@ local function tile(
 						gloss = true,
 						children = {
 							Base.padding(Theme.spacing.xs),
-							-- Gold once the player's wins reach this tier.
-							chip("Wins", 0, function()
-								return if row().reached then Theme.color.primary else Theme.color.outline
-							end, function()
-								local w = row().wins
-								return if w == 0 then "NOW" else string.format("%d WINS", w)
-							end, function()
-								return if row().reached then Theme.color.onPrimary else Theme.color.ink
-							end),
 							switch(cornerIcon)(iconViews({ "check", "lock" }, function(key)
 								local icon = C.Icons.view(
 									key,
@@ -716,30 +743,38 @@ local function tile(
 									if key == "check" then Theme.color.success else base.ink
 								)
 								icon.AnchorPoint = Vector2.new(1, 0)
-								icon.Position = UDim2.new(1, 0, 0, CHIP_H + Theme.spacing.xxs)
+								icon.Position = UDim2.fromScale(1, 0)
 								icon.ZIndex = 4
 								return icon
 							end)) :: any,
 							picture,
-							Base.text("caption", {
+							Base.text("body", {
 								Name = "Item",
 								AnchorPoint = Vector2.new(0, 1),
-								Position = UDim2.new(0, 0, 1, -(CHIP_H + Theme.spacing.xxs)),
+								Position = UDim2.fromScale(0, 1),
 								Size = UDim2.new(1, 0, 0, NAME_H),
 								Text = function()
 									return row().text
 								end,
 								TextColor3 = base.ink,
-								FontFace = Font.new(Theme.type.caption.font.Family, Enum.FontWeight.Bold),
+								FontFace = Font.new(Theme.type.body.font.Family, Enum.FontWeight.Bold),
 								TextTruncate = Enum.TextTruncate.AtEnd,
 							}),
-							chip("Status", 1, function()
-								return status().back
-							end, function()
-								return status().text
-							end, function()
-								return status().ink
-							end),
+							-- Over the picture's foot, just above the name.
+							(function()
+								local strip = chip("Status", 1, function()
+									return status().back
+								end, function()
+									return status().text
+								end, function()
+									return status().ink
+								end) :: Frame
+								strip.Position = UDim2.new(0, 0, 1, -(NAME_H + Theme.spacing.xxs))
+								effect(function()
+									strip.Visible = status().shown
+								end)
+								return strip
+							end)(),
 							-- A claimed item dims under its banner, like a
 							-- ticked-off tier.
 							create("Frame")({
@@ -849,7 +884,10 @@ local function arrow(direction: number, shown: () -> boolean, onActivate: () -> 
 	return button
 end
 
-local function seasonTrack(store: Store, height: () -> number, pane: number): Instance
+-- `width` is the whole strip's, row cards included. `info` (the pass
+-- bar's layout) is a line of rich text under the row cards, beside the
+-- indicator: the season, the player's wins and the time left.
+local function seasonTrack(store: Store, height: () -> number, width: number, info: (() -> string)?): Instance
 	local hasSeason = derive(function()
 		return store.seasonView() ~= nil
 	end)
@@ -863,7 +901,7 @@ local function seasonTrack(store: Store, height: () -> number, pane: number): In
 		Name = "Season",
 		Position = UDim2.fromOffset(0, TAB_H + Theme.spacing.sm),
 		Size = function()
-			return UDim2.fromOffset(pane, height())
+			return UDim2.fromOffset(width, height())
 		end,
 		BackgroundTransparency = 1,
 		switch(hasSeason)({
@@ -874,11 +912,13 @@ local function seasonTrack(store: Store, height: () -> number, pane: number): In
 				local passLocked = derive(function()
 					return view().premium.locked
 				end)
+				local bottomRow = if info then INFO_ROW else INDICATOR_ROW
 				local stripH = derive(function()
-					return math.max(0, height() - INDICATOR_ROW)
+					return math.max(0, height() - bottomRow)
 				end)
+				-- Each column heads its two tiles with its win count.
 				local tileH = derive(function()
-					return math.max(TILE_MIN, math.floor((stripH() - Theme.spacing.sm) / 2))
+					return math.max(TILE_MIN, math.floor((stripH() - CHIP_H - 2 * Theme.spacing.sm) / 2))
 				end)
 				local function stack(): Instance
 					return create("UIListLayout")({
@@ -921,6 +961,24 @@ local function seasonTrack(store: Store, height: () -> number, pane: number): In
 							Size = UDim2.new(0, COLUMN_W, 1, 0),
 							BackgroundTransparency = 1,
 							stack(),
+							-- Gold once the player's wins reach this tier.
+							(function()
+								local reached = derive(function()
+									local c = column()
+									return (c.premium ~= nil and c.premium.reached)
+										or (c.free ~= nil and c.free.reached)
+								end)
+								local wins = chip("Wins", 0, function()
+									return if reached() then Theme.color.primary else Theme.color.outline
+								end, function()
+									local w = column().wins
+									return if w == 0 then "NOW" else string.format("%d WINS", w)
+								end, function()
+									return if reached() then Theme.color.onPrimary else Theme.color.ink
+								end) :: Frame
+								wins.LayoutOrder = 0
+								return wins
+							end)(),
 							tile(function()
 								return column().premium
 							end, true, passLocked, tileH, 2 * index - 1, claim("Premium")),
@@ -977,6 +1035,12 @@ local function seasonTrack(store: Store, height: () -> number, pane: number): In
 						Size = UDim2.new(0, GUTTER_W - Theme.spacing.sm, 1, 0),
 						BackgroundTransparency = 1,
 						stack(),
+						create("Frame")({
+							Name = "Head",
+							LayoutOrder = 0,
+							Size = UDim2.new(1, 0, 0, CHIP_H),
+							BackgroundTransparency = 1,
+						}),
 						rowCard(true, passLocked, tileH),
 						rowCard(false, passLocked, tileH),
 					}),
@@ -984,7 +1048,7 @@ local function seasonTrack(store: Store, height: () -> number, pane: number): In
 						Name = "Track",
 						Position = UDim2.fromOffset(GUTTER_W, 0),
 						Size = function()
-							return UDim2.fromOffset(pane - GUTTER_W, stripH())
+							return UDim2.fromOffset(width - GUTTER_W, stripH())
 						end,
 						BackgroundTransparency = 1,
 						strip :: Instance,
@@ -1000,12 +1064,16 @@ local function seasonTrack(store: Store, height: () -> number, pane: number): In
 							step(1)
 						end),
 					}),
-					-- Where the window sits along the whole season.
+					-- Where the window sits along the whole season: the
+					-- strip's width, or with `info` the half beside it.
 					create("Frame")({
 						Name = "Indicator",
-						AnchorPoint = Vector2.new(0, 1),
-						Position = UDim2.new(0, GUTTER_W, 1, -Theme.spacing.xs),
-						Size = UDim2.fromOffset(pane - GUTTER_W, INDICATOR_H),
+						AnchorPoint = Vector2.new(1, 0.5),
+						Position = UDim2.new(1, 0, 1, -bottomRow / 2),
+						Size = UDim2.fromOffset(
+							if info then math.floor((width - GUTTER_W) / 2) else width - GUTTER_W,
+							INDICATOR_H
+						),
 						BackgroundColor3 = Theme.color.outline,
 						Visible = function()
 							return scroll().max > 0
@@ -1030,12 +1098,62 @@ local function seasonTrack(store: Store, height: () -> number, pane: number): In
 						}),
 					}),
 				}
+				if info then
+					table.insert(
+						children,
+						Base.text("body", {
+							Name = "Info",
+							AnchorPoint = Vector2.new(0, 1),
+							Position = UDim2.fromScale(0, 1),
+							Size = UDim2.fromOffset(
+								width - math.floor((width - GUTTER_W) / 2) - Theme.spacing.md,
+								INFO_ROW - Theme.spacing.xxs
+							),
+							RichText = true,
+							Text = info,
+							TextColor3 = Theme.color.inkMuted,
+							TextXAlignment = Enum.TextXAlignment.Left,
+							TextTruncate = Enum.TextTruncate.AtEnd,
+						})
+					)
+				end
 				return children :: any
 			end,
 			[false] = function()
 				return MenuShell.message("No season running", "The next season's track shows up here.")
 			end,
 		}) :: any,
+	})
+end
+
+-- The Season tab's pass bar (owner, 2026-10-17): with the panel split
+-- beside the grid, the pass's two buttons sit in the tab row's other
+-- half and the track takes the whole width below, so more tiers show.
+-- What the panel's text said moves to the track's info line.
+local function passBar(store: Store, item: () -> StoreScreenLogic.Item?, pane: number): Instance
+	local half = math.floor((pane - Theme.spacing.sm) / 2)
+	local y = (TAB_H - Theme.touch.iconButton) / 2
+	-- A narrow window (a small desktop one) keeps the label, not the icon.
+	local icon = half >= 140
+	return create("Frame")({
+		Name = "PassBar",
+		Position = UDim2.fromOffset(pane + MenuShell.GUTTER, 0),
+		Size = UDim2.fromOffset(pane, TAB_H),
+		BackgroundTransparency = 1,
+		claimAllButton(store, item, pane, {
+			width = half,
+			anchorPoint = Vector2.zero,
+			position = UDim2.fromOffset(0, y),
+			compact = true,
+			icon = icon,
+		}),
+		buyButton(store, item, pane, {
+			width = half,
+			anchorPoint = Vector2.new(1, 0),
+			position = UDim2.new(1, 0, 0, y),
+			compact = true,
+			icon = icon,
+		}),
 	})
 end
 
@@ -1153,11 +1271,43 @@ local function body(store: Store, height: () -> number, layout: MenuShell.BodyLa
 					-- show their grid; the pass sits in the panel below.
 					switch(onSeason)({
 						[true] = function()
-							return seasonTrack(store, gridHeight, pane)
+							if not layout.split then
+								return { seasonTrack(store, gridHeight, pane), panel(store, selected, layout) }
+							end
+							local full = 2 * pane + MenuShell.GUTTER
+							return {
+								passBar(store, selected, pane),
+								seasonTrack(store, gridHeight, full, function()
+									local season = store.seasonView()
+									if season == nil then
+										return ""
+									end
+									local wins = math.max(season.free.wins, season.premium.wins)
+									return string.format(
+										"%s%s · %d wins so far · %s",
+										saleText(store, selected()),
+										season.name,
+										wins,
+										season.timeLeft
+									)
+								end),
+								-- A purchase's result, over the track.
+								create("Frame")({
+									Name = "Flow",
+									Position = UDim2.new(0.5, 0, 0, TAB_H + Theme.spacing.sm),
+									AnchorPoint = Vector2.new(0.5, 0),
+									Size = function()
+										return UDim2.fromOffset(pane, math.min(PANEL_H, gridHeight()))
+									end,
+									BackgroundTransparency = 1,
+									flowBanner(store, pane),
+								}),
+							}
 						end,
-						[false] = grid,
+						[false] = function()
+							return { grid(), panel(store, selected, layout) }
+						end,
 					}) :: any,
-					panel(store, selected, layout),
 				} :: any
 			end,
 			[false] = function()
