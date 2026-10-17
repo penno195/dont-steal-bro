@@ -344,7 +344,7 @@ Roughly in order of how much they cost:
    if "also earnable" means earnable on a comparable timescale. There
    are targets now (design-decisions.md Q1, "pricing", 2026-10-02): one
    Common power-up is one rung-0 win, or about 15 Robux (repriced
-   2026-10-17), so ten Sprint Boosts are ten wins or 105 Robux. Playtest still has to confirm how
+   2026-10-17), so ten Sprint Boosts are ten wins or 99 Robux. Playtest still has to confirm how
    long a win takes. **Whoever sets those numbers is the
    person who decides whether this design is pay-to-win, not whoever
    wrote Q8.** If ten Sprint Boosts cost 79 Robux or forty minutes of

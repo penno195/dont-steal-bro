@@ -250,8 +250,8 @@ rarity.
   base rate: 75 coins for **45 R$** (was 79). The owner chose to reprice
   the coin packs rather than sell single power-ups for Robux. At that
   rate an Uncommon is about 30 R$ and a Rare about 60 R$.
-- **Bundles are about 30% off that rate:** Large Coin Chest 250 coins
-  for **105 R$** (was 249), Sprint Boost x10 **105 R$** (was 249),
+- **Bundles are about 30% off that rate** (the two 99s rounded down for looks, ~34%): Large Coin Chest 250 coins
+  for **99 R$** (was 249), Sprint Boost x10 **99 R$** (was 249),
   Starter Loadout Bundle (15 Commons) **159 R$** (was 349).
   Each shows the full rate as a struck-through "was" price (150, 150
   and 225 R$), once its live dashboard price is really lower.
