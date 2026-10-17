@@ -379,6 +379,29 @@ there "Got it" works as before.
   billboard picture** (StoreItemDef.plinthModel); the Season Pass's is a
   golden ticket.
 
+### Applied case: a payoff for every round (2026-10-17, user decision)
+
+From the 2026-10-17 game review: only wins paid anything, so roughly
+3 rounds in 4 paid nothing. Build order: `docs/payoff-loop-roadmap.md`.
+
+- **XP and an account level, for everyone.** XP is earned from what a
+  player did in the round (tasks done, placement, reaching the Studio,
+  power-up hits), win or lose. Level is lifetime and never resets.
+  **Each level-up pays coins**, and **milestone levels unlock level-only
+  cosmetics**. The level isn't a streak tell, so Q7 doesn't hide it.
+- **Every placement pays some coins**, not just a win. Win payouts
+  stay as they are, and a win stays worth far more than a placement.
+- **A free season pass for playtime.** 6 active hours in one week
+  (Mon–Sun UTC) unlocks the live season's premium track for the rest of
+  that season, once per season. Time in a match always counts. Hub time
+  counts only with player input in the last 2 minutes, so standing AFK
+  earns nothing. It's the same premium track a purchase unlocks (the
+  pass is a developer product recorded on the profile, so the game can
+  grant it). Q8 isn't affected: everything on the track was already
+  earnable free.
+
+All amounts are PLACEHOLDER, to be tuned in playtest.
+
 ## 2. Round timer expires with <3 finished
 
 **Decision:** Rank finishers by task-completion percentage (tiebreak:
@@ -928,6 +951,32 @@ go?" offer. The plan and build order are in `onboarding.md`,
   Negotiate the card follows How it works. Claude's calls: a player who
   has no Freeze left when the step comes (fired or discarded early)
   skips it, and the next pop-up waits 3 s after firing, as in the hub.
+
+### Applied case: streak cash-out, own-streak indicator, finale guesses (2026-10-17, user decision)
+
+From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
+
+- **Cashing out a streak.** In the Hub, a player can choose to bank
+  their current streak. It pays coins that grow steeply with the
+  streak, records a permanent "best banked" stat shown in the Hub, and
+  resets the streak to 0. `bestStreak`, titles and the leaderboard are
+  untouched. Hub-only, so it shows nothing in a live round. It's a
+  streak change, so it goes through the single streak writer with its
+  own reason code. Claude's placeholder: available from streak 3.
+- **Own-streak indicator.** In the Decision Studio a finalist sees
+  **their own** streak at stake. Condition 1 is about other players
+  seeing it, so it's sent only to that finalist (targeted), the same way
+  `DecisionPersonalResult` already is.
+- **Finale guesses.** Every player knocked out of the race gets a
+  **Guess Token** and picks the finalist who walks out. A correct guess
+  earns a **streak credit**, but only when the result is **a single
+  stealer or a single sharer**. Every other guess, and every all-share
+  or all-steal result, wins nothing. **Still to ask the owner before
+  building (roadmap step 2):** what a streak credit does mechanically
+  (+1 to the current streak, which a non-qualifier has just lost?),
+  whether it counts toward `bestStreak` / titles / the leaderboard, and
+  whether NPC-heavy lobbies limit it (threat-model.md §8's NPC-seat
+  rule).
 
 ## 8. Are starting power-ups sold for Robux?
 

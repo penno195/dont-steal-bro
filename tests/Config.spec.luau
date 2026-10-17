@@ -48,6 +48,11 @@ local function validGameConfig(): Validate.GameConfig
 				duplicateCurrency = { Common = 50, Uncommon = 100, Rare = 250 },
 			},
 		},
+		roundRewards = {
+			xp = { perTask = 8, studio = 40, win = 50, perHit = 5, maxHits = 6, byPlace = { 30, 25, 20, 15, 10, 5 } },
+			currencyByPlace = { 12, 10, 8, 6, 4, 2 },
+			level = { firstLevelXp = 100, perLevelXp = 25, maxLevel = 200, levelUpCurrency = 50 },
+		},
 		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
 		powerUpUseRangeStuds = 24,
@@ -1148,6 +1153,56 @@ TestRunner.describe("Validate.checkGameConfig (win rewards)", function()
 			end,
 			function(c)
 				c.winRewards.drop.powerUpAmount = 1.5
+			end,
+		}
+		for _, mutate in cases do
+			local issues = {}
+			local config = validGameConfig()
+			mutate(config)
+			Validate.checkGameConfig(config, issues)
+			TestRunner.expect(#issues > 0):toBeTruthy()
+		end
+	end)
+end)
+
+TestRunner.describe("Validate.checkGameConfig (round rewards)", function()
+	TestRunner.it("accepts the fixture's round rewards", function()
+		local issues = {}
+		Validate.checkGameConfig(validGameConfig(), issues)
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects each broken round-reward number", function()
+		local cases: { (any) -> () } = {
+			function(c)
+				table.remove(c.roundRewards.xp.byPlace) -- one short of playerCount
+			end,
+			function(c)
+				c.roundRewards.currencyByPlace[3] = 11 -- 3rd out-pays 2nd
+			end,
+			function(c)
+				c.roundRewards.currencyByPlace[6] = -1
+			end,
+			function(c)
+				c.roundRewards.currencyByPlace[1] = 25 -- matches allShare: a place must pay less than a win
+			end,
+			function(c)
+				c.roundRewards.xp.perTask = 2.5
+			end,
+			function(c)
+				c.roundRewards.xp.maxHits = -1
+			end,
+			function(c)
+				c.roundRewards.level.firstLevelXp = 0
+			end,
+			function(c)
+				c.roundRewards.level.perLevelXp = -5
+			end,
+			function(c)
+				c.roundRewards.level.maxLevel = 1
+			end,
+			function(c)
+				c.roundRewards.level.levelUpCurrency = -50
 			end,
 		}
 		for _, mutate in cases do

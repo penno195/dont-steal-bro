@@ -842,6 +842,30 @@ export type WinRewardsConfig = {
 	drop: WinDropConfig,
 }
 
+-- What every round pays, win or lose (design-decisions.md Q1's "a
+-- payoff for every round", 2026-10-17). LevelLogic reads it.
+export type RoundXpConfig = {
+	perTask: number,
+	studio: number,
+	win: number,
+	perHit: number,
+	maxHits: number,
+	byPlace: { number }, -- index = race place, one entry per player
+}
+
+export type LevelCurveConfig = {
+	firstLevelXp: number,
+	perLevelXp: number,
+	maxLevel: number,
+	levelUpCurrency: number,
+}
+
+export type RoundRewardsConfig = {
+	xp: RoundXpConfig,
+	currencyByPlace: { number }, -- index = race place, one entry per player
+	level: LevelCurveConfig,
+}
+
 export type StudioTimers = {
 	introSeconds: number,
 	introNewPlayerSeconds: number,
@@ -878,6 +902,7 @@ export type GameConfig = {
 	studioTimers: StudioTimers,
 	roundTimers: RoundTimers,
 	winRewards: WinRewardsConfig,
+	roundRewards: RoundRewardsConfig,
 
 	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
 	-- loadout (StoreService) starts in these slots; field pickups fill
@@ -3947,6 +3972,61 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 			"winRewards.drop.powerUpAmount",
 			"must be a whole number, at least 1"
 		)
+	end
+
+	-- Every round's XP and placement coins (Q1, 2026-10-17). A place
+	-- list must cover every seat and never pay a worse place more.
+	local round = config.roundRewards
+	local function checkByPlace(path: string, list: { number })
+		if #list ~= config.playerCount then
+			issue(issues, "GameConfig", "GameConfig.luau", path, "needs one entry per player (playerCount)")
+		end
+		for place, amount in list do
+			if amount < 0 or amount % 1 ~= 0 then
+				issue(issues, "GameConfig", "GameConfig.luau", path, "entries must be whole numbers, not negative")
+			elseif place > 1 and amount > list[place - 1] then
+				issue(issues, "GameConfig", "GameConfig.luau", path, "a worse place must not pay more")
+			end
+		end
+	end
+	checkByPlace("roundRewards.xp.byPlace", round.xp.byPlace)
+	checkByPlace("roundRewards.currencyByPlace", round.currencyByPlace)
+	for _, field in { "perTask", "studio", "win", "perHit", "maxHits" } do
+		local value = (round.xp :: any)[field] :: number
+		if value < 0 or value % 1 ~= 0 then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"roundRewards.xp." .. field,
+				"must be a whole number, not negative"
+			)
+		end
+	end
+	-- A placement must never out-pay a win, or the streak stops being
+	-- the prize (Q1, 2026-10-17).
+	if (round.currencyByPlace[1] or 0) >= winCurrency.allShare then
+		issue(
+			issues,
+			"GameConfig",
+			"GameConfig.luau",
+			"roundRewards.currencyByPlace",
+			"1st place must pay less than winRewards.currency.allShare"
+		)
+	end
+	-- Each level field and the lowest whole number it may be.
+	local levelMinimums: { [string]: number } = { firstLevelXp = 1, perLevelXp = 0, maxLevel = 2, levelUpCurrency = 0 }
+	for field, minimum in levelMinimums do
+		local value = (round.level :: any)[field] :: number
+		if value < minimum or value % 1 ~= 0 then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"roundRewards.level." .. field,
+				"must be a whole number, at least " .. minimum
+			)
+		end
 	end
 end
 

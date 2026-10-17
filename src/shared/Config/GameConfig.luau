@@ -71,6 +71,34 @@ local GameConfig: Validate.GameConfig = {
 		},
 	},
 
+	-- What EVERY round pays, win or lose (design-decisions.md Q1's
+	-- "a payoff for every round", 2026-10-17): XP toward a lifetime
+	-- account level, and a few coins for the race place. LevelLogic
+	-- does the arithmetic. Every number is PLACEHOLDER until playtest.
+	roundRewards = {
+		-- An average round (4 tasks, 4th place, 1 hit) is about 50 XP;
+		-- a perfect one (all 6 tasks, 1st, max hits, a win) is about 200.
+		xp = {
+			perTask = 8,
+			studio = 40, -- reached the Decision Studio as a finalist
+			win = 50, -- on top of studio
+			perHit = 5, -- a power-up landed on a rival
+			maxHits = 6, -- hits past this pay nothing, so spamming isn't a farm
+			byPlace = { 30, 25, 20, 15, 10, 5 }, -- race finish order 1st-6th
+		},
+		-- Coins by race place, paid on top of any win payout. Kept well
+		-- under winRewards' allShare (25), so a win stays the big prize.
+		currencyByPlace = { 12, 10, 8, 6, 4, 2 },
+		-- Level n -> n+1 costs firstLevelXp + perLevelXp * (n - 1):
+		-- level 2 at 100 XP (~2 rounds), level 10 at 1,800 total, 25 at 9,300.
+		level = {
+			firstLevelXp = 100,
+			perLevelXp = 25,
+			maxLevel = 200,
+			levelUpCurrency = 50, -- per level gained
+		},
+	},
+
 	-- P2-7: PowerUpService's in-round inventory. The pre-game loadout
 	-- starts in these slots and field pickups fill whatever is empty
 	-- (powerups.md "Inventory and aiming", decided 2026-09-25). Range,
@@ -797,6 +825,7 @@ local GameConfig: Validate.GameConfig = {
 			"game.roundTimers.*",
 			"game.studioTimers.*",
 			"game.winRewards.**",
+			"game.roundRewards.**",
 			"game.powerUpRotationTimers.*",
 			"game.powerUpRoundDeal.**",
 			"game.powerUpUseRangeStuds",
