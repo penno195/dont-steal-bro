@@ -980,6 +980,12 @@ From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
     still only move on real wins.
   - **No NPC limit**: Guess Tokens are offered in every lobby, however
     many finalist seats are NPCs.
+  - Shields **stack without limit**: every correct guess adds one.
+  - A shield covers **any loss** that would reset the streak (not
+    qualifying, a Studio loss, timeout, disconnect).
+  - A shield is spent **only on a loss with a streak of 1 or more**. At
+    streak 0, or when the player cashes out (step 4), held shields are
+    kept.
 
 ## 8. Are starting power-ups sold for Robux?
 
