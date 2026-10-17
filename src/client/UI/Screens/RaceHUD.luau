@@ -406,9 +406,14 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 		floorDown.Visible = l == "below" and not allDone()
 	end)
 	local panel = card("Objective", 3, UDim2.fromOffset(COMPASS, RING), {
+		-- All done: the readout goes and the dial, showing its check,
+		-- centres. A "DONE" there overflowed: the headline face's 22 px
+		-- floor is wider than the readout (playtest, 2026-10-17).
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
-			HorizontalAlignment = Enum.HorizontalAlignment.Left,
+			HorizontalAlignment = function()
+				return if allDone() then Enum.HorizontalAlignment.Center else Enum.HorizontalAlignment.Left
+			end,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
 			Padding = UDim.new(0, Theme.spacing.xs),
 			SortOrder = Enum.SortOrder.LayoutOrder,
@@ -427,6 +432,9 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 			Name = "Readout",
 			LayoutOrder = 2,
 			BackgroundTransparency = 1,
+			Visible = function()
+				return not allDone()
+			end,
 			Size = UDim2.fromOffset(readout, DIAL),
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Vertical,
@@ -441,9 +449,6 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 				TextWrapped = false,
 				Text = derive(function()
 					local o = objective()
-					if allDone() then
-						return "DONE"
-					end
 					return if o then tostring(math.floor(o.distance)) else "-"
 				end),
 			}),
