@@ -111,6 +111,13 @@ local function holdPlayers(held: boolean)
 		local root = if character then character:FindFirstChild("HumanoidRootPart") else nil
 		if root ~= nil and root:IsA("BasePart") then
 			root.Anchored = held
+			-- Unanchoring drops the rig back to automatic network
+			-- ownership, which can leave it with no client running its
+			-- Humanoid: it slumps until only the head is above the floor.
+			-- Hand it straight back, as MapLoaderService.release does at GO.
+			if not held then
+				root:SetNetworkOwner(player)
+			end
 		end
 	end
 end
