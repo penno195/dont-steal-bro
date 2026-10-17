@@ -735,7 +735,7 @@ local function holdFace(choice: Choice, store: Store): Frame
 			Text = style.label,
 			TextColor3 = ink,
 		}, outlined),
-		stakesLine("Coins", 3, "coin", STAKES_COINS_H, "headline", ink, function()
+		stakesLine("Coins", 3, "coin-gold", STAKES_COINS_H, "headline", ink, function()
 			local c = copy()
 			return if c then c.amount else ""
 		end, hasStakes, outlined),

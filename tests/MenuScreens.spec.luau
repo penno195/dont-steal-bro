@@ -593,7 +593,7 @@ describe("SeasonTrackLogic", function()
 		end)
 		expect(view.premium.rows[1].image):toBe(42)
 		expect(view.premium.rows[2].image):toBe(nil)
-		expect(view.premium.rows[2].icon):toBe("coin")
+		expect(view.premium.rows[2].icon):toBe("coin-gold")
 		expect(SeasonTrackLogic.view(def, state({}), text).premium.rows[1].image):toBe(nil)
 	end)
 

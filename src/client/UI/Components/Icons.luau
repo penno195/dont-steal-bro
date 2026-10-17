@@ -45,6 +45,9 @@ local ICONS: { [string]: Icon } = {
 	info = { glyph = "i" },
 	warning = { glyph = "!", image = "rbxassetid://94459837108575" },
 	coin = { glyph = "¢", image = "rbxassetid://122080278870723" },
+	-- The coin in colour (assets/seasonpass/make-pictures.js), wherever
+	-- coins are counted; plain `coin` stays for tinted rows like tabs.
+	["coin-gold"] = { glyph = "¢", image = "rbxassetid://112937854585932", fullColor = true },
 	gem = { glyph = "◆", image = "rbxassetid://91124997557663" },
 	star = { glyph = "★" },
 	settings = { glyph = "⚙", image = "rbxassetid://121595912998780" },

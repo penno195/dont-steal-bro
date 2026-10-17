@@ -82,7 +82,7 @@ TestRunner.describe("GiftLogic pictures", function()
 		TestRunner.expect(GiftLogic.storeKey({ id = "x", from = "P", kind = "UnlimitedNavigation" }))
 			:toBe("navigation-pass")
 		TestRunner.expect(GiftLogic.storeKey(gift("x")) == nil):toBe(true)
-		TestRunner.expect(GiftLogic.icon(gift("x"))):toBe("coin")
+		TestRunner.expect(GiftLogic.icon(gift("x"))):toBe("coin-gold")
 	end)
 end)
 

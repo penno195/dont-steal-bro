@@ -37,7 +37,7 @@ local KINDS: { [string]: boolean } = {
 -- Card icon per kind (Components/Icons names), for when the item has no
 -- picture of its own.
 local ICON: { [string]: string } = {
-	Currency = "coin",
+	Currency = "coin-gold",
 	Cosmetic = "gem",
 	NavigationRound = "arrow",
 	UnlimitedNavigation = "arrow",

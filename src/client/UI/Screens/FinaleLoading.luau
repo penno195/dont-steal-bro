@@ -71,7 +71,7 @@ local COIN_STEP = (ICON - COIN) / 2 -- three coins fill the icon square
 local function coinPile(count: number): Instance
 	local coins = {}
 	for i = 1, count do
-		local coin = Icons.view("coin", COIN, Theme.color.warning)
+		local coin = Icons.view("coin-gold", COIN, Theme.color.warning)
 		-- Bottom-left to top-right, so the pile grows up and across.
 		coin.Position = UDim2.fromOffset((i - 1) * COIN_STEP, (3 - i) * COIN_STEP)
 		coin.ZIndex = i

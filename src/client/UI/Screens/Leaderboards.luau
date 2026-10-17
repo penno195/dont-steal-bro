@@ -186,7 +186,7 @@ local function prizeHeight(prizes: BoardLogic.Prizes): number
 end
 
 local function prizeChip(chip: () -> BoardLogic.PrizeChip, count: () -> number, order: number): Frame
-	local coin = C.Icons.view("coin", 18, Theme.color.ink)
+	local coin = C.Icons.view("coin-gold", 18, Theme.color.ink)
 	coin.LayoutOrder = 2
 	local gem = C.Icons.view("gem", 14, Theme.color.ink)
 	gem.LayoutOrder = 4

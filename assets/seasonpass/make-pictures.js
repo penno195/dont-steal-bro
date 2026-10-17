@@ -18,11 +18,12 @@ fs.mkdirSync(OUT, { recursive: true });
 const INK = '#1A1030';
 const S = 512;
 
-// The outer finish: ink ring (alpha over ~40/255, dilated by 10) and a
-// shadow 12 below, the same numbers as make-wear-pictures.py.
-const FINISH = `<filter id="finish" x="-10%" y="-10%" width="120%" height="125%">
+// The outer finish: ink ring (alpha over ~40/255, dilated by `ring`) and
+// a shadow 12 below; 10 is make-wear-pictures.py's. A small UI icon
+// takes a thicker ring so it survives being drawn at ~20px.
+const finish = (ring) => `<filter id="finish" x="-10%" y="-10%" width="120%" height="125%">
   <feComponentTransfer in="SourceAlpha" result="solid"><feFuncA type="discrete" tableValues="0 1 1 1 1 1"/></feComponentTransfer>
-  <feMorphology in="solid" operator="dilate" radius="10" result="ring"/>
+  <feMorphology in="solid" operator="dilate" radius="${ring}" result="ring"/>
   <feFlood flood-color="${INK}"/><feComposite in2="ring" operator="in" result="inkRing"/>
   <feOffset in="ring" dy="12" result="drop"/>
   <feFlood flood-color="#000" flood-opacity=".3"/><feComposite in2="drop" operator="in" result="shadow"/>
@@ -31,9 +32,9 @@ const FINISH = `<filter id="finish" x="-10%" y="-10%" width="120%" height="125%"
 
 // `loose` (the sparkles) sits on top without the finish, which would
 // swell such small shapes into blobs.
-const render = (name, defs, body, loose = '') => {
+const render = (name, defs, body, loose = '', ring = 10) => {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}">
-  <defs>${FINISH}${defs}</defs><g filter="url(#finish)">${body}</g>${loose}</svg>`;
+  <defs>${finish(ring)}${defs}</defs><g filter="url(#finish)">${body}</g>${loose}</svg>`;
   fs.writeFileSync(OUT + name + '.png', new Resvg(svg).render().asPng());
   console.log('wrote', name + '.png');
 };
@@ -119,6 +120,12 @@ render('coins-stack', coinDefs, `
   ${gloss(120, 262, 30, 7, 0, 0.45)}`,
   `${sparkle(70, 120, 30)}${sparkle(452, 96, 26)}${sparkle(452, 380, 22)}`);
 }
+
+// The UI's coin icon (Icons "coin-gold": the balance pill, prize strips,
+// payouts): two coins, drawn bold for ~20px.
+render('icon-coin', coinDefs, `
+  ${coin(200, 210, 150)}
+  ${coin(312, 300, 168)}`, '', 26);
 
 // ===== power-ups ============================================================
 // A glossy disc in the power-up's store colour with a white symbol, the

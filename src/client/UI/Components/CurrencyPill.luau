@@ -21,7 +21,7 @@ local create = vide.create
 
 export type Props = {
 	amount: number | Base.Source<number>,
-	icon: string?, -- default "coin"
+	icon: string?, -- default "coin-gold"
 	onActivate: (() -> ())?,
 	order: number?,
 	layoutOrder: number?,
@@ -45,7 +45,7 @@ local function contents(props: Props, state: Base.Source<ComponentLogic.State>?)
 	local amount: Base.Source<number> = Base.read(props.amount)
 	local shown = Env.animate(amount, Theme.motion.slow)
 	local hasPlus = props.onActivate ~= nil
-	local icon = props.icon or "coin"
+	local icon = props.icon or "coin-gold"
 	local iconSize = Theme.spacing.xl - Theme.spacing.xs
 	local plusSize = Theme.spacing.lg + Theme.spacing.xs
 

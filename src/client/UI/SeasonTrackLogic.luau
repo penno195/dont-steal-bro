@@ -216,7 +216,7 @@ end
 -- key): a power-up its own icon, which Icons keys by power-up id, and
 -- anything else one for its grant's kind.
 local KIND_ICON: { [string]: string } = {
-	Currency = "coin",
+	Currency = "coin-gold",
 	PowerUpStock = "bolt",
 	Cosmetic = "gem",
 	Title = "trophy",
