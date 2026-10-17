@@ -74,13 +74,17 @@ them touches a remote.
 
 ## Decisions made here
 
-- **No 3D item preview yet.** The prompt asks for a viewport preview. Since
-  next-stages 14d (2026-10-06) every item has a 2D picture
-  (`StoreItemDef.imageAssetId`), shown on its card and in the panel's
-  rarity-edged `Preview` tile. A 3D preview would swap that tile in
-  `Store.luau` for a `ViewportFrame`; nothing else changes.
+- **Try-on avatar (owner, 2026-10-17).** Hats, back items, skins and emotes
+  preview on a turning copy of the player's own avatar (`UI/AvatarPreview`,
+  a ViewportFrame): in the Store panel's tall `Preview` tile, the Locker's
+  Style tab (left pane, landscape) and the season pass item pop-up
+  (`Screens/ItemPreview`, a tap on a tile that isn't ready to claim).
+  Trails and the other categories keep their 2D picture (Trails don't
+  render in a ViewportFrame). The accessory is `shared/WearLook`'s, the
+  same one the server puts on the real character.
 - **Client copy of the cosmetic slot map.** `StoreEquipIntent` needs the slot
-  name, and `CosmeticLogic` lives in ServerScriptService.
+  name. `CosmeticLogic` now lives in `src/shared`, but StoreScreenLogic stays
+  require-free.
   `StoreScreenLogic.slotFor` is a copy, and the spec asserts it matches the
   server's for every category.
 

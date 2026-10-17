@@ -28,6 +28,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local StoreScreenLogic = require(script.Parent.Parent.StoreScreenLogic)
 local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
+local AvatarPreview = require(script.Parent.Parent.AvatarPreview)
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
 local MenuShell = require(script.Parent.MenuShell)
@@ -46,6 +47,8 @@ local TAB_H = Theme.touch.primaryHeight -- C.TabBar's height (TabBar.luau HEIGHT
 local CARD_H = 92
 local PANEL_H = 212
 local PREVIEW = 72
+-- The try-on avatar's width, beside the panel's text (AvatarPreview).
+local TRY_W = 96
 local CARD_IMAGE = 48 -- the item picture, top-right of a card; the name wraps beside it
 
 export type Store = {
@@ -65,6 +68,8 @@ export type Store = {
 	-- One line per grant ("500 coins", "Founder's Trail"), for the panel.
 	grantText: (StoreScreenLogic.Grant) -> string,
 	cosmeticName: (cosmeticId: string) -> string,
+	-- A cosmetic's config, for the try-on preview; nil if unknown.
+	cosmeticDef: (cosmeticId: string) -> any?,
 	state: () -> StoreScreenLogic.StoreState?,
 	flow: () -> StoreScreenLogic.Flow,
 	buy: (key: string) -> (),
@@ -78,6 +83,9 @@ export type Store = {
 	-- Claim season rewards: one row up to a tile's list position, or
 	-- (both nil) Claim All. An intent; the server decides what pays.
 	claim: (track: ("Free" | "Premium")?, upTo: number?) -> (),
+	-- Show a pass item up close (Screens/ItemPreview): a tap on a tile
+	-- that isn't ready to claim.
+	preview: (row: SeasonTrackLogic.Row, premium: boolean) -> (),
 	close: () -> (),
 }
 
@@ -407,8 +415,36 @@ local function saleText(store: Store, i: StoreScreenLogic.Item?): string
 		else ""
 end
 
-local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: MenuShell.BodyLayout): Instance
+local function panel(
+	store: Store,
+	item: () -> StoreScreenLogic.Item?,
+	layout: MenuShell.BodyLayout,
+	height: () -> number
+): Instance
 	local pane = layout.pane
+	-- Beside the grid it can be as tall as the body; under it, fixed.
+	local panelH = derive(function()
+		return if layout.split then math.max(PANEL_H, height()) else PANEL_H
+	end)
+	-- The first cosmetic in the item that previews on the avatar.
+	local tryOn = derive(function(): any?
+		local i = item()
+		if i == nil then
+			return nil
+		end
+		for _, grant in i.grants do
+			local def = if grant.kind == "Cosmetic" and grant.cosmeticId
+				then store.cosmeticDef(grant.cosmeticId)
+				else nil
+			if AvatarPreview.supports(def) then
+				return def
+			end
+		end
+		return nil
+	end)
+	local left = derive(function()
+		return (if tryOn() then TRY_W else PREVIEW) + Theme.spacing.md
+	end)
 	local rarity = derive(function(): string?
 		local i = item()
 		return if i then StoreScreenLogic.rarityOf(i, store.rarityOf) else nil
@@ -451,18 +487,27 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 		name = "Selected",
 		elevation = 3,
 		padding = Theme.spacing.md,
-		size = UDim2.fromOffset(pane, PANEL_H),
+		size = function()
+			return UDim2.fromOffset(pane, panelH())
+		end,
 		-- Under the grid, or beside it when split (MenuShell).
 		anchorPoint = if layout.split then Vector2.zero else Vector2.new(0, 1),
 		position = if layout.split then UDim2.fromOffset(pane + MenuShell.GUTTER, 0) else UDim2.fromScale(0, 1),
 		children = {
-			-- Preview: the item's picture on a rarity-edged tile. A
-			-- cosmetic still has no 3D ViewportFrame preview;
-			-- docs/menu-screens.md tracks that.
+			-- Preview: the item's picture on a rarity-edged tile, or for
+			-- something worn, the player's avatar trying it on: a tall
+			-- tile down to the Buy button.
 			create("Frame")({
 				Name = "Preview",
-				Size = UDim2.fromOffset(PREVIEW, PREVIEW),
+				Size = function()
+					if tryOn() == nil then
+						return UDim2.fromOffset(PREVIEW, PREVIEW)
+					end
+					local tall = panelH() - 2 * Theme.spacing.md - Theme.touch.primaryHeight - Theme.spacing.sm
+					return UDim2.fromOffset(TRY_W, math.max(PREVIEW, tall))
+				end,
 				BackgroundColor3 = Theme.color.background,
+				ClipsDescendants = true,
 				Base.corner(Theme.radius.md),
 				create("UIStroke")({
 					BorderStrokePosition = Enum.BorderStrokePosition.Inner,
@@ -471,12 +516,29 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 					end,
 					Thickness = 2,
 				}),
-				itemImage(item, PREVIEW, {}),
+				switch(derive(function()
+					return tryOn() ~= nil
+				end))({
+					[true] = function()
+						local picture = itemImage(item, PREVIEW, {
+							AnchorPoint = Vector2.new(0.5, 0.5),
+							Position = UDim2.fromScale(0.5, 0.5),
+						})
+						return AvatarPreview.view({ def = tryOn, fallback = picture }) :: any
+					end,
+					[false] = function()
+						return itemImage(item, PREVIEW, {}) :: any
+					end,
+				}) :: any,
 			}),
 			Base.text("title", {
 				Name = "Name",
-				Position = UDim2.fromOffset(PREVIEW + Theme.spacing.md, 0),
-				Size = UDim2.new(1, -(PREVIEW + Theme.spacing.md), 0, Theme.type.title.size + Theme.spacing.xs),
+				Position = function()
+					return UDim2.fromOffset(left(), 0)
+				end,
+				Size = function()
+					return UDim2.new(1, -left(), 0, Theme.type.title.size + Theme.spacing.xs)
+				end,
 				Text = function()
 					local i = item()
 					return if i then i.displayName else ""
@@ -485,13 +547,12 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 			}),
 			Base.text("body", {
 				Name = "Contents",
-				Position = UDim2.fromOffset(PREVIEW + Theme.spacing.md, Theme.type.title.size + Theme.spacing.sm),
-				Size = UDim2.new(
-					1,
-					-(PREVIEW + Theme.spacing.md),
-					0,
-					PREVIEW - Theme.type.title.size - Theme.spacing.sm
-				),
+				Position = function()
+					return UDim2.fromOffset(left(), Theme.type.title.size + Theme.spacing.sm)
+				end,
+				Size = function()
+					return UDim2.new(1, -left(), 0, PREVIEW - Theme.type.title.size - Theme.spacing.sm)
+				end,
 				-- On sale, it opens with the struck-through "was" price.
 				RichText = true,
 				Text = function()
@@ -503,34 +564,56 @@ local function panel(store: Store, item: () -> StoreScreenLogic.Item?, layout: M
 				TextXAlignment = Enum.TextXAlignment.Left,
 				TextYAlignment = Enum.TextYAlignment.Top,
 			}),
-			-- Equip toggles for cosmetics this item gave the player.
+			-- Equip toggles for cosmetics this item gave the player:
+			-- beside the try-on avatar when there is one.
 			create("Frame")({
 				Name = "Equip",
-				Position = UDim2.fromOffset(0, PREVIEW + Theme.spacing.sm),
-				Size = UDim2.new(1, 0, 0, Theme.touch.iconButton),
+				Position = function()
+					return UDim2.fromOffset(if tryOn() then left() else 0, PREVIEW + Theme.spacing.sm)
+				end,
+				Size = function()
+					return UDim2.new(1, if tryOn() then -left() else 0, 0, Theme.touch.iconButton)
+				end,
 				BackgroundTransparency = 1,
 				create("UIListLayout")({
 					FillDirection = Enum.FillDirection.Horizontal,
 					Padding = UDim.new(0, Theme.spacing.sm),
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
-				indexes(targets, function(t: () -> StoreScreenLogic.EquipTarget, index: number)
-					local count = #targets()
-					return C.Button({
-						label = derive(function()
-							local v = t()
-							return (if v.equipped then "Take off " else "Wear ") .. store.cosmeticName(v.cosmeticId)
-						end),
-						variant = "secondary",
-						width = (pane - 2 * Theme.spacing.md - (count - 1) * Theme.spacing.sm) / math.max(count, 1),
-						onActivate = function()
-							local v = t()
-							store.equip(v.cosmeticId, not v.equipped)
-						end,
-						order = 90 + index,
-						layoutOrder = index,
-					})
-				end) :: any,
+				-- Rebuilt when the avatar comes or goes, which changes the
+				-- buttons' width.
+				(function()
+					local function buttons(narrow: boolean): () -> any
+						return function()
+							return indexes(targets, function(t: () -> StoreScreenLogic.EquipTarget, index: number)
+								local count = #targets()
+								return C.Button({
+									label = derive(function()
+										local v = t()
+										return (if v.equipped then "Take off " else "Wear ")
+											.. store.cosmeticName(v.cosmeticId)
+									end),
+									variant = "secondary",
+									width = (
+										pane
+										- 2 * Theme.spacing.md
+										- (if narrow then untrack(left) else 0)
+										- (count - 1) * Theme.spacing.sm
+									) / math.max(count, 1),
+									onActivate = function()
+										local v = t()
+										store.equip(v.cosmeticId, not v.equipped)
+									end,
+									order = 90 + index,
+									layoutOrder = index,
+								})
+							end)
+						end
+					end
+					return switch(derive(function()
+						return tryOn() ~= nil
+					end))({ [true] = buttons(true), [false] = buttons(false) })
+				end)() :: any,
 			}),
 			claimAllButton(store, item, pane),
 			buyButton(store, item, pane),
@@ -570,7 +653,7 @@ local ARROW = 40
 -- Stands in for an empty slot (a tier only the other row pays at), so a
 -- hidden tile's bindings never read nil.
 local EMPTY_ROW: SeasonTrackLogic.Row =
-	{ index = 0, wins = 0, text = "", status = "Locked", icon = "gem", reached = false }
+	{ index = 0, grant = { kind = "Currency" }, wins = 0, text = "", status = "Locked", icon = "gem", reached = false }
 
 -- A row's fill with another rim: the tile's state shows in its rim.
 local function withRim(fill: Theme.Fill, rim: Color3): Theme.Fill
@@ -662,7 +745,8 @@ local function tile(
 	passLocked: () -> boolean,
 	tileH: () -> number,
 	order: number,
-	claim: (row: SeasonTrackLogic.Row) -> ()
+	claim: (row: SeasonTrackLogic.Row) -> (),
+	preview: (row: SeasonTrackLogic.Row) -> ()
 ): Instance
 	local row = derive(function(): SeasonTrackLogic.Row
 		return get() or EMPTY_ROW
@@ -705,12 +789,15 @@ local function tile(
 		size = derive(function()
 			return Vector2.new(COLUMN_W, tileH())
 		end),
+		-- A claimable tile claims; any other shows the item up close.
 		disabled = derive(function()
-			return not claimable()
+			return not shown()
 		end),
 		onActivate = function()
 			if claimable() then
 				claim(row())
+			elseif shown() then
+				preview(row())
 			end
 		end,
 		order = 200 + order,
@@ -979,12 +1066,32 @@ local function seasonTrack(store: Store, height: () -> number, width: number, in
 								wins.LayoutOrder = 0
 								return wins
 							end)(),
-							tile(function()
-								return column().premium
-							end, true, passLocked, tileH, 2 * index - 1, claim("Premium")),
-							tile(function()
-								return column().free
-							end, false, passLocked, tileH, 2 * index, claim("Free")),
+							tile(
+								function()
+									return column().premium
+								end,
+								true,
+								passLocked,
+								tileH,
+								2 * index - 1,
+								claim("Premium"),
+								function(row)
+									store.preview(row, true)
+								end
+							),
+							tile(
+								function()
+									return column().free
+								end,
+								false,
+								passLocked,
+								tileH,
+								2 * index,
+								claim("Free"),
+								function(row)
+									store.preview(row, false)
+								end
+							),
 						})
 					end) :: any,
 				}) :: ScrollingFrame
@@ -1272,7 +1379,10 @@ local function body(store: Store, height: () -> number, layout: MenuShell.BodyLa
 					switch(onSeason)({
 						[true] = function()
 							if not layout.split then
-								return { seasonTrack(store, gridHeight, pane), panel(store, selected, layout) }
+								return {
+									seasonTrack(store, gridHeight, pane),
+									panel(store, selected, layout, height),
+								}
 							end
 							local full = 2 * pane + MenuShell.GUTTER
 							return {
@@ -1305,7 +1415,7 @@ local function body(store: Store, height: () -> number, layout: MenuShell.BodyLa
 							}
 						end,
 						[false] = function()
-							return { grid(), panel(store, selected, layout) }
+							return { grid(), panel(store, selected, layout, height) }
 						end,
 					}) :: any,
 				} :: any

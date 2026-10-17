@@ -4,7 +4,7 @@
 -- Decision Studio podium flourish, hats and back items - plus the victory
 -- emote playback hook.
 -- The registry is config (src/shared/Config/Cosmetics/), the
--- slot/category rules are pure (src/server/CosmeticLogic.luau, tested
+-- slot/category rules are pure (src/shared/CosmeticLogic.luau, tested
 -- headlessly in tests/CosmeticLogic.spec.luau), and this file is what
 -- reads real profiles and touches real Instances.
 --
@@ -50,7 +50,8 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Participants = require(ServerScriptService.Server.Participants)
-local CosmeticLogic = require(ServerScriptService.Server.CosmeticLogic)
+local CosmeticLogic = require(ReplicatedStorage.Shared.CosmeticLogic)
+local WearLook = require(ReplicatedStorage.Shared.WearLook)
 
 local catalogue: { CosmeticLogic.CosmeticDef } = {}
 for _, entry in Cosmetics do
@@ -194,14 +195,9 @@ end
 -- them back exactly where they were. Keyed by character Model, like
 -- skinRestoreFor, so a respawn starts from its own avatar.
 --
--- The handle is a plain Part + SpecialMesh rather than a MeshPart:
--- MeshPart.MeshId can't be set from a script, and a SpecialMesh's
--- MeshId/TextureId/Scale can, with no async load to wait on.
+-- The Accessory itself is shared/WearLook's, the same one the menus'
+-- try-on preview builds.
 local WEAR_CATEGORIES = { "Hat", "BackItem" }
-local ACCESSORY_TYPE: { [string]: Enum.AccessoryType } = {
-	Hat = Enum.AccessoryType.Hat,
-	BackItem = Enum.AccessoryType.Back,
-}
 
 local hiddenFor: { [Model]: { [string]: { Accessory } } } = {}
 local watching: { [Model]: boolean } = {}
@@ -296,7 +292,6 @@ local function applyWear(character: Model, category: string, def: CosmeticLogic.
 	if humanoid == nil or not humanoid:IsA("Humanoid") then
 		return
 	end
-	local attachmentName = CosmeticLogic.wearAttachmentFor(category) :: string
 
 	watchLateAccessories(character)
 	for _, child in character:GetChildren() do
@@ -305,36 +300,12 @@ local function applyWear(character: Model, category: string, def: CosmeticLogic.
 		end
 	end
 
-	local accessory = Instance.new("Accessory")
+	local accessory = WearLook.accessory(def)
+	if accessory == nil then
+		return
+	end
 	accessory.Name = wearName(category)
-	accessory.AccessoryType = ACCESSORY_TYPE[category]
 	accessory:SetAttribute(OWNED_ATTRIBUTE, true)
-
-	local handle = Instance.new("Part")
-	handle.Name = "Handle"
-	handle.Size = Vector3.one
-	handle.CanCollide = false
-	handle.CanQuery = false
-	handle.CanTouch = false
-	handle.Massless = true
-	handle.Parent = accessory
-
-	local mesh = Instance.new("SpecialMesh")
-	mesh.MeshType = Enum.MeshType.FileMesh
-	mesh.MeshId = string.format("rbxassetid://%d", def.wearMeshAssetId :: number)
-	mesh.TextureId = string.format("rbxassetid://%d", def.wearTextureAssetId :: number)
-	mesh.Scale = Vector3.one * (def.wearScale :: number)
-	mesh.Parent = handle
-
-	-- The weld lines this attachment up with the body's, so the mesh's
-	-- offset from the body is this attachment's inverse.
-	local o = def.wearOffset or { 0, 0, 0 }
-	local r = def.wearRotation or { 0, 0, 0 }
-	local attachment = Instance.new("Attachment")
-	attachment.Name = attachmentName
-	local placement = CFrame.new(o[1], o[2], o[3]) * CFrame.Angles(math.rad(r[1]), math.rad(r[2]), math.rad(r[3]))
-	attachment.CFrame = placement:Inverse()
-	attachment.Parent = handle
 
 	humanoid:AddAccessory(accessory)
 end

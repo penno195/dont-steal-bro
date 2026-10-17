@@ -20,6 +20,7 @@ local Season1 = require(ReplicatedStorage.Shared.Config.Seasons.Season1)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local ClaimPopup = require(script.Parent.ClaimPopup)
+local ItemPreview = require(script.Parent.ItemPreview)
 local SeasonPass = require(ReplicatedStorage.Shared.Config.Store.SeasonPass)
 local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
 local StoreScreenLogic = require(script.Parent.Parent.StoreScreenLogic)
@@ -57,8 +58,10 @@ end
 
 -- The real items' pictures, as MenuController shows them.
 local previewIcons: { [string]: number? } = {}
+local cosmeticDefs: { [string]: any } = {}
 for _, entry in Cosmetics do
 	previewIcons[entry.def.id] = entry.def.previewIconAssetId
+	cosmeticDefs[entry.def.id] = entry.def
 end
 local powerUpPictures: { [string]: number? } = {}
 for _, entry in PowerUps do
@@ -173,7 +176,11 @@ function SeasonPassPreview.mount(controller: any): () -> ()
 		end,
 		grantText = grantText,
 		cosmeticName = function(id: string)
-			return id
+			local cosmetic = cosmeticDefs[id]
+			return if cosmetic then cosmetic.displayName else id
+		end,
+		cosmeticDef = function(id: string): any?
+			return cosmeticDefs[id]
 		end,
 		state = state,
 		flow = function()
@@ -193,6 +200,16 @@ function SeasonPassPreview.mount(controller: any): () -> ()
 			return def.passKey
 		end,
 		claim = claim,
+		preview = function(row: SeasonTrackLogic.Row, premium: boolean)
+			local grant = row.grant
+			ItemPreview.open({
+				title = grantText(grant :: any),
+				body = if premium then "Paid pass" else "Free pass",
+				def = if grant.kind == "Cosmetic" and grant.cosmeticId then cosmeticDefs[grant.cosmeticId] else nil,
+				icon = SeasonTrackLogic.iconFor(grant),
+				image = grantImage(grant),
+			})
+		end,
 		close = function()
 			ReplicatedStorage:SetAttribute("UISeasonPassPreview", nil)
 		end,

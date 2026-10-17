@@ -54,6 +54,7 @@ export type Row = {
 	-- The item's list position on its track: what a Claim names
 	-- (SeasonClaimIntent's `upTo`).
 	index: number,
+	grant: Grant, -- what it pays, for the item preview
 	wins: number,
 	text: string,
 	status: RowStatus,
@@ -128,6 +129,7 @@ local function track(
 		end
 		table.insert(rows, {
 			index = index,
+			grant = item.grant,
 			wins = item.wins,
 			text = grantText(item.grant),
 			status = status,

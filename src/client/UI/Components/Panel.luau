@@ -20,7 +20,7 @@ local create = vide.create
 
 export type Props = {
 	elevation: number?, -- 1-3, default 2
-	size: UDim2?,
+	size: (UDim2 | Base.Source<UDim2>)?,
 	automaticSize: Enum.AutomaticSize?,
 	position: UDim2?,
 	anchorPoint: Vector2?,

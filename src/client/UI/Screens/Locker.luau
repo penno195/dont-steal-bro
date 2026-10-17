@@ -26,6 +26,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local LockerLogic = require(script.Parent.Parent.LockerLogic)
+local AvatarPreview = require(script.Parent.Parent.AvatarPreview)
 local StoreScreenLogic = require(script.Parent.Parent.StoreScreenLogic)
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
@@ -40,6 +41,7 @@ local indexes = vide.indexes
 local switch = vide.switch
 local show = vide.show
 local effect = vide.effect
+local untrack = vide.untrack
 
 local TAB_H = Theme.touch.primaryHeight -- C.TabBar's height (TabBar.luau HEIGHT)
 local SLOT_H = 72
@@ -66,6 +68,10 @@ export type Locker = {
 	cosmeticName: (cosmeticId: string) -> string,
 	cosmeticCategory: (cosmeticId: string) -> string?,
 	cosmeticRarity: (cosmeticId: string) -> string?,
+	-- A cosmetic's config (its picture, the try-on avatar); nil if unknown.
+	cosmeticDef: (cosmeticId: string) -> any?,
+	-- A power-up's full-colour picture, if it has one.
+	powerUpPicture: (powerUpId: string) -> number?,
 	-- Cosmetic categories in the order the Style tab groups them.
 	categoryOrder: { string },
 	-- Put a power-up in a loadout slot, or take it out with nil.
@@ -252,18 +258,21 @@ local function stockCard(locker: Locker, row: () -> LockerLogic.StockRow, index:
 		visual = function(state)
 			return {
 				tileFill(state, rarity, {
-					iconFor(
-						locker,
-						function()
+					(function()
+						-- Its badge in colour (the pass's art), else its icon.
+						local picture = Icons.picture(function()
 							return row().powerUpId
-						end,
-						CARD_ICON,
-						ink,
-						{
-							AnchorPoint = Vector2.new(0, 0.5),
-							Position = UDim2.fromScale(0, 0.5),
-						}
-					),
+						end, function()
+							return locker.powerUpPicture(row().powerUpId)
+						end, Theme.color.ink)
+						picture.AnchorPoint = Vector2.new(0, 0.5)
+						picture.Position = UDim2.fromScale(0, 0.5)
+						picture.Size = UDim2.fromOffset(CARD_ICON, CARD_ICON)
+						effect(function()
+							picture.ImageTransparency = if block() then 0.4 else 0
+						end)
+						return picture
+					end)(),
 					Base.text("label", {
 						Name = "Name",
 						Position = UDim2.fromOffset(CARD_ICON + Theme.spacing.sm, 0),
@@ -275,7 +284,7 @@ local function stockCard(locker: Locker, row: () -> LockerLogic.StockRow, index:
 						TextTruncate = Enum.TextTruncate.AtEnd,
 						TextXAlignment = Enum.TextXAlignment.Left,
 					}),
-					Base.text("caption", {
+					Base.text("body", {
 						Name = "Detail",
 						Position = UDim2.new(0, CARD_ICON + Theme.spacing.sm, 0.5, 0),
 						Size = UDim2.new(1, -(CARD_ICON + Theme.spacing.sm), 0.5, 0),
@@ -414,7 +423,14 @@ end
 
 -- ===== Style tab ============================================================
 
-local function cosmeticCard(locker: Locker, row: () -> LockerLogic.CosmeticRow, index: number, width: number): Instance
+-- `tried` hears which item was just put on, for the try-on avatar.
+local function cosmeticCard(
+	locker: Locker,
+	row: () -> LockerLogic.CosmeticRow,
+	index: number,
+	width: number,
+	tried: (cosmeticId: string?) -> ()
+): Instance
 	local rarity = derive(function()
 		return locker.cosmeticRarity(row().cosmeticId)
 	end)
@@ -431,24 +447,36 @@ local function cosmeticCard(locker: Locker, row: () -> LockerLogic.CosmeticRow, 
 			local r = row()
 			if r.slot ~= nil then
 				locker.equip(r.cosmeticId, r.slot, not r.equipped)
+				tried(if r.equipped then nil else r.cosmeticId)
 			end
 		end,
 		visual = function(state)
+			local picture = Icons.picture(function()
+				return "gem"
+			end, function()
+				local def = locker.cosmeticDef(row().cosmeticId)
+				return if def then def.previewIconAssetId else nil
+			end, Theme.color.inkMuted)
+			picture.AnchorPoint = Vector2.new(0, 0.5)
+			picture.Position = UDim2.fromScale(0, 0.5)
+			picture.Size = UDim2.fromOffset(CARD_ICON, CARD_ICON)
 			return {
 				tileFill(state, rarity, {
+					picture,
 					Base.text("label", {
 						Name = "Name",
-						Size = UDim2.fromScale(1, 0.5),
+						Position = UDim2.fromOffset(CARD_ICON + Theme.spacing.sm, 0),
+						Size = UDim2.new(1, -(CARD_ICON + Theme.spacing.sm), 0.5, 0),
 						Text = function()
 							return locker.cosmeticName(row().cosmeticId)
 						end,
 						TextTruncate = Enum.TextTruncate.AtEnd,
 						TextXAlignment = Enum.TextXAlignment.Left,
 					}),
-					Base.text("caption", {
+					Base.text("body", {
 						Name = "Detail",
-						Position = UDim2.fromScale(0, 0.5),
-						Size = UDim2.fromScale(1, 0.5),
+						Position = UDim2.new(0, CARD_ICON + Theme.spacing.sm, 0.5, 0),
+						Size = UDim2.new(1, -(CARD_ICON + Theme.spacing.sm), 0.5, 0),
 						Text = function()
 							local r = row()
 							if r.equipped then
@@ -658,13 +686,44 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 		})
 	end
 
+	-- The Style tab's try-on avatar (owner, 2026-10-17), in the left pane
+	-- beside the grid: the player as they look now, re-copied a moment
+	-- after each equip lands (the server dresses the real character
+	-- first), wearing or playing what they last put on.
+	local triedId = source(nil :: string?)
+	local outfit = source(0)
+	effect(function()
+		locker.state()
+		task.delay(0.3, function()
+			outfit(untrack(outfit) + 1)
+		end)
+	end)
+	local tried = derive(function(): any?
+		local id = triedId()
+		local def = if id then locker.cosmeticDef(id) else nil
+		return if AvatarPreview.supports(def) then def else nil
+	end)
+
 	local function styleTab(): Instance
 		local position, gridH = gridPlace(STYLE_H)
+		local avatarTop = controlsTop + STYLE_H + Theme.spacing.sm
 		return create("Frame")({
 			Name = "Style",
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
-			Base.text("caption", {
+			if layout.split
+				then create("Frame")({
+					Name = "TryOn",
+					Position = UDim2.fromOffset(0, avatarTop),
+					Size = function()
+						return UDim2.fromOffset(pane, math.max(0, height() - avatarTop))
+					end,
+					BackgroundColor3 = Theme.color.background,
+					Base.corner(Theme.radius.md),
+					AvatarPreview.view({ def = tried, refresh = outfit }),
+				})
+				else nil,
+			Base.text("body", {
 				Name = "Hint",
 				Position = UDim2.fromOffset(0, controlsTop),
 				Size = UDim2.fromOffset(pane, STYLE_H),
@@ -680,7 +739,7 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 				[true] = function()
 					return grid("Cosmetics", position, pane, gridH, {
 						indexes(cosmeticRows, function(row: () -> LockerLogic.CosmeticRow, index: number)
-							return cosmeticCard(locker, row, index, cardW)
+							return cosmeticCard(locker, row, index, cardW, triedId)
 						end) :: any,
 						switch(communityOffered)({
 							[true] = function()
@@ -708,7 +767,7 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 			Name = "Titles",
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
-			Base.text("caption", {
+			Base.text("body", {
 				Name = "Hint",
 				Position = UDim2.fromOffset(0, controlsTop),
 				Size = UDim2.fromOffset(pane, STYLE_H),

@@ -78,7 +78,7 @@ local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 local StoreOffers = require(ReplicatedStorage.Shared.StoreOffers)
-local CosmeticLogic = require(ServerScriptService.Server.CosmeticLogic)
+local CosmeticLogic = require(ReplicatedStorage.Shared.CosmeticLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 

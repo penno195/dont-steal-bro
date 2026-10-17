@@ -6,7 +6,7 @@
 -- uses.
 
 local TestRunner = require("./TestRunner")
-local CosmeticLogic = require("../src/server/CosmeticLogic")
+local CosmeticLogic = require("../src/shared/CosmeticLogic")
 
 local CATALOGUE: { CosmeticLogic.CosmeticDef } = {
 	{

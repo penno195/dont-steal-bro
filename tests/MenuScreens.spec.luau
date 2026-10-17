@@ -4,7 +4,7 @@
 -- screens themselves are reviewed on device (docs/menu-screens.md).
 
 local BoardLogic = require("../src/client/UI/BoardLogic")
-local CosmeticLogic = require("../src/server/CosmeticLogic")
+local CosmeticLogic = require("../src/shared/CosmeticLogic")
 local Net = require("../src/shared/Net")
 local ProgressionLogic = require("../src/server/ProgressionLogic")
 local ResultsLogic = require("../src/client/UI/ResultsLogic")

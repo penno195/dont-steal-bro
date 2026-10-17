@@ -222,9 +222,9 @@ function StoreScreenLogic.equipTargets(item: Item, state: StoreState): { EquipTa
 end
 
 -- The equip slot a cosmetic category lives in - what StoreEquipIntent's
--- `slot` must be. A copy of server/CosmeticLogic's map (the client can't
--- require a ServerScriptService module); tests/MenuScreens.spec checks
--- the two agree for every category, so they can't drift silently.
+-- `slot` must be. A copy of shared/CosmeticLogic's map, so this module
+-- stays require-free; tests/MenuScreens.spec checks the two agree for
+-- every category, so they can't drift silently.
 local SLOT_FOR_CATEGORY: { [string]: string } = {
 	Skin = "skin",
 	Trail = "trail",

@@ -63,6 +63,7 @@ local ResultsScreen = require(script.Parent.Parent.UI.Screens.Results)
 local SettingsScreen = require(script.Parent.Parent.UI.Screens.Settings)
 local StoreScreen = require(script.Parent.Parent.UI.Screens.Store)
 local ClaimPopup = require(script.Parent.Parent.UI.Screens.ClaimPopup)
+local ItemPreview = require(script.Parent.Parent.UI.Screens.ItemPreview)
 local StaffPanelScreen = require(script.Parent.Parent.UI.Screens.StaffPanel)
 local GiftLogic = require(script.Parent.Parent.UI.GiftLogic)
 local PrizeReveal = require(script.Parent.Parent.UI.Screens.PrizeReveal)
@@ -322,6 +323,22 @@ local function grantText(grant: StoreScreenLogic.Grant): string
 	return grant.kind
 end
 
+-- A season pass tile up close (the Store's `preview`).
+local function previewSeasonItem(row: SeasonTrackLogic.Row, premium: boolean)
+	local grant = row.grant
+	ItemPreview.open({
+		title = grantText(grant :: any),
+		body = string.format(
+			"%s · %s",
+			if premium then "Paid pass" else "Free pass",
+			if row.wins == 0 then "yours now" else string.format("at %d wins", row.wins)
+		),
+		def = if grant.kind == "Cosmetic" and grant.cosmeticId then cosmeticDefs[grant.cosmeticId] else nil,
+		icon = SeasonTrackLogic.iconFor(grant),
+		image = grantImage(grant),
+	})
+end
+
 -- ===== state =================================================================
 
 local storeState = source(nil :: StoreScreenLogic.StoreState?)
@@ -452,6 +469,9 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 			rarityOf = rarityOf,
 			grantText = grantText,
 			cosmeticName = cosmeticName,
+			cosmeticDef = function(id: string): any?
+				return cosmeticDefs[id]
+			end,
 			state = storeState,
 			flow = flow,
 			buy = function(key: string)
@@ -481,6 +501,7 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 				end
 				return SeasonTrackLogic.view(def, season :: any, grantText :: any, grantImage)
 			end,
+			preview = previewSeasonItem,
 			claim = function(track: ("Free" | "Premium")?, upTo: number?)
 				Net.fireServer("SeasonClaimIntent", { track = track, upTo = upTo })
 			end,
@@ -509,6 +530,13 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 			cosmeticRarity = function(id: string): string?
 				local def = cosmeticDefs[id]
 				return def and def.rarity
+			end,
+			cosmeticDef = function(id: string): any?
+				return cosmeticDefs[id]
+			end,
+			powerUpPicture = function(id: string): number?
+				local def = powerUpDefs[id]
+				return def and def.pictureAssetId
 			end,
 			categoryOrder = COSMETIC_CATEGORY_ORDER,
 			community = {
@@ -674,10 +702,11 @@ local function mountLauncher()
 		local column = create("Frame")({
 			Name = "Launcher",
 			AnchorPoint = Vector2.new(1, 0.5),
-			-- Centred in its room, growing left as columns are added.
+			-- Centred in its room, growing left as columns are added. A
+			-- UIScale doesn't scale Position, so the offset is scaled here.
 			Position = function()
 				local r = room()
-				return UDim2.new(1, -Theme.spacing.sm, 0, r.top + r.tall / 2)
+				return UDim2.new(1, -Theme.spacing.sm, 0, (r.top + r.tall / 2) * C.Env.scale())
 			end,
 			Size = function()
 				local grid = room().grid
