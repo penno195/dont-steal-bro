@@ -270,6 +270,9 @@ local function pushState(player: Player)
 		ownedPasses = ownedPasses,
 		navigationRounds = DataService.getNavigationRounds(player),
 		streakSaves = DataService.getStreakSaves(player),
+		-- Payoff-loop step 2: streak shields held, for the Hub's own
+		-- shield pill. Targeted, so only the holder sees it (Q7).
+		streakShields = DataService.getStreakShields(player),
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
 		-- The Hub's level badge (payoff-loop step 1c). Worked out here

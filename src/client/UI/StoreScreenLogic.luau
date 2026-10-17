@@ -75,6 +75,8 @@ export type StoreState = {
 	-- The account level (payoff-loop step 1c): LevelLogic.Progress,
 	-- worked out by the server. The Hub's level badge.
 	level: { level: number, xpIntoLevel: number, xpForNext: number }?,
+	-- Streak shields held (payoff-loop step 2c): the Hub's shield pill.
+	streakShields: number?,
 }
 
 export type Category = "Season" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"

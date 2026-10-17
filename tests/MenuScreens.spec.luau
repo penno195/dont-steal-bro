@@ -527,6 +527,76 @@ describe("ResultsLogic level beat (payoff-loop 1c)", function()
 	end)
 end)
 
+describe("ResultsLogic finale guess and shields (payoff-loop 2c)", function()
+	local function ids(r: ResultsLogic.Recap): string
+		local out = {}
+		for _, b in ResultsLogic.beats(r) do
+			table.insert(out, b.id)
+		end
+		return table.concat(out, ",")
+	end
+
+	it("adds a Guess beat after the finale and before the level", function()
+		local r = recap("FailedToQualify", 0, 0, {
+			guess = { targetId = 7, correct = true, shieldEarned = true },
+			level = {
+				xpGained = 5,
+				before = { level = 1, xpIntoLevel = 0, xpForNext = 100 },
+				after = { level = 1, xpIntoLevel = 5, xpForNext = 100 },
+				placeCurrency = 0,
+				levelUpCurrency = 0,
+				cosmetics = {},
+			},
+		})
+		expect(ids(r)):toBe("Placement,Tasks,PowerUps,Guess,Level,Streak")
+		expect(ids(recap("FailedToQualify", 0, 0))):toBe("Placement,Tasks,PowerUps,Streak")
+	end)
+
+	it("promises a shield only when one was earned", function()
+		local won = { targetId = 7, correct = true, shieldEarned = true }
+		expect(ResultsLogic.guessHeadline(won, false)):toBe("You called it: +1 shield")
+		local practice = { targetId = 7, correct = true, shieldEarned = false }
+		expect(ResultsLogic.guessHeadline(practice, true)):toBe("You called it (practice: no shield)")
+		expect(ResultsLogic.guessHeadline(practice, false)):toBe("You called it")
+		local wrong = { targetId = 7, correct = false, shieldEarned = false }
+		expect(ResultsLogic.guessHeadline(wrong, false)):toBe("No shield this time")
+	end)
+
+	it("names the pick when it can", function()
+		local g = { targetId = -2, correct = false, shieldEarned = false }
+		expect(ResultsLogic.guessLabel(g, function(id)
+			return if id == -2 then "Bot Bea" else nil
+		end)):toBe("Your guess: Bot Bea")
+		expect(ResultsLogic.guessLabel(g, nil)):toBe("Your guess")
+	end)
+
+	it("reads a shield-saved loss as safe, not dead", function()
+		local change = ResultsLogic.streakChange(recap("FailedToQualify", 4, 4, { shieldSpent = true }))
+		expect(change.kind):toBe("Shielded")
+		expect(ResultsLogic.streakHeadline(change)):toBe("Your 4-win streak is safe")
+		local practice = recap("FailedToQualify", 4, 4, { shieldSpent = true, practice = true })
+		expect(ResultsLogic.streakChange(practice).kind):toBe("Practice")
+	end)
+
+	it("counts the shields held, and says nothing at none", function()
+		expect(ResultsLogic.shieldsLine(nil)):toBe(nil)
+		expect(ResultsLogic.shieldsLine(0)):toBe(nil)
+		expect(ResultsLogic.shieldsLine(1)):toBe("1 streak shield held")
+		expect(ResultsLogic.shieldsLine(3)):toBe("3 streak shields held")
+	end)
+
+	it("drops a malformed guess or count rather than trusting its shape", function()
+		expect(ResultsLogic.parseGuess(nil)):toBe(nil)
+		expect(ResultsLogic.parseGuess({ targetId = 7, correct = "yes", shieldEarned = false })):toBe(nil)
+		local g = ResultsLogic.parseGuess({ targetId = 7, correct = true, shieldEarned = false, extra = 1 })
+		expect(g and g.targetId):toBe(7)
+		expect(ResultsLogic.parseShields(2)):toBe(2)
+		expect(ResultsLogic.parseShields(-1)):toBe(nil)
+		expect(ResultsLogic.parseShields("2")):toBe(nil)
+		expect(ResultsLogic.parseShields(0 / 0)):toBe(nil)
+	end)
+end)
+
 describe("ResultsLogic.placementText", function()
 	it("gets the ordinals right", function()
 		expect(ResultsLogic.placementText(1, 6)):toBe("1st of 6")

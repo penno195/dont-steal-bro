@@ -44,6 +44,8 @@ local Env = C.Env
 local CARD_H = 64
 local STREAK_H = 112
 local LEVEL_H = 104
+-- The streak card's extra line for the shields held (payoff-loop 2c).
+local SHIELDS_H = Theme.type.label.size + Theme.spacing.sm
 local SLIDE = 24
 local RECAP_WAIT = 6
 
@@ -53,6 +55,8 @@ export type Store = {
 	close: () -> (),
 	now: (() -> number)?, -- clock override for a preview; default os.clock
 	nameOf: PayoutLogic.NameOf?, -- a drop's display name, from config
+	-- A finalist's name, for the guess card (payoff-loop step 2c).
+	finalistName: ((id: number) -> string?)?,
 }
 
 type CardStyle = { icon: string, color: string }
@@ -62,6 +66,7 @@ local STREAK_STYLE: { [string]: CardStyle } = {
 	Died = { icon = "down", color = "danger" },
 	None = { icon = "info", color = "inkMuted" },
 	Practice = { icon = "shield", color = "inkMuted" },
+	Shielded = { icon = "shield", color = "success" },
 }
 
 local LABELS: { [string]: string } = {
@@ -70,6 +75,7 @@ local LABELS: { [string]: string } = {
 	PowerUps = "Power-ups used",
 	Finale = "Decision Studio",
 	Rewards = "Coins",
+	Guess = "Your guess",
 }
 
 -- The Drop card has neither: its label is the rarity and its icon the
@@ -80,11 +86,17 @@ local ICONS: { [string]: string } = {
 	PowerUps = "bolt",
 	Finale = "star",
 	Rewards = "coin",
+	Guess = "shield",
 }
 
 -- Slides up and fades in when `shown` turns true; just appears under
--- reduced motion.
-local function reveal(shown: () -> boolean, height: number, order: number, children: { any }): Frame
+-- reduced motion. `height` may be a source, for a card that grows.
+local function reveal(shown: () -> boolean, height: number | () -> number, order: number, children: { any }): Frame
+	local tall: () -> number = if type(height) == "number"
+		then function()
+			return height
+		end
+		else height
 	local target = derive(function()
 		return if shown() then 0 else 1
 	end)
@@ -92,7 +104,9 @@ local function reveal(shown: () -> boolean, height: number, order: number, child
 	return create("Frame")({
 		Name = "Beat" .. order,
 		LayoutOrder = order,
-		Size = UDim2.fromOffset(MenuShell.INNER, height),
+		Size = function()
+			return UDim2.fromOffset(MenuShell.INNER, tall())
+		end,
 		BackgroundTransparency = 1,
 		Visible = shown,
 		create("CanvasGroup")({
@@ -121,14 +135,15 @@ local function reveal(shown: () -> boolean, height: number, order: number, child
 	}) :: Frame
 end
 
--- `iconKey` and `label` override ICONS/LABELS, for the Drop card.
+-- `iconKey` and `label` override ICONS/LABELS, for the Drop and Guess
+-- cards.
 local function statCard(
 	id: string,
 	value: () -> string,
 	shown: () -> boolean,
 	order: number,
 	iconKey: string?,
-	label: string?
+	label: (string | () -> string)?
 ): Frame
 	local icon = C.Icons.view(iconKey or ICONS[id], 28, Theme.color.inkMuted)
 	icon.AnchorPoint = Vector2.new(0, 0.5)
@@ -178,6 +193,7 @@ local function streakCard(store: Store, timedOut: () -> boolean, shown: () -> bo
 				then "Your best ever."
 				elseif c.kind == "Died" then "Back to zero. Next round starts a new one."
 				elseif c.kind == "Practice" then "Private server: no streak, coins or stats change here."
+				elseif c.kind == "Shielded" then "A streak shield saved it: this loss didn't count."
 				else ""
 		end
 		return if timedOut() then "It's saved on the server. It'll show next time you open your profile." else ""
@@ -197,37 +213,71 @@ local function streakCard(store: Store, timedOut: () -> boolean, shown: () -> bo
 		table.insert(icons, icon)
 	end
 
-	return reveal(shown, STREAK_H, order, {
-		create("Frame")({
-			Name = "Accent",
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, -Theme.spacing.md, 0.5, 0),
-			Size = UDim2.new(0, 6, 1, 0),
-			BackgroundColor3 = function()
-				return Theme.color[style().color]
-			end,
-			BorderSizePixel = 0,
-		}),
-		icons,
-		Base.text("headline", {
-			Name = "Headline",
-			Position = UDim2.fromOffset(48, Theme.spacing.sm),
-			Size = UDim2.new(1, -48, 0, Theme.type.headline.size + Theme.spacing.xs),
-			Text = headline,
-			TextXAlignment = Enum.TextXAlignment.Left,
-		}),
-		Base.text("body", {
-			Name = "Note",
-			AnchorPoint = Vector2.new(0, 1),
-			Position = UDim2.new(0, 0, 1, -Theme.spacing.sm),
-			Size = UDim2.new(1, 0, 0, 2 * Theme.type.body.size + Theme.spacing.xs),
-			Text = note,
-			TextColor3 = Theme.color.inkMuted,
-			TextWrapped = true,
-			TextXAlignment = Enum.TextXAlignment.Left,
-			TextYAlignment = Enum.TextYAlignment.Top,
-		}),
-	})
+	-- The shields still held: the player's own screen, after the round
+	-- (Q7 condition 1), so it's safe to show here.
+	local shields = derive(function(): string?
+		local recap = store.recap()
+		return if recap then ResultsLogic.shieldsLine(recap.streakShields) else nil
+	end)
+	local shieldsExtra = derive(function()
+		return if shields() then SHIELDS_H else 0
+	end)
+
+	return reveal(
+		shown,
+		function()
+			return STREAK_H + shieldsExtra()
+		end,
+		order,
+		{
+			create("Frame")({
+				Name = "Accent",
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.new(0, -Theme.spacing.md, 0.5, 0),
+				Size = UDim2.new(0, 6, 1, 0),
+				BackgroundColor3 = function()
+					return Theme.color[style().color]
+				end,
+				BorderSizePixel = 0,
+			}),
+			icons,
+			Base.text("headline", {
+				Name = "Headline",
+				Position = UDim2.fromOffset(48, Theme.spacing.sm),
+				Size = UDim2.new(1, -48, 0, Theme.type.headline.size + Theme.spacing.xs),
+				Text = headline,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+			Base.text("body", {
+				Name = "Note",
+				AnchorPoint = Vector2.new(0, 1),
+				Position = function()
+					return UDim2.new(0, 0, 1, -(Theme.spacing.sm + shieldsExtra()))
+				end,
+				Size = UDim2.new(1, 0, 0, 2 * Theme.type.body.size + Theme.spacing.xs),
+				Text = note,
+				TextColor3 = Theme.color.inkMuted,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+			}),
+			Base.text("label", {
+				Name = "Shields",
+				AnchorPoint = Vector2.new(0, 1),
+				Position = UDim2.new(0, 0, 1, -Theme.spacing.sm),
+				Size = UDim2.new(1, 0, 0, Theme.type.label.size),
+				Text = function()
+					local line = shields()
+					return if line then "⛨ " .. line else ""
+				end,
+				Visible = function()
+					return shields() ~= nil
+				end,
+				TextColor3 = Theme.color.rim,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}),
+		}
+	)
 end
 
 -- The level beat (payoff-loop step 1c): the level, what the round paid,
@@ -388,6 +438,24 @@ local function body(store: Store, height: () -> number): { Instance }
 				return (if p then PayoutLogic.dropLine(p, store.nameOf) else nil) or ""
 			end, isShown("Drop"), 6, if C.Icons.has(key) then key else "gem", PayoutLogic.dropLabel(d))
 		end) :: any,
+		-- The finale guess (payoff-loop step 2c): who they picked, and
+		-- whether it paid a shield.
+		statCard(
+			"Guess",
+			function()
+				local recap = store.recap()
+				local guess = if recap then recap.guess else nil
+				return if recap and guess then ResultsLogic.guessHeadline(guess, recap.practice) else ""
+			end,
+			isShown("Guess"),
+			7,
+			nil,
+			function()
+				local recap = store.recap()
+				local guess = if recap then recap.guess else nil
+				return if guess then ResultsLogic.guessLabel(guess, store.finalistName) else LABELS.Guess
+			end
+		),
 		indexes(
 			derive(function(): { ResultsLogic.RecapLevel }
 				local recap = store.recap()
@@ -395,7 +463,7 @@ local function body(store: Store, height: () -> number): { Instance }
 				return if level then { level } else {}
 			end),
 			function(level: () -> ResultsLogic.RecapLevel)
-				return levelCard(level(), isShown("Level"), 7)
+				return levelCard(level(), isShown("Level"), 8)
 			end
 		) :: any,
 		indexes(
@@ -403,7 +471,7 @@ local function body(store: Store, height: () -> number): { Instance }
 				return if streakDue() then { true } else {}
 			end),
 			function()
-				return streakCard(store, timedOut, isShown("Streak"), 8)
+				return streakCard(store, timedOut, isShown("Streak"), 9)
 			end
 		) :: any,
 	}) :: ScrollingFrame

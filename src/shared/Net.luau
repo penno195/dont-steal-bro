@@ -1324,7 +1324,9 @@ Net.Remotes = {
 	-- Also the open streak buy-back offer (`buyBack`: key, streak,
 	-- robuxPrice), which names your own streak - so StoreService holds
 	-- it back on a match server until your round's Results (Q7) - and
-	-- the Streak Saves held (`streakSaves`), which the offer card spends.
+	-- the Streak Saves held (`streakSaves`), which the offer card spends,
+	-- and the streak shields held (`streakShields`, payoff-loop step 2),
+	-- shown on the Hub only.
 	StoreState = {
 		name = "StoreState",
 		direction = "ServerBroadcast",

@@ -16,6 +16,9 @@
 --   - its own streak before/after, and a win's payout, from
 --     DecisionPersonalResult, which the server fires to this player
 --     alone, after the reveal.
+--   - a knocked-out player's own finale guess (payoff-loop step 2c):
+--     the finalist they tapped, then FinaleGuessAccepted's {targetId},
+--     sent to them alone. Never anyone else's guess.
 -- Nothing is written to an Attribute, a ValueObject or anything else
 -- that replicates; it's all Lua locals and Vide sources.
 --
@@ -36,6 +39,7 @@ local Workspace = game:GetService("Workspace")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local GuessViewLogic = require(script.Parent.Parent.UI.GuessViewLogic)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local ParticipantIds = require(ReplicatedStorage.Shared.ParticipantIds)
@@ -76,6 +80,12 @@ local chat = source(nil :: DecisionLogic.Rect?)
 local keyboard = source(nil :: number?)
 
 local finalists = source({} :: { FinaleLoading.Finalist })
+
+-- The Guess Token (payoff-loop step 2c). `raced`: this player was in
+-- this round's standings, so the server will take their guess (a late
+-- joiner watching gets no picker).
+local guess = source(GuessViewLogic.OPEN)
+local raced = source(false)
 
 -- The Intro's ready-up: who the server says is ready, and whether WE
 -- closed the loading card (spectators can close it too; only a
@@ -154,6 +164,30 @@ local function chooseOpen(): boolean
 end
 
 local confirm, press, release, _stopConfirm = DecisionStudio.confirmer(send, chooseOpen)
+
+-- One tap, one intent, final. No resend: the server takes the first
+-- guess only, so a repeat could only be refused. Silence past
+-- ACK_TIMEOUT is read as a refusal (GuessViewLogic's header).
+local guessToken = 0
+local function pickGuess(targetId: number)
+	if not GuessViewLogic.canPick(guess()) or isFinalist() or reveal() ~= nil then
+		return
+	end
+	guess(GuessViewLogic.step(guess(), { type = "Pick", targetId = targetId }))
+	guessToken += 1
+	local token = guessToken
+	Net.fireServer("FinaleGuessIntent", { targetId = targetId })
+	task.delay(GuessViewLogic.ACK_TIMEOUT, function()
+		if guessToken == token then
+			guess(GuessViewLogic.step(guess(), { type = "Timeout" }))
+		end
+	end)
+end
+
+local function resetGuess()
+	guessToken += 1
+	guess(GuessViewLogic.OPEN)
+end
 
 local unmount: (() -> ())? = nil
 local talkThread: thread? = nil
@@ -280,6 +314,11 @@ local store: DecisionStudio.Store = {
 			setWatching(not watching())
 		end
 	end,
+	guess = guess,
+	guessOpen = function(): boolean
+		return GuessViewLogic.visible(isFinalist(), raced(), phase() ~= nil, reveal() ~= nil)
+	end,
+	pickGuess = pickGuess,
 }
 
 -- STAGE CAMERA. StudioStageService moves this player onto a podium or a
@@ -562,6 +601,10 @@ local DecisionStudioController: Loader.Controller = {
 		end
 		return seatIds
 	end,
+
+	-- A finalist's display name (an NPC seat's too), for the results
+	-- screen's guess card.
+	nameOf = nameOf,
 }
 
 function DecisionStudioController:init()
@@ -583,6 +626,8 @@ function DecisionStudioController:init()
 			if payload.state == "Race" then
 				finalists({})
 				stakes(nil) -- last round's; this round's come when you finish
+				raced(false)
+				resetGuess()
 			end
 		end
 		if payload.state == "DecisionStudio" then
@@ -601,6 +646,13 @@ function DecisionStudioController:init()
 		if type(payload) ~= "table" or type(payload.qualifiers) ~= "table" then
 			return
 		end
+		if type(payload.ranked) == "table" then
+			for _, entry in payload.ranked :: { any } do
+				if type(entry) == "table" and entry.playerId == selfId then
+					raced(true)
+				end
+			end
+		end
 		local list: { number } = {}
 		for _, raw in payload.qualifiers :: { any } do
 			if type(raw) == "number" then
@@ -612,6 +664,7 @@ function DecisionStudioController:init()
 
 	Net.onClientEvent("DecisionParticipants", function(payload: any)
 		resetStudio()
+		resetGuess()
 		ids = {}
 		leftIds = {}
 		for _, raw in (payload.qualifierIds or {}) :: { any } do
@@ -696,6 +749,13 @@ function DecisionStudioController:init()
 		locked(nextLocked)
 		if id == selfId then
 			acked(true)
+		end
+	end)
+
+	-- Your guess was taken: locked in for the round, on the server's word.
+	Net.onClientEvent("FinaleGuessAccepted", function(payload: any)
+		if type(payload) == "table" and type(payload.targetId) == "number" then
+			guess(GuessViewLogic.step(guess(), { type = "Ack", targetId = payload.targetId }))
 		end
 	end)
 

@@ -42,7 +42,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     streak; the Hub gets a LevelBadge left of the coin pill; a level-up
     opens the claim pop-up (level-up coins + level cosmetics) when the
     player taps Continue on the results.
-- [ ] **2. Finale guesses for knocked-out players.** Each non-finalist
+- [x] **2. Finale guesses for knocked-out players.** Each non-finalist
   gets one **Guess Token** per round and picks who walks out. A correct
   guess earns a **streak credit**, but only when the result is a single
   stealer or a single sharer. Every other guess (and an all-share or
@@ -68,9 +68,21 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     single write with an audit line. `FinaleGuessAccepted` acks the
     guesser; `RoundRecap` gains `shieldSpent`, `guess` and
     `streakShields`. Practice matches judge guesses but grant nothing.
-  - [ ] 2c. UI: the Guess Token picker for knocked-out players, the
+  - [x] 2c. UI: the Guess Token picker for knocked-out players, the
     result ("You called it: +1 shield"), and the held shield count on
-    the player's own Hub/results screens only (Q7 condition 1).
+    the player's own Hub/results screens only (Q7 condition 1). The
+    picker (`Screens/GuessPicker`, pure half `UI/GuessViewLogic`) sits
+    in a spectator's bottom-left corner in the Studio, for anyone in
+    this round's standings who isn't a finalist, until the reveal: one
+    card per seat, NPCs included. A tap fires `FinaleGuessIntent` once;
+    `FinaleGuessAccepted` locks it, and no ack within 4s reads as a
+    refusal (no resend: the server takes the first guess only). Results
+    gains a Guess beat before Level (`ResultsLogic.guessHeadline`; a
+    practice match never promises a shield), a "Shielded" streak kind
+    ("Your 4-win streak is safe") when `shieldSpent`, and the shields
+    held under the streak card. The Hub shows a shield pill between the
+    level badge and coins once one is held (StoreState's new
+    `streakShields`). Unseen in Studio when built: check it on device.
 - [ ] **3. Quick-chat rewording and restyle.** Quick-chat buttons already
   exist. Reword them for the negotiation (promises, threats, emotes)
   and restyle them to the HUD art pass.

@@ -22,6 +22,9 @@
 --            written inside.
 --   bottom   the chat line between them (or above them when there's
 --            no room), then the locked card and the result panel.
+--            A knocked-out player has no hold buttons, so their corners
+--            hold the Guess Token picker (bottom-left, payoff-loop 2c)
+--            and "Watch up close" (bottom-right).
 --
 -- SECRECY: this file never sees another player's choice before the
 -- reveal packet, because the Store has nowhere to put one - `locked` is
@@ -41,6 +44,8 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Clock = require(ReplicatedStorage.Shared.Clock)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
+local GuessPicker = require(script.Parent.GuessPicker)
+local GuessViewLogic = require(script.Parent.Parent.GuessViewLogic)
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
 local Feel = require(script.Parent.Parent.Components.Feel)
@@ -116,6 +121,12 @@ export type Store = {
 	-- nil hides the button (the preview has no camera to move).
 	watching: (() -> boolean)?,
 	toggleWatch: (() -> ())?,
+	-- The Guess Token picker (payoff-loop step 2c): this player's own
+	-- guess, whether the picker is up (GuessViewLogic.visible), and the
+	-- tap. All three nil hides it.
+	guess: (() -> GuessViewLogic.Guess)?,
+	guessOpen: (() -> boolean)?,
+	pickGuess: ((targetId: number) -> ())?,
 
 	now: (() -> number)?, -- clock override for the preview; default Clock.now
 }
@@ -1534,6 +1545,27 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			watchButton = button
 		end
 
+		-- Knocked-out players only: the Guess Token picker, bottom-left
+		-- where a finalist's Steal button would be.
+		local guessPanel: GuiObject? = nil
+		local guess, guessOpen, pickGuess = store.guess, store.guessOpen, store.pickGuess
+		if guess ~= nil and guessOpen ~= nil and pickGuess ~= nil then
+			local names = derive(function(): { GuessPicker.Seat }
+				local list: { GuessPicker.Seat } = {}
+				for _, seat in store.seats() do
+					table.insert(list, table.freeze({ id = seat.id, name = seat.name }))
+				end
+				return list
+			end)
+			local panel = GuessPicker.build({ seats = names, guess = guess, pick = pickGuess })
+			panel.Parent = gui
+			cleanup(controller.attachScale(panel))
+			effect(function()
+				panel.Visible = guessOpen()
+			end)
+			guessPanel = panel
+		end
+
 		-- Placement. Portrait: info from the top (below the chat window),
 		-- decide from the bottom. Landscape: side by side. Positions are
 		-- in the ScreenGui's own space, which is already inside the safe
@@ -1622,6 +1654,19 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			-- is Roblox's player list.
 			if watchButton ~= nil then
 				watchButton.Position = UDim2.new(1, -edge, 1, -(edge + margin))
+			end
+			-- Sideways: the bottom-left corner. Portrait (a tablet; phones
+			-- are locked sideways) has no room beside the Watch button, so
+			-- the picker sits centred above it.
+			if guessPanel ~= nil then
+				if portrait() then
+					local watchH = if watchButton ~= nil then (Theme.touch.primaryHeight + GAP) * scale else 0
+					guessPanel.AnchorPoint = Vector2.new(0.5, 1)
+					guessPanel.Position = UDim2.new(0.5, 0, 1, -(edge + margin + watchH))
+				else
+					guessPanel.AnchorPoint = Vector2.new(0, 1)
+					guessPanel.Position = UDim2.new(0, edge, 1, -(edge + margin))
+				end
 			end
 		end)
 

@@ -6,7 +6,8 @@
 --
 -- Two sources, and they're trusted differently:
 --   * RoundRecap (server, targeted, on entering Results): reason,
---     streak before/after, win reward, streak credit. Authoritative.
+--     streak before/after, win reward, streak credit, finale guess and
+--     streak shields. Authoritative.
 --   * RaceTally (counted by the client from broadcasts it already got:
 --     TaskProgress, TaskQualificationResult, its own PowerUpUseResult).
 --     Display-only - a modified client lying to itself about how many
@@ -42,6 +43,16 @@ export type RecapLevel = {
 	cosmetics: { string }, -- level cosmetics unlocked this round
 }
 
+-- This player's finale guess (payoff-loop step 2c; GuessService's
+-- recapFor). `correct` is only ever true when one finalist walked out
+-- alone; `shieldEarned` is false in a practice match, which judges the
+-- guess but grants nothing.
+export type RecapGuess = {
+	targetId: number,
+	correct: boolean,
+	shieldEarned: boolean,
+}
+
 export type Recap = {
 	roundId: string,
 	reason: string, -- ProgressionLogic.ReasonCode
@@ -56,6 +67,11 @@ export type Recap = {
 	-- XP, level and place coins. Every round has one (Q1, "a payoff
 	-- for every round") except a practice match or a failed write.
 	level: RecapLevel?,
+	-- Payoff-loop step 2: a streak shield took this round's loss, so the
+	-- streak stayed where it was.
+	shieldSpent: boolean?,
+	guess: RecapGuess?, -- nil when they placed no guess
+	streakShields: number?, -- shields held now, after this round
 }
 
 export type RaceTally = {
@@ -105,6 +121,7 @@ export type StreakKind =
 	| "Died" -- a loss that ended a streak worth naming
 	| "None" -- a loss from zero: nothing was lost
 	| "Practice" -- a practice match: nothing was at stake, win or lose
+	| "Shielded" -- a loss a streak shield took, so the streak stayed
 
 export type StreakChange = {
 	kind: StreakKind,
@@ -117,6 +134,8 @@ function ResultsLogic.streakChange(recap: Recap): StreakChange
 	local kind: StreakKind
 	if recap.practice == true then
 		kind = "Practice"
+	elseif recap.shieldSpent == true then
+		kind = "Shielded"
 	elseif recap.streakAfter > recap.streakBefore then
 		kind = "Up"
 	elseif recap.streakBefore > 0 then
@@ -146,13 +165,15 @@ function ResultsLogic.streakHeadline(change: StreakChange): string
 		return if change.before > 0
 			then string.format("Practice match - your %d-win streak is safe", change.before)
 			else "Practice match - nothing at stake"
+	elseif change.kind == "Shielded" then
+		return string.format("Your %d-win streak is safe", change.after)
 	end
 	return "No streak on the line this time"
 end
 
 -- ===== sequencing ===========================================================
 
-export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Drop" | "Level" | "Streak"
+export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Drop" | "Guess" | "Level" | "Streak"
 
 export type Beat = { id: BeatId, at: number }
 
@@ -166,7 +187,8 @@ ResultsLogic.STREAK_PAUSE = 0.9
 -- screen opens. The streak is always last - P6-6's one sequencing rule.
 -- Finale appears only for someone who reached the Studio, Rewards only
 -- for a win that paid something, Drop only when that win also dropped
--- an item (its own card, for its icon), Level when the round paid XP
+-- an item (its own card, for its icon), Guess when they placed a finale
+-- guess (payoff-loop step 2c), Level when the round paid XP
 -- (payoff-loop step 1c), Streak only when there is a
 -- recap at all (a spectator has no streak change this round).
 --
@@ -186,6 +208,9 @@ function ResultsLogic.beats(recap: Recap?): { Beat }
 			if reward.drop ~= nil then
 				table.insert(ids, "Drop")
 			end
+		end
+		if recap.guess ~= nil then
+			table.insert(ids, "Guess")
 		end
 		if recap.level ~= nil then
 			table.insert(ids, "Level")
@@ -307,6 +332,57 @@ function ResultsLogic.parseLevel(value: any): RecapLevel?
 		levelUpCurrency = value.levelUpCurrency,
 		cosmetics = cosmetics,
 	}
+end
+
+-- ===== the guess beat and shields (payoff-loop step 2c) =====================
+
+-- The guess card's headline. Only a guess that earned a shield promises
+-- one: a practice match judges it but pays nothing.
+function ResultsLogic.guessHeadline(guess: RecapGuess, practice: boolean?): string
+	if not guess.correct then
+		return "No shield this time"
+	elseif guess.shieldEarned then
+		return "You called it: +1 shield"
+	elseif practice == true then
+		return "You called it (practice: no shield)"
+	end
+	return "You called it"
+end
+
+-- The guess card's label: who they picked.
+function ResultsLogic.guessLabel(guess: RecapGuess, nameOf: ((id: number) -> string?)?): string
+	local name = if nameOf then nameOf(guess.targetId) else nil
+	return if name then string.format("Your guess: %s", name) else "Your guess"
+end
+
+-- "2 streak shields held", for the player's own screens only (Q7
+-- condition 1). nil when they hold none.
+function ResultsLogic.shieldsLine(count: number?): string?
+	if count == nil or count <= 0 then
+		return nil
+	end
+	return if count == 1 then "1 streak shield held" else string.format("%d streak shields held", count)
+end
+
+-- A recap's guess, checked for shape, like parseLevel.
+function ResultsLogic.parseGuess(value: any): RecapGuess?
+	if
+		type(value) ~= "table"
+		or type(value.targetId) ~= "number"
+		or type(value.correct) ~= "boolean"
+		or type(value.shieldEarned) ~= "boolean"
+	then
+		return nil
+	end
+	return { targetId = value.targetId, correct = value.correct, shieldEarned = value.shieldEarned }
+end
+
+-- A shield count, or nil when it isn't a sane one.
+function ResultsLogic.parseShields(value: any): number?
+	if type(value) ~= "number" or value ~= value or value < 0 then
+		return nil
+	end
+	return math.floor(value)
 end
 
 -- "3rd of 6", with the ordinal done properly (11th/12th/13th).

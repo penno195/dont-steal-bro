@@ -20,7 +20,9 @@
 -- store on the Coins tab. Hidden while a menu is open (the store shows
 -- its own balance) and in a match place, where the HUD owns the corners.
 -- The account level's badge (payoff-loop step 1c) sits to its left and
--- shows and hides with it.
+-- shows and hides with it, and so do the streak shields held (payoff-
+-- loop step 2c), between the two, once there's at least one. Hub only:
+-- the player's own screen, never during a live round (Q7 condition 1).
 --
 -- LEVEL-UP: a round that crossed a level shows the claim pop-up with
 -- what the level paid, once the player taps Continue on the results.
@@ -628,6 +630,7 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 				showLevelUp()
 			end,
 			nameOf = DropNames,
+			finalistName = DecisionStudioController.nameOf,
 		})
 	elseif menu == "Staff" then
 		staffResult(nil)
@@ -726,7 +729,7 @@ local function mountLauncher()
 				open("Store", "Currency")
 			end,
 			order = 0,
-			layoutOrder = 2,
+			layoutOrder = 3,
 		})
 		local level = vide.derive(function()
 			local s = storeState()
@@ -746,13 +749,25 @@ local function mountLauncher()
 		vide.effect(function()
 			badge.Visible = level() ~= nil
 		end)
+		local shieldCount = vide.derive(function()
+			local s = storeState()
+			return (if s then ResultsLogic.parseShields(s.streakShields) else nil) or 0
+		end)
+		local shields = C.CurrencyPill({
+			amount = shieldCount,
+			icon = "shield",
+			layoutOrder = 2,
+		})
+		vide.effect(function()
+			shields.Visible = shieldCount() > 0
+		end)
 		-- One scaled row, anchored top-right, so the badge stays beside
 		-- the pill at any UI scale (a UIScale doesn't scale Position).
 		local row = create("Frame")({
 			Name = "Balances",
 			AnchorPoint = Vector2.new(1, 0),
 			Position = UDim2.new(1, -Theme.spacing.md, 0, Theme.spacing.md),
-			Size = UDim2.fromOffset(2 * coins.Size.X.Offset + Theme.spacing.sm, coins.Size.Y.Offset),
+			Size = UDim2.fromOffset(3 * coins.Size.X.Offset + 2 * Theme.spacing.sm, coins.Size.Y.Offset),
 			BackgroundTransparency = 1,
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Horizontal,
@@ -762,6 +777,7 @@ local function mountLauncher()
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
 			badge,
+			shields,
 			coins,
 		}) :: Frame
 		UIScaleController.attachScale(row)
@@ -1205,6 +1221,9 @@ function MenuController:init()
 	Net.onClientEvent("RoundRecap", function(payload: any)
 		if type(payload) == "table" and type(payload.reason) == "string" then
 			payload.level = ResultsLogic.parseLevel(payload.level)
+			payload.guess = ResultsLogic.parseGuess(payload.guess)
+			payload.streakShields = ResultsLogic.parseShields(payload.streakShields)
+			payload.shieldSpent = payload.shieldSpent == true
 			recap(payload)
 		end
 	end)
