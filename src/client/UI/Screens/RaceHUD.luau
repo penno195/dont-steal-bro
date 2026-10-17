@@ -155,16 +155,17 @@ local GAP = Theme.spacing.sm
 local COMPASS = 96
 local TOP_WIDTH = 2 * COMPASS + RING + 2 * GAP
 local TOP_MARGIN = 4 -- px from the top bar (or the screen top, when lifted into the bar)
--- The Navigation tab, docked to the compass's right edge: NAV wide and
--- the card's full height, so the switch clears the rim (playtest,
--- 2026-10-17: a shorter drawer let it run through the border).
--- A spacer balances it on the left.
-local NAV = Theme.touch.minTargetPoints + 14 -- room for the switch inside the rim
-local NAV_INSET = 0 -- px shorter than the card, top and bottom
+-- The Navigation tab, docked to the compass's right edge: NAV wide, a
+-- touch shorter than the card so it reads as a drawer pulled out of it.
+-- The badge and switch are sized to fit inside its rim at that height
+-- (playtest, 2026-10-17: the owner wants the drawer smaller than the
+-- compass, not a full-height box). A spacer balances it on the left.
+local NAV = Theme.touch.minTargetPoints
+local NAV_INSET = 5 -- px shorter than the card, top and bottom
 local NAV_SEAM = 2 -- px the tab runs under the card's rim, so the rims join
-local NAV_ICON = 22 -- the route badge
-local NAV_SWITCH = 30 -- the on/off switch's track width
-local NAV_KNOB = 10
+local NAV_ICON = 18 -- the route badge
+local NAV_SWITCH = 24 -- the on/off switch's track width
+local NAV_KNOB = 6
 -- The HUD panels' bevelled rim, a touch heavier than Base.stage's 2 so
 -- the bevel reads over a busy map (HUD art pass, 2026-10-17).
 local RIM = 3
