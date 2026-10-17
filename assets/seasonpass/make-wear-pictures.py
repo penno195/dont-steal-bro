@@ -1,6 +1,6 @@
 # Turns each Meshy thumbnail (models/<Name>/thumb.png, transparent) into a
 # 512x512 pass tile picture wear-<name>.png next to this file, with the same
-# thick ink outline and drop shadow as make-art.js so it reads on both the
+# thick ink outline and drop shadow as make-pictures.js so it reads on both the
 # gold and blue tiles. Run: python make-wear-pictures.py  (needs Pillow)
 import os
 from PIL import Image, ImageFilter, ImageChops

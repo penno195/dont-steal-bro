@@ -604,6 +604,31 @@ describe("SeasonTrackLogic", function()
 		expect(SeasonTrackLogic.iconFor({ kind = "Cosmetic", cosmeticId = "x" })):toBe("gem")
 	end)
 
+	it("pictures a reward from its config, coins by amount", function()
+		local function cosmetic(id: string): number?
+			return if id == "hat" then 7 else nil
+		end
+		local function powerUp(id: string): number?
+			return if id == "freeze" then 9 else nil
+		end
+		local function picture(grant: any): number?
+			return SeasonTrackLogic.pictureFor(grant, cosmetic, powerUp)
+		end
+		expect(picture({ kind = "Cosmetic", cosmeticId = "hat" })):toBe(7)
+		expect(picture({ kind = "Cosmetic", cosmeticId = "none" })):toBe(nil)
+		expect(picture({ kind = "PowerUpStock", powerUpId = "freeze", amount = 2 })):toBe(9)
+		expect(picture({ kind = "PowerUpStock", powerUpId = "blind", amount = 2 })):toBe(nil)
+		expect(picture({ kind = "Title" })):toBe(nil)
+		-- Three tiers: up to 75, up to 150, more.
+		local small = picture({ kind = "Currency", amount = 50 })
+		local stack = picture({ kind = "Currency", amount = 150 })
+		local chest = picture({ kind = "Currency", amount = 250 })
+		expect(small):toBe(picture({ kind = "Currency", amount = 75 }))
+		expect(small == stack):toBe(false)
+		expect(stack == chest):toBe(false)
+		expect(chest):toBe(picture({ kind = "Currency", amount = 100000 }))
+	end)
+
 	it("locks the whole premium track without the pass", function()
 		local view = SeasonTrackLogic.view(def, state({}), text)
 		expect(view.premium.locked):toBe(true)

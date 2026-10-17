@@ -25,6 +25,7 @@ local TaskScramble: Validate.PowerUpDef = {
 	rarity = "Common",
 	hardControl = false,
 	impact = { style = "Glitch", rgb = { 190, 90, 255 } }, -- purple pixel cubes
+	pictureAssetId = 70411546791216,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

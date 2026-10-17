@@ -17,7 +17,7 @@ local FounderSkin: Validate.CosmeticDef = {
 	enabled = true,
 	shirtAssetId = 99470555666548,
 	pantsAssetId = 129608190082628,
-	previewIconAssetId = 100937989803769,
+	previewIconAssetId = 124455842000000,
 }
 
 return FounderSkin

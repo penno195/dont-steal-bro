@@ -21,6 +21,7 @@ local Blind: Validate.PowerUpDef = {
 	hardControl = false,
 	impact = { style = "Flash", rgb = { 255, 245, 200 } }, -- blinding white flash and dark smoke
 	victimLook = "Blinded", -- a cloud of ink round the head
+	pictureAssetId = 99204372506288,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

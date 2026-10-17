@@ -236,6 +236,9 @@ export type PowerUpDef = {
 	-- How the victim looks while this debuff is on them. nil = just the
 	-- word over their head. Only on Debuffs.
 	victimLook: PowerUpVictimLook?,
+	-- Full-colour picture for a reward of this item (the season pass
+	-- tile, the claim pop-up). nil = its tinted HUD icon.
+	pictureAssetId: number?,
 	acquisition: PowerUpAcquisition,
 }
 
@@ -1518,6 +1521,10 @@ function Validate.checkPowerUp(fileName: string, def: PowerUpDef, issues: { Issu
 		elseif shuntScale < 0 or shuntScale > 5 then
 			issue(issues, "PowerUp", fileName, "shuntScale", "must be between 0 and 5")
 		end
+	end
+	local picture = def.pictureAssetId
+	if picture ~= nil and (type(picture) ~= "number" or picture <= 0 or picture % 1 ~= 0) then
+		issue(issues, "PowerUp", fileName, "pictureAssetId", "must be a positive integer asset id")
 	end
 	local victimLook = def.victimLook
 	if victimLook ~= nil then

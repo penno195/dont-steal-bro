@@ -18,6 +18,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Season1 = require(ReplicatedStorage.Shared.Config.Seasons.Season1)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local ClaimPopup = require(script.Parent.ClaimPopup)
 local SeasonPass = require(ReplicatedStorage.Shared.Config.Store.SeasonPass)
 local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
@@ -55,16 +56,21 @@ local function grantText(grant: StoreScreenLogic.Grant): string
 end
 
 -- The real items' pictures, as MenuController shows them.
-local previewIcons: { [string]: number } = {}
+local previewIcons: { [string]: number? } = {}
 for _, entry in Cosmetics do
-	local id = entry.def.previewIconAssetId
-	if id ~= nil and id > 0 then
-		previewIcons[entry.def.id] = id
-	end
+	previewIcons[entry.def.id] = entry.def.previewIconAssetId
+end
+local powerUpPictures: { [string]: number? } = {}
+for _, entry in PowerUps do
+	powerUpPictures[entry.def.id] = entry.def.pictureAssetId
 end
 
 local function grantImage(grant: SeasonTrackLogic.Grant): number?
-	return if grant.kind == "Cosmetic" and grant.cosmeticId then previewIcons[grant.cosmeticId] else nil
+	return SeasonTrackLogic.pictureFor(grant, function(id: string): number?
+		return previewIcons[id]
+	end, function(id: string): number?
+		return powerUpPictures[id]
+	end)
 end
 
 local SeasonPassPreview = {}

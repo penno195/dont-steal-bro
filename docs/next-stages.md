@@ -33,7 +33,7 @@ that finishes it. Sources: `README.md`, `rewards-roadmap.md`,
     Blender later. *2026-10-09: lineup set (Season1.luau, 11 columns
     to 30 wins), five wearables written (disabled, asset ids 0), tiles
     show an item's `previewIconAssetId`. Pictures done for the founder
-    trail, skin and emote (`assets/seasonpass/make-art.js`). Left: the
+    trail, skin and emote (now `assets/seasonpass/make-pictures.js`). Left: the
     five Meshy models (Loot Sack, Burglar Beanie, Traffic Cone, Game
     Show Top Hat, Gold Bar Jetpack), their pictures, fitting them in
     Studio, then enabling them.* *Done 2026-10-09: all five Meshy

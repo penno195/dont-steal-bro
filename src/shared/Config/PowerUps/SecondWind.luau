@@ -22,6 +22,7 @@ local SecondWind: Validate.PowerUpDef = {
 	cooldownSeconds = 22,
 	rarity = "Rare",
 	hardControl = false,
+	pictureAssetId = 92035431857893,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

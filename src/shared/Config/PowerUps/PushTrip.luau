@@ -23,6 +23,7 @@ local PushTrip: Validate.PowerUpDef = {
 	shuntScale = 2, -- the shove IS this item; the other throws only nudge
 	impact = { style = "Shockwave", rgb = { 255, 140, 40 } }, -- orange blast ring
 	victimLook = "Ragdoll", -- knocked flat, limbs loose
+	pictureAssetId = 118306470597744,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

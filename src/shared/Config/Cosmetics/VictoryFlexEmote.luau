@@ -16,7 +16,7 @@ local VictoryFlexEmote: Validate.CosmeticDef = {
 	sortOrder = 20,
 	enabled = true,
 	animationAssetId = 86732319077255,
-	previewIconAssetId = 100548500057990,
+	previewIconAssetId = 95305500617277,
 }
 
 return VictoryFlexEmote

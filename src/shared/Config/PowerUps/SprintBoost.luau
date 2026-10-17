@@ -18,6 +18,7 @@ local SprintBoost: Validate.PowerUpDef = {
 	cooldownSeconds = 10,
 	rarity = "Common",
 	hardControl = false,
+	pictureAssetId = 101916223425794,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

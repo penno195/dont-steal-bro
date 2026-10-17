@@ -22,6 +22,7 @@ local TaskInsight: Validate.PowerUpDef = {
 	cooldownSeconds = 12,
 	rarity = "Uncommon",
 	hardControl = false,
+	pictureAssetId = 100446077741631,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

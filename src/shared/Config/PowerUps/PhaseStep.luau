@@ -18,6 +18,7 @@ local PhaseStep: Validate.PowerUpDef = {
 	cooldownSeconds = 15,
 	rarity = "Rare",
 	hardControl = false,
+	pictureAssetId = 131086452815730,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

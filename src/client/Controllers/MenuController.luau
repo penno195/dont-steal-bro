@@ -214,12 +214,16 @@ local function rarityOf(grant: StoreScreenLogic.Grant): string?
 	return nil
 end
 
--- A season reward's own picture: a cosmetic's preview icon, once it has
--- one. Anything else shows its icon (SeasonTrackLogic.iconFor).
+-- A reward's own picture (SeasonTrackLogic.pictureFor); nil shows its
+-- icon (SeasonTrackLogic.iconFor).
 local function grantImage(grant: SeasonTrackLogic.Grant): number?
-	local def = if grant.kind == "Cosmetic" and grant.cosmeticId then cosmeticDefs[grant.cosmeticId] else nil
-	local id = if def then def.previewIconAssetId else nil
-	return if type(id) == "number" and id > 0 then id else nil
+	return SeasonTrackLogic.pictureFor(grant, function(id: string): number?
+		local def = cosmeticDefs[id]
+		return def and def.previewIconAssetId
+	end, function(id: string): number?
+		local def = powerUpDefs[id]
+		return def and def.pictureAssetId
+	end)
 end
 
 local function cosmeticName(id: string): string

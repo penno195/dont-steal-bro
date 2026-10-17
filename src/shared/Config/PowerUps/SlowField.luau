@@ -27,6 +27,7 @@ local SlowField: Validate.PowerUpDef = {
 	rarity = "Common",
 	hardControl = false,
 	areaRadiusStuds = 15,
+	pictureAssetId = 81449789402346,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

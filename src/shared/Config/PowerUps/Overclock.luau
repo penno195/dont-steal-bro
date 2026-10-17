@@ -19,6 +19,7 @@ local Overclock: Validate.PowerUpDef = {
 	cooldownSeconds = 20,
 	rarity = "Rare",
 	hardControl = false,
+	pictureAssetId = 140533045815756,
 	acquisition = { fieldPickup = true, loadoutEligible = true, freelyEarnable = true, robuxPrice = nil },
 }
 

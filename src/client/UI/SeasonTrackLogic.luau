@@ -229,6 +229,40 @@ function SeasonTrackLogic.iconFor(grant: Grant): string
 	return KIND_ICON[grant.kind] or "gem"
 end
 
+-- A coin reward's picture grows with the amount: a few coins, then
+-- stacks, then a chest (assets/seasonpass/make-pictures.js). Each tier
+-- covers amounts up to `upTo`; the last has none and takes the rest.
+local COIN_PICTURES: { { upTo: number?, image: number } } = {
+	{ upTo = 75, image = 138425276509423 },
+	{ upTo = 150, image = 124045296120447 },
+	{ image = 113432804756453 },
+}
+
+-- A reward's own full-colour picture, for the pass tiles and every claim
+-- pop-up: a cosmetic's preview icon, a power-up's picture (both looked
+-- up by the caller, from config), coins by amount. nil = show iconFor's
+-- tinted icon instead.
+function SeasonTrackLogic.pictureFor(
+	grant: Grant,
+	cosmeticPicture: (string) -> number?,
+	powerUpPicture: (string) -> number?
+): number?
+	local id: number? = nil
+	if grant.kind == "Cosmetic" and grant.cosmeticId ~= nil then
+		id = cosmeticPicture(grant.cosmeticId)
+	elseif grant.kind == "PowerUpStock" and grant.powerUpId ~= nil then
+		id = powerUpPicture(grant.powerUpId)
+	elseif grant.kind == "Currency" then
+		local amount = grant.amount or 0
+		for _, tier in COIN_PICTURES do
+			if tier.upTo == nil or amount <= tier.upTo then
+				return tier.image
+			end
+		end
+	end
+	return if type(id) == "number" and id > 0 then id else nil
+end
+
 export type Reward = { premium: boolean, grant: Grant }
 
 -- What a claim just paid, for the pop-up: the items whose list position
