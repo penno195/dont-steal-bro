@@ -59,7 +59,7 @@ scaled to 960x540.
 
 | File | Step | Asset id |
 |---|---|---|
-| step-arrow.png | Head to a station | 88935690507893 |
+| step-arrow.png | Head to a station | 79321072899961 |
 | hub-aim.png | Use your Freeze (reuses Aim and fire) | 122300696146508 |
 | step-progress.png | Finish your tasks | 137248450645671 |
 | step-task.png | Do the task (v1 shot, kept) | 110568131773173 |
@@ -69,3 +69,9 @@ The v2 pictures are the owner's own screenshots (Desktop folder
 letterboxes them). The mouse cursor was painted out of the pickup and
 station shots with ffmpeg `delogo`, the station shot lost its top 20 px
 of HUD and was scaled to 960 wide, and the arrow crop was doubled.
+
+step-arrow.png was retaken 2026-10-17 for the compass dial and NAV
+drawer: a Studio Play round on Laboratory, the compass pinned on the
+client to a same-floor reading (gold rim, needle at 18°, distance 22)
+from a BindToRenderStep, other ScreenGuis hidden, then the compass and
+drawer cropped from the capture and scaled 3x.

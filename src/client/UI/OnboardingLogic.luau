@@ -441,7 +441,7 @@ local STEPS: { Step } = {
 		id = "station",
 		title = "Head to a station",
 		body = "Follow the arrow to your first task.",
-		picture = 88935690507893,
+		picture = 79321072899961,
 	},
 	{ id = "task", title = "Do the task", body = "Finish the mini-game to tick it off.", picture = 110568131773173 },
 	{
