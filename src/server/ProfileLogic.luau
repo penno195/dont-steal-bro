@@ -204,6 +204,17 @@ export type ProfileData = {
 	-- 1 or more, which then keeps the streak (ProgressionLogic
 	-- .spendsShield). Stacks with no cap. Only ever shown to its owner.
 	streakShields: number,
+
+	-- ===== schema v18, banking a streak ===================================
+
+	-- The longest streak ever banked in the Hub (payoff-loop step 4,
+	-- CashOutLogic). Only goes up. Shown to its owner in the Hub.
+	bestBanked: number,
+	-- The streak the last buy-back or Streak Save brought back, so
+	-- banking it pays only for the wins since (owner, 2026-10-17). 0 when
+	-- the current streak holds no restore; the progression writer clears
+	-- it whenever the streak goes back to 0.
+	streakRestoredAt: number,
 }
 
 -- Structurally StaffGrantLogic.UnseenGift: a unique id, who gave it
@@ -237,7 +248,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 17
+local CURRENT_SCHEMA_VERSION = 18
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -273,6 +284,8 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		tutorialGiftGiven = false,
 		xp = 0,
 		streakShields = 0,
+		bestBanked = 0,
+		streakRestoredAt = 0,
 	}
 end
 
@@ -472,6 +485,16 @@ migrations[16] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 17
 	next.streakShields = (old.streakShields :: number?) or 0
+	return next
+end
+
+-- v17 -> v18 (banking a streak): nothing banked. A streak restored
+-- before this version isn't known to be one, so it reads as earned: 0.
+migrations[17] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 18
+	next.bestBanked = (old.bestBanked :: number?) or 0
+	next.streakRestoredAt = (old.streakRestoredAt :: number?) or 0
 	return next
 end
 

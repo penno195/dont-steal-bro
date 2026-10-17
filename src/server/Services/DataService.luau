@@ -32,6 +32,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ProfileStoreLib = require(ServerScriptService.ServerPackages.ProfileStore)
 local Loader = require(ReplicatedStorage.Shared.Loader)
+local CashOutLogic = require(ServerScriptService.Server.CashOutLogic)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 local StaffGrantLogic = require(ServerScriptService.Server.StaffGrantLogic)
@@ -324,6 +325,16 @@ export type LevelStep = (xp: number, ownedCosmetics: { string }) -> (number, { S
 -- result (payoff-loop step 2): one streak shield goes in the same
 -- mutation as the streak it kept, so a profile can't keep the streak
 -- and the shield both, or lose the shield and the streak both.
+--
+-- `bank` is a streak banked in the Hub (payoff-loop step 4,
+-- ProgressionService.cashOut): its coins, and the streak it raises
+-- bestBanked to, in the same mutation as the reset to 0, so a profile
+-- can't keep the streak and the coins both.
+export type BankWrite = {
+	grants: { StoreLogic.Grant },
+	banked: number,
+}
+
 export type ProgressionWriter = (
 	player: Player,
 	state: ProfileLogic.ProgressionState,
@@ -331,7 +342,8 @@ export type ProgressionWriter = (
 	reward: WinRewardWrite?,
 	seasonStep: SeasonStep?,
 	levelStep: LevelStep?,
-	spendShield: boolean?
+	spendShield: boolean?,
+	bank: BankWrite?
 ) -> { string }
 
 local progressionWriterClaimedBy: string? = nil
@@ -357,7 +369,8 @@ local function writeProgressionState(
 	reward: WinRewardWrite?,
 	seasonStep: SeasonStep?,
 	levelStep: LevelStep?,
-	spendShield: boolean?
+	spendShield: boolean?,
+	bank: BankWrite?
 ): { string }
 	local d = writable(player)
 	if d == nil then
@@ -365,6 +378,8 @@ local function writeProgressionState(
 	end
 	d.currentStreak = state.currentStreak
 	d.bestStreak = state.bestStreak
+	-- A streak back at 0 holds no restore any more (CashOutLogic).
+	d.streakRestoredAt = CashOutLogic.restoredAtAfter(d.streakRestoredAt, state.currentStreak)
 	if spendShield then
 		d.streakShields = math.max(0, d.streakShields - 1)
 	end
@@ -391,6 +406,12 @@ local function writeProgressionState(
 		d.xp = xpAfter
 		-- Not merged either: ProgressionService logs the round's award.
 		applyGrantsTo(d, grants)
+	end
+	if bank ~= nil then
+		d.bestBanked = CashOutLogic.bestBankedAfter(d.bestBanked, bank.banked)
+		for _, line in applyGrantsTo(d, bank.grants) do
+			table.insert(changes, line)
+		end
 	end
 	return changes
 end
@@ -445,6 +466,18 @@ end
 local function getStreakShields(player: Player): number
 	local d = data(player)
 	return if d then d.streakShields else 0
+end
+
+-- Banking a streak (payoff-loop step 4): the most ever banked, and the
+-- streak the last restore brought back (0 if none in this streak).
+local function getBestBanked(player: Player): number
+	local d = data(player)
+	return if d then d.bestBanked else 0
+end
+
+local function getStreakRestoredAt(player: Player): number
+	local d = data(player)
+	return if d then d.streakRestoredAt else 0
 end
 
 -- ===== the receipt write gate (P4-5) =====================================
@@ -1055,6 +1088,8 @@ local DataService: Loader.Service = {
 	-- Payoff-loop step 2: handed out once, to GuessService.
 	claimShieldGranter = claimShieldGranter,
 	getStreakShields = getStreakShields,
+	getBestBanked = getBestBanked,
+	getStreakRestoredAt = getStreakRestoredAt,
 
 	-- P4-5: see the receipt write gate above. Handed out once, to
 	-- StoreService, because ProcessReceipt needs durability facts no

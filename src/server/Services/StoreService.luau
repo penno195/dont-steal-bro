@@ -227,6 +227,22 @@ end
 -- A player's own store state, to that player only. Never
 -- fireAllClients: this is a private inventory (see Net.luau's own note
 -- on StoreState).
+local function cashOutCard(player: Player, DataService: any): { [string]: any }?
+	local offer = (Loader.get("ProgressionService") :: any).cashOutOfferFor(player)
+	if offer == nil then
+		return nil
+	end
+	return {
+		streak = offer.streak,
+		wins = offer.wins,
+		coins = offer.coins,
+		available = offer.available,
+		refusal = offer.refusal,
+		minStreak = GameConfig.streakCashOut.minStreak,
+		bestBanked = DataService.getBestBanked(player),
+	}
+end
+
 local function pushState(player: Player)
 	local DataService = Loader.get("DataService") :: any
 
@@ -273,6 +289,10 @@ local function pushState(player: Player)
 		-- Payoff-loop step 2: streak shields held, for the Hub's own
 		-- shield pill. Targeted, so only the holder sees it (Q7).
 		streakShields = DataService.getStreakShields(player),
+		-- Payoff-loop step 4: the Hub's bank card - what banking the
+		-- streak pays now, and the best ever banked. nil off the Hub, so
+		-- a match server never sends it (Q7 condition 1).
+		cashOut = cashOutCard(player, DataService),
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
 		-- The Hub's level badge (payoff-loop step 1c). Worked out here
@@ -315,6 +335,7 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 		currentStreak = data.currentStreak,
 		buyBackOffer = data.buyBackOffer,
 		streakSaves = data.streakSaves,
+		streakRestoredAt = data.streakRestoredAt,
 	}
 
 	-- The season pass unlocks the live season's premium track; what its
@@ -350,6 +371,8 @@ local function applyProductTo(data: any, def: StoreItemDef, purchaseId: string?)
 	-- writer already recorded losing, and only through a paid receipt,
 	-- audited by recordGrant's line like every other grant.
 	data.currentStreak = after.currentStreak or data.currentStreak
+	-- Banking a restored streak pays only for wins since (step 4).
+	data.streakRestoredAt = after.streakRestoredAt or data.streakRestoredAt
 	data.buyBackOffer = after.buyBackOffer
 
 	if purchaseId ~= nil then
@@ -978,6 +1001,7 @@ local function handleUseStreakSave(player: Player)
 		currentStreak = data.currentStreak,
 		buyBackOffer = data.buyBackOffer,
 		streakSaves = data.streakSaves,
+		streakRestoredAt = data.streakRestoredAt,
 	})
 	if after == nil then
 		sendPurchaseResult(player, USE_SAVE_KEY, "Unavailable", "You don't have a Streak Save.")
@@ -986,6 +1010,7 @@ local function handleUseStreakSave(player: Player)
 
 	data.streakSaves = after.streakSaves
 	data.currentStreak = after.currentStreak
+	data.streakRestoredAt = after.streakRestoredAt or data.streakRestoredAt
 	data.buyBackOffer = after.buyBackOffer
 	handle.save()
 	logGrant(player, USE_SAVE_KEY, 0, nil, { change })

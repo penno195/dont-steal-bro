@@ -7,6 +7,8 @@
 -- The one exception is paid and narrow: a streak buy-back receipt
 -- (design-decisions.md Q7) restores the streak this writer recorded
 -- losing, through StoreService's receipt path and its audit line.
+-- Banking a streak in the Hub (`cashOut`, payoff-loop step 4) is not an
+-- exception: it goes through this same writer, with its own reason code.
 --
 -- The rules themselves - what a win does, what a loss does, which
 -- reason code an outcome maps to, what counts as a duplicate - are pure
@@ -45,7 +47,9 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -55,10 +59,12 @@ local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local LevelLogic = require(ReplicatedStorage.Shared.LevelLogic)
+local CashOutLogic = require(ServerScriptService.Server.CashOutLogic)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local ProgressionLogic = require(ServerScriptService.Server.ProgressionLogic)
 local RewardLogic = require(ServerScriptService.Server.RewardLogic)
+local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 local Participants = require(ServerScriptService.Server.Participants)
 
 export type ReasonCode = ProgressionLogic.ReasonCode
@@ -294,7 +300,8 @@ local writeProgressionState: ((
 	reward: any,
 	seasonStep: any,
 	levelStep: any,
-	spendShield: boolean?
+	spendShield: boolean?,
+	bank: any
 ) -> { string })? =
 	nil
 
@@ -716,11 +723,91 @@ local function sendStakes(racerId: number)
 	end
 end
 
+-- ===== banking a streak (payoff-loop step 4) ==============================
+
+-- Set in init: banking is Hub-only (design-decisions.md Q7's cash-out
+-- case), so it can never show or happen in a live round.
+local isHub = false
+
+export type CashOutRefusal = CashOutLogic.Refusal | "NotHub" | "NotLoaded" | "NotSaved"
+
+-- What banking `player`'s streak would pay right now (CashOutLogic.offer),
+-- or nil off the Hub or before their profile loads. StoreState's
+-- `cashOut` card.
+local function cashOutOfferFor(player: Player): CashOutLogic.Offer?
+	local DataService = Loader.get("DataService") :: any
+	if not isHub or not DataService.isLoaded(player) then
+		return nil
+	end
+	return CashOutLogic.offer(
+		GameConfig.streakCashOut,
+		DataService.getStreak(player) :: number,
+		DataService.getStreakRestoredAt(player) :: number
+	)
+end
+
+-- Banks `player`'s streak: coins by CashOutLogic, the streak to 0,
+-- bestBanked raised, in the one progression write. `expectedStreak` is
+-- the streak they confirmed on the card. Returns the offer it paid, or
+-- nil and why not, having written nothing.
+local function cashOut(player: Player, expectedStreak: number): (CashOutLogic.Offer?, CashOutRefusal?)
+	if not isHub then
+		return nil, "NotHub"
+	end
+	local DataService = Loader.get("DataService") :: any
+	local write = writeProgressionState
+	local offer = cashOutOfferFor(player)
+	if offer == nil or write == nil then
+		return nil, "NotLoaded"
+	end
+	local ok, refusal = CashOutLogic.validate(offer, expectedStreak)
+	if not ok then
+		-- Cast: luau-lsp widens the literal union back to `string`.
+		return nil, refusal :: any
+	end
+
+	local restoredAt = DataService.getStreakRestoredAt(player) :: number
+	local before: ProgressionLogic.StreakState = {
+		currentStreak = DataService.getStreak(player),
+		bestStreak = DataService.getBestStreak(player),
+	}
+	local changes = write(player, CashOutLogic.after(before), nil, nil, nil, nil, false, {
+		grants = { { kind = "Currency", amount = offer.coins } },
+		banked = offer.streak,
+	})
+	if #changes == 0 then
+		-- Read-only or released mid-call: nothing was written.
+		return nil, "NotSaved"
+	end
+	print(CashOutLogic.formatAudit(player.Name, offer, restoredAt))
+	for _, change in changes do
+		print(ProgressionLogic.formatRewardAudit(player.Name, "hub", "CashOut", 0, change))
+	end
+	return offer, nil
+end
+
+local function handleCashOutIntent(player: Player, payload: any)
+	local StoreService = Loader.get("StoreService") :: any
+	local offer, refusal = cashOut(player, payload.streak)
+	if offer == nil then
+		Net.fireClient("StreakCashOutResult", player, { status = "Refused", reason = refusal })
+		-- The card may be stale (a restore landed): send the current one.
+		StoreService.pushState(player)
+		return
+	end
+	Net.fireClient("StreakCashOutResult", player, { status = "Banked", streak = offer.streak, coins = offer.coins })
+	-- The coins, the 0 streak and the new best banked on the Hub's card,
+	-- and the counter over their head.
+	StoreService.pushState(player)
+	local StreakTagService = Loader.get("StreakTagService") :: any
+	StreakTagService.broadcast()
+end
+
 -- ===== service =============================================================
 
 local ProgressionService: Loader.Service = {
 	name = "ProgressionService",
-	dependencies = { "DataService", "RoundService", "ParticipantService", "Telemetry" },
+	dependencies = { "DataService", "RoundService", "ParticipantService", "Telemetry", "NetGuard" },
 
 	applyRoundResult = applyRoundResult,
 	hasResultFor = hasResultFor,
@@ -736,6 +823,10 @@ local ProgressionService: Loader.Service = {
 	stakesFor = stakesFor,
 	sendStakes = sendStakes,
 
+	-- Banking a streak in the Hub (payoff-loop step 4).
+	cashOut = cashOut,
+	cashOutOfferFor = cashOutOfferFor,
+
 	-- Re-exported so a caller (DecisionService) maps an outcome branch
 	-- to a reason code through the same function the tests cover,
 	-- rather than keeping its own copy of the mapping.
@@ -745,6 +836,15 @@ local ProgressionService: Loader.Service = {
 function ProgressionService:init()
 	local DataService = Loader.get("DataService") :: any
 	writeProgressionState = DataService.claimProgressionWriter("ProgressionService")
+
+	isHub = StreakTagLogic.isHub(
+		game.PlaceId,
+		GameConfig.matchmaking.hubPlaceId,
+		RunService:IsStudio(),
+		Workspace:FindFirstChild("Hub") ~= nil
+	)
+	local NetGuard = Loader.get("NetGuard") :: any
+	NetGuard.on("StreakCashOutIntent", handleCashOutIntent)
 
 	local RoundService = Loader.get("RoundService") :: any
 	RoundService.onEnter("Results", function()

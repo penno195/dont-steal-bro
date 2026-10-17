@@ -106,7 +106,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     (the offer: streak, wins paid for, coins, whether and why not), the
     `CashOut` reason code, and StoreLogic's restores recording
     `streakRestoredAt`.
-  - [ ] 4b. Server: profile fields `bestBanked` and `streakRestoredAt`
+  - [x] 4b. Server: profile fields `bestBanked` and `streakRestoredAt`
     (schema v18), `StreakCashOutIntent`/`StreakCashOutResult`,
     `ProgressionService.cashOut` through the one progression writer
     (Hub only, audit line), StoreState's `cashOut` offer (Hub only).

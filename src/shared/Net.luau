@@ -1104,6 +1104,32 @@ Net.Remotes = {
 	-- a save is held, exactly as it would before a buy-back prompt
 	-- ("Applied case: staff tools"). The result comes back as a
 	-- StorePurchaseResult under the key "use-streak-save".
+	-- Payoff-loop step 4: bank the streak in the Hub (design-decisions.md
+	-- Q7's cash-out case). Client -> server: `streak` is the streak the
+	-- player saw on the card when they confirmed, so a restore landing
+	-- in between can't bank a number they didn't agree to. The server
+	-- works out the coins itself (CashOutLogic) and refuses anywhere but
+	-- the Hub.
+	StreakCashOutIntent = {
+		name = "StreakCashOutIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ streak = Net.number({ min = 0, max = 100000, integer = true }) }),
+		rateLimit = { capacity = 2, refillPerSecond = 0.2 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted): how a bank went. { status = "Banked",
+	-- streak, coins } or { status = "Refused", reason } (CashOutLogic's
+	-- Refusal, or "NotHub"/"NotLoaded"/"NotSaved"). To its owner only: it
+	-- names their streak.
+	StreakCashOutResult = {
+		name = "StreakCashOutResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	UseStreakSaveIntent = {
 		name = "UseStreakSaveIntent",
 		direction = "ServerIntent",
@@ -1326,7 +1352,8 @@ Net.Remotes = {
 	-- it back on a match server until your round's Results (Q7) - and
 	-- the Streak Saves held (`streakSaves`), which the offer card spends,
 	-- and the streak shields held (`streakShields`, payoff-loop step 2),
-	-- shown on the Hub only.
+	-- shown on the Hub only. On the Hub only, `cashOut` (payoff-loop step
+	-- 4): what banking the streak pays now, and the best ever banked.
 	StoreState = {
 		name = "StoreState",
 		direction = "ServerBroadcast",
