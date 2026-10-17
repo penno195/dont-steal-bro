@@ -125,8 +125,14 @@ export type StreakState = {
 -- counts, however many seats were bots (design-decisions.md Q5's
 -- 2026-10-02 applied case, which retired threat-model.md §8's NPC-seat
 -- threshold).
-function ProgressionLogic.applyResult(before: StreakState, reason: ReasonCode): StreakState
+--
+-- `shielded` is spendsShield's answer for this result: a loss it covers
+-- leaves the streak exactly where it was instead of zeroing it.
+function ProgressionLogic.applyResult(before: StreakState, reason: ReasonCode, shielded: boolean?): StreakState
 	if not ProgressionLogic.isWin(reason) then
+		if shielded then
+			return { currentStreak = before.currentStreak, bestStreak = before.bestStreak }
+		end
 		return { currentStreak = 0, bestStreak = before.bestStreak }
 	end
 
@@ -137,16 +143,31 @@ function ProgressionLogic.applyResult(before: StreakState, reason: ReasonCode): 
 	}
 end
 
+-- Whether this result spends one of the player's streak shields
+-- (design-decisions.md Q7's finale guesses case). A shield is spent on
+-- ANY loss that would reset a streak of 1 or more: not qualifying, a
+-- Studio loss, a timeout or a disconnect. A win never spends one, and
+-- neither does a loss at streak 0 (nothing to save), so shields are
+-- kept until they can matter. Exactly one is spent per covered loss,
+-- however many are held. The shield only stops the reset: it never
+-- adds to the streak, so bestStreak still moves only on real wins.
+function ProgressionLogic.spendsShield(before: StreakState, reason: ReasonCode, shieldsHeld: number): boolean
+	return not ProgressionLogic.isWin(reason) and before.currentStreak >= 1 and shieldsHeld >= 1
+end
+
 -- The buy-back offer a result leaves open (design-decisions.md Q7,
 -- "buying back a streak"): any loss of a streak of 1 or more, priced by
 -- that streak. Nil otherwise, and the writer stores the nil too, so a
 -- win or a loss from 0 never leaves an older offer behind.
+--
+-- A loss a shield covered reset nothing, so it leaves no offer either.
 function ProgressionLogic.buyBackOffer(
 	roundId: string,
 	before: StreakState,
-	reason: ReasonCode
+	reason: ReasonCode,
+	shielded: boolean?
 ): { roundId: string, streak: number }?
-	if ProgressionLogic.isWin(reason) or before.currentStreak < 1 then
+	if ProgressionLogic.isWin(reason) or before.currentStreak < 1 or shielded then
 		return nil
 	end
 	return { roundId = roundId, streak = before.currentStreak }

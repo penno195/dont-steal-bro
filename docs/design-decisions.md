@@ -986,6 +986,8 @@ From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
   - A shield is spent **only on a loss with a streak of 1 or more**. At
     streak 0, or when the player cashes out (step 4), held shields are
     kept.
+  - Claude's reading (step 2a): one token means **one guess per round,
+    final once placed**. A guess can't be changed or withdrawn.
 
 ## 8. Are starting power-ups sold for Robux?
 

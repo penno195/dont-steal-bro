@@ -50,6 +50,22 @@ All amounts are PLACEHOLDER until a playtest tunes them.
   case): the credit is a **streak shield**, spent on the holder's next
   loss instead of a reset. It's the whole prize and never adds to the
   streak. No NPC-lobby limit.
+  - [x] 2a. Pure logic + specs. `src/server/GuessLogic.luau`: who walks
+    out (exactly one winner, tagged a lone stealer or lone sharer, so
+    all-share, all-steal and the solo default give nil), whether a guess
+    is valid (not a finalist, target is a finalist, NPC seats included,
+    one guess per round that can't be changed), and who earns a shield.
+    `ProgressionLogic.spendsShield` (any loss with streak >= 1 and a
+    shield held spends exactly one), and `applyResult`/`buyBackOffer`
+    take that answer: a covered loss keeps the streak and leaves no
+    buy-back offer.
+  - [ ] 2b. Server: profile field `streakShields` (schema bump), a guess
+    intent remote (validated by `GuessLogic.validate`, open only until
+    the reveal), shields granted after the Studio resolves, and spent in
+    `applyRoundResult`'s single write with an audit line.
+  - [ ] 2c. UI: the Guess Token picker for knocked-out players, the
+    result ("You called it: +1 shield"), and the held shield count on
+    the player's own Hub/results screens only (Q7 condition 1).
 - [ ] **3. Quick-chat rewording and restyle.** Quick-chat buttons already
   exist. Reword them for the negotiation (promises, threats, emotes)
   and restyle them to the HUD art pass.

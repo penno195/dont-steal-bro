@@ -207,3 +207,63 @@ TestRunner.describe("ProgressionLogic.formatRewardAudit", function()
 		TestRunner.expect(line):toBe("Reward: Racer round=job:1 outcome=SoleStealer rung=4 -> currency +140 (now 140)")
 	end)
 end)
+
+-- Streak shields (payoff-loop-roadmap.md step 2, design-decisions.md
+-- Q7's finale guesses case): spent on any loss of a streak of 1 or
+-- more, never on a win or at streak 0, and they never add to a streak.
+TestRunner.describe("ProgressionLogic.spendsShield", function()
+	local ON_THREE: ProgressionLogic.StreakState = { currentStreak = 3, bestStreak = 5 }
+
+	TestRunner.it("is spent on every kind of loss of a live streak", function()
+		for _, reason in ALL_REASONS do
+			local expected = not ProgressionLogic.isWin(reason)
+			TestRunner.expect(ProgressionLogic.spendsShield(ON_THREE, reason, 1)):toBe(expected)
+		end
+	end)
+
+	TestRunner.it("is kept at streak 0 and when none are held", function()
+		TestRunner.expect(ProgressionLogic.spendsShield(FRESH, "StudioLoss", 4)):toBe(false)
+		TestRunner.expect(ProgressionLogic.spendsShield(ON_THREE, "StudioLoss", 0)):toBe(false)
+	end)
+end)
+
+TestRunner.describe("ProgressionLogic.applyResult - shielded", function()
+	TestRunner.it("leaves the streak exactly where it was on a covered loss", function()
+		local before: ProgressionLogic.StreakState = { currentStreak = 3, bestStreak = 5 }
+		for _, reason in { "StudioLoss", "FailedToQualify", "ForfeitDisconnect" } :: { ProgressionLogic.ReasonCode } do
+			local after = ProgressionLogic.applyResult(before, reason, true)
+			TestRunner.expect(after.currentStreak):toBe(3)
+			TestRunner.expect(after.bestStreak):toBe(5)
+		end
+	end)
+
+	TestRunner.it("never adds to a win", function()
+		local before: ProgressionLogic.StreakState = { currentStreak = 3, bestStreak = 3 }
+		local after = ProgressionLogic.applyResult(before, "StudioWinSoleStealer", true)
+		TestRunner.expect(after.currentStreak):toBe(4)
+		TestRunner.expect(after.bestStreak):toBe(4)
+	end)
+
+	TestRunner.it("leaves no buy-back offer behind a covered loss", function()
+		local before: ProgressionLogic.StreakState = { currentStreak = 3, bestStreak = 5 }
+		TestRunner.expect(ProgressionLogic.buyBackOffer("job:1", before, "StudioLoss", true) == nil):toBe(true)
+		local offer = ProgressionLogic.buyBackOffer("job:1", before, "StudioLoss", false)
+		TestRunner.expect(offer ~= nil and offer.streak == 3):toBe(true)
+	end)
+
+	TestRunner.it("spends one shield per loss when several are stacked", function()
+		local state: ProgressionLogic.StreakState = { currentStreak = 2, bestStreak = 2 }
+		local shields = 2
+		for _ = 1, 3 do
+			local shielded = ProgressionLogic.spendsShield(state, "StudioLoss", shields)
+			if shielded then
+				shields -= 1
+			end
+			state = ProgressionLogic.applyResult(state, "StudioLoss", shielded)
+		end
+		-- Two losses covered, the third resets.
+		TestRunner.expect(shields):toBe(0)
+		TestRunner.expect(state.currentStreak):toBe(0)
+		TestRunner.expect(state.bestStreak):toBe(2)
+	end)
+end)
