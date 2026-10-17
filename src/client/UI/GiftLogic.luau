@@ -39,8 +39,8 @@ local KINDS: { [string]: boolean } = {
 local ICON: { [string]: string } = {
 	Currency = "coin-gold",
 	Cosmetic = "gem",
-	NavigationRound = "arrow",
-	UnlimitedNavigation = "arrow",
+	NavigationRound = "nav-route",
+	UnlimitedNavigation = "nav-route",
 	StreakSave = "shield",
 }
 

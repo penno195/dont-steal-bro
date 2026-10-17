@@ -66,6 +66,12 @@ local ICONS: { [string]: Icon } = {
 	-- new effect in an existing category needs no new art.
 	-- The silhouettes without a pack source are drawn by make-ui-icons.ps1.
 	arrow = { glyph = "▲", image = "rbxassetid://120767400257382" }, -- objective compass; rotated, so it must point up
+	-- The compass dial, drawn by assets/ui/make-nav-art.js: a face, a
+	-- grey rim RaceHUD tints by floor, and a gold needle (points up).
+	["dial-face"] = { glyph = "●", image = "rbxassetid://137548852801147", fullColor = true },
+	["dial-rim"] = { glyph = "○", image = "rbxassetid://110457539667769" },
+	["compass-needle"] = { glyph = "▲", image = "rbxassetid://71823988480421", fullColor = true },
+	["nav-route"] = { glyph = "📍", image = "rbxassetid://99680681787928", fullColor = true }, -- the Navigation tab
 	chevron = { glyph = "⌃", image = "rbxassetid://86275122876329" }, -- objective a floor up (turned 180 for down)
 	trash = { glyph = "🗑", image = "rbxassetid://73911474022830" }, -- the power-up discard bin
 	down = { glyph = "▼", image = "rbxassetid://107723111049144" }, -- below the qualification line

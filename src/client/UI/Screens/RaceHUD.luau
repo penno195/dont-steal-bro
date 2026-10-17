@@ -150,16 +150,25 @@ local NEXT_PAD = Enum.KeyCode.ButtonR1
 local RING = 52
 local PILL = 72
 local GAP = Theme.spacing.sm
-local TOP_WIDTH = 2 * PILL + RING + 2 * GAP
+-- The compass card is wider than its pair, for the dial; a spacer on the
+-- left balances the extra so the countdown stays centred.
+local COMPASS = 96
+local TOP_WIDTH = 2 * COMPASS + RING + 2 * GAP
 local TOP_MARGIN = 4 -- px from the top bar (or the screen top, when lifted into the bar)
--- The Navigation tab, docked to the compass's right edge: NAV wide, a
--- touch shorter than the card so it reads as a drawer pulled out of it.
+-- The Navigation tab, docked to the compass's right edge: NAV wide and
+-- the card's full height, so the switch clears the rim (playtest,
+-- 2026-10-17: a shorter drawer let it run through the border).
 -- A spacer balances it on the left.
-local NAV = Theme.touch.minTargetPoints
-local NAV_INSET = 6 -- px shorter than the card, top and bottom
+local NAV = Theme.touch.minTargetPoints + 14 -- room for the switch inside the rim
+local NAV_INSET = 0 -- px shorter than the card, top and bottom
 local NAV_SEAM = 2 -- px the tab runs under the card's rim, so the rims join
-local NAV_SOCKET = 14 -- the status light's housing
-local NAV_LIGHT = 8
+local NAV_ICON = 22 -- the route badge
+local NAV_SWITCH = 30 -- the on/off switch's track width
+local NAV_KNOB = 10
+-- The HUD panels' bevelled rim, a touch heavier than Base.stage's 2 so
+-- the bevel reads over a busy map (HUD art pass, 2026-10-17).
+local RIM = 3
+local OUTLINE = 2 -- Base.stage's outline width, outside the rim
 local CHIP = 36
 local TASK_WIDTH = 150
 local TASK_ROW = 18
@@ -258,7 +267,7 @@ local function card(name: string, order: number, size: UDim2, children: { any })
 		BackgroundColor3 = Base.STAGE_BACKGROUND,
 		BackgroundTransparency = 0.15,
 		Base.corner(Theme.radius.md),
-		Base.stage(),
+		Base.stage({ thickness = RIM, outline = Theme.spacing.xs }),
 		Base.padding(Theme.spacing.xs),
 	}
 	for _, child in children do
@@ -343,12 +352,13 @@ local function placementCard(standing: () -> HudLogic.Standing?): Frame
 	return placement
 end
 
--- The compass: the arrow and distance side by side, the floor row under
--- them. A station a floor up or down turns the card blue or orange and
--- the floor row to an arrow and "UP" or "DOWN"; on your floor that row
--- is a plain line. So it's told by shape and words as well as colour
--- (P6-8).
+-- The compass (UI art pass, 2026-10-17): a dial with a gold needle on
+-- the left, the distance beside it. A station a floor up or down tints
+-- the dial's rim and the card blue or orange and adds an arrow and "UP"
+-- or "DOWN" under the distance. So it's told by shape and words as well
+-- as colour (P6-8).
 local FLOOR_ROW = 14
+local DIAL = RING - 2 * Theme.spacing.xs
 local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean): Frame
 	local level = derive(function(): HudLogic.Level
 		local o = objective()
@@ -358,115 +368,112 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 		local l = level()
 		return if l == "above" then Theme.color.above elseif l == "below" then Theme.color.below else Theme.color.ink
 	end
-	local inner = PILL - 2 * Theme.spacing.xs
-	local top = RING - 2 * Theme.spacing.xs - FLOOR_ROW - Theme.spacing.xxs
-	-- The arrow turns inside a plain holder: a UIListLayout drops the
-	-- Rotation of its own children (AbsoluteRotation stays 0), which left
-	-- the compass pointing straight up whatever the bearing (playtest,
-	-- 2026-10-15). The holder is laid out; the arrow inside it is not.
-	local arrow = Icons.view("arrow", top, tint)
-	local arrowHolder = create("Frame")({
-		Name = "ArrowHolder",
-		LayoutOrder = 1,
-		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(top, top),
-		arrow,
-	}) :: Frame
-	local done = Icons.view("check", top, Theme.color.success)
-	done.LayoutOrder = 1
+	local rimTint = function(): Color3
+		local l = level()
+		return if l == "level" or allDone() then Theme.color.rim else tint()
+	end
+	local readout = COMPASS - 2 * Theme.spacing.xs - DIAL - Theme.spacing.xs
+	-- The needle turns inside the dial, a plain holder: a UIListLayout
+	-- drops the Rotation of its own children (AbsoluteRotation stays 0),
+	-- which left the compass pointing straight up whatever the bearing
+	-- (playtest, 2026-10-15). The dial is laid out; the needle is not.
+	local function centred(view: GuiObject, scale: number): GuiObject
+		view.AnchorPoint = Vector2.new(0.5, 0.5)
+		view.Position = UDim2.fromScale(0.5, 0.5)
+		view.Size = UDim2.fromScale(scale, scale)
+		return view
+	end
+	local needle = centred(Icons.view("compass-needle", DIAL, Color3.new(1, 1, 1)), 0.72)
+	local done = centred(Icons.view("check-badge", DIAL, Color3.new(1, 1, 1)), 0.66)
+	local rim = centred(Icons.view("dial-rim", DIAL, rimTint), 1)
+	rim.ZIndex = 2
+	needle.ZIndex = 3
+	done.ZIndex = 3
 	-- The floor row swaps icons rather than turning one, for the same
 	-- reason.
 	local floorUp = Icons.view("arrow", FLOOR_ROW - 2, tint)
 	floorUp.LayoutOrder = 1
 	local floorDown = Icons.view("down", FLOOR_ROW - 2, tint)
 	floorDown.LayoutOrder = 1
-	local floorLine = create("Frame")({
-		Name = "SameFloor",
-		LayoutOrder = 1,
-		Size = UDim2.fromOffset(inner - 4 * Theme.spacing.xs, 2),
-		BackgroundColor3 = Theme.color.ink,
-		BackgroundTransparency = 0.3,
-		BorderSizePixel = 0,
-		Base.corner(Theme.radius.pill),
-	}) :: Frame
 	effect(function()
 		local o = objective()
 		local l = level()
-		arrow.Rotation = if o then o.bearing else 0
-		arrowHolder.Visible = o ~= nil and not allDone()
+		needle.Rotation = if o then o.bearing else 0
+		needle.Visible = o ~= nil and not allDone()
 		done.Visible = allDone()
 		floorUp.Visible = l == "above" and not allDone()
 		floorDown.Visible = l == "below" and not allDone()
-		floorLine.Visible = l == "level" and o ~= nil and not allDone()
 	end)
-	local panel = card("Objective", 3, UDim2.fromOffset(PILL, RING), {
+	local panel = card("Objective", 3, UDim2.fromOffset(COMPASS, RING), {
 		create("UIListLayout")({
-			FillDirection = Enum.FillDirection.Vertical,
-			HorizontalAlignment = Enum.HorizontalAlignment.Center,
+			FillDirection = Enum.FillDirection.Horizontal,
+			HorizontalAlignment = Enum.HorizontalAlignment.Left,
 			VerticalAlignment = Enum.VerticalAlignment.Center,
-			Padding = UDim.new(0, Theme.spacing.xxs),
+			Padding = UDim.new(0, Theme.spacing.xs),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
 		create("Frame")({
-			Name = "Reading",
+			Name = "Dial",
 			LayoutOrder = 1,
 			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(inner, top),
+			Size = UDim2.fromOffset(DIAL, DIAL),
+			centred(Icons.view("dial-face", DIAL, Color3.new(1, 1, 1)), 1),
+			rim,
+			needle,
+			done,
+		}),
+		create("Frame")({
+			Name = "Readout",
+			LayoutOrder = 2,
+			BackgroundTransparency = 1,
+			Size = UDim2.fromOffset(readout, DIAL),
 			create("UIListLayout")({
-				FillDirection = Enum.FillDirection.Horizontal,
+				FillDirection = Enum.FillDirection.Vertical,
 				HorizontalAlignment = Enum.HorizontalAlignment.Center,
 				VerticalAlignment = Enum.VerticalAlignment.Center,
-				Padding = UDim.new(0, Theme.spacing.xxs),
 				SortOrder = Enum.SortOrder.LayoutOrder,
 			}),
-			arrowHolder,
-			done,
-			Base.text("label", {
+			Base.text("headline", {
 				Name = "Distance",
-				LayoutOrder = 2,
-				Size = UDim2.fromOffset(inner - top - Theme.spacing.xxs, top),
+				LayoutOrder = 1,
+				Size = UDim2.fromOffset(readout, DIAL - FLOOR_ROW - Theme.spacing.xxs),
 				TextWrapped = false,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextColor3 = function(): Color3
-					return if allDone() then Theme.color.ink else tint()
-				end,
 				Text = derive(function()
 					local o = objective()
 					if allDone() then
-						return "Done"
+						return "DONE"
 					end
 					return if o then tostring(math.floor(o.distance)) else "-"
 				end),
 			}),
-		}),
-		create("Frame")({
-			Name = "Floor",
-			LayoutOrder = 2,
-			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(inner, FLOOR_ROW),
-			create("UIListLayout")({
-				FillDirection = Enum.FillDirection.Horizontal,
-				HorizontalAlignment = Enum.HorizontalAlignment.Center,
-				VerticalAlignment = Enum.VerticalAlignment.Center,
-				Padding = UDim.new(0, Theme.spacing.xxs),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-			}),
-			floorUp,
-			floorDown,
-			floorLine,
-			Base.text("caption", {
-				Name = "FloorWord",
+			create("Frame")({
+				Name = "Floor",
 				LayoutOrder = 2,
-				Size = UDim2.fromOffset(34, FLOOR_ROW),
-				TextWrapped = false,
-				TextXAlignment = Enum.TextXAlignment.Left,
-				TextColor3 = tint,
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(readout, FLOOR_ROW),
 				Visible = function()
 					return level() ~= "level" and not allDone()
 				end,
-				Text = function()
-					return if level() == "below" then "DOWN" else "UP"
-				end,
+				create("UIListLayout")({
+					FillDirection = Enum.FillDirection.Horizontal,
+					HorizontalAlignment = Enum.HorizontalAlignment.Center,
+					VerticalAlignment = Enum.VerticalAlignment.Center,
+					Padding = UDim.new(0, Theme.spacing.xxs),
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+				floorUp,
+				floorDown,
+				Base.text("caption", {
+					Name = "FloorWord",
+					LayoutOrder = 2,
+					Size = UDim2.fromOffset(readout - FLOOR_ROW, FLOOR_ROW),
+					TextWrapped = false,
+					TextXAlignment = Enum.TextXAlignment.Left,
+					TextColor3 = tint,
+					Text = function()
+						return if level() == "below" then "DOWN" else "UP"
+					end,
+				}),
 			}),
 		}),
 	})
@@ -474,7 +481,7 @@ local function objectiveCard(objective: () -> Objective?, allDone: () -> boolean
 	effect(function()
 		local plain = level() == "level" or allDone()
 		stroke.Color = if plain then Theme.fill.panel.rim else tint()
-		stroke.Thickness = if plain then 2 else 3
+		stroke.Thickness = if plain then RIM else RIM + 1
 	end)
 	return panel
 end
@@ -737,8 +744,8 @@ local function powerUpSlot(
 			button.Rotation = 0
 		end)
 	end)
-	-- The button shakes inside a plain holder, as the compass arrow does
-	-- (ArrowHolder): the row's UIListLayout drops the Rotation of its own
+	-- The button shakes inside a plain holder, as the compass needle does
+	-- in its Dial: the row's UIListLayout drops the Rotation of its own
 	-- children, so a laid-out button never visibly turned.
 	return create("Frame")({
 		Name = "SlotHolder",
@@ -1182,9 +1189,10 @@ local RaceHUD = {}
 -- do). Returns unmount.
 -- The Navigation toggle (design-decisions.md Q8, "Navigation"): a tab
 -- docked to the compass's right edge, since it toggles the compass's
--- own path line. Its light is green while the path line is up; the tab
--- dims while the server hasn't answered. Whether a tap spends a round or
--- opens the buy sheet is the server's call, not this button's.
+-- own path line. Its switch is on (knob right, green) while the path
+-- line is up; the tab dims while the server hasn't answered. Whether a
+-- tap spends a round or opens the buy sheet is the server's call, not
+-- this button's.
 --
 -- The card is see-through, so the tab can't simply tuck under it. It
 -- sits in a clip instead, its rounded left end cut off: a square edge
@@ -1194,11 +1202,14 @@ local function navigationToggle(state: () -> string?, press: () -> ()): Frame
 		return state() == "On"
 	end
 	local hidden = Theme.radius.md.Offset + 2 -- the clipped end: corner and rim
+	-- The clip grows by the outline's width on its three open sides, so
+	-- the outline round the tab isn't cut off with its left end.
+	local out = OUTLINE
 	return create("Frame")({
 		Name = "Navigation",
 		ZIndex = 1,
-		Position = UDim2.fromOffset(PILL - NAV_SEAM, NAV_INSET),
-		Size = UDim2.fromOffset(NAV + NAV_SEAM, RING - 2 * NAV_INSET),
+		Position = UDim2.fromOffset(COMPASS - NAV_SEAM, NAV_INSET - out),
+		Size = UDim2.fromOffset(NAV + NAV_SEAM + out, RING - 2 * NAV_INSET + 2 * out),
 		BackgroundTransparency = 1,
 		ClipsDescendants = true,
 		Visible = function()
@@ -1206,8 +1217,8 @@ local function navigationToggle(state: () -> string?, press: () -> ()): Frame
 		end,
 		create("TextButton")({
 			Name = "Tab",
-			Position = UDim2.fromOffset(-hidden, 0),
-			Size = UDim2.new(1, hidden, 1, 0),
+			Position = UDim2.fromOffset(-hidden, out),
+			Size = UDim2.new(1, hidden - out, 1, -2 * out),
 			Text = "",
 			AutoButtonColor = false,
 			Selectable = false,
@@ -1216,7 +1227,7 @@ local function navigationToggle(state: () -> string?, press: () -> ()): Frame
 				return if state() == "Waiting" then 0.5 else 0.15
 			end,
 			Base.corner(Theme.radius.md),
-			Base.stage(),
+			Base.stage({ thickness = RIM, outline = 0 }),
 			create("Frame")({
 				Name = "Face",
 				Position = UDim2.fromOffset(hidden + NAV_SEAM, 0),
@@ -1229,42 +1240,45 @@ local function navigationToggle(state: () -> string?, press: () -> ()): Frame
 					Padding = UDim.new(0, Theme.spacing.xxs),
 					SortOrder = Enum.SortOrder.LayoutOrder,
 				}),
-				Base.text("label", {
-					Name = "Label",
-					LayoutOrder = 1,
-					Size = UDim2.new(1, 0, 0, 14),
-					Text = "NAV",
-					TextColor3 = function(): Color3
-						return if lit() then Theme.color.ink else Theme.color.inkMuted
-					end,
-				}),
-				-- A recessed socket with the light set in it, glowing when on.
+				-- The route badge, dimmed while the line is down.
+				(function()
+					local route = Icons.view("nav-route", NAV_ICON, Color3.new(1, 1, 1)) :: ImageLabel
+					route.LayoutOrder = 1
+					effect(function()
+						route.ImageTransparency = if lit() then 0 else 0.35
+					end)
+					return route
+				end)(),
+				-- An on/off switch: the knob slides right and the track turns
+				-- green while the path line is up.
 				create("Frame")({
-					Name = "Socket",
+					Name = "Switch",
 					LayoutOrder = 2,
-					Size = UDim2.fromOffset(NAV_SOCKET, NAV_SOCKET),
-					BackgroundColor3 = Color3.new(0, 0, 0),
-					BackgroundTransparency = 0.45,
-					Base.corner(UDim.new(0.5, 0)),
+					Size = UDim2.fromOffset(NAV_SWITCH, NAV_KNOB + 4),
+					BackgroundColor3 = function(): Color3
+						return if lit() then Theme.color.success else Color3.new(0, 0, 0)
+					end,
+					BackgroundTransparency = function()
+						return if lit() then 0 else 0.45
+					end,
+					Base.corner(Theme.radius.pill),
+					create("UIStroke")({
+						Color = Theme.color.outline,
+						Thickness = 1.5,
+					}),
 					create("Frame")({
-						Name = "Light",
-						AnchorPoint = Vector2.new(0.5, 0.5),
-						Position = UDim2.fromScale(0.5, 0.5),
-						Size = UDim2.fromOffset(NAV_LIGHT, NAV_LIGHT),
+						Name = "Knob",
+						AnchorPoint = function()
+							return Vector2.new(if lit() then 1 else 0, 0.5)
+						end,
+						Position = function()
+							return if lit() then UDim2.new(1, -2, 0.5, 0) else UDim2.new(0, 2, 0.5, 0)
+						end,
+						Size = UDim2.fromOffset(NAV_KNOB, NAV_KNOB),
 						BackgroundColor3 = function(): Color3
-							return if lit() then Theme.color.success else Theme.color.inkMuted
+							return if lit() then Theme.color.ink else Theme.color.inkMuted
 						end,
-						BackgroundTransparency = function()
-							return if lit() then 0 else 0.7
-						end,
-						Base.corner(UDim.new(0.5, 0)),
-						create("UIStroke")({
-							Color = Theme.color.success,
-							Thickness = 3,
-							Transparency = function()
-								return if lit() then 0.55 else 1
-							end,
-						}),
+						Base.corner(Theme.radius.pill),
 					}),
 				}),
 			}),
@@ -1290,7 +1304,7 @@ local function objectiveGroup(
 		LayoutOrder = 3,
 		BackgroundTransparency = 1,
 		Size = function()
-			return UDim2.fromOffset(if navShown() then PILL + NAV else PILL, RING)
+			return UDim2.fromOffset(if navShown() then COMPASS + NAV else COMPASS, RING)
 		end,
 		compass :: Instance,
 		navigationToggle(navState, press) :: Instance,
@@ -1360,7 +1374,7 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 		end)
 
 		-- Top stack: info bar, portrait task bar, effect chips.
-		local compactTasks = taskBar(done, total, TOP_WIDTH - 2 * PILL / 3, 2)
+		local compactTasks = taskBar(done, total, TOP_WIDTH - 2 * (COMPASS - PILL) - 2 * PILL / 3, 2)
 		effect(function()
 			compactTasks.Visible = portrait()
 		end)
@@ -1417,14 +1431,15 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 			row(1, RING, {
 				placementCard(standing),
 				ring,
-				-- Balances the tab, so the countdown stays centred. The tab
-				-- has no gap before it; the spacer's GAP comes off its width.
+				-- Balances the compass's extra width and the tab, so the
+				-- countdown stays centred. The spacer's GAP comes off its width.
 				create("Frame")({
-					Name = "NavigationSpacer",
+					Name = "CompassSpacer",
 					LayoutOrder = 0,
-					Size = UDim2.fromOffset(NAV - GAP, RING),
+					Size = function()
+						return UDim2.fromOffset(COMPASS - PILL - GAP + (if navShown() then NAV else 0), RING)
+					end,
 					BackgroundTransparency = 1,
-					Visible = navShown,
 				}),
 				objectiveGroup(store.objective, allDone, navState, navShown, store.pressNavigation or function() end),
 			}),
@@ -1455,7 +1470,7 @@ function RaceHUD.mount(controller: any, store: Store): () -> ()
 				return not portrait()
 			end,
 			Base.corner(Theme.radius.md),
-			Base.stage(),
+			Base.stage({ thickness = RIM, outline = Theme.spacing.sm }),
 			Base.padding(Theme.spacing.sm),
 			create("UIListLayout")({
 				FillDirection = Enum.FillDirection.Vertical,

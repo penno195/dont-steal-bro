@@ -69,6 +69,8 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 	local pending = source(false)
 	local effects = source({} :: { HudLogic.Effect })
 	local objective = source(nil :: RaceHUD.Objective?)
+	-- The Navigation tab, flipping on and off each scene.
+	local navigation = source("Off" :: string?)
 
 	local step = 0
 	local function show(scene: Scene)
@@ -99,6 +101,7 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 			)
 		end
 		slots(list)
+		navigation(if step % 2 == 0 then "On" else "Off")
 		objective(if scene.mine < #TITLES
 			then table.freeze({
 				bearing = (step * 45) % 360 - 180,
@@ -124,6 +127,10 @@ function RaceHUDPreview.mount(controller: any): () -> ()
 		end,
 		effects = effects,
 		objective = objective,
+		navigation = navigation,
+		pressNavigation = function()
+			navigation(if navigation() == "On" then "Off" else "On")
+		end,
 		select = function(index: number)
 			selected(index)
 		end,

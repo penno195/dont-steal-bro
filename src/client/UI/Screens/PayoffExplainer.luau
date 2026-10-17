@@ -50,7 +50,7 @@ local function pips(stealers: number, seats: number): Frame
 		local spec = if steal then Tokens.decision.steal else Tokens.decision.share
 		-- The face turns inside a plain holder: the row's UIListLayout
 		-- drops the Rotation of its own children, so a laid-out diamond
-		-- drew as a square (see RaceHUD's ArrowHolder).
+		-- drew as a square (see RaceHUD's compass Dial).
 		table.insert(
 			children,
 			create("Frame")({
