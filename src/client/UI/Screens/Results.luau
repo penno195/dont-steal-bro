@@ -43,6 +43,7 @@ local Env = C.Env
 
 local CARD_H = 64
 local STREAK_H = 112
+local LEVEL_H = 104
 local SLIDE = 24
 local RECAP_WAIT = 6
 
@@ -229,6 +230,50 @@ local function streakCard(store: Store, timedOut: () -> boolean, shown: () -> bo
 	})
 end
 
+-- The level beat (payoff-loop step 1c): the level, what the round paid,
+-- and the XP bar filling from where the round started to where it ended
+-- (from empty if it crossed a level; ResultsLogic.levelStartFraction).
+local function levelCard(level: ResultsLogic.RecapLevel, shown: () -> boolean, order: number): Frame
+	local levelledUp = ResultsLogic.levelsGained(level) > 0
+	local fill = source(ResultsLogic.levelStartFraction(level) * 100)
+	effect(function()
+		if shown() then
+			fill(ResultsLogic.levelFraction(level.after) * 100)
+		end
+	end)
+	local icon = C.Icons.view("star", 28, Theme.color[if levelledUp then "success" else "inkMuted"])
+	icon.Position = UDim2.fromOffset(0, Theme.spacing.sm)
+	local bar = C.ProgressBar({
+		value = fill,
+		max = 100,
+		color = if levelledUp then "success" else nil,
+		label = if level.after.xpForNext > 0 then string.format("To level %d", level.after.level + 1) else "Top level",
+		valueText = ResultsLogic.levelXpText(level.after),
+	})
+	bar.AnchorPoint = Vector2.new(0, 1)
+	bar.Position = UDim2.new(0, 0, 1, -Theme.spacing.md)
+	return reveal(shown, LEVEL_H, order, {
+		icon,
+		Base.text("title", {
+			Name = "Headline",
+			Position = UDim2.fromOffset(40, Theme.spacing.sm),
+			Size = UDim2.new(0.6, -40, 0, Theme.type.title.size + Theme.spacing.xs),
+			Text = ResultsLogic.levelHeadline(level),
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+		Base.text("label", {
+			Name = "Gains",
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, 0, 0, Theme.spacing.sm),
+			Size = UDim2.new(0.4, 0, 0, Theme.type.title.size + Theme.spacing.xs),
+			Text = ResultsLogic.levelGains(level),
+			TextColor3 = Theme.color.rim,
+			TextXAlignment = Enum.TextXAlignment.Right,
+		}),
+		bar,
+	})
+end
+
 local function body(store: Store, height: () -> number): { Instance }
 	local clock = store.now or os.clock
 	local openedAt = clock()
@@ -344,11 +389,21 @@ local function body(store: Store, height: () -> number): { Instance }
 			end, isShown("Drop"), 6, if C.Icons.has(key) then key else "gem", PayoutLogic.dropLabel(d))
 		end) :: any,
 		indexes(
+			derive(function(): { ResultsLogic.RecapLevel }
+				local recap = store.recap()
+				local level = if recap then recap.level else nil
+				return if level then { level } else {}
+			end),
+			function(level: () -> ResultsLogic.RecapLevel)
+				return levelCard(level(), isShown("Level"), 7)
+			end
+		) :: any,
+		indexes(
 			derive(function()
 				return if streakDue() then { true } else {}
 			end),
 			function()
-				return streakCard(store, timedOut, isShown("Streak"), 7)
+				return streakCard(store, timedOut, isShown("Streak"), 8)
 			end
 		) :: any,
 	}) :: ScrollingFrame

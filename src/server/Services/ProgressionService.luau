@@ -90,6 +90,8 @@ type LedgerEntry = {
 	-- What the round paid in XP, coins and levels (LevelLogic.award),
 	-- set by the write's level step. nil if the write never ran it.
 	levelAward: LevelLogic.RoundAward?,
+	-- The level cosmetics that award granted, for the recap's pop-up.
+	levelCosmetics: { string }?,
 }
 
 -- ===== season tracks (rewards-roadmap.md step 5) ===========================
@@ -430,6 +432,7 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	local levelCosmetics: { string } = {}
 	local levelStep = levelStepFor(performanceFor(player, result.reason), function(award, cosmetics)
 		entry.levelAward = award
+		entry.levelCosmetics = cosmetics
 		levelCosmetics = cosmetics
 	end)
 	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep, levelStep)
@@ -552,6 +555,27 @@ end
 
 -- rewards-roadmap.md step 3: DecisionService adds this to a finalist's
 -- DecisionPersonalResult, which only goes out after DecisionReveal.
+-- What the round paid toward the account level (payoff-loop step 1c),
+-- as the results screen shows it. Both ends of the bar are worked out
+-- here, against the curve the award used, so a LiveConfig retune can't
+-- leave the client drawing a different one. Not a streak, so it's no
+-- secret, but it goes out with the recap all the same.
+local function levelPayload(entry: LedgerEntry): { [string]: any }?
+	local award = entry.levelAward
+	if award == nil then
+		return nil
+	end
+	local curve = GameConfig.roundRewards.level
+	return {
+		xpGained = award.xpGained,
+		before = LevelLogic.progressFor(curve, award.xpAfter - award.xpGained),
+		after = LevelLogic.progressFor(curve, award.xpAfter),
+		placeCurrency = award.placeCurrency,
+		levelUpCurrency = award.levelUpCurrency,
+		cosmetics = entry.levelCosmetics or {},
+	}
+end
+
 local function rewardFor(roundId: string, userId: number): { [string]: any }?
 	local entry = ledger[ledgerKey(roundId, userId)]
 	return if entry ~= nil then rewardPayload(entry) else nil
@@ -618,6 +642,7 @@ local function sendRecaps()
 			bestStreakBefore = entry.before.bestStreak,
 			bestStreakAfter = entry.after.bestStreak,
 			reward = rewardPayload(entry),
+			level = levelPayload(entry),
 			practice = entry.practice,
 		})
 		-- The win's coins, drop and season progress, now that Results is

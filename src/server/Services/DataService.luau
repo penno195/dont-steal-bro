@@ -823,6 +823,13 @@ local function getCurrency(player: Player): number
 	return if d then d.currency else 0
 end
 
+-- Lifetime XP (payoff-loop step 1). The level is derived from it
+-- (LevelLogic.progressFor), never stored.
+local function getXp(player: Player): number
+	local d = data(player)
+	return if d then (d.xp :: number?) or 0 else 0
+end
+
 -- One season's progress, or nil when the player hasn't been seen during it.
 -- A copy: callers display it, and only the progression writer and
 -- StoreService's pass sync write it.
@@ -1014,6 +1021,7 @@ local DataService: Loader.Service = {
 	getEquipped = getEquipped,
 	setEquippedCosmetic = setEquippedCosmetic,
 	getCurrency = getCurrency,
+	getXp = getXp,
 	getNavigationRounds = getNavigationRounds,
 	spendNavigationRound = spendNavigationRound,
 	getStreakSaves = getStreakSaves,

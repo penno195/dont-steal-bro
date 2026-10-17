@@ -467,6 +467,66 @@ describe("ResultsLogic.beats", function()
 	end)
 end)
 
+describe("ResultsLogic level beat (payoff-loop 1c)", function()
+	local function level(before: { number }, after: { number }, overrides: { [string]: any }?): ResultsLogic.RecapLevel
+		local l: any = {
+			xpGained = 85,
+			before = { level = before[1], xpIntoLevel = before[2], xpForNext = before[3] },
+			after = { level = after[1], xpIntoLevel = after[2], xpForNext = after[3] },
+			placeCurrency = 10,
+			levelUpCurrency = 0,
+			cosmetics = {},
+		}
+		for k, v in overrides or {} do
+			l[k] = v
+		end
+		return l
+	end
+
+	it("adds a Level beat just before the streak", function()
+		local r = recap("FailedToQualify", 0, 0, { level = level({ 2, 10, 200 }, { 2, 95, 200 }) })
+		local out = {}
+		for _, b in ResultsLogic.beats(r) do
+			table.insert(out, b.id)
+		end
+		expect(table.concat(out, ",")):toBe("Placement,Tasks,PowerUps,Level,Streak")
+	end)
+
+	it("fills from the round's start, or from empty after a level-up", function()
+		local same = level({ 2, 50, 200 }, { 2, 150, 200 })
+		expect(ResultsLogic.levelStartFraction(same)):toBeCloseTo(0.25)
+		expect(ResultsLogic.levelFraction(same.after)):toBeCloseTo(0.75)
+		expect(ResultsLogic.levelHeadline(same)):toBe("Level 2")
+		local up = level({ 2, 150, 200 }, { 3, 35, 250 }, { levelUpCurrency = 25 })
+		expect(ResultsLogic.levelStartFraction(up)):toBe(0)
+		expect(ResultsLogic.levelsGained(up)):toBe(1)
+		expect(ResultsLogic.levelHeadline(up)):toBe("Level up! Level 3")
+		expect(ResultsLogic.levelGains(up)):toBe("+85 XP  +35 coins")
+	end)
+
+	it("shows a full bar and MAX at the top level", function()
+		local top = { level = 50, xpIntoLevel = 0, xpForNext = 0 }
+		expect(ResultsLogic.levelFraction(top)):toBe(1)
+		expect(ResultsLogic.levelXpText(top)):toBe("MAX")
+		expect(ResultsLogic.levelXpText({ level = 3, xpIntoLevel = 35, xpForNext = 250 })):toBe("35/250 XP")
+	end)
+
+	it("drops a malformed level rather than trusting its shape", function()
+		expect(ResultsLogic.parseLevel(nil)):toBe(nil)
+		expect(ResultsLogic.parseLevel({ xpGained = 5 })):toBe(nil)
+		local parsed = ResultsLogic.parseLevel({
+			xpGained = 5,
+			before = { level = 1, xpIntoLevel = 0, xpForNext = 100 },
+			after = { level = 1, xpIntoLevel = 5, xpForNext = 100 },
+			placeCurrency = 0,
+			levelUpCurrency = 0,
+			cosmetics = { "ClimberTrail", 7 },
+		})
+		expect(parsed and #parsed.cosmetics):toBe(1)
+		expect(ResultsLogic.levelGains(parsed :: any)):toBe("+5 XP")
+	end)
+end)
+
 describe("ResultsLogic.placementText", function()
 	it("gets the ordinals right", function()
 		expect(ResultsLogic.placementText(1, 6)):toBe("1st of 6")

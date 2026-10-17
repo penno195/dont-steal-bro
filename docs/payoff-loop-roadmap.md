@@ -18,7 +18,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
 
 ## Priority order (the owner's)
 
-- [ ] **1. XP, account level and coins for every placement.**
+- [x] **1. XP, account level and coins for every placement.**
   - [x] 1a. Config + pure logic + specs: `GameConfig.roundRewards`
     (XP per task done, per placement, per Studio visit, per power-up
     hit; the level curve; coins per level; coins per placement), and
@@ -35,8 +35,13 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     `CosmeticDef.unlockLevel` (level-only, validated). Three disabled
     PLACEHOLDERS await assets and the owner's say on levels/looks:
     ClimberTrail (5), VeteranNameplate (10), OldHandStreakFlair (25).
-  - [ ] 1c. UI: XP bar + level on the results screen and Hub menu,
-    level-up pop-up.
+  - [x] 1c. UI: XP bar + level on the results screen and Hub menu,
+    level-up pop-up. The server sends both ends of the bar (RoundRecap's
+    `level`, StoreState's `level`) so a LiveConfig curve retune can't
+    disagree with the client. Results gets a Level beat before the
+    streak; the Hub gets a LevelBadge left of the coin pill; a level-up
+    opens the claim pop-up (level-up coins + level cosmetics) when the
+    player taps Continue on the results.
 - [ ] **2. Finale guesses for knocked-out players.** Each non-finalist
   gets one **Guess Token** per round and picks who walks out. A correct
   guess earns a **streak credit**, but only when the result is a single

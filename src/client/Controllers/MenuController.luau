@@ -19,6 +19,11 @@
 -- players look for a currency. The "+" says it's a button: it opens the
 -- store on the Coins tab. Hidden while a menu is open (the store shows
 -- its own balance) and in a match place, where the HUD owns the corners.
+-- The account level's badge (payoff-loop step 1c) sits to its left and
+-- shows and hides with it.
+--
+-- LEVEL-UP: a round that crossed a level shows the claim pop-up with
+-- what the level paid, once the player taps Continue on the results.
 --
 -- RESULTS opens itself on entering Results - but only once the Decision
 -- Studio screen is gone (DecisionStudioController.isActive), because
@@ -447,6 +452,53 @@ local function isHubServer(): boolean
 	return game.PlaceId == hubPlaceId
 end
 
+-- The level-up pop-up (payoff-loop step 1c), shown once per recap when
+-- the player leaves the results with Continue. A results screen the
+-- next round closes for them skips it; its level card already said so.
+local levelUpShownFor: string? = nil
+
+local function showLevelUp()
+	local r = recap()
+	local level = if r then r.level else nil
+	if r == nil or level == nil or ResultsLogic.levelsGained(level) == 0 or levelUpShownFor == r.roundId then
+		return
+	end
+	if IN_PLAY[roundState() or ""] then
+		return
+	end
+	levelUpShownFor = r.roundId
+	local shown: { ClaimPopup.Reward } = {}
+	if level.levelUpCurrency > 0 then
+		local grant = { kind = "Currency", amount = level.levelUpCurrency }
+		table.insert(shown, {
+			premium = true,
+			text = grantText(grant :: any),
+			icon = SeasonTrackLogic.iconFor(grant :: any),
+			image = nil,
+		})
+	end
+	for _, id in level.cosmetics do
+		local grant = { kind = "Cosmetic", cosmeticId = id }
+		table.insert(shown, {
+			premium = true,
+			text = grantText(grant :: any),
+			icon = SeasonTrackLogic.iconFor(grant :: any),
+			image = grantImage(grant :: any),
+		})
+	end
+	if #shown == 0 then
+		return
+	end
+	ClaimPopup.open(
+		shown,
+		string.format("LEVEL %d!", level.after.level),
+		if ResultsLogic.levelsGained(level) > 1
+			then string.format("Up %d levels this round.", ResultsLogic.levelsGained(level))
+			else "You levelled up."
+	)
+	Loader.get("AudioController").play("SeasonClaim")
+end
+
 local function closeMenu()
 	if unmountMenu ~= nil then
 		(unmountMenu :: () -> ())()
@@ -571,7 +623,10 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 		unmountMenu = ResultsScreen.mount(UIScaleController, {
 			recap = recap,
 			tally = tally,
-			close = closeMenu,
+			close = function()
+				closeMenu()
+				showLevelUp()
+			end,
 			nameOf = DropNames,
 		})
 	elseif menu == "Staff" then
@@ -671,16 +726,51 @@ local function mountLauncher()
 				open("Store", "Currency")
 			end,
 			order = 0,
-			anchorPoint = Vector2.new(1, 0),
-			position = UDim2.new(1, -Theme.spacing.md, 0, Theme.spacing.md),
+			layoutOrder = 2,
 		})
-		UIScaleController.attachScale(coins)
+		local level = vide.derive(function()
+			local s = storeState()
+			return if s then s.level else nil
+		end)
+		local badge = C.LevelBadge({
+			level = function()
+				local l = level()
+				return if l then l.level else 1
+			end,
+			fraction = function()
+				local l = level()
+				return if l then ResultsLogic.levelFraction(l) else 0
+			end,
+		})
+		badge.LayoutOrder = 1
+		vide.effect(function()
+			badge.Visible = level() ~= nil
+		end)
+		-- One scaled row, anchored top-right, so the badge stays beside
+		-- the pill at any UI scale (a UIScale doesn't scale Position).
+		local row = create("Frame")({
+			Name = "Balances",
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -Theme.spacing.md, 0, Theme.spacing.md),
+			Size = UDim2.fromOffset(2 * coins.Size.X.Offset + Theme.spacing.sm, coins.Size.Y.Offset),
+			BackgroundTransparency = 1,
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Right,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			badge,
+			coins,
+		}) :: Frame
+		UIScaleController.attachScale(row)
 		create("Frame")({
 			Name = "CoinBalance",
 			Size = UDim2.fromScale(1, 1),
 			BackgroundTransparency = 1,
 			Visible = coinsVisible,
-			coins,
+			row,
 			Parent = gui,
 		})
 	end)
@@ -1114,6 +1204,7 @@ function MenuController:init()
 	-- Results: the recap, and the tally from what this client already saw.
 	Net.onClientEvent("RoundRecap", function(payload: any)
 		if type(payload) == "table" and type(payload.reason) == "string" then
+			payload.level = ResultsLogic.parseLevel(payload.level)
 			recap(payload)
 		end
 	end)

@@ -24,6 +24,24 @@ export type RecapReward = {
 	dropAmount: number?,
 }
 
+-- One end of the XP bar: LevelLogic.Progress, worked out by the server.
+export type LevelProgress = {
+	level: number,
+	xpIntoLevel: number,
+	xpForNext: number, -- 0 at the max level
+}
+
+-- What the round paid toward the account level (payoff-loop step 1c;
+-- ProgressionService's levelPayload). Already granted on arrival.
+export type RecapLevel = {
+	xpGained: number,
+	before: LevelProgress,
+	after: LevelProgress,
+	placeCurrency: number,
+	levelUpCurrency: number,
+	cosmetics: { string }, -- level cosmetics unlocked this round
+}
+
 export type Recap = {
 	roundId: string,
 	reason: string, -- ProgressionLogic.ReasonCode
@@ -35,6 +53,9 @@ export type Recap = {
 	-- A practice match on a private server (design-decisions.md Q7):
 	-- nothing was at stake, so the streak never moved.
 	practice: boolean?,
+	-- XP, level and place coins. Every round has one (Q1, "a payoff
+	-- for every round") except a practice match or a failed write.
+	level: RecapLevel?,
 }
 
 export type RaceTally = {
@@ -131,7 +152,7 @@ end
 
 -- ===== sequencing ===========================================================
 
-export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Drop" | "Streak"
+export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Drop" | "Level" | "Streak"
 
 export type Beat = { id: BeatId, at: number }
 
@@ -145,7 +166,8 @@ ResultsLogic.STREAK_PAUSE = 0.9
 -- screen opens. The streak is always last - P6-6's one sequencing rule.
 -- Finale appears only for someone who reached the Studio, Rewards only
 -- for a win that paid something, Drop only when that win also dropped
--- an item (its own card, for its icon), Streak only when there is a
+-- an item (its own card, for its icon), Level when the round paid XP
+-- (payoff-loop step 1c), Streak only when there is a
 -- recap at all (a spectator has no streak change this round).
 --
 -- Reduced motion keeps the SAME order and timing. Reduced motion is
@@ -164,6 +186,9 @@ function ResultsLogic.beats(recap: Recap?): { Beat }
 			if reward.drop ~= nil then
 				table.insert(ids, "Drop")
 			end
+		end
+		if recap.level ~= nil then
+			table.insert(ids, "Level")
 		end
 		table.insert(ids, "Streak")
 	end
@@ -196,6 +221,92 @@ function ResultsLogic.revealedCount(beats: { Beat }, elapsed: number, skipped: b
 		end
 	end
 	return n
+end
+
+-- ===== the level beat (payoff-loop step 1c) ================================
+
+-- How full the XP bar is, 0..1. The max level shows a full bar.
+function ResultsLogic.levelFraction(progress: LevelProgress): number
+	if progress.xpForNext <= 0 then
+		return 1
+	end
+	return math.clamp(progress.xpIntoLevel / progress.xpForNext, 0, 1)
+end
+
+-- The bar's right-hand label: "120/400 XP", or "MAX" at the cap.
+function ResultsLogic.levelXpText(progress: LevelProgress): string
+	if progress.xpForNext <= 0 then
+		return "MAX"
+	end
+	return string.format("%d/%d XP", progress.xpIntoLevel, progress.xpForNext)
+end
+
+function ResultsLogic.levelsGained(level: RecapLevel): number
+	return math.max(0, level.after.level - level.before.level)
+end
+
+function ResultsLogic.levelHeadline(level: RecapLevel): string
+	if ResultsLogic.levelsGained(level) > 0 then
+		return string.format("Level up! Level %d", level.after.level)
+	end
+	return string.format("Level %d", level.after.level)
+end
+
+-- "+85 XP  +35 coins". Place and level-up coins are one grant, so
+-- they're one number here.
+function ResultsLogic.levelGains(level: RecapLevel): string
+	local coins = level.placeCurrency + level.levelUpCurrency
+	if coins > 0 then
+		return string.format("+%d XP  +%d coins", level.xpGained, coins)
+	end
+	return string.format("+%d XP", level.xpGained)
+end
+
+-- Where the bar starts filling from: this round's start in the same
+-- level, or empty if the round crossed into a new one.
+function ResultsLogic.levelStartFraction(level: RecapLevel): number
+	if ResultsLogic.levelsGained(level) > 0 then
+		return 0
+	end
+	return ResultsLogic.levelFraction(level.before)
+end
+
+-- A recap's level, checked for shape: the remote is trusted, but a
+-- malformed one should drop the beat, not error the screen.
+local function isProgress(value: any): boolean
+	return type(value) == "table"
+		and type(value.level) == "number"
+		and type(value.xpIntoLevel) == "number"
+		and type(value.xpForNext) == "number"
+end
+
+function ResultsLogic.parseLevel(value: any): RecapLevel?
+	if
+		type(value) ~= "table"
+		or type(value.xpGained) ~= "number"
+		or not isProgress(value.before)
+		or not isProgress(value.after)
+		or type(value.placeCurrency) ~= "number"
+		or type(value.levelUpCurrency) ~= "number"
+	then
+		return nil
+	end
+	local cosmetics: { string } = {}
+	if type(value.cosmetics) == "table" then
+		for _, id in value.cosmetics do
+			if type(id) == "string" then
+				table.insert(cosmetics, id)
+			end
+		end
+	end
+	return {
+		xpGained = value.xpGained,
+		before = value.before,
+		after = value.after,
+		placeCurrency = value.placeCurrency,
+		levelUpCurrency = value.levelUpCurrency,
+		cosmetics = cosmetics,
+	}
 end
 
 -- "3rd of 6", with the ordinal done properly (11th/12th/13th).

@@ -72,6 +72,9 @@ export type StoreState = {
 	-- season is running. SeasonTrackLogic.SeasonState's shape; loose here
 	-- because this module has no requires.
 	season: { [string]: any }?,
+	-- The account level (payoff-loop step 1c): LevelLogic.Progress,
+	-- worked out by the server. The Hub's level badge.
+	level: { level: number, xpIntoLevel: number, xpForNext: number }?,
 }
 
 export type Category = "Season" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"

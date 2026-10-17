@@ -78,6 +78,7 @@ local PowerUps = require(ReplicatedStorage.Shared.Config.PowerUps)
 local Validate = require(ReplicatedStorage.Shared.Config.Validate)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 local StoreOffers = require(ReplicatedStorage.Shared.StoreOffers)
+local LevelLogic = require(ReplicatedStorage.Shared.LevelLogic)
 local CosmeticLogic = require(ReplicatedStorage.Shared.CosmeticLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local Signal = require(ReplicatedStorage.Packages.Signal)
@@ -271,6 +272,9 @@ local function pushState(player: Player)
 		streakSaves = DataService.getStreakSaves(player),
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
+		-- The Hub's level badge (payoff-loop step 1c). Worked out here
+		-- rather than on the client, which can't see LiveConfig's curve.
+		level = LevelLogic.progressFor(GameConfig.roundRewards.level, DataService.getXp(player)),
 	})
 end
 

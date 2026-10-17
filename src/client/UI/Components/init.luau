@@ -16,6 +16,7 @@ return table.freeze({
 	TaskCard = require(script.TaskCard),
 	PlayerRow = require(script.PlayerRow),
 	CurrencyPill = require(script.CurrencyPill),
+	LevelBadge = require(script.LevelBadge),
 	TabBar = require(script.TabBar),
 	Icons = require(script.Icons),
 	Env = require(script.Env),
