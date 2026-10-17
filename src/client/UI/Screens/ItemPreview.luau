@@ -32,6 +32,7 @@ function ItemPreview.open(item: Item): () -> ()
 	close = C.Modal.open({
 		title = item.title,
 		body = item.body,
+		lead = true, -- the bigger body face: what it is and when, easy to read
 		bodyLines = 1,
 		dismissible = true,
 		onDismiss = function()

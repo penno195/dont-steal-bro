@@ -203,20 +203,20 @@ local function card(
 						TextXAlignment = Enum.TextXAlignment.Left,
 						TextYAlignment = Enum.TextYAlignment.Top,
 					}),
-					Base.text("caption", {
+					Base.text("body", {
 						Name = "Rarity",
 						AnchorPoint = Vector2.new(0, 1),
 						Position = UDim2.new(0, 0, 1, -(Theme.type.body.size + Theme.spacing.xs)),
-						Size = UDim2.new(1, 0, 0, Theme.type.caption.size + Theme.spacing.xxs),
+						Size = UDim2.new(1, 0, 0, Theme.type.body.size + Theme.spacing.xxs),
 						Text = rarity or "",
 						TextColor3 = Theme.color[RARITY_COLOR[rarity or ""] or "inkMuted"],
 						TextXAlignment = Enum.TextXAlignment.Left,
 					}),
-					Base.text("caption", {
+					Base.text("body", {
 						Name = "Sale",
 						AnchorPoint = Vector2.new(1, 1),
 						Position = UDim2.new(1, 0, 1, -(Theme.type.body.size + Theme.spacing.xs)),
-						Size = UDim2.new(0.5, 0, 0, Theme.type.caption.size + Theme.spacing.xxs),
+						Size = UDim2.new(0.5, 0, 0, Theme.type.body.size + Theme.spacing.xxs),
 						Text = "SALE",
 						TextColor3 = Theme.color.warning,
 						TextXAlignment = Enum.TextXAlignment.Right,
@@ -445,6 +445,14 @@ local function panel(
 	local left = derive(function()
 		return (if tryOn() then TRY_W else PREVIEW) + Theme.spacing.md
 	end)
+	-- The Equip row's top, just above the Buy button (inside the
+	-- padding): in the short panel that's right under the picture, in the
+	-- tall one it leaves the description room to be big (owner,
+	-- 2026-10-17: the description was hard to read).
+	local equipTop = derive(function()
+		return panelH() - 2 * Theme.spacing.md - Theme.touch.primaryHeight - Theme.spacing.sm - Theme.touch.iconButton
+	end)
+	local DESCRIPTION_TOP = Theme.type.title.size + Theme.spacing.sm
 	local rarity = derive(function(): string?
 		local i = item()
 		return if i then StoreScreenLogic.rarityOf(i, store.rarityOf) else nil
@@ -545,13 +553,13 @@ local function panel(
 				end,
 				TextXAlignment = Enum.TextXAlignment.Left,
 			}),
-			Base.text("body", {
+			Base.text("lead", {
 				Name = "Contents",
 				Position = function()
-					return UDim2.fromOffset(left(), Theme.type.title.size + Theme.spacing.sm)
+					return UDim2.fromOffset(left(), DESCRIPTION_TOP)
 				end,
 				Size = function()
-					return UDim2.new(1, -left(), 0, PREVIEW - Theme.type.title.size - Theme.spacing.sm)
+					return UDim2.new(1, -left(), 0, math.max(0, equipTop() - Theme.spacing.sm - DESCRIPTION_TOP))
 				end,
 				-- On sale, it opens with the struck-through "was" price.
 				RichText = true,
@@ -569,7 +577,7 @@ local function panel(
 			create("Frame")({
 				Name = "Equip",
 				Position = function()
-					return UDim2.fromOffset(if tryOn() then left() else 0, PREVIEW + Theme.spacing.sm)
+					return UDim2.fromOffset(if tryOn() then left() else 0, equipTop())
 				end,
 				Size = function()
 					return UDim2.new(1, if tryOn() then -left() else 0, 0, Theme.touch.iconButton)
