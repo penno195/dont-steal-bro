@@ -183,6 +183,22 @@ function NPCBrainLogic.staticHistory(
 	return { steals = steals, shares = finales - steals }
 end
 
+-- How many of a bot's made-up shares were betrayed, for the "robbed N×"
+-- part of the Studio's reputation line (payoff-loop step 7). Each share
+-- is betrayed with chance `perShare` (GameConfig.npc.betrayedPerShare),
+-- so the count stays inside [0, shares] and a bot that never shared was
+-- never robbed, the same as a real player. Rolled once per bot, after its
+-- history, from the same stream, so adding it changed no bot's history.
+function NPCBrainLogic.staticBetrayed(shares: number, perShare: number, nextRandom: () -> number): number
+	local betrayed = 0
+	for _ = 1, math.max(0, shares) do
+		if nextRandom() < perShare then
+			betrayed += 1
+		end
+	end
+	return betrayed
+end
+
 -- ===== Decision Studio: timing ==============================================
 
 -- Where inside the Choose window this bot commits, in seconds from the

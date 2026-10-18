@@ -553,6 +553,31 @@ streak and pays the full reward at the new rung, like any other.
 **Reversal cost:** Cheap — additive UI and a counter field; doesn't touch
 resolution logic.
 
+### Applied case: the betrayal card and trust stat (2026-10-18, user decision)
+
+Payoff-loop step 7. **Betrayed** means a sharer who lost to a single
+stealer: the sole-steal result (one Steal, the rest Share, including a
+two-seat Studio's one-steal-one-share). Two stealers can't rob a sharer,
+since the lone sharer wins there (`docs/payoff-table.md`), so a card
+always names exactly one stealer. **Owner's answers:**
+
+- **The card:** each betrayed sharer gets a "Robbed by X" card after
+  the reveal, sent to them alone. Stealers get no card.
+- **"Times betrayed" is shown in the Studio and in the player's own
+  Hub.** It joins the Studio reputation line beside the steal/share
+  record, to the people in the Studio (this case's Studio-only scope,
+  unchanged). NPCs get a made-up count rolled from their fixed history,
+  so their line never stands out.
+- **The player's own record** (shares, steals, share %, times betrayed)
+  shows on a "Your record" panel in the Hub. Only its owner sees it, so
+  it isn't the public profile stat this case ruled out.
+- **Practice shows the card but doesn't count** towards times betrayed,
+  matching how practice keeps no steal/share stats.
+
+Claude's calls: the stat counts only finalists still in the Studio when
+it resolves, the same path that counts steals/shares; a leaver's
+defaulted Share (Q4) isn't counted as betrayed and gets no card.
+
 ## 6. What does "progress to the next round" mean mechanically?
 
 **Decision:** A fresh match via **normal requeue** — no priority ticket,

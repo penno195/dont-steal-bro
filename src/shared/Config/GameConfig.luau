@@ -271,6 +271,14 @@ local GameConfig: Validate.GameConfig = {
 		-- player rather than a veteran with a telling record.
 		historyFinales = { min = 1, max = 8 },
 
+		-- The chance each of a bot's made-up shares counts as betrayed, for
+		-- the "robbed N×" part of its reputation line (payoff-loop step 7,
+		-- NPCBrainLogic.staticBetrayed). In a three-seat Studio a share is
+		-- robbed when exactly one of the other two steals, 2p(1-p), which is
+		-- about 0.4-0.5 for steal rates of 0.3-0.5. PLACEHOLDER: retune to
+		-- real players' betrayed/shares once telemetry has it.
+		betrayedPerShare = 0.4,
+
 		-- What a bot wears, so it passes for a real player. Each bot draws
 		-- one of each from these lists (NPCLogic.pickAppearance). IDs are
 		-- live catalog assets, checked in Studio on 2026-09-29 (hair,

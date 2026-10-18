@@ -249,6 +249,36 @@ TestRunner.describe("NPCBrainLogic.staticHistory", function()
 	end)
 end)
 
+TestRunner.describe("NPCBrainLogic.staticBetrayed", function()
+	TestRunner.it("stays inside [0, shares]", function()
+		local rng = NPCLogic.newRng(5)
+		for shares = 0, 8 do
+			for _ = 1, 50 do
+				local betrayed = NPCBrainLogic.staticBetrayed(shares, 0.4, rng)
+				assert(
+					betrayed >= 0 and betrayed <= shares,
+					string.format("%d betrayed of %d shares", betrayed, shares)
+				)
+			end
+		end
+	end)
+
+	TestRunner.it("is 0 for a bot that never shared, and at the extremes of the chance", function()
+		TestRunner.expect(NPCBrainLogic.staticBetrayed(0, 1, NPCLogic.newRng(1))):toBe(0)
+		TestRunner.expect(NPCBrainLogic.staticBetrayed(6, 0, NPCLogic.newRng(1))):toBe(0)
+		TestRunner.expect(NPCBrainLogic.staticBetrayed(6, 1, NPCLogic.newRng(1))):toBe(6)
+	end)
+
+	TestRunner.it("pools to the configured chance per share", function()
+		local rng = NPCLogic.newRng(99)
+		local betrayed = 0
+		for _ = 1, 1000 do
+			betrayed += NPCBrainLogic.staticBetrayed(5, 0.4, rng)
+		end
+		TestRunner.expect(betrayed / 5000):toBeCloseTo(0.4, 0.03)
+	end)
+end)
+
 TestRunner.describe("NPCBrainLogic.lockInOffsetSeconds", function()
 	TestRunner.it("never lands at or after the deadline, at any roll", function()
 		-- The guarantee that matters: a lock-in racing the phase timer

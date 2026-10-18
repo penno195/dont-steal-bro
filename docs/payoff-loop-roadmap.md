@@ -167,6 +167,23 @@ All amounts are PLACEHOLDER until a playtest tunes them.
 - [ ] **7. Betrayal card + trust stat.** After a reveal, a betrayed
   sharer gets a "Robbed by X" card. Lifetime "times betrayed" and a
   share/steal trust record, built on the existing Studio history (Q5).
+  Owner's answers: Q5's "betrayal card and trust stat" applied case.
+  - [x] 7a. Config + pure logic + specs: `src/server/BetrayalLogic.luau`
+    (who was robbed by whom, from the resolved winners and the
+    choices; "betrayed" = a sharer who lost to a lone stealer), the NPC
+    made-up count (`GameConfig.npc.betrayedPerShare`, rolled per share
+    of the bot's fixed history), validated and spec'd. Built as
+    `BetrayalLogic.robberies` / `robbedBy` and
+    `NPCBrainLogic.staticBetrayed` (roll it after `staticHistory` from
+    the same stream, so no bot's history changes); PLACEHOLDER 0.4.
+  - [ ] 7b. Server: profile stat `betrayed` (schema bump), recorded
+    with steals/shares (never in practice); a targeted "Robbed by"
+    payload to each betrayed sharer still present (practice included);
+    `betrayed` added to `DecisionParticipants`' reputation entries (the
+    NPC count from 7a); the player's own record in a targeted Hub
+    payload.
+  - [ ] 7c. UI: the "Robbed by X" card after the reveal, "robbed N×" in
+    the Studio reputation line, and the Hub's "Your record" panel.
 - [ ] **8. Daily challenges.** Three a day (e.g. "Freeze 5 players",
   "Reach the Studio twice", "Share and survive"), most doable without
   winning. One config file per challenge.

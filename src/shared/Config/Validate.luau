@@ -1197,6 +1197,8 @@ export type NPCConfig = {
 	},
 	-- How many past finales a bot's rolled reputation covers (inclusive).
 	historyFinales: { min: number, max: number },
+	-- Chance each made-up share counts as betrayed (payoff-loop step 7).
+	betrayedPerShare: number,
 	appearance: NPCAppearance,
 }
 
@@ -2446,6 +2448,11 @@ local function checkNPCConfig(npc: NPCConfig, issues: { Issue })
 			"npc.historyFinales",
 			"must be whole numbers with 0 <= min <= max"
 		)
+	end
+
+	local perShare = npc.betrayedPerShare
+	if type(perShare) ~= "number" or perShare < 0 or perShare > 1 then
+		issue(issues, "GameConfig", "GameConfig.luau", "npc.betrayedPerShare", "must be a number in [0, 1]")
 	end
 
 	local appearance = npc.appearance

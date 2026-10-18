@@ -107,6 +107,7 @@ local function validGameConfig(): Validate.GameConfig
 				walkSpeedShave = 0.04,
 			},
 			historyFinales = { min = 1, max = 8 },
+			betrayedPerShare = 0.4,
 			appearance = {
 				hair = { 63690008 },
 				faces = { 144075659 },
@@ -1087,6 +1088,12 @@ TestRunner.describe("Validate.checkGameConfig (P3-5 npc block)", function()
 			end,
 			function(config)
 				config.npc.historyFinales = { min = -1, max = 2 }
+			end,
+			function(config)
+				config.npc.betrayedPerShare = 1.5
+			end,
+			function(config)
+				config.npc.betrayedPerShare = -0.1
 			end,
 			function(config)
 				config.npc.appearance.hair = {}
