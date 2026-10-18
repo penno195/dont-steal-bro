@@ -32,8 +32,8 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     enabled level cosmetic now due. Inputs are server-side only:
     TaskService's tasks and qualification rank, PowerUpService's landed
     hits on a rival (`getHitsFor`). Level cosmetics are a
-    `CosmeticDef.unlockLevel` (level-only, validated). Three disabled
-    PLACEHOLDERS await assets and the owner's say on levels/looks:
+    `CosmeticDef.unlockLevel` (level-only, validated). Three of them,
+    enabled 2026-10-18 with Meshy art, levels owner-confirmed:
     ClimberTrail (5), VeteranNameplate (10), OldHandStreakFlair (25).
   - [x] 1c. UI: XP bar + level on the results screen and Hub menu,
     level-up pop-up. The server sends both ends of the bar (RoundRecap's

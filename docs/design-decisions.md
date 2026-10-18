@@ -389,6 +389,9 @@ From the 2026-10-17 game review: only wins paid anything, so roughly
   power-up hits), win or lose. Level is lifetime and never resets.
   **Each level-up pays coins**, and **milestone levels unlock level-only
   cosmetics**. The level isn't a streak tell, so Q7 doesn't hide it.
+  *Applied (owner, 2026-10-18):* the three level cosmetics unlock at
+  level 5 (Climber's Trail), 10 (Veteran Frame) and 25 (Old Hand
+  flair).
 - **Every placement pays some coins**, not just a win. Win payouts
   stay as they are, and a win stays worth far more than a placement.
 - **A free season pass for playtime.** 6 active hours in one week
