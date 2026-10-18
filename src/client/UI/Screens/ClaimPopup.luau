@@ -4,7 +4,12 @@
 -- Claim All just paid, as a row of reward cards in the pass rows' gold
 -- (pass) and blue (free), popping in over the store. The caller plays the
 -- SeasonClaim cue alongside it - UI modules don't reach controllers.
--- The community reward and staff gifts (GiftLogic) reuse it.
+-- The community reward and staff gifts (GiftLogic) reuse it, and the
+-- level-up pop-up (LevelUpPopup) puts its XP bar above the cards.
+--
+-- `open` queues (PopupQueue, owner 2026-10-18): a second claim waits for
+-- the first to be closed instead of replacing it. `show` opens at once,
+-- for a caller already running as a queue entry.
 --
 -- Display only: what was paid is the server's (SeasonLogic.claim), read
 -- back from StoreState by SeasonTrackLogic.claimedBetween.
@@ -16,6 +21,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
+local PopupQueue = require(script.Parent.Parent.PopupQueue)
 local Theme = require(script.Parent.Parent.Theme)
 
 local create = vide.create
@@ -108,11 +114,24 @@ end
 
 local ClaimPopup = {}
 
--- Opens the pop-up over whatever is on screen; returns `close`. A second
--- claim while it's up replaces it (Modal is one at a time). `title` and
--- `body` override the claim wording (the staff gift pop-up's "GIFT
--- RECEIVED!" / "From <name>").
-function ClaimPopup.open(rewards: { Reward }, title: string?, body: string?): () -> ()
+export type Options = {
+	-- Called as the pop-up appears (it may have waited in the queue):
+	-- where the caller plays its sound, since UI modules don't reach
+	-- controllers.
+	onShown: (() -> ())?,
+	-- Built as the pop-up appears, and shown above the cards (the
+	-- level-up's XP bar). Must come back at a fixed offset height.
+	header: (() -> GuiObject)?,
+	-- Seconds before the cards bounce in, hidden till then (the level-up
+	-- holds them until its bar has filled). Default: at once.
+	popDelay: number?,
+}
+
+-- Opens the pop-up over whatever is on screen now; returns `close`.
+-- `title` and `body` override the claim wording (the staff gift
+-- pop-up's "GIFT RECEIVED!" / "From <name>").
+function ClaimPopup.show(rewards: { Reward }, title: string?, body: string?, options: Options?): () -> ()
+	local opts: Options = options or {}
 	local close: () -> () = function() end
 	close = C.Modal.open({
 		title = title or if #rewards == 1 then "REWARD CLAIMED!" else string.format("%d REWARDS CLAIMED!", #rewards),
@@ -134,7 +153,8 @@ function ClaimPopup.open(rewards: { Reward }, title: string?, body: string?): ()
 			},
 		},
 		content = function()
-			local scale = create("UIScale")({ Scale = POP_FROM })
+			local delay = opts.popDelay or 0
+			local scale = create("UIScale")({ Scale = if delay > 0 then 0 else POP_FROM })
 			local size = if #rewards <= 2 then BIG else SMALL
 			-- Rows of up to PER_ROW, each centred, so a short last row
 			-- sits in the middle rather than hugging the left.
@@ -161,7 +181,7 @@ function ClaimPopup.open(rewards: { Reward }, title: string?, body: string?): ()
 			-- one. On the auto-sized frame itself, the modal measured the
 			-- cards at POP_FROM and never again once they grew, so the card
 			-- sat off centre and its top went off a short screen.
-			local height = #rows * cardHeight(size) + (#rows - 1) * Theme.spacing.sm
+			local height = math.max(0, #rows * cardHeight(size) + (#rows - 1) * Theme.spacing.sm)
 			local frame = create("Frame")({
 				Name = "Rewards",
 				Size = UDim2.fromOffset(C.Modal.CONTENT_WIDTH, height),
@@ -181,16 +201,66 @@ function ClaimPopup.open(rewards: { Reward }, title: string?, body: string?): ()
 					rows,
 				}),
 			})
-			-- The bounce in: a back-eased overshoot from POP_FROM.
-			TweenService:Create(
-				scale,
-				TweenInfo.new(C.Env.duration(0.35), Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-				{ Scale = 1 }
-			):Play()
-			return frame
+			-- The bounce in: a back-eased overshoot from POP_FROM (from
+			-- nothing after a delay, so the cards arrive rather than sit).
+			local function bounce()
+				TweenService:Create(
+					scale,
+					TweenInfo.new(C.Env.duration(0.35), Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+					{ Scale = 1 }
+				):Play()
+			end
+			if delay > 0 then
+				task.delay(delay, bounce)
+			else
+				bounce()
+			end
+			local header = opts.header
+			if header == nil then
+				return frame
+			end
+			-- The header over the cards, in one fixed-height column.
+			local top = header()
+			top.LayoutOrder = 1
+			frame.LayoutOrder = 2
+			local gap = if #rows > 0 then Theme.spacing.md else 0
+			return create("Frame")({
+				Name = "WithHeader",
+				Size = UDim2.fromOffset(C.Modal.CONTENT_WIDTH, top.Size.Y.Offset + gap + height),
+				BackgroundTransparency = 1,
+				create("UIListLayout")({
+					Padding = UDim.new(0, gap),
+					HorizontalAlignment = Enum.HorizontalAlignment.Center,
+					SortOrder = Enum.SortOrder.LayoutOrder,
+				}),
+				top,
+				frame,
+			})
 		end,
 	})
+	local onShown = opts.onShown
+	if onShown ~= nil then
+		onShown()
+	end
 	return close
+end
+
+-- Queues the pop-up behind any other (PopupQueue) and shows it when its
+-- turn comes. Returns `close`, which also drops it if still waiting.
+function ClaimPopup.open(rewards: { Reward }, title: string?, body: string?, options: Options?): () -> ()
+	local close: (() -> ())? = nil
+	local cancel = PopupQueue.push({
+		run = function(done)
+			close = ClaimPopup.show(rewards, title, body, options)
+			PopupQueue.whenModalCloses(done)
+		end,
+	})
+	return function()
+		cancel()
+		if close ~= nil then
+			close()
+		end
+	end
 end
 
 return ClaimPopup

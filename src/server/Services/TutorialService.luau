@@ -58,6 +58,7 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local LevelLogic = require(ReplicatedStorage.Shared.LevelLogic)
 local Participants = require(ServerScriptService.Server.Participants)
 local TutorialLogic = require(ServerScriptService.Server.TutorialLogic)
 local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
@@ -169,25 +170,75 @@ local function rewardGrants()
 	return TutorialLogic.rewardGrants(config, cosmeticEnabled(config.rewardCosmeticId))
 end
 
+-- The reward's level-up (config.rewardLevelUp): ProgressionService's
+-- own LevelStep with no round performance, fed exactly the XP to the
+-- next level as its bonus, so it pays level-up coins and any level
+-- cosmetic just as a round would.
+local NO_ROUND: LevelLogic.RoundPerformance =
+	{ tasksDone = 0, place = nil, reachedStudio = false, won = false, hits = 0 }
+
+local function levelUpStep(): any
+	if not config.rewardLevelUp then
+		return nil
+	end
+	local ProgressionService = Loader.get("ProgressionService") :: any
+	local step = ProgressionService.levelStepFor(NO_ROUND, function() end)
+	return function(xp: number, owned: { string }, _bonusXp: number)
+		local bonus = TutorialLogic.levelUpXp(LevelLogic.progressFor(GameConfig.roundRewards.level, xp))
+		return step(xp, owned, bonus)
+	end
+end
+
 -- Paid here, shown in the Hub (sendUnseenReward).
 local function payRewards()
 	local DataService = Loader.get("DataService") :: any
 	local grants = rewardGrants()
 	for _, player in Players:GetPlayers() do
-		local changes = DataService.claimTutorialReward(player, grants)
+		local changes = DataService.claimTutorialReward(player, grants, levelUpStep())
 		if changes ~= nil then
 			print(string.format("TutorialService: paid the tutorial reward to %d", player.UserId))
 		end
 	end
 end
 
+-- The reveal's XP bar, in the round recap's level shape (ResultsLogic
+-- .RecapLevel): from before the reward's XP to now. nil when it paid
+-- none (the cap, rewardLevelUp off, or claimed before schema v25).
+local function levelPayload(player: Player): { [string]: any }?
+	local DataService = Loader.get("DataService") :: any
+	local gained = DataService.getTutorialRewardXp(player) :: number
+	if gained <= 0 then
+		return nil
+	end
+	local curve = GameConfig.roundRewards.level
+	local total = DataService.getXp(player) :: number
+	local before = LevelLogic.progressFor(curve, total - gained)
+	local after = LevelLogic.progressFor(curve, total)
+	local cosmetics: { string } = {}
+	local ProgressionService = Loader.get("ProgressionService") :: any
+	for _, unlock in ProgressionService.levelUnlocks() :: { LevelLogic.LevelUnlock } do
+		if unlock.level > before.level and unlock.level <= after.level then
+			table.insert(cosmetics, unlock.id)
+		end
+	end
+	return {
+		xpGained = gained,
+		before = before,
+		after = after,
+		placeCurrency = 0,
+		levelUpCurrency = curve.levelUpCurrency * (after.level - before.level),
+		cosmetics = cosmetics,
+	}
+end
+
 -- Hub only: a reward paid on a match server whose reveal is still
 -- waiting. Re-derived from config rather than stored, the same grants
--- the claim used unless config changed in between.
+-- the claim used unless config changed in between; the level-up comes
+-- from the stored tutorialRewardXp.
 local function sendUnseenReward(player: Player)
 	local DataService = Loader.get("DataService") :: any
 	if DataService.isTutorialRewardUnseen(player) then
-		Net.fireClient("TutorialRewarded", player, { grants = rewardGrants() })
+		Net.fireClient("TutorialRewarded", player, { grants = rewardGrants(), level = levelPayload(player) })
 	end
 end
 
@@ -225,6 +276,7 @@ local TutorialService: Loader.Service = {
 		"StoreService",
 		"PowerUpService",
 		"DecisionService",
+		"ProgressionService",
 	},
 
 	-- True for the whole of a tutorial round.

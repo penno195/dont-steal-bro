@@ -48,6 +48,14 @@ function TutorialLogic.rewardGrants(config: RewardConfig, cosmeticEnabled: boole
 	return grants
 end
 
+-- The level-up finishing pays (GameConfig.tutorial.rewardLevelUp): the
+-- XP that takes `progress` (LevelLogic.progressFor of the stored XP)
+-- exactly to the start of the next level. 0 at the level cap, where
+-- there is no next level to show.
+function TutorialLogic.levelUpXp(progress: { xpIntoLevel: number, xpForNext: number }): number
+	return math.max(0, progress.xpForNext - progress.xpIntoLevel)
+end
+
 -- ===== the guided round (seam 3) ============================================
 --
 -- Owner's answers, 2026-10-15: the guided round has no race clock, the

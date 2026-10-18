@@ -80,6 +80,8 @@ local ResultsScreen = require(script.Parent.Parent.UI.Screens.Results)
 local SettingsScreen = require(script.Parent.Parent.UI.Screens.Settings)
 local StoreScreen = require(script.Parent.Parent.UI.Screens.Store)
 local ClaimPopup = require(script.Parent.Parent.UI.Screens.ClaimPopup)
+local LevelUpPopup = require(script.Parent.Parent.UI.Screens.LevelUpPopup)
+local PopupQueue = require(script.Parent.Parent.UI.PopupQueue)
 local CommunityJoin = require(script.Parent.Parent.UI.Screens.CommunityJoin)
 local ItemPreview = require(script.Parent.Parent.UI.Screens.ItemPreview)
 local StaffPanelScreen = require(script.Parent.Parent.UI.Screens.StaffPanel)
@@ -592,9 +594,45 @@ local function isHubServer(): boolean
 	return game.PlaceId == hubPlaceId
 end
 
+-- The claim pop-up's sound, played as it appears: it may wait its
+-- turn in the pop-up queue, so not as it's asked for.
+local function playClaim()
+	Loader.get("AudioController").play("SeasonClaim")
+end
+
+local function playCue(cueId: string)
+	Loader.get("AudioController").play(cueId)
+end
+
+-- A level-up's reward cards: its coins, then any level cosmetics.
+local function levelUpRewards(levelUpCurrency: number, cosmetics: { string }): { ClaimPopup.Reward }
+	local shown: { ClaimPopup.Reward } = {}
+	if levelUpCurrency > 0 then
+		local grant = { kind = "Currency", amount = levelUpCurrency }
+		table.insert(shown, {
+			premium = true,
+			text = grantText(grant :: any),
+			icon = SeasonTrackLogic.iconFor(grant :: any),
+			image = nil,
+		})
+	end
+	for _, id in cosmetics do
+		local grant = { kind = "Cosmetic", cosmeticId = id }
+		table.insert(shown, {
+			premium = true,
+			text = grantText(grant :: any),
+			icon = SeasonTrackLogic.iconFor(grant :: any),
+			image = grantImage(grant :: any),
+		})
+	end
+	return shown
+end
+
 -- The level-up pop-up (payoff-loop step 1c), shown once per recap when
 -- the player leaves the results with Continue. A results screen the
 -- next round closes for them skips it; its level card already said so.
+-- Its XP bar fills from the round's start to now (LevelUpPopup,
+-- 2026-10-18), with the LevelUp sting on each level.
 local levelUpShownFor: string? = nil
 
 local function showLevelUp()
@@ -607,36 +645,15 @@ local function showLevelUp()
 		return
 	end
 	levelUpShownFor = r.roundId
-	local shown: { ClaimPopup.Reward } = {}
-	if level.levelUpCurrency > 0 then
-		local grant = { kind = "Currency", amount = level.levelUpCurrency }
-		table.insert(shown, {
-			premium = true,
-			text = grantText(grant :: any),
-			icon = SeasonTrackLogic.iconFor(grant :: any),
-			image = nil,
-		})
-	end
-	for _, id in level.cosmetics do
-		local grant = { kind = "Cosmetic", cosmeticId = id }
-		table.insert(shown, {
-			premium = true,
-			text = grantText(grant :: any),
-			icon = SeasonTrackLogic.iconFor(grant :: any),
-			image = grantImage(grant :: any),
-		})
-	end
-	if #shown == 0 then
-		return
-	end
-	ClaimPopup.open(
-		shown,
+	LevelUpPopup.open(
+		level,
+		levelUpRewards(level.levelUpCurrency, level.cosmetics),
 		string.format("LEVEL %d!", level.after.level),
 		if ResultsLogic.levelsGained(level) > 1
 			then string.format("Up %d levels this round.", ResultsLogic.levelsGained(level))
-			else "You levelled up."
+			else "You levelled up.",
+		playCue
 	)
-	Loader.get("AudioController").play("SeasonClaim")
 end
 
 local function closeMenu()
@@ -1263,8 +1280,7 @@ local function showGifts()
 		})
 	end
 	local title, body = GiftLogic.heading(gifts)
-	ClaimPopup.open(shown, title, body)
-	Loader.get("AudioController").play("SeasonClaim")
+	ClaimPopup.open(shown, title, body, { onShown = playClaim })
 end
 
 local function holdGifts(gifts: { GiftLogic.Gift })
@@ -1304,8 +1320,7 @@ local function showPlaytimePass(def: SeasonTrackLogic.SeasonDef, before: SeasonT
 				icon = "star",
 				image = imageByKey[def.passKey],
 			},
-		}, title, body)
-		Loader.get("AudioController").play("SeasonClaim")
+		}, title, body, { onShown = playClaim })
 	end)
 end
 
@@ -1336,9 +1351,9 @@ local function showStarterPack(rewardPowerUps: { [string]: number })
 			string.format(
 				"%d minutes of play earned you these power-ups. They're in your Locker, ready for your loadout.",
 				GameConfig.playtimeStarterPack.activeMinutes
-			)
+			),
+			{ onShown = playClaim }
 		)
-		Loader.get("AudioController").play("SeasonClaim")
 	end)
 end
 
@@ -1441,8 +1456,7 @@ function MenuController:init()
 						image = grantImage(reward.grant),
 					})
 				end
-				ClaimPopup.open(shown)
-				Loader.get("AudioController").play("SeasonClaim")
+				ClaimPopup.open(shown, nil, nil, { onShown = playClaim })
 			end
 			if SeasonTrackLogic.earnedByPlaytime(beforeSeason :: any, afterSeason) then
 				showPlaytimePass(def, beforeSeason :: any)
@@ -1472,8 +1486,7 @@ function MenuController:init()
 					icon = SeasonTrackLogic.iconFor(grant :: any),
 					image = grantImage(grant :: any),
 				},
-			})
-			Loader.get("AudioController").play("SeasonClaim")
+			}, nil, nil, { onShown = playClaim })
 		elseif type(status) == "string" and COMMUNITY_TEXT[status] then
 			communityText(COMMUNITY_TEXT[status])
 		end
@@ -1481,8 +1494,11 @@ function MenuController:init()
 	-- The guided round's once-only reward, revealed back in the Hub
 	-- (owner, 2026-10-15): a prize-wheel spin with ticks over the reveal
 	-- riser, then a flash, confetti and the claim pop-up with its win
-	-- flourish. It waits, like the gift pop-up, for the loading screen
-	-- and any other dialog to clear, so the show isn't missed.
+	-- flourish. It waits its turn in the pop-up queue, and for no round
+	-- or Studio to be up, so the show isn't missed. Then, when the
+	-- reward paid a level-up (GameConfig.tutorial.rewardLevelUp, owner
+	-- 2026-10-18), the level-up pop-up queues behind it: the XP bar
+	-- filling to LEVEL 2, to show a new player the XP system.
 	local tutorialRevealing = false
 	Net.onClientEvent("TutorialRewarded", function(payload: any)
 		local grants = if type(payload) == "table" and type(payload.grants) == "table" then payload.grants else {}
@@ -1499,47 +1515,55 @@ function MenuController:init()
 			return
 		end
 		tutorialRevealing = true
-		task.spawn(function()
-			local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-			while
-				IN_PLAY[roundState() or ""]
-				or DecisionStudioController.isActive()
-				or playerGui:FindFirstChild("LoadingCover") ~= nil
-				or playerGui:FindFirstChild("Modal") ~= nil
-			do
-				task.wait(STUDIO_POLL)
-			end
-			task.wait(REVEAL_SETTLE)
-			Net.fireServer("TutorialRewardSeenIntent", {})
-			local audio = Loader.get("AudioController") :: any
-			local reveal = PrizeReveal.open(PrizeRevealLogic.SPIN)
-			audio.play("RevealRiser")
-			local started = os.clock()
-			for _, tick in PrizeRevealLogic.ticks() do
-				local wait = tick.at - (os.clock() - started)
-				if wait > 0 then
-					task.wait(wait)
+		local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+		PopupQueue.push({
+			ready = function()
+				return not IN_PLAY[roundState() or ""] and not DecisionStudioController.isActive()
+			end,
+			run = function(done)
+				task.wait(REVEAL_SETTLE)
+				Net.fireServer("TutorialRewardSeenIntent", {})
+				local audio = Loader.get("AudioController") :: any
+				local reveal = PrizeReveal.open(PrizeRevealLogic.SPIN)
+				audio.play("RevealRiser")
+				local started = os.clock()
+				for _, tick in PrizeRevealLogic.ticks() do
+					local wait = tick.at - (os.clock() - started)
+					if wait > 0 then
+						task.wait(wait)
+					end
+					audio.playScaled("PrizeTick", tick.volume)
+					reveal.tick()
 				end
-				audio.playScaled("PrizeTick", tick.volume)
-				reveal.tick()
-			end
-			local rest = PrizeRevealLogic.SPIN - (os.clock() - started)
-			if rest > 0 then
-				task.wait(rest)
-			end
-			reveal.reveal()
-			ClaimPopup.open(shown, "TUTORIAL DONE!", "First round finished. These are yours.")
-			audio.play("SeasonClaim")
-			-- The rays stay behind the pop-up until it goes, however it goes
-			-- (Nice!, a tap outside, or another dialog replacing it).
-			local modal = playerGui:FindFirstChild("Modal")
-			if modal then
-				modal.Destroying:Connect(reveal.close)
-			else
-				reveal.close()
-			end
-			tutorialRevealing = false
-		end)
+				local rest = PrizeRevealLogic.SPIN - (os.clock() - started)
+				if rest > 0 then
+					task.wait(rest)
+				end
+				reveal.reveal()
+				ClaimPopup.show(shown, "TUTORIAL DONE!", "First round finished. These are yours.")
+				audio.play("SeasonClaim")
+				-- The rays stay behind the pop-up until it goes, however it goes
+				-- (Nice!, a tap outside, or another dialog replacing it).
+				local modal = playerGui:FindFirstChild("Modal")
+				if modal then
+					modal.Destroying:Connect(reveal.close)
+				else
+					reveal.close()
+				end
+				tutorialRevealing = false
+				PopupQueue.whenModalCloses(done)
+			end,
+		})
+		local level = ResultsLogic.parseLevel(if type(payload) == "table" then payload.level else nil)
+		if level ~= nil and ResultsLogic.levelsGained(level) > 0 then
+			LevelUpPopup.open(
+				level,
+				levelUpRewards(level.levelUpCurrency, level.cosmetics),
+				string.format("LEVEL %d!", level.after.level),
+				"Every round earns XP. Level up for coins and unlocks.",
+				playCue
+			)
+		end
 	end)
 	Net.onClientEvent("GiftReceived", function(payload: any)
 		holdGifts(GiftLogic.read(payload))

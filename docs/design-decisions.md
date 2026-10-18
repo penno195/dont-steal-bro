@@ -1058,6 +1058,22 @@ go?" offer. The plan and build order are in `onboarding.md`,
   has no Freeze left when the step comes (fired or discarded early)
   skips it, and the next pop-up waits 3 s after firing, as in the hub.
 
+### Applied case: the tutorial's level-up and the pop-up queue (2026-10-18, user decision)
+
+- **Tutorial XP:** finishing the guided round also pays exactly the XP
+  to reach the next account level (`GameConfig.tutorial.rewardLevelUp`),
+  so a new player sees the XP system. The level-up pays its usual
+  `levelUpCurrency` like any other. It's paid with the rest of the
+  reward at Results and shown in the Hub: after the "TUTORIAL DONE!"
+  claim, a level-up pop-up fills the XP bar (tick sound), pops the
+  level number with a sting, then shows the level-up coins. A round
+  that levels up uses the same pop-up.
+- **Pop-ups never compete:** reward pop-ups queue (`UI/PopupQueue`);
+  each waits until the one before is closed and no other dialog or
+  loading screen is up.
+- Claude's wording, owner may tweak: the level-up body "Every round
+  earns XP. Level up for coins and unlocks."
+
 ### Applied case: streak cash-out, own-streak indicator, finale guesses (2026-10-17, user decision)
 
 From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).

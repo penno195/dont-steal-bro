@@ -161,6 +161,31 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0,
 	}),
 
+	-- The level-up pop-up's XP bar (owner, 2026-10-18): a soft bubbly
+	-- tick as it fills, then a sting on each level gained. The sting is
+	-- the race's Qualified one ("you made it"), only ever heard in a
+	-- match, so in the Hub it reads as new. No cooldown on the tick,
+	-- which comes every LevelUpLogic.TICK_SECONDS.
+	XpFill = cue({
+		assetId = "rbxassetid://9114380768", -- PSE "Fat Beeps Bubble Like Bursts 1", TaskStep's
+		category = "SFX",
+		volume = 0.35,
+		looped = false,
+		spatial = false,
+		priority = 60,
+		cooldown = 0,
+	}),
+	LevelUp = cue({
+		assetId = "rbxassetid://1837769261", -- APM "Time Attack (sting)", Qualified's
+		category = "SFX",
+		volume = 0.9,
+		looped = false,
+		spatial = false,
+		priority = 90,
+		cooldown = 0.3,
+		duck = { level = 0.3, attack = 0.05, hold = 1.2, release = 0.8 },
+	}),
+
 	-- Menus (owner, 2026-10-18): every button and tab clicks, and an X
 	-- or Close has its own softer swipe, so shutting a panel reads apart
 	-- from pressing something in it. Played by Components/Click through

@@ -252,6 +252,7 @@ local function validGameConfig(): Validate.GameConfig
 			rewardCosmeticId = "cap",
 			rewardCurrency = 100,
 			rewardPowerUps = { ["sprint-boost"] = 1 },
+			rewardLevelUp = true,
 			practicePickupPowerUpIds = { "push-trip" },
 			practicePickupClaimRadius = 6,
 			lockerGiftPowerUpId = "push-trip",

@@ -87,5 +87,6 @@ require("./CashOutLogic.spec")
 require("./CashOutViewLogic.spec")
 require("./RecordViewLogic.spec")
 require("./DailyChallengeViewLogic.spec")
+require("./LevelUpLogic.spec")
 
 TestRunner.run()

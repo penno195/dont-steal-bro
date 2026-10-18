@@ -907,6 +907,12 @@ local ProgressionService: Loader.Service = {
 	stakesFor = stakesFor,
 	sendStakes = sendStakes,
 
+	-- The level arithmetic, for the tutorial reward's level-up
+	-- (TutorialService): the same LevelStep and level-only cosmetics a
+	-- round's write uses, so a level gained there pays the same.
+	levelStepFor = levelStepFor,
+	levelUnlocks = levelUnlocks,
+
 	-- Banking a streak in the Hub (payoff-loop step 4).
 	cashOut = cashOut,
 	cashOutOfferFor = cashOutOfferFor,

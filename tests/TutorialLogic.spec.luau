@@ -59,6 +59,20 @@ describe("TutorialLogic.rewardGrants", function()
 	end)
 end)
 
+describe("TutorialLogic.levelUpXp", function()
+	it("pays a fresh account the whole first level", function()
+		expect(TutorialLogic.levelUpXp({ xpIntoLevel = 0, xpForNext = 100 })):toBe(100)
+	end)
+
+	it("pays only what's left of a part-filled level", function()
+		expect(TutorialLogic.levelUpXp({ xpIntoLevel = 70, xpForNext = 125 })):toBe(55)
+	end)
+
+	it("pays nothing at the level cap", function()
+		expect(TutorialLogic.levelUpXp({ xpIntoLevel = 0, xpForNext = 0 })):toBe(0)
+	end)
+end)
+
 describe("TutorialLogic.botMayFinish", function()
 	it("lets two bots finish ahead of one unfinished player, not a third", function()
 		expect(TutorialLogic.botMayFinish(0, 1, 3)):toBe(true)

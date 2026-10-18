@@ -1286,8 +1286,10 @@ Net.Remotes = {
 	-- reveal yet (profile tutorialRewardUnseen). Sent when the profile
 	-- loads in the Hub, never on the match server (owner, 2026-10-15).
 	-- `{ grants = { { kind, amount?, powerUpId?, cosmeticId? } } }`,
-	-- TutorialLogic.rewardGrants, already applied. Shown as the prize
-	-- reveal, then the claim pop-up.
+	-- TutorialLogic.rewardGrants, already applied, plus `level?`: the
+	-- reward's level-up in the round recap's level shape (ResultsLogic
+	-- .RecapLevel). Shown as the prize reveal, the claim pop-up, then
+	-- the level-up pop-up with its XP bar.
 	TutorialRewarded = {
 		name = "TutorialRewarded",
 		direction = "ServerBroadcast",

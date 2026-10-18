@@ -702,6 +702,11 @@ local GameConfig: Validate.GameConfig = {
 		rewardCosmeticId = "hat-rookie-cap",
 		rewardCurrency = 100,
 		rewardPowerUps = { freeze = 1 },
+		-- Finishing also pays exactly the XP to the next account level, so
+		-- the Hub reveal can show a new player the XP bar filling and a
+		-- level-up (owner, 2026-10-18). The level-up pays its usual
+		-- roundRewards.level.levelUpCurrency on top, like any other.
+		rewardLevelUp = true,
 		-- The hub tutorial's "Mess with rivals" step (tutorial v2): a
 		-- pickup only the tutorial player sees, in the practice area,
 		-- holding one of these at random (Aimed items only). Always

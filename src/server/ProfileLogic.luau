@@ -256,6 +256,14 @@ export type ProfileData = {
 	-- Written only by PlaytimeService and StoreService's grant.
 	starterPackSeconds: number,
 	starterPackClaimed: boolean,
+
+	-- ===== schema v25, the tutorial's level-up ============================
+
+	-- The XP the tutorial reward paid (GameConfig.tutorial.rewardLevelUp;
+	-- owner, 2026-10-18), set with it in claimTutorialReward's one
+	-- mutation. The Hub reveal, shown later, animates the XP bar from
+	-- `xp - tutorialRewardXp` up to `xp`. 0 = none paid.
+	tutorialRewardXp: number,
 }
 
 -- Structurally LockerSeenLogic.Seen.
@@ -309,7 +317,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 24
+local CURRENT_SCHEMA_VERSION = 25
 
 local function defaultStats(): Stats
 	return {
@@ -361,6 +369,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		lockerSeen = { Power = {}, Style = {}, Titles = {} },
 		starterPackSeconds = 0,
 		starterPackClaimed = false,
+		tutorialRewardXp = 0,
 	}
 end
 
@@ -644,6 +653,15 @@ migrations[23] = function(old: { [string]: any }): { [string]: any }
 	next.schemaVersion = 24
 	next.starterPackSeconds = 0
 	next.starterPackClaimed = false
+	return next
+end
+
+-- v24 -> v25 (the tutorial's level-up): none paid. A tutorial reward
+-- claimed before this version paid no XP, so its reveal has no bar.
+migrations[24] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 25
+	next.tutorialRewardXp = 0
 	return next
 end
 

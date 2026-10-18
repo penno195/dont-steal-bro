@@ -1032,9 +1032,14 @@ end
 -- tutorial"): marks it paid and applies `grants` in the same mutation,
 -- then saves at once, since it can never be earned again. It also
 -- leaves the reveal waiting for the Hub (tutorialRewardUnseen, owner
--- 2026-10-15). Returns the change lines, or nil when the profile isn't
--- writable or it was already paid.
-local function claimTutorialReward(player: Player, grants: { StoreLogic.Grant }): { string }?
+-- 2026-10-15). `levelStep`, when given, pays the reward's level-up
+-- (GameConfig.tutorial.rewardLevelUp) in the same mutation, like the
+-- progression writer's: it gets the stored XP and owned cosmetics and
+-- returns the new XP and its grants (level-up coins, any level
+-- cosmetics); what it added is kept as tutorialRewardXp for the reveal.
+-- Returns the change lines, or nil when the profile isn't writable or
+-- it was already paid.
+local function claimTutorialReward(player: Player, grants: { StoreLogic.Grant }, levelStep: LevelStep?): { string }?
 	local d = writable(player)
 	local profile = profiles[player]
 	if d == nil or profile == nil or d.tutorialRewarded then
@@ -1042,7 +1047,17 @@ local function claimTutorialReward(player: Player, grants: { StoreLogic.Grant })
 	end
 	d.tutorialRewarded = true
 	d.tutorialRewardUnseen = true
-	local changes = applyGrantsTo(d, grants)
+	local all = table.clone(grants)
+	if levelStep ~= nil then
+		local xpBefore = (d.xp :: number?) or 0
+		local xpAfter, levelGrants = levelStep(xpBefore, table.clone(d.ownedCosmetics), 0)
+		d.xp = xpAfter
+		d.tutorialRewardXp = math.max(0, xpAfter - xpBefore)
+		for _, grant in levelGrants do
+			table.insert(all, grant)
+		end
+	end
+	local changes = applyGrantsTo(d, all)
 	profile:Save()
 	return changes
 end
@@ -1066,6 +1081,12 @@ end
 local function hasTutorialReward(player: Player): boolean
 	local d = data(player)
 	return if d then d.tutorialRewarded else false
+end
+
+-- The XP the tutorial reward paid (schema v25), for the reveal's bar.
+local function getTutorialRewardXp(player: Player): number
+	local d = data(player)
+	return if d then d.tutorialRewardXp else 0
 end
 
 -- Paid, and the Hub hasn't shown its reveal yet (schema v14).
@@ -1247,6 +1268,7 @@ local DataService: Loader.Service = {
 	claimTutorialGift = claimTutorialGift,
 	hasTutorialReward = hasTutorialReward,
 	isTutorialRewardUnseen = isTutorialRewardUnseen,
+	getTutorialRewardXp = getTutorialRewardXp,
 	markTutorialRewardSeen = markTutorialRewardSeen,
 	getLockerUnseen = getLockerUnseen,
 	markLockerSeen = markLockerSeen,

@@ -823,6 +823,7 @@ export type TutorialConfig = {
 	rewardCosmeticId: string,
 	rewardCurrency: number,
 	rewardPowerUps: { [string]: number }, -- power-up id -> how many go into loadout stock
+	rewardLevelUp: boolean, -- also pays exactly the XP to reach the next account level
 	practicePickupPowerUpIds: { string }, -- the hub step's personal pickup: Aimed items, one at random
 	practicePickupClaimRadius: number, -- studs from the pickup a claim may be made from
 	lockerGiftPowerUpId: string, -- the hub Locker step's free power-up, once per account; also the guided round's Freeze step
@@ -3505,6 +3506,9 @@ local function checkTutorialConfig(tc: TutorialConfig, issues: { Issue })
 	end
 	if type(tc.rewardCurrency) ~= "number" or tc.rewardCurrency < 0 or tc.rewardCurrency % 1 ~= 0 then
 		bad("rewardCurrency", "must be a whole number, 0 or more")
+	end
+	if type(tc.rewardLevelUp) ~= "boolean" then
+		bad("rewardLevelUp", "must be true or false")
 	end
 	if type(tc.rewardPowerUps) ~= "table" then
 		bad("rewardPowerUps", "must be a table of power-up id -> count")
