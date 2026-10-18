@@ -115,6 +115,8 @@ local ICONS: { [string]: Icon } = {
 	["hub-playtime"] = { glyph = "⏱", image = "rbxassetid://76059439549426", fullColor = true },
 	["hub-record"] = { glyph = "📊", image = "rbxassetid://102420453967206", fullColor = true },
 	["hub-bank"] = { glyph = "🐷", image = "rbxassetid://137129770273757", fullColor = true },
+	-- The Play button: a chequered finish flag (2026-10-18, replaced the bolt).
+	["hub-play"] = { glyph = "🏁", image = "rbxassetid://97033072386445", fullColor = true },
 	-- The menu tabs (Store, Locker, Leaderboards) in the same style.
 	["tab-power"] = { glyph = "⚡", image = "rbxassetid://115206414493863", fullColor = true },
 	["tab-style"] = { glyph = "👕", image = "rbxassetid://126158275845000", fullColor = true },

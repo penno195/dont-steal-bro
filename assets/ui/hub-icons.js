@@ -168,6 +168,21 @@
   ];
   Object.assign(ICONS, {
     // Power-ups: a yellow lightning bolt.
+    // Play: a chequered finish flag on a gold pole - "go race".
+    play: [
+      GOLD('pl-gold') +
+        `<clipPath id="pl-flag"><path d="M34 22 Q56 10 76 22 T116 22 V78 Q96 66 76 78 T34 78 Z"/></clipPath>`,
+      `<rect x="20" y="14" width="13" height="104" rx="6.5" fill="url(#pl-gold)" ${line}/>
+       <path d="M34 22 Q56 10 76 22 T116 22 V78 Q96 66 76 78 T34 78 Z" fill="#FFFFFF"/>
+       <g clip-path="url(#pl-flag)">
+         ${[0, 1, 2, 3].flatMap((c) => [0, 1, 2, 3].map((r) => ((c + r) % 2 ? '' : `<rect x="${34 + 20.5 * c}" y="${4 + 19 * r}" width="20.5" height="19" fill="#2A1650"/>`))).join('')}
+       </g>
+       <path d="M34 22 Q56 10 76 22 T116 22 V78 Q96 66 76 78 T34 78 Z" fill="none" ${line}/>
+       <circle cx="26.5" cy="13" r="10" fill="url(#pl-gold)" ${line}/>
+       ${gloss(23, 9, 3.5, 2.5, 0)}
+       ${gloss(52, 28, 9, 3.5, -25)}`,
+    ],
+
     'tab-power': [
       grad('tp-bolt', '#FFF09A', '#FFB703'),
       `<path d="M74 8 L26 72 H58 L48 120 L102 50 H70 Z" fill="url(#tp-bolt)" ${line}/>

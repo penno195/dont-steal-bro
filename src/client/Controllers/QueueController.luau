@@ -418,7 +418,7 @@ local function mountCard()
 						label = function(): string
 							return if buttons().play then "Play" else "Practice"
 						end,
-						icon = "bolt",
+						icon = "hub-play",
 						variant = "primary",
 						width = CARD_WIDTH,
 						loading = function()

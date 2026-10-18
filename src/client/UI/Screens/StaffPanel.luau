@@ -56,7 +56,9 @@ local untrack = vide.untrack
 -- Reference px. Landscape's short side is ~360 at the current scale, so
 -- the window leaves the game visible above and below it.
 local WIDTH = 480
-local HEIGHT = 280
+-- 288, not 280: the Gifts form was exactly the list's height, so the
+-- last row's chip lips were clipped (phone playtest, 2026-10-18).
+local HEIGHT = 288
 local PAD = Theme.spacing.md
 local INNER = WIDTH - 2 * PAD
 local SCROLLBAR = 4
@@ -262,6 +264,8 @@ local function form(children: { any }): ScrollingFrame
 			Padding = UDim.new(0, GAP),
 			SortOrder = Enum.SortOrder.LayoutOrder,
 		}),
+		-- Room under the last row for its chips' lips.
+		create("UIPadding")({ PaddingBottom = UDim.new(0, GAP) }),
 	}
 	for _, child in children do
 		table.insert(props, child)

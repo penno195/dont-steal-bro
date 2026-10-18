@@ -932,6 +932,7 @@ local function explainer(title: string, body: string)
 end
 local BIG_ICON = 44
 local COLUMN_W = 3 * BIG + 2 * Theme.spacing.sm
+local PILL_HEIGHT = Theme.spacing.xxl -- CurrencyPill's and LevelBadge's drawn height
 
 local function mountLauncher()
 	-- In the top bar's band (right of Roblox's buttons), so the corner
@@ -1056,9 +1057,31 @@ local function mountLauncher()
 			icon = "shield",
 			layoutOrder = 3,
 		})
+		-- The row lines up by what's drawn: on touch a pill's hit area
+		-- grows to the 44pt minimum with the pill centred in it, which
+		-- dropped it below the level badge (phone playtest, 2026-10-18).
+		-- So each pill sits in a slot its drawn height, the hit area
+		-- overhanging it evenly.
+		local function slot(pill: GuiObject): Frame
+			local holder = create("Frame")({
+				Name = pill.Name .. "Slot",
+				BackgroundTransparency = 1,
+				Size = UDim2.fromOffset(pill.Size.X.Offset, PILL_HEIGHT),
+				LayoutOrder = pill.LayoutOrder,
+			}) :: Frame
+			pill.AnchorPoint = Vector2.new(0.5, 0.5)
+			pill.Position = UDim2.fromScale(0.5, 0.5)
+			pill.Parent = holder
+			pill:GetPropertyChangedSignal("Size"):Connect(function()
+				holder.Size = UDim2.fromOffset(pill.Size.X.Offset, PILL_HEIGHT)
+			end)
+			return holder
+		end
+		local coinsSlot = slot(coins)
+		local shieldsSlot = slot(shields)
 		vide.effect(function()
-			coins.Visible = coinsVisible()
-			shields.Visible = coinsVisible() and shieldCount() > 0
+			coinsSlot.Visible = coinsVisible()
+			shieldsSlot.Visible = coinsVisible() and shieldCount() > 0
 		end)
 		local gear = C.IconButton({
 			icon = "hub-settings",
@@ -1103,8 +1126,8 @@ local function mountLauncher()
 			}),
 			staff :: any,
 			gear,
-			shields,
-			coins,
+			shieldsSlot,
+			coinsSlot,
 			column,
 			Parent = gui,
 		}) :: Frame
