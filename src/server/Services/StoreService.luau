@@ -67,6 +67,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -82,6 +83,7 @@ local LevelLogic = require(ReplicatedStorage.Shared.LevelLogic)
 local CosmeticLogic = require(ReplicatedStorage.Shared.CosmeticLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local PlaytimeLogic = require(ServerScriptService.Server.PlaytimeLogic)
+local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 
 type StoreItemDef = Validate.StoreItemDef
@@ -128,6 +130,9 @@ local ownership: { [Player]: { [number]: OwnershipEntry } } = {}
 local PASS_SYNC_COOLDOWN_SECONDS = 10
 local lastPassSyncAt: { [Player]: number } = {}
 local pendingPassSync: { [Player]: { [number]: boolean } } = {}
+
+-- Set in init: only the Hub sends the "Your record" panel (recordCard).
+local isHub = false
 
 -- Every grant this server has made, newest last. In memory only: the
 -- durable record is the profile itself plus Roblox's own transaction
@@ -260,6 +265,14 @@ local function cashOutCard(player: Player, DataService: any): { [string]: any }?
 	}
 end
 
+local function recordCard(player: Player, DataService: any): { steals: number, shares: number, betrayed: number }?
+	if not isHub or not DataService.isLoaded(player) then
+		return nil
+	end
+	local stats = DataService.getStats(player)
+	return { steals = stats.steals, shares = stats.shares, betrayed = stats.betrayed }
+end
+
 local function pushState(player: Player)
 	local DataService = Loader.get("DataService") :: any
 
@@ -310,6 +323,11 @@ local function pushState(player: Player)
 		-- streak pays now, and the best ever banked. nil off the Hub, so
 		-- a match server never sends it (Q7 condition 1).
 		cashOut = cashOutCard(player, DataService),
+		-- Payoff-loop step 7: the Hub's "Your record" panel - your own
+		-- lifetime shares, steals and times betrayed. Targeted, and Hub
+		-- only like `cashOut`, so nobody else ever sees it (Q5's betrayal
+		-- applied case: not a public profile stat).
+		record = recordCard(player, DataService),
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
 		-- The Hub's level badge (payoff-loop step 1c). Worked out here
@@ -1439,6 +1457,13 @@ function StoreService:init()
 	local DataService = Loader.get("DataService") :: any
 
 	receiptHandleFor = DataService.claimReceiptAccess("StoreService")
+
+	isHub = StreakTagLogic.isHub(
+		game.PlaceId,
+		GameConfig.matchmaking.hubPlaceId,
+		RunService:IsStudio(),
+		Workspace:FindFirstChild("Hub") ~= nil
+	)
 
 	NetGuard.on("StorePurchaseIntent", function(player: Player, payload: any)
 		handlePurchaseIntent(player, payload.key)

@@ -82,8 +82,9 @@ type BrainRecord = {
 	-- after an early lock.
 	lockedIn: boolean?,
 	-- The past the Studio's reputation line shows for this bot, rolled
-	-- from its personality once and then fixed.
-	history: { steals: number, shares: number },
+	-- from its personality once and then fixed. `betrayed` is its made-up
+	-- "times robbed" (payoff-loop step 7), rolled after the counts.
+	history: { steals: number, shares: number, betrayed: number },
 }
 
 local brains: { [number]: BrainRecord } = {}
@@ -121,7 +122,15 @@ local function ensureBrain(npcId: number): BrainRecord?
 		nextRandom = nextRandom,
 		choice = nil,
 		saidLines = {},
-		history = NPCBrainLogic.staticHistory(personality, nextRandom, historyFinales.min, historyFinales.max),
+		history = { steals = 0, shares = 0, betrayed = 0 },
+	}
+	-- Rolled in this order from the one stream, so adding `betrayed` left
+	-- every bot's steal/share history as it was.
+	local counts = NPCBrainLogic.staticHistory(personality, nextRandom, historyFinales.min, historyFinales.max)
+	record.history = {
+		steals = counts.steals,
+		shares = counts.shares,
+		betrayed = NPCBrainLogic.staticBetrayed(counts.shares, GameConfig.npc.betrayedPerShare, nextRandom),
 	}
 	brains[npcId] = record
 	return record
@@ -459,10 +468,10 @@ local NPCBrain: Loader.Service = {
 		return if record ~= nil then record.personality.id else nil
 	end,
 
-	-- A bot's steal/share counts for the Studio's reputation line, in the
-	-- same shape as a human's profile stats. Nil only when no personality
-	-- is configured at all.
-	historyFor = function(npcId: number): { steals: number, shares: number }?
+	-- A bot's steal/share/betrayed counts for the Studio's reputation line,
+	-- in the same shape as a human's profile stats. Nil only when no
+	-- personality is configured at all.
+	historyFor = function(npcId: number): { steals: number, shares: number, betrayed: number }?
 		local record = ensureBrain(npcId)
 		return if record ~= nil then record.history else nil
 	end,

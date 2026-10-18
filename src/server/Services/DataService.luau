@@ -1025,14 +1025,14 @@ end
 local function getStats(player: Player): ProfileLogic.Stats
 	local d = data(player)
 	if d == nil then
-		return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
+		return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0, betrayed = 0 }
 	end
 	return table.clone(d.stats) -- a copy, not a live reference
 end
 
 local function recordRoundStat(
 	player: Player,
-	statName: "roundsPlayed" | "qualifications" | "steals" | "shares" | "wins" | "losses"
+	statName: "roundsPlayed" | "qualifications" | "steals" | "shares" | "wins" | "losses" | "betrayed"
 )
 	local d = writable(player)
 	if d ~= nil then

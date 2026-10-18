@@ -117,6 +117,7 @@ local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Outcomes = require(ReplicatedStorage.Shared.Config.Outcomes)
 local Participants = require(ServerScriptService.Server.Participants)
 local FinaleRoster = require(ServerScriptService.Server.FinaleRoster)
+local BetrayalLogic = require(ServerScriptService.Server.BetrayalLogic)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 
 export type Phase = "Intro" | "Negotiate" | "Choose" | "Reveal" | "Resolve"
@@ -181,7 +182,17 @@ local outcomeWritten = false
 -- - before the reveal packet, which is the one thing this file forbids.
 -- `reward` (rewards-roadmap.md step 3) is a winner's own payout, from
 -- ProgressionService.rewardFor; nil on a loss. Only its owner gets it.
-type PersonalResult = { streakBefore: number, streakAfter: number, won: boolean, reward: { [string]: any }? }
+-- `robbedBy` (payoff-loop step 7) is the lone stealer's id when this
+-- finalist shared and lost to them (BetrayalLogic), for the "Robbed by"
+-- card; nil otherwise. Practice included: the card shows there, only
+-- the stat doesn't count.
+type PersonalResult = {
+	streakBefore: number,
+	streakAfter: number,
+	won: boolean,
+	reward: { [string]: any }?,
+	robbedBy: number?,
+}
 local personalResults: { [number]: PersonalResult } = {}
 
 local pendingPhaseTimerThread: thread? = nil
@@ -352,6 +363,13 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 	-- before Results sweeps the non-qualifiers' losses.
 	Loader.get("GuessService").resolve(outcome)
 
+	-- Payoff-loop step 7: who the lone stealer (if any) robbed. Only a
+	-- sharer still here below gets a card or a count, so a leaver's
+	-- defaulted Share (Q4) is neither (Q5's betrayal applied case).
+	-- Cast: BetrayalLogic restates these shapes with plain strings to
+	-- stay require-free, and Luau's tables are invariant on them.
+	local robberies = BetrayalLogic.robberies(finalists :: any, outcome :: any)
+
 	for _, finalist in finalists do
 		local player = Players:GetPlayerByUserId(finalist.playerId)
 		if player == nil then
@@ -388,6 +406,7 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			streakAfter = after.currentStreak,
 			won = won,
 			reward = ProgressionService.rewardFor(roundId, player.UserId),
+			robbedBy = BetrayalLogic.robbedBy(finalist.playerId, robberies),
 		}
 		-- Practice matches keep no stats or choice telemetry
 		-- (design-decisions.md Q7). Defaulted choices included: the streak
@@ -398,6 +417,9 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 
 			DataService.recordRoundStat(player, if finalist.choice == "Steal" then "steals" else "shares")
 			DataService.recordRoundStat(player, "qualifications")
+			if BetrayalLogic.robbedBy(finalist.playerId, robberies) ~= nil then
+				DataService.recordRoundStat(player, "betrayed")
+			end
 		end
 
 		-- Their real result is now written - the Q4 forfeit fallback
@@ -903,8 +925,10 @@ local function beginDecisionStudio()
 	-- history rolled from its hidden personality (NPCBrain.historyFor),
 	-- so its line reads like a light player's and never becomes an NPC
 	-- detector. An absent player sends 0/0, a first-timer's line.
+	-- `betrayed` (payoff-loop step 7) is the times they shared and lost
+	-- to a lone stealer; a bot's is made up from its history the same way.
 	local NPCBrain = Loader.get("NPCBrain") :: any
-	local reputation: { { playerId: number, steals: number, shares: number } } = {}
+	local reputation: { { playerId: number, steals: number, shares: number, betrayed: number } } = {}
 	for _, id in qualifierIds do
 		local player = Players:GetPlayerByUserId(id)
 		local stats = if player ~= nil
@@ -915,6 +939,7 @@ local function beginDecisionStudio()
 			playerId = id,
 			steals = if stats ~= nil then stats.steals else 0,
 			shares = if stats ~= nil then stats.shares else 0,
+			betrayed = if stats ~= nil then stats.betrayed else 0,
 		})
 	end
 

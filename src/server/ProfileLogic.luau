@@ -17,6 +17,11 @@ export type Stats = {
 	shares: number,
 	wins: number,
 	losses: number,
+	-- Schema v20 (payoff-loop step 7, BetrayalLogic): times this player
+	-- shared and lost to a lone stealer. Counted beside steals/shares,
+	-- never in practice. Shown in the Studio's reputation line and the
+	-- owner's own Hub record.
+	betrayed: number,
 }
 
 export type OutcomeTag = "SoleStealer" | "LoneSharer" | "AllShare"
@@ -264,10 +269,10 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 19
+local CURRENT_SCHEMA_VERSION = 20
 
 local function defaultStats(): Stats
-	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
+	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0, betrayed = 0 }
 end
 
 function ProfileLogic.newProfileTemplate(): ProfileData
@@ -520,6 +525,19 @@ end
 migrations[18] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 19
+	return next
+end
+
+-- v19 -> v20 (times betrayed): none. Past Studio results weren't kept,
+-- so every account starts its count here.
+migrations[19] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 20
+	if type(old.stats) == "table" then
+		local stats = table.clone(old.stats)
+		stats.betrayed = (stats.betrayed :: number?) or 0
+		next.stats = stats
+	end
 	return next
 end
 

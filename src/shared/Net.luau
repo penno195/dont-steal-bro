@@ -1014,6 +1014,8 @@ Net.Remotes = {
 	-- A winner's `reward` rides along (rewards-roadmap.md step 3):
 	-- { currency, rung, drop, dropAmount }, their own payout only. The
 	-- reveal never shows another finalist's (user decision, Q7).
+	-- `robbedBy` (payoff-loop step 7): the lone stealer's id when you
+	-- shared and lost to them, for the "Robbed by" card; nil otherwise.
 	DecisionPersonalResult = {
 		name = "DecisionPersonalResult",
 		direction = "ServerBroadcast",
@@ -1370,6 +1372,8 @@ Net.Remotes = {
 	-- and the streak shields held (`streakShields`, payoff-loop step 2),
 	-- shown on the Hub only. On the Hub only, `cashOut` (payoff-loop step
 	-- 4): what banking the streak pays now, and the best ever banked.
+	-- On the Hub only, `record` (payoff-loop step 7): your own lifetime
+	-- { steals, shares, betrayed }, for the "Your record" panel.
 	StoreState = {
 		name = "StoreState",
 		direction = "ServerBroadcast",
