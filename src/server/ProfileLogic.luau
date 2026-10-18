@@ -250,8 +250,9 @@ export type ProfileData = {
 
 	-- ===== schema v24, the playtime starter pack ==========================
 
-	-- Lifetime active seconds toward the one-off free power-up starter
-	-- pack (GameConfig.playtimeStarterPack, PlaytimeLogic.creditStarter),
+	-- This session's active seconds toward the one-off free power-up
+	-- starter pack (GameConfig.playtimeStarterPack, PlaytimeLogic
+	-- .creditStarter; lifetime until v26),
 	-- and whether it has been paid. Once claimed nothing counts again.
 	-- Written only by PlaytimeService and StoreService's grant.
 	starterPackSeconds: number,
@@ -264,6 +265,15 @@ export type ProfileData = {
 	-- mutation. The Hub reveal, shown later, animates the XP bar from
 	-- `xp - tutorialRewardXp` up to `xp`. 0 = none paid.
 	tutorialRewardXp: number,
+
+	-- ===== schema v26, the starter pack counts per session ================
+
+	-- os.time() of the last PlaytimeService tick that saw this player in
+	-- any server, active or not (0 = never). A tick more than
+	-- GameConfig.playtimeStarterPack.sessionGapSeconds after it starts a
+	-- new session, so starterPackSeconds goes back to 0
+	-- (PlaytimeLogic.starterSession; owner, 2026-10-18).
+	starterPackSeenAt: number,
 }
 
 -- Structurally LockerSeenLogic.Seen.
@@ -317,7 +327,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 25
+local CURRENT_SCHEMA_VERSION = 26
 
 local function defaultStats(): Stats
 	return {
@@ -370,6 +380,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		starterPackSeconds = 0,
 		starterPackClaimed = false,
 		tutorialRewardXp = 0,
+		starterPackSeenAt = 0,
 	}
 end
 
@@ -662,6 +673,16 @@ migrations[24] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 25
 	next.tutorialRewardXp = 0
+	return next
+end
+
+-- v25 -> v26 (the starter pack counts per session): never seen, so the
+-- next tick starts a fresh session and any lifetime count is dropped.
+migrations[25] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 26
+	next.starterPackSeenAt = 0
+	next.starterPackSeconds = 0
 	return next
 end
 

@@ -149,16 +149,30 @@ end
 -- ===== the starter pack ====================================================
 --
 -- A one-off free power-up pack (owner, 2026-10-18): activeMinutes of
--- active time, counted for life rather than per week or season, pay
--- GameConfig.playtimeStarterPack.rewardPowerUps once. "Active" is
--- isActive above with the pass's own idle window and credit cap, so the
--- two count the very same stretches.
+-- active time inside ONE session pay GameConfig.playtimeStarterPack
+-- .rewardPowerUps once. It's there to keep a new player in for their
+-- first 30 minutes (session length is what Roblox's discovery rewards),
+-- so leaving starts the count again on the next visit, until it's paid.
+-- "Active" is isActive above with the pass's own idle window and credit
+-- cap, so the two count the very same stretches; idle time pauses the
+-- count, it doesn't end the session.
+--
+-- A session spans the teleports between the Hub and match servers, so
+-- it can't be "this server". It ends when no server has seen the player
+-- for sessionGapSeconds (starterSession below), stamped on every tick.
+
+function PlaytimeLogic.starterSession(counted: number, seenAt: number, now: number, gapSeconds: number): number
+	if seenAt <= 0 or now - seenAt > gapSeconds then
+		return 0
+	end
+	return counted
+end
 
 function PlaytimeLogic.starterTargetSeconds(activeMinutes: number): number
 	return activeMinutes * 60
 end
 
--- Adds `seconds` to the lifetime count `counted`. Returns the new count
+-- Adds `seconds` to this session's count `counted`. Returns the new count
 -- and whether the pack is now due. Nothing counts once it's claimed.
 -- The count stops at the target, and `due` stays true until the claim
 -- is saved, so a grant that failed is retried by the next tick.

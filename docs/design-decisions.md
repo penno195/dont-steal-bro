@@ -437,6 +437,15 @@ From the 2026-10-17 game review: only wins paid anything, so roughly
   count is lifetime and needs no live season; time played before it
   shipped doesn't count; and Q8 isn't affected, since all three are
   Commons that spawn free on every map.
+  *Applied (owner, 2026-10-18, same day): the 30 minutes must be in
+  one session.* The pack is there to keep a new player in for a
+  30-minute first session, which Roblox's discovery rewards. Leaving
+  restarts the count on the next visit, every visit until it's paid
+  once; AFK time still doesn't count, but only pauses the count
+  rather than ending the session. Claude's calls: a session spans the
+  Hub <-> match teleports and ends when no server has seen the player
+  for 5 minutes (`sessionGapSeconds`), so a quick rejoin carries on;
+  counts banked under the lifetime rule were dropped (schema v26).
 - **Quick-chat for the negotiation** (payoff-loop step 3, user
   decision 2026-10-17). Three sets of short one-tap phrases for mobile
   players: Promise, Threat and Emote. "Emotes" are short phrases like

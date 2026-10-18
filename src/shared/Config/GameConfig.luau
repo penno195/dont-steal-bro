@@ -123,8 +123,11 @@ local GameConfig: Validate.GameConfig = {
 	},
 
 	-- A one-off free power-up starter pack for playtime (owner,
-	-- 2026-10-18). This many active minutes, counted for life rather than
-	-- per week, pay rewardPowerUps into loadout stock once. Active means
+	-- 2026-10-18). This many active minutes in ONE session pay
+	-- rewardPowerUps into loadout stock once; leaving restarts the count
+	-- next visit (the aim is a 30-minute first session). A session ends
+	-- when no server has seen the player for sessionGapSeconds, long
+	-- enough to cover a Hub <-> match teleport. Active means
 	-- the same as for playtimePass (its idle window and credit cap), and
 	-- the Hub's playtime panel swaps between the two until it's paid.
 	-- An empty rewardPowerUps switches the pack off.
@@ -132,6 +135,7 @@ local GameConfig: Validate.GameConfig = {
 	-- paid Starter Loadout Bundle's 5 each (owner).
 	playtimeStarterPack = {
 		activeMinutes = 30,
+		sessionGapSeconds = 300,
 		rewardPowerUps = { ["sprint-boost"] = 2, ["slow-field"] = 2, ["push-trip"] = 2 },
 	},
 

@@ -951,9 +951,11 @@ export type PlaytimePassConfig = {
 }
 
 -- The one-off playtime starter pack: PlaytimeLogic.creditStarter's
--- target, and the stock it pays (power-up id -> count; {} = no pack).
+-- target, how long away ends a session (PlaytimeLogic.starterSession),
+-- and the stock it pays (power-up id -> count; {} = no pack).
 export type PlaytimeStarterPackConfig = {
 	activeMinutes: number,
+	sessionGapSeconds: number,
 	rewardPowerUps: { [string]: number },
 }
 
@@ -4314,6 +4316,15 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 				"GameConfig.luau",
 				"playtimeStarterPack.activeMinutes",
 				"must be a whole number, at least 1"
+			)
+		end
+		if not isWholeAtLeast(starter.sessionGapSeconds, 60) then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"playtimeStarterPack.sessionGapSeconds",
+				"must be a whole number, at least 60 (a tick is 30s, and a teleport takes longer)"
 			)
 		end
 		if type(starter.rewardPowerUps) ~= "table" then

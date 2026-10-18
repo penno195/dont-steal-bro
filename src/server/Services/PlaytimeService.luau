@@ -12,6 +12,9 @@
 --
 -- The same stretches also count toward the one-off starter pack
 -- (PlaytimeLogic.creditStarter), paid by StoreService.grantStarterPack.
+-- That count is per session: every tick, active or not, stamps when the
+-- player was last seen, and a stamp older than sessionGapSeconds starts
+-- the count from 0 (PlaytimeLogic.starterSession).
 --
 -- When the count reaches the week's target, StoreService grants the
 -- live season's pass (SeasonLogic.buyPass, source "Playtime"), saved and
@@ -66,6 +69,19 @@ local function tickPlayer(player: Player, context: PlaytimeLogic.Context, nowUtc
 	if not DataService.isLoaded(player) then
 		return
 	end
+	-- The one-off starter pack's session: carried on from the last
+	-- server if it saw this player recently, else back to 0. Stamped on
+	-- every tick, idle or not, since idling only pauses the count.
+	local starterConfig = GameConfig.playtimeStarterPack
+	local starterSaved, claimed, seenAt = DataService.getStarterPack(player)
+	if next(starterConfig.rewardPowerUps) == nil then
+		claimed = true -- switched off: nothing to count toward
+	end
+	local starterBefore = starterSaved
+	if not claimed then
+		starterBefore = PlaytimeLogic.starterSession(starterSaved, seenAt, nowUtc, starterConfig.sessionGapSeconds)
+		DataService.setStarterPack(player, starterBefore, nowUtc)
+	end
 	local since = lastTickAt[player]
 	lastTickAt[player] = nowUtc
 	if since == nil then
@@ -75,21 +91,12 @@ local function tickPlayer(player: Player, context: PlaytimeLogic.Context, nowUtc
 	if not PlaytimeLogic.isActive(config, context, nowUtc, lastInputAt[player]) then
 		return
 	end
-	-- The one-off starter pack counts the same stretch, for life and
-	-- with or without a live season.
-	local starterBefore, claimed = DataService.getStarterPack(player)
-	if next(GameConfig.playtimeStarterPack.rewardPowerUps) == nil then
-		claimed = true -- switched off: nothing to count toward
-	end
-	local starterAfter, starterDue = PlaytimeLogic.creditStarter(
-		config,
-		GameConfig.playtimeStarterPack.activeMinutes,
-		starterBefore,
-		claimed,
-		nowUtc - since
-	)
+	-- The starter pack counts the same stretch, with or without a live
+	-- season.
+	local starterAfter, starterDue =
+		PlaytimeLogic.creditStarter(config, starterConfig.activeMinutes, starterBefore, claimed, nowUtc - since)
 	if starterAfter ~= starterBefore then
-		DataService.setStarterPackSeconds(player, starterAfter)
+		DataService.setStarterPack(player, starterAfter, nowUtc)
 	end
 	if starterDue and StoreService.grantStarterPack(player) then
 		lastPushAt[player] = nowUtc -- the grant pushed

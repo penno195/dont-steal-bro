@@ -210,8 +210,9 @@ end
 -- The pop-up the starter pack row opens.
 function SeasonTrackLogic.starterExplainer(minutes: number, contents: string, view: StarterView): string
 	return string.format(
-		"Play for %d active minutes to get a free power-up starter pack: %s. One per player.\n\n"
-			.. "Ranked rounds always count. Lobby and practice time counts while you're playing, not while you're away.\n\n"
+		"Play for %d active minutes in one visit to get a free power-up starter pack: %s. One per player.\n\n"
+			.. "Ranked rounds always count. Lobby and practice time counts while you're playing, not while you're away. "
+			.. "Leave the game and the timer starts again next time.\n\n"
 			.. "So far: %s.",
 		minutes,
 		contents,

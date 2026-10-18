@@ -225,17 +225,20 @@ local function seasonState(player: Player, DataService: any): { [string]: any }?
 	}
 end
 
--- The playtime starter pack's lifetime count toward its target, or nil
+-- The playtime starter pack's session count toward its target, or nil
 -- once it's paid, while the pack is switched off, or before the profile
--- loads.
+-- loads. A count from a session that has ended reads as 0, so a join
+-- doesn't flash the last visit's bar before PlaytimeService ticks.
 local function starterPackState(player: Player, DataService: any): { [string]: any }?
 	if not DataService.isLoaded(player) then
 		return nil
 	end
-	local counted, claimed = DataService.getStarterPack(player)
+	local saved, claimed, seenAt = DataService.getStarterPack(player)
 	if claimed or next(GameConfig.playtimeStarterPack.rewardPowerUps) == nil then
 		return nil
 	end
+	local counted =
+		PlaytimeLogic.starterSession(saved, seenAt, os.time(), GameConfig.playtimeStarterPack.sessionGapSeconds)
 	local target = PlaytimeLogic.starterTargetSeconds(GameConfig.playtimeStarterPack.activeMinutes)
 	return { activeSeconds = math.min(counted, target), targetSeconds = target }
 end

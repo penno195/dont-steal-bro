@@ -1374,7 +1374,7 @@ local function showStarterPack(rewardPowerUps: { [string]: number })
 			shown,
 			"FREE STARTER PACK!",
 			string.format(
-				"%d minutes of play earned you these power-ups. They're in your Locker, ready for your loadout.",
+				"%d minutes of play in one visit earned you these power-ups. They're in your Locker, ready for your loadout.",
 				GameConfig.playtimeStarterPack.activeMinutes
 			),
 			{ onShown = playClaim }

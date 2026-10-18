@@ -540,23 +540,26 @@ local function setPlaytime(player: Player, state: ProfileLogic.PlaytimeState?): 
 	return true
 end
 
--- The playtime starter pack's lifetime count and whether it's paid.
--- PlaytimeService writes the count; StoreService's grant sets the claim
--- through the receipt handle, in one save with the stock it pays.
-local function getStarterPack(player: Player): (number, boolean)
+-- The playtime starter pack's session count, whether it's paid, and
+-- when a server last saw the player (PlaytimeLogic.starterSession).
+-- PlaytimeService writes the count and stamp; StoreService's grant sets
+-- the claim through the receipt handle, in one save with the stock it
+-- pays.
+local function getStarterPack(player: Player): (number, boolean, number)
 	local d = data(player)
 	if d == nil then
-		return 0, false
+		return 0, false, 0
 	end
-	return d.starterPackSeconds, d.starterPackClaimed
+	return d.starterPackSeconds, d.starterPackClaimed, d.starterPackSeenAt
 end
 
-local function setStarterPackSeconds(player: Player, seconds: number): boolean
+local function setStarterPack(player: Player, seconds: number, seenAt: number): boolean
 	local d = writable(player)
 	if d == nil then
 		return false
 	end
 	d.starterPackSeconds = seconds
+	d.starterPackSeenAt = seenAt
 	return true
 end
 
@@ -1229,7 +1232,7 @@ local DataService: Loader.Service = {
 	getPlaytime = getPlaytime,
 	setPlaytime = setPlaytime,
 	getStarterPack = getStarterPack,
-	setStarterPackSeconds = setStarterPackSeconds,
+	setStarterPack = setStarterPack,
 
 	-- P4-5: see the receipt write gate above. Handed out once, to
 	-- StoreService, because ProcessReceipt needs durability facts no

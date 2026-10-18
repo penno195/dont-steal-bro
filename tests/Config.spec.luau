@@ -55,7 +55,7 @@ local function validGameConfig(): Validate.GameConfig
 		},
 		streakCashOut = { minStreak = 3, coinsPerWinSquared = 25 },
 		playtimePass = { activeHoursPerWeek = 6, idleWindowSeconds = 120, maxCreditSeconds = 120 },
-		playtimeStarterPack = { activeMinutes = 30, rewardPowerUps = {} }, -- off: registries vary per spec
+		playtimeStarterPack = { activeMinutes = 30, sessionGapSeconds = 300, rewardPowerUps = {} }, -- off: registries vary per spec
 		dailyChallenges = { picksPerDay = 3, maxWinPicks = 1, rerollsPerDay = 1, allDoneCoins = 50, allDoneXp = 100 },
 		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
@@ -1239,6 +1239,9 @@ TestRunner.describe("Validate.checkGameConfig (round rewards)", function()
 			end,
 			function(c)
 				c.playtimeStarterPack.activeMinutes = 0 -- the pack for joining
+			end,
+			function(c)
+				c.playtimeStarterPack.sessionGapSeconds = 10 -- shorter than a teleport
 			end,
 			function(c)
 				c.playtimeStarterPack.rewardPowerUps = { "sprint-boost" } -- a list, not id -> count
