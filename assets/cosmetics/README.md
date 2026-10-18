@@ -21,6 +21,12 @@ all nine items are enabled.
   opens the Save to Roblox dialog without the Animation Editor. Scripts
   run through Studio MCP have no `plugin` object, so a plugin is needed.
 
+Level rewards, done 2026-10-18: Climber's Trail (level 5), Veteran
+Frame (10) and Old Hand flair (25). Source art from Meshy text-to-image
+(`node assets/cosmetics/make-level-art.js`, needs `MESHY_API_KEY`;
+writes `meshy/`), cut into the textures and Locker pictures by
+`python assets/cosmetics/make-level-art.py`.
+
 The steps below are for redoing or replacing an asset.
 
 ## Upload, then paste the ids back
@@ -43,6 +49,10 @@ the image id it points at.
 | `duck-burst.png` | `RubberDuckProjectile` | `explosionTextureAssetId` |
 | `rubber-duck.obj` | `RubberDuckProjectile` | `projectileMeshAssetId` |
 | `wildfire-flair.png` | `WildfireStreakFlair` | `flairTextureAssetId` |
+| `climber-trail.png` | `ClimberTrail` | `trailTextureAssetId` |
+| `veteran-nameplate.png` | `VeteranNameplate` | `nameplateFrameAssetId` |
+| `old-hand-flair.png` | `OldHandStreakFlair` | `flairTextureAssetId` |
+| `*-picture.png` | those three | `previewIconAssetId` |
 
 The first three are Season 1's premium track.
 
