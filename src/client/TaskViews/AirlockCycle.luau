@@ -33,6 +33,7 @@ type Challenge = {
 	period: number,
 	gapHalfWidth: number,
 	door: number,
+	doorHalfWidth: number,
 }
 
 type Feedback = {
@@ -53,7 +54,10 @@ local HEIGHT = TRACK.Y + GAP + BUTTON.Y
 -- The channel's ends are padded so the lights stay visible as the window
 -- reaches 0 or 1 (its edges overhang it by gapHalfWidth).
 local INSET = 0.12
-local DOOR_WIDTH = 26
+-- The door frame's stroke sits outside the doorway, so the doorway is
+-- drawn this much narrower and the frame's OUTER edge is the door's true
+-- width on the track - the width the server's seal check uses.
+local DOOR_STROKE = 3
 local SHUTTER_RAISED = 0.7 -- share of the shutter hidden above the doorway
 local LIGHT = 20
 local VERDICT_TIMEOUT = 1 -- see ReactorSync.luau
@@ -228,12 +232,12 @@ return TaskViewBase.define({
 				Name = "Doorway",
 				AnchorPoint = Vector2.new(0.5, 0),
 				Position = UDim2.fromScale(trackX(challenge.door), 0),
-				Size = UDim2.new(0, DOOR_WIDTH, 1, 0),
+				Size = UDim2.new(challenge.doorHalfWidth * 2 * (1 - 2 * INSET), -2 * DOOR_STROKE, 1, 0),
 				BackgroundColor3 = DOORWAY,
 				BackgroundTransparency = 0.15,
 				ClipsDescendants = true,
 				ZIndex = 2,
-				create("UIStroke")({ Color = DOOR_FRAME, Thickness = 3 }),
+				create("UIStroke")({ Color = DOOR_FRAME, Thickness = DOOR_STROKE }),
 				shutter,
 			}),
 			edge(-1),
