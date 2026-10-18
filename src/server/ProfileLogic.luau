@@ -215,6 +215,21 @@ export type ProfileData = {
 	-- the current streak holds no restore; the progression writer clears
 	-- it whenever the streak goes back to 0.
 	streakRestoredAt: number,
+
+	-- ===== schema v19, the playtime pass ==================================
+
+	-- Active seconds counted toward the free season pass this week of
+	-- this season (payoff-loop step 5, PlaytimeLogic.State). nil = none
+	-- counted yet. A stale week or season reads as 0, so nothing resets
+	-- it on a schedule. Written only by PlaytimeService.
+	playtime: PlaytimeState?,
+}
+
+-- Structurally PlaytimeLogic.State.
+export type PlaytimeState = {
+	seasonId: string,
+	weekStart: number,
+	activeSeconds: number,
 }
 
 -- Structurally StaffGrantLogic.UnseenGift: a unique id, who gave it
@@ -249,7 +264,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 18
+local CURRENT_SCHEMA_VERSION = 19
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0 }
@@ -287,6 +302,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		streakShields = 0,
 		bestBanked = 0,
 		streakRestoredAt = 0,
+		playtime = nil,
 	}
 end
 
@@ -496,6 +512,14 @@ migrations[17] = function(old: { [string]: any }): { [string]: any }
 	next.schemaVersion = 18
 	next.bestBanked = (old.bestBanked :: number?) or 0
 	next.streakRestoredAt = (old.streakRestoredAt :: number?) or 0
+	return next
+end
+
+-- v18 -> v19 (the playtime pass): nothing counted. `playtime` is
+-- optional, so this step only moves the version on.
+migrations[18] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 19
 	return next
 end
 

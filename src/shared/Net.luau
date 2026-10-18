@@ -1138,6 +1138,21 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server: "this player touched the controls lately"
+	-- (payoff-loop step 5b). Hub and practice time counts toward the
+	-- free season pass only with input in the last
+	-- GameConfig.playtimePass.idleWindowSeconds, and the server stamps
+	-- its own clock when this lands, so the client sends no time. The
+	-- client sends it at most every 30s while there's input. Forging it
+	-- buys only what tapping the screen would. Every round state.
+	PlaytimeActivityIntent = {
+		name = "PlaytimeActivityIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({}),
+		rateLimit = { capacity = 2, refillPerSecond = 0.1 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: a staff member gives a gift (staff-tools.md step
 	-- 2). Anyone can fire it; StaffService drops it unless the sender is
 	-- on liveOps.adminUserIds, with no reply, so its existence isn't

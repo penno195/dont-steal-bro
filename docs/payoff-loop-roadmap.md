@@ -134,12 +134,18 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     cap, when the pass falls due, the pass screen's progress), and
     `SeasonLogic.buyPass`'s optional `source` ("Playtime" stored as
     `passSource`; nil = bought, so no migration).
-  - [ ] 5b. Server: a profile field for `PlaytimeLogic.State` (schema
+  - [x] 5b. Server: a profile field for `PlaytimeLogic.State` (schema
     bump), a ticking credit per player (context from the place and
     whether the match is practice; Hub/practice input stamped by the
     server from a rate-limited activity intent), the grant through
     `SeasonLogic.buyPass(..., "Playtime")` with an audit line, and the
-    week's progress in StoreState for the pass screen.
+    week's progress in StoreState for the pass screen. Built as
+    `PlaytimeService` (30s tick; StoreState re-sent every 5 min while
+    counting), profile v19 `playtime`, `PlaytimeActivityIntent` (sent
+    by `PlaytimeActivityController` at most every 30s with input), and
+    `StoreService.grantPlaytimePass`. StoreState's `season` gains
+    `passSource` and `playtime = { activeSeconds, targetSeconds,
+    weekResetsIn }` (nil once the pass is held).
   - [ ] 5c. UI: the pass screen's "x / 6 active hours this week" bar
     (with when the week resets) while the pass isn't held, and an
     "Earned by playtime" pass pop-up when it unlocks.

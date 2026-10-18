@@ -81,6 +81,7 @@ local StoreOffers = require(ReplicatedStorage.Shared.StoreOffers)
 local LevelLogic = require(ReplicatedStorage.Shared.LevelLogic)
 local CosmeticLogic = require(ReplicatedStorage.Shared.CosmeticLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
+local PlaytimeLogic = require(ServerScriptService.Server.PlaytimeLogic)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 
 type StoreItemDef = Validate.StoreItemDef
@@ -192,10 +193,26 @@ local function seasonState(player: Player, DataService: any): { [string]: any }?
 		return nil
 	end
 	local progress = DataService.getSeasonProgress(player, season.id)
+	local hasPass = SeasonLogic.hasPass(progress)
+	-- Payoff-loop step 5b: this week's active time toward the free pass,
+	-- while the pass isn't held. The reset is sent as a duration, like
+	-- secondsLeft.
+	local playtime = nil
+	if not hasPass then
+		local counted = PlaytimeLogic.progress(GameConfig.playtimePass, DataService.getPlaytime(player), season, nowUtc)
+		playtime = {
+			activeSeconds = counted.activeSeconds,
+			targetSeconds = counted.targetSeconds,
+			weekResetsIn = counted.weekEndsAt - nowUtc,
+		}
+	end
 	return {
 		id = season.id,
 		secondsLeft = season.endsAt - nowUtc,
-		passSeen = SeasonLogic.hasPass(progress),
+		passSeen = hasPass,
+		-- "Playtime" when the pass was earned, nil when bought or not held.
+		passSource = if progress then progress.passSource else nil,
+		playtime = playtime,
 		freeWins = if progress then progress.freeWins else 0,
 		premiumWins = if progress then progress.premiumWins else 0,
 		freePaid = if progress then progress.freePaid else 0,
@@ -828,6 +845,43 @@ local function handleSeasonClaim(player: Player, track: SeasonLogic.Track?, upTo
 	pushState(player)
 end
 
+-- The free season pass for playtime (payoff-loop step 5b). PlaytimeService
+-- calls this when PlaytimeLogic.credit says the pass is due. The same
+-- unlock a purchase gives (SeasonLogic.buyPass), tagged "Playtime", so
+-- it's once per season however the pass was got. Saved at once and
+-- audited like a receipt grant. Returns whether the pass is held now
+-- (granted here, or already), so a caller only retries a real failure.
+local PLAYTIME_PASS_KEY = "playtime-pass"
+
+local function grantPlaytimePass(player: Player): boolean
+	local getHandle = receiptHandleFor
+	if getHandle == nil then
+		return false
+	end
+	local handle = getHandle(player)
+	if handle == nil or not handle.isActive() then
+		return false
+	end
+	local data = handle.getData()
+	if data == nil or (Loader.get("LiveConfig") :: any).flags().readOnly then
+		return false
+	end
+	local nowUtc = os.time()
+	local season = liveSeason(nowUtc)
+	if season == nil then
+		return false
+	end
+	local progress, granted = SeasonLogic.buyPass(data.seasonProgress[season.id], season, nowUtc, "Playtime")
+	if not granted then
+		return SeasonLogic.hasPass(data.seasonProgress[season.id])
+	end
+	data.seasonProgress[season.id] = progress
+	logGrant(player, PLAYTIME_PASS_KEY, 0, nil, { string.format("season pass for %s (earned by playtime)", season.id) })
+	handle.save()
+	pushState(player)
+	return true
+end
+
 -- ===== the community reward (design-decisions.md Q1) =====================
 
 -- One cosmetic, free to members of the game's Roblox group
@@ -1364,6 +1418,13 @@ local StoreService: Loader.Service = {
 	-- Studio only, and no remote reaches it - see its own comment.
 	debugSimulateReceipt = debugSimulateReceipt,
 	pushState = pushState,
+
+	-- Payoff-loop step 5b, for PlaytimeService: the live season (nil
+	-- when none), and the playtime pass grant.
+	liveSeason = function(): SeasonLogic.Season?
+		return liveSeason(os.time())
+	end,
+	grantPlaytimePass = grantPlaytimePass,
 
 	-- Read-only, for a support tool or a test - never mutated by a
 	-- caller, since this hands back the live list by design (it is a

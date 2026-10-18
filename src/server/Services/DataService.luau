@@ -480,6 +480,25 @@ local function getStreakRestoredAt(player: Player): number
 	return if d then d.streakRestoredAt else 0
 end
 
+-- The playtime pass count (payoff-loop step 5b). PlaytimeService is the
+-- only writer; it works the new state out with PlaytimeLogic.credit.
+-- Returns false if nothing was written (not loaded, read-only mode).
+local function getPlaytime(player: Player): ProfileLogic.PlaytimeState?
+	local d = data(player)
+	return if d then d.playtime else nil
+end
+
+local function setPlaytime(player: Player, state: ProfileLogic.PlaytimeState?): boolean
+	local d = writable(player)
+	if d == nil then
+		return false
+	end
+	d.playtime = if state ~= nil
+		then { seasonId = state.seasonId, weekStart = state.weekStart, activeSeconds = state.activeSeconds }
+		else nil
+	return true
+end
+
 -- ===== the receipt write gate (P4-5) =====================================
 --
 -- Everywhere else in this file, a caller gets a narrow typed accessor
@@ -1090,6 +1109,8 @@ local DataService: Loader.Service = {
 	getStreakShields = getStreakShields,
 	getBestBanked = getBestBanked,
 	getStreakRestoredAt = getStreakRestoredAt,
+	getPlaytime = getPlaytime,
+	setPlaytime = setPlaytime,
 
 	-- P4-5: see the receipt write gate above. Handed out once, to
 	-- StoreService, because ProcessReceipt needs durability facts no
