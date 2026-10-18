@@ -345,7 +345,7 @@ export type HardControlDecision = {
 local IMMUNITY_WINDOW_SECONDS = 3 -- powerups.md rule 1
 local DIMINISHING_RETURNS_WINDOW_SECONDS = 20 -- powerups.md rule 2
 local DIMINISHING_RETURNS_FLOOR_SECONDS = 0.5 -- powerups.md rule 2
-local ROUND_DISABLE_CAP_SECONDS = 15 -- powerups.md rule 3
+local ROUND_DISABLE_CAP_SECONDS = 22 -- powerups.md rule 3; was 15 (user decision 2026-10-18)
 
 -- Pure: true while rule 1's post-effect immunity window is open, i.e. a
 -- new hard-control effect would be refused outright. Asked on its own by

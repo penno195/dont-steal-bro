@@ -4,7 +4,7 @@
 -- application (cleansing active debuffs) is P2-8's job (Status Effects)
 -- - this file only declares the item, per Ground Rule 2.
 --
--- durationSeconds is the 2.5s post-cleanse immunity window - the cleanse
+-- durationSeconds is the 3.5s post-cleanse immunity window - the cleanse
 -- itself is instant, so the immunity window is the only real "duration"
 -- this item has.
 
@@ -18,7 +18,7 @@ local SecondWind: Validate.PowerUpDef = {
 	kind = "Buff",
 	role = "Defence",
 	target = "Self",
-	durationSeconds = 2.5,
+	durationSeconds = 3.5, -- was 2.5; design-decisions.md §12
 	cooldownSeconds = 22,
 	rarity = "Rare",
 	hardControl = false,

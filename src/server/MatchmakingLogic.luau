@@ -142,10 +142,26 @@ export type FormedGroup = {
 export type Config = {
 	groupSize: number,
 	partialGroupTimeoutSeconds: number,
+	-- The shorter timer for a quiet queue: nobody else has joined within
+	-- quietWindowSeconds, so the full wait would almost never find anyone.
+	quietQueueTimeoutSeconds: number,
+	quietWindowSeconds: number,
 	partialGroupMinPlayers: number,
 	formationTickSeconds: number,
 	rematchCooldownSeconds: number,
 	recentOpponentsCap: number,
+}
+
+-- Who joined the queue recently, as THIS server has seen it, kept from
+-- the page or summary it already reads each tick. Departed and Left
+-- entries expire too fast to look back a whole window, so the history
+-- lives here instead. `since` is when the log's view became complete:
+-- a server that just started, or whose last read was a full page that
+-- hid the newest joins, can't call the queue quiet until it has watched
+-- a whole window.
+export type ArrivalLog = {
+	since: number,
+	arrivals: { [number]: number }, -- userId -> latest enqueuedAt seen
 }
 
 export type QueueStatus = {
@@ -566,12 +582,70 @@ end
 -- together. They keep their place and get the partial-group timer.
 --
 -- Then partial groups: the oldest leftover player who has waited past
--- partialGroupTimeoutSeconds seeds the largest compatible group of
+-- their partial timer (partialTimeoutFor: the full
+-- partialGroupTimeoutSeconds, or the quiet one) seeds the largest compatible group of
 -- leftovers, and the rest of the seats are NPC slots. The cooldown is
 -- never relaxed to fill a group. A quiet server is exactly when
 -- colluding friends would be matched together, so the fallback is
 -- bots.
-function MatchmakingLogic.selectGroups(entries: { Entry }, now: number, config: Config): { FormedGroup }
+-- ===== the quiet-queue timer ===============================================
+
+function MatchmakingLogic.newArrivalLog(now: number): ArrivalLog
+	return { since = now, arrivals = {} }
+end
+
+-- Notes every entry's join time (any state: a player who joined and
+-- already left still shows the queue is active) and forgets anything
+-- older than the window. A full page hides the newest joins, so it
+-- restarts the window rather than risk calling a busy queue quiet.
+function MatchmakingLogic.recordArrivals(
+	log: ArrivalLog,
+	entries: { Entry },
+	now: number,
+	pageWasFull: boolean,
+	config: Config
+): ArrivalLog
+	local cutoff = now - config.quietWindowSeconds
+	local arrivals: { [number]: number } = {}
+	for userId, at in log.arrivals do
+		if at >= cutoff then
+			arrivals[userId] = at
+		end
+	end
+	for _, entry in entries do
+		local seen = arrivals[entry.userId]
+		if entry.enqueuedAt >= cutoff and (seen == nil or entry.enqueuedAt > seen) then
+			arrivals[entry.userId] = entry.enqueuedAt
+		end
+	end
+	return { since = if pageWasFull then now else log.since, arrivals = arrivals }
+end
+
+-- How long `seed` waits before a partial group forms around them. The
+-- full timer is what gives another real player the chance to share the
+-- lobby; it is only cut when the log has watched a whole window and
+-- nobody but the seed joined in it. Without a log (or before it has
+-- watched a window) the answer is always the full timer.
+function MatchmakingLogic.partialTimeoutFor(seed: Entry, log: ArrivalLog?, now: number, config: Config): number
+	local full = config.partialGroupTimeoutSeconds
+	if log == nil or now - log.since < config.quietWindowSeconds then
+		return full
+	end
+	local cutoff = now - config.quietWindowSeconds
+	for userId, at in log.arrivals do
+		if userId ~= seed.userId and at >= cutoff then
+			return full
+		end
+	end
+	return math.min(full, config.quietQueueTimeoutSeconds)
+end
+
+function MatchmakingLogic.selectGroups(
+	entries: { Entry },
+	now: number,
+	config: Config,
+	arrivals: ArrivalLog?
+): { FormedGroup }
 	local waiting = MatchmakingLogic.waitingInOrder(entries)
 	local taken: { [number]: boolean } = {}
 	local groups: { FormedGroup } = {}
@@ -590,7 +664,10 @@ function MatchmakingLogic.selectGroups(entries: { Entry }, now: number, config: 
 	end
 
 	for _, seed in waiting do
-		if not taken[seed.userId] and now - seed.enqueuedAt >= config.partialGroupTimeoutSeconds then
+		if
+			not taken[seed.userId]
+			and now - seed.enqueuedAt >= MatchmakingLogic.partialTimeoutFor(seed, arrivals, now, config)
+		then
 			local group = greedyFrom(seed, waiting, taken, now, size)
 			if #group >= config.partialGroupMinPlayers then
 				for _, member in group do
@@ -674,7 +751,8 @@ function MatchmakingLogic.queueStatus(
 	userId: number,
 	now: number,
 	config: Config,
-	pageWasFull: boolean
+	pageWasFull: boolean,
+	arrivals: ArrivalLog?
 ): QueueStatus
 	local waiting = MatchmakingLogic.waitingInOrder(entries)
 	local position: number? = nil
@@ -697,8 +775,9 @@ function MatchmakingLogic.queueStatus(
 		if #waiting >= slice * size then
 			estimate = tick
 		else
-			local waited = now - waiting[sliceStart].enqueuedAt
-			estimate = math.max(tick, config.partialGroupTimeoutSeconds - waited)
+			local seed = waiting[sliceStart]
+			local waited = now - seed.enqueuedAt
+			estimate = math.max(tick, MatchmakingLogic.partialTimeoutFor(seed, arrivals, now, config) - waited)
 		end
 	end
 

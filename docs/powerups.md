@@ -95,16 +95,16 @@ coexist (`store-receipts.md` §5).
 
 | id | Type | Role | Target | Duration | Magnitude | Cooldown | Rarity |
 |---|---|---|---|---|---|---|---|
-| `sprint-boost` | Buff | Utility | Self | 6s | +35% move speed | 10s | Common |
-| `second-wind` | Buff | Defence | Self | instant + 2.5s immunity | Cleanses all active debuffs | 22s | Rare |
-| `task-insight` | Buff | Utility | Self | next attempt (≤15s) | -1 difficulty tier on current task's rolled challenge | 12s | Uncommon |
-| `phase-step` | Buff | Defence | Self | 3s | Untargetable by targeted effects; passes through hazards & players | 15s | Rare |
-| `overclock` | Buff | Utility | Self | 10s | -50% cooldown on own other power-ups | 20s | Rare |
-| `freeze` | Debuff | Attack | Aimed | 4.5s | Full immobilize, can't interact with tasks | 12s | Uncommon |
-| `slow-field` | Debuff | Attack | Area | 5s zone | -40% move speed while inside | 15s | Common |
-| `blind` | Debuff | Attack | Aimed | 4.5s | Obscures screen, no movement lock | 12s | Uncommon |
+| `sprint-boost` | Buff | Utility | Self | 7s | +35% move speed | 10s | Common |
+| `second-wind` | Buff | Defence | Self | instant + 3.5s immunity | Cleanses all active debuffs | 22s | Rare |
+| `task-insight` | Buff | Utility | Self | next attempt (≤16s) | -1 difficulty tier on current task's rolled challenge | 12s | Uncommon |
+| `phase-step` | Buff | Defence | Self | 4s | Untargetable by targeted effects; passes through hazards & players | 15s | Rare |
+| `overclock` | Buff | Utility | Self | 11s | -50% cooldown on own other power-ups | 20s | Rare |
+| `freeze` | Debuff | Attack | Aimed | 5.5s | Full immobilize, can't interact with tasks | 12s | Uncommon |
+| `slow-field` | Debuff | Attack | Area | 6s zone | -40% move speed while inside | 15s | Common |
+| `blind` | Debuff | Attack | Aimed | 5.5s | Obscures screen, no movement lock | 12s | Uncommon |
 | `task-scramble` | Debuff | Attack | Aimed | instant | Forces current task's challenge to re-roll (~4s added) | 10s | Common |
-| `push-trip` | Debuff | Attack | Aimed | 2s stagger (ragdoll) | Knockback + brief stun | 7s | Common |
+| `push-trip` | Debuff | Attack | Aimed | 3s stagger (ragdoll) | Knockback + brief stun | 7s | Common |
 
 **Role** is the colour family on the HUD slot and pickup orb: Attack red
 (exactly the Debuffs, enforced by `Validate.checkPowerUp`), Defence blue,
@@ -179,7 +179,7 @@ itself.
 | Fuse Rewire | 4 fuses | 3 fuses |
 
 Used mid-task, the current attempt restarts on its easy tier. Used
-anywhere else, the next attempt started within `durationSeconds` (15s)
+anywhere else, the next attempt started within `durationSeconds` (16s)
 rolls easy, and that spends it.
 
 ### 4. Phase Step (Buff, Self)
@@ -203,7 +203,7 @@ Overclock is active; this is intentional (see anti-frustration note below)
 ### 6. Freeze (Debuff, Aimed)
 
 **Counter-play:** Second Wind cleanses it; Phase Step blocks it if timed
-before the cast lands; failing either, the fixed 4.5s duration plus the
+before the cast lands; failing either, the fixed 5.5s duration plus the
 post-effect hard-control immunity window (below) bounds the worst case.
 **Stacking:** does not extend past its own duration if reapplied — see the
 anti-frustration layer for cross-effect stacking rules.
@@ -265,7 +265,7 @@ Bots have no task view, so it does nothing to them.
 ### 10. Push/Trip (Debuff, Aimed)
 
 **Counter-play:** Phase Step blocks it; Second Wind cleanses the stagger;
-its 2s duration means even a fully unmitigated hit rarely costs real race
+its 3s duration means even a fully unmitigated hit rarely costs real race
 position. **Stacking:** classified as hard control (see below) despite its
 short duration — it shares the same post-effect immunity window and
 rolling disable-time cap as Freeze, not Slow Field's softer treatment.
@@ -297,13 +297,13 @@ then later a Push/Trip from someone else) isn't covered by it — this rule
 bounds that case across effect types and across multiple attackers without
 banning legitimate independent use of the kit by different players.
 
-**3. Rolling hard-control cap: 15 seconds of total disable time per
-round.** Once a player has accumulated 15 seconds of combined Freeze +
+**3. Rolling hard-control cap: 22 seconds of total disable time per
+round.** (15s until 2026-10-18.) Once a player has accumulated 22 seconds of combined Freeze +
 Push/Trip time in a round, any further hard-control effect that would land
 on them is automatically downgraded to a Slow Field-equivalent soft
 effect instead of applying. This is the actual ceiling the design
 constraint asks for: no matter how many opponents pile on, a player can
-never be fully disabled for more than 15 seconds of a round — comfortably
+never be fully disabled for more than 22 seconds of a round — comfortably
 under any plausible round length, so "chain-frozen out of the round"
 becomes structurally impossible rather than just unlikely.
 

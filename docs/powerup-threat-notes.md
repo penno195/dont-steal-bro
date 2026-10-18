@@ -23,7 +23,7 @@ exploit list below — read that first if the two ever seem to disagree).
   validated use logs `"no effect resolver wired in yet (P2-8)"` via
   `PowerUpService.setEffectApplier`'s default.
 - **The anti-frustration stacking rules** (post-effect immunity,
-  diminishing returns, the 15s rolling hard-control cap) — also P2-8,
+  diminishing returns, the 22s rolling hard-control cap, 15s before 2026-10-18) — also P2-8,
   which owns every active effect on a character and is the only place
   those rules can be enforced centrally.
 - **Movement/position sanity-checking** (is this Character.Position

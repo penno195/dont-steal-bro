@@ -1292,6 +1292,18 @@ bound the worst case, now reached in fewer hits.
 4s → **4.5s**, after a playtest. Push/Trip stays at 2s. Freeze now
 uses 4.5s of the 15s rolling cap per full hit.
 
+**Revision (2026-10-18, user decision):** every timed power-up effect
+gets **+1s**: Freeze and Blind 5.5s, Push/Trip 3s, Sprint Boost 7s,
+Slow Field 6s, Phase Step 4s, Overclock 11s, Second Wind's immunity
+3.5s, Task Insight's window 16s. Task Scramble is instant and is
+unchanged. The 3s post-effect immunity is unchanged.
+
+**Revision (2026-10-18, user decision, same day):** the rolling
+hard-control cap (`powerups.md` rule 3) goes 15s → **22s** of total
+disable time per round (`StatusEffectResolver.ROUND_DISABLE_CAP_SECONDS`).
+A full Freeze now uses 5.5s of it. Rule 5's separate 15s cap on Task
+Scramble's added time is unchanged.
+
 ### Applied case: firing into the immunity window (2026-10-09, user decision)
 
 **Decision:** a hard-control item (Freeze, Push/Trip) aimed at someone

@@ -85,14 +85,21 @@ type Ticket = {
 
 local config = GameConfig.matchmaking
 
-local logicConfig: MatchmakingLogic.Config = {
-	groupSize = config.groupSize,
-	partialGroupTimeoutSeconds = config.partialGroupTimeoutSeconds,
-	partialGroupMinPlayers = config.partialGroupMinPlayers,
-	formationTickSeconds = config.formationTickSeconds,
-	rematchCooldownSeconds = config.rematchCooldownSeconds,
-	recentOpponentsCap = config.recentOpponentsCap,
-}
+-- Rebuilt on every call, not copied once at require time: LiveConfig
+-- writes tuned values into GameConfig.matchmaking leaf by leaf, and a
+-- copy would never see them.
+local function logicConfig(): MatchmakingLogic.Config
+	return {
+		groupSize = config.groupSize,
+		partialGroupTimeoutSeconds = config.partialGroupTimeoutSeconds,
+		quietQueueTimeoutSeconds = config.quietQueueTimeoutSeconds,
+		quietWindowSeconds = config.quietWindowSeconds,
+		partialGroupMinPlayers = config.partialGroupMinPlayers,
+		formationTickSeconds = config.formationTickSeconds,
+		rematchCooldownSeconds = config.rematchCooldownSeconds,
+		recentOpponentsCap = config.recentOpponentsCap,
+	}
+end
 
 local LEASE_KEY = "formationLease"
 
@@ -132,6 +139,13 @@ local tutorialEntries: { [Player]: Entry } = {}
 local function now(): number
 	return DateTime.now().UnixTimestampMillis / 1000
 end
+
+-- The quiet-queue timer's view of recent joins (MatchmakingLogic.
+-- ArrivalLog). Every hub keeps its own from what it reads each tick, so
+-- the lease holder's formation and everyone's wait estimates agree, and
+-- a new lease holder starts from the full timer until it has watched a
+-- whole window.
+local arrivalLog = MatchmakingLogic.newArrivalLog(now())
 
 local function sendState(player: Player, payload: { [string]: any })
 	Net.fireClient("QueueState", player, payload)
@@ -445,6 +459,7 @@ local UNAVAILABLE_MESSAGE = "Matchmaking is having trouble. You're still in line
 local function broadcastStatus(entries: { Entry }?, pageWasFull: boolean, practice: boolean)
 	local unavailable = not practice and consecutiveFailures >= config.unavailableAfterFailures
 	local stamp = now()
+	local mmConfig = logicConfig()
 	for player, ticket in tickets do
 		if ticket.status == "Waiting" and ticket.practice == practice then
 			if unavailable or entries == nil then
@@ -452,7 +467,16 @@ local function broadcastStatus(entries: { Entry }?, pageWasFull: boolean, practi
 					sendState(player, { status = "Unavailable", message = UNAVAILABLE_MESSAGE })
 				end
 			else
-				local status = MatchmakingLogic.queueStatus(entries, player.UserId, stamp, logicConfig, pageWasFull)
+				-- The practice queue never uses the quiet timer: it has its
+				-- own early start (everyone on the server has queued).
+				local status = MatchmakingLogic.queueStatus(
+					entries,
+					player.UserId,
+					stamp,
+					mmConfig,
+					pageWasFull,
+					if practice then nil else arrivalLog
+				)
 				sendState(player, {
 					status = "Waiting",
 					position = status.position,
@@ -518,11 +542,16 @@ local function tick()
 	end
 	if entries == nil then
 		consecutiveFailures += 1
+		-- Joins during a failed read went unseen, so the queue can't be
+		-- called quiet until a whole window has been watched again.
+		arrivalLog = MatchmakingLogic.newArrivalLog(now())
 		broadcastStatus(nil, false, false)
 		return
 	end
 	consecutiveFailures = 0
 	local page = entries :: { Entry }
+	local mmConfig = logicConfig()
+	arrivalLog = MatchmakingLogic.recordArrivals(arrivalLog, page, now(), pageWasFull, mmConfig)
 
 	local pending: PendingDepartures = {}
 	for _, entry in page do
@@ -534,7 +563,7 @@ local function tick()
 		-- P8-5 kill switch: no new groups form, but owned entries above are
 		-- still serviced, so a group formed before the switch still departs.
 		if Loader.get("LiveConfig").flags().matchmakingEnabled then
-			for _, group in MatchmakingLogic.selectGroups(page, now(), logicConfig) do
+			for _, group in MatchmakingLogic.selectGroups(page, now(), mmConfig, arrivalLog) do
 				local groupId = formGroup(group)
 				if groupId ~= nil then
 					local userIds: { number } = {}
@@ -625,7 +654,7 @@ local function practiceTick()
 	end
 	if Loader.get("LiveConfig").flags().matchmakingEnabled then
 		local group =
-			MatchmakingLogic.selectPracticeGroup(entries, now(), #Players:GetPlayers(), logicConfig, partyUnitOf)
+			MatchmakingLogic.selectPracticeGroup(entries, now(), #Players:GetPlayers(), logicConfig(), partyUnitOf)
 		if group ~= nil then
 			local record = formPracticeGroup(group)
 			if record ~= nil then

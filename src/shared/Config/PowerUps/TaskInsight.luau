@@ -5,7 +5,7 @@
 -- challenge) is P2-8's job (Status Effects) - this file only declares
 -- the item, per Ground Rule 2.
 --
--- durationSeconds is the "next attempt (<=15s)" window the discount
+-- durationSeconds is the "next attempt (<=16s)" window the discount
 -- applies within.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,7 +18,7 @@ local TaskInsight: Validate.PowerUpDef = {
 	kind = "Buff",
 	role = "Utility",
 	target = "Self",
-	durationSeconds = 15,
+	durationSeconds = 16, -- was 15; design-decisions.md §12
 	cooldownSeconds = 12,
 	rarity = "Uncommon",
 	hardControl = false,

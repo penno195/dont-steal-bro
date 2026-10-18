@@ -222,9 +222,9 @@ TestRunner.describe("StatusEffectResolver.decideHardControlApplication - three f
 end)
 
 TestRunner.describe("StatusEffectResolver.decideHardControlApplication - rolling per-round cap", function()
-	TestRunner.it("downgrades to a soft effect once 15s of disable time has accumulated this round", function()
+	TestRunner.it("downgrades to a soft effect once 22s of disable time has accumulated this round", function()
 		local history: StatusEffectResolver.HardControlHistory =
-			{ lastEndedAt = nil, recentApplications = {}, totalDisabledSeconds = 15 }
+			{ lastEndedAt = nil, recentApplications = {}, totalDisabledSeconds = 22 }
 
 		local decision = StatusEffectResolver.decideHardControlApplication(history, 100, 2.5)
 
@@ -235,12 +235,12 @@ TestRunner.describe("StatusEffectResolver.decideHardControlApplication - rolling
 
 	TestRunner.it("still applies at full strength just under the cap", function()
 		local history: StatusEffectResolver.HardControlHistory =
-			{ lastEndedAt = nil, recentApplications = {}, totalDisabledSeconds = 14.9 }
+			{ lastEndedAt = nil, recentApplications = {}, totalDisabledSeconds = 21.9 }
 
 		local decision = StatusEffectResolver.decideHardControlApplication(history, 100, 2.5)
 
 		TestRunner.expect(decision.downgradedToSoft):toBe(false)
-		TestRunner.expect(decision.updatedHistory.totalDisabledSeconds):toBeCloseTo(14.9 + 2.5)
+		TestRunner.expect(decision.updatedHistory.totalDisabledSeconds):toBeCloseTo(21.9 + 2.5)
 	end)
 end)
 

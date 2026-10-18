@@ -125,6 +125,37 @@ ordering at boot. Even if it is broken, the result is at most a short
 group, never a double booking. The spec's "stalled former" case pins
 that down.
 
+## The quiet-queue timer
+
+*Owner's choice 2026-10-18, before advertising: cut the queue wait as
+far as possible without costing real players a match.*
+
+A partial group forms when its oldest player has waited
+`partialGroupTimeoutSeconds` (30). That wait exists only so another real
+player has a chance to join the lobby. When nobody else has pressed Play
+for a while, it almost never finds anyone. So a player's timer drops to
+`quietQueueTimeoutSeconds` (10) when **nobody but them has joined the
+queue in the last `quietWindowSeconds` (60)**. Anyone else joining in
+that window, including someone who has since left or already departed,
+restores the full 30s. When it's busy, full groups of 6 form at once
+and neither timer matters.
+
+- **Where the history lives.** Departed and Left entries expire after
+  `departedTtlSeconds` (30), too soon to look back a whole window. So
+  every hub keeps an `ArrivalLog` (`MatchmakingLogic.recordArrivals`)
+  from the page or summary it already reads each tick, at no extra
+  MemoryStore cost. The lease holder forms groups from its log, and
+  every hub's wait estimate (`queueStatus`) comes from its own log.
+- **It fails towards the full timer.** A log that hasn't watched a whole
+  window yet uses 30s. That covers a new server, a new lease holder, a
+  failed read (the log restarts) and a full page (which hides the newest
+  joins, so the log restarts too).
+- **Practice queues are unaffected.** They already start early once
+  everyone on the server has queued.
+- Both values are live-tunable (`live-ops.md`). Validation keeps the
+  quiet timer at or below the full one, and the window at least as long
+  as the quiet timer.
+
 ## Timing orderings (enforced by `Validate.checkMatchmakingConfig`)
 
 These protect liveness (the queue keeps moving). None of them affects
@@ -140,6 +171,8 @@ the no-double-booking guarantee.
   hands every tick.
 - `groupSize == playerCount`, and `queuePageSize` is between
   `groupSize` and 200.
+- `quietQueueTimeoutSeconds <= partialGroupTimeoutSeconds`, and
+  `quietWindowSeconds >= quietQueueTimeoutSeconds`.
 
 ## MemoryStore limits this is designed against — VERIFY before launch
 

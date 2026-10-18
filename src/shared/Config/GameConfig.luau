@@ -535,6 +535,13 @@ local GameConfig: Validate.GameConfig = {
 
 		groupSize = 6, -- gdd.md; must equal playerCount
 		partialGroupTimeoutSeconds = 30, -- owner's choice 2026-10-04: long enough to fill a group, short enough not to annoy. Live-tunable
+		-- Owner's choice 2026-10-18 (matchmaking.md, "the quiet-queue timer"):
+		-- when nobody else has joined the queue in quietWindowSeconds, the
+		-- full wait would almost never find anyone, so a group forms after
+		-- this instead. Anyone else joining in the window restores the full
+		-- timer. Both live-tunable.
+		quietQueueTimeoutSeconds = 10,
+		quietWindowSeconds = 60,
 		partialGroupMinPlayers = 1, -- P5-1: "with at least 1 player"
 		formationTickSeconds = 2, -- PLACEHOLDER: also the UI refresh rate and the claim-discovery latency
 		queuePageSize = 200, -- the oldest 200 waiting are the only ones who can form a group this tick
@@ -615,7 +622,7 @@ local GameConfig: Validate.GameConfig = {
 	-- except these. All PLACEHOLDER, to tune in playtest: the aim is fun
 	-- for a few seconds, never annoying for long.
 	practice = {
-		durationScale = 0.5, -- a 4.5s Freeze lands as 2.25s
+		durationScale = 0.5, -- a 5.5s Freeze lands as 2.75s
 		maxEffectSeconds = 2, -- nothing lasts longer than this, whatever the item
 		maxActiveEffects = 1, -- one effect per player at a time
 		itemSpawnRarities = { "Common", "Uncommon", "Rare" }, -- so every tier shows up to try
@@ -883,6 +890,8 @@ local GameConfig: Validate.GameConfig = {
 			"game.npc.**",
 			"game.npcBrain.**",
 			"game.matchmaking.partialGroupTimeoutSeconds",
+			"game.matchmaking.quietQueueTimeoutSeconds",
+			"game.matchmaking.quietWindowSeconds",
 			"game.matchmaking.partialGroupMinPlayers",
 			"game.matchmaking.rematchCooldownSeconds",
 			"game.telemetry.enabled",

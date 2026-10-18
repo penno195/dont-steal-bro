@@ -130,7 +130,8 @@ validation. Covered today:
 - **NPCs:** `game.npc.**`, `game.npcBrain.**`,
   `map.<id>.npcDifficultyModifier`
 - **Matchmaking (per server):** `game.matchmaking.partialGroupTimeoutSeconds`,
-  `partialGroupMinPlayers`, `rematchCooldownSeconds`
+  `quietQueueTimeoutSeconds`, `quietWindowSeconds` (matchmaking.md, the
+  quiet-queue timer), `partialGroupMinPlayers`, `rematchCooldownSeconds`
 - `game.telemetry.enabled`
 
 Effects have no registry validator, so `LiveConfig.luau` adds bounds of
@@ -196,7 +197,7 @@ access on, and your id in `adminUserIds`:
 | 2 | **Win payouts** | P9-2's gate is "the payoff numbers survive contact with real players" | `set game.winRewards.currency.soleStealer …` (and `loneSharer`, `allShare`, `perRungBonus`) ✅, with Validate enforcing the Steal > Share ordering |
 | 3 | **NPC difficulty** | At soft-launch player counts most lobbies have bots, and bots that win too often feel unfair | `game.npc.**`, `game.npcBrain.**`, `map.<id>.npcDifficultyModifier` ✅, plus `kill npcfill` as a last resort |
 | 4 | **Power-up balance** | One power-up always turns out too strong | `powerUp.<id>.cooldownSeconds`, `effect.<id>.magnitude/durationSeconds` ✅, or `disable powerup <id>` ✅ |
-| 5 | **Matchmaking wait** | Low concurrency means long waits for a full group | `set game.matchmaking.partialGroupTimeoutSeconds …` ✅ (per server, so safe in a partial rollout) |
+| 5 | **Matchmaking wait** | Low concurrency means long waits for a full group | `set game.matchmaking.partialGroupTimeoutSeconds …`, or `quietQueueTimeoutSeconds` for the empty-queue case ✅ (per server, so safe in a partial rollout) |
 
 The Decision Studio negotiate window (`game.studioTimers.negotiateSeconds`)
 is close behind and also covered.

@@ -182,6 +182,8 @@ local function validGameConfig(): Validate.GameConfig
 			metaMapName = "TestMeta",
 			groupSize = 6,
 			partialGroupTimeoutSeconds = 60,
+			quietQueueTimeoutSeconds = 10,
+			quietWindowSeconds = 60,
 			partialGroupMinPlayers = 1,
 			formationTickSeconds = 2,
 			queuePageSize = 200,
@@ -2181,6 +2183,19 @@ TestRunner.describe("Validate.checkGameConfig (P5-1 matchmaking)", function()
 	TestRunner.it("rejects a commit deadline that isn't shorter than the stale-claim revert", function()
 		TestRunner.expect(#issuesWith(function(mm)
 			mm.claimCommitDeadlineSeconds = 45
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a quiet-queue timer longer than the full one", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.quietQueueTimeoutSeconds = 61
+			mm.quietWindowSeconds = 90
+		end) > 0):toBeTruthy()
+	end)
+
+	TestRunner.it("rejects a quiet window shorter than the quiet wait", function()
+		TestRunner.expect(#issuesWith(function(mm)
+			mm.quietWindowSeconds = 5
 		end) > 0):toBeTruthy()
 	end)
 

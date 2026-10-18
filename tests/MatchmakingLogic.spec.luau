@@ -14,6 +14,8 @@ type Entry = MatchmakingLogic.Entry
 local CONFIG: MatchmakingLogic.Config = {
 	groupSize = 6,
 	partialGroupTimeoutSeconds = 60,
+	quietQueueTimeoutSeconds = 10,
+	quietWindowSeconds = 90,
 	partialGroupMinPlayers = 1,
 	formationTickSeconds = 2,
 	rematchCooldownSeconds = 900,
@@ -378,6 +380,74 @@ TestRunner.describe("MatchmakingLogic.queueStatus", function()
 		local status = MatchmakingLogic.queueStatus(queue(3), 99, NOW, CONFIG, true)
 		TestRunner.expect(status.position):toBe(nil)
 		TestRunner.expect(status.queueSizeIsLowerBound):toBe(true)
+	end)
+end)
+
+TestRunner.describe("MatchmakingLogic quiet-queue timer", function()
+	-- A log that has watched a whole window (CONFIG.quietWindowSeconds = 90).
+	local function watched(entries: { Entry }): MatchmakingLogic.ArrivalLog
+		local log = MatchmakingLogic.newArrivalLog(NOW - 200)
+		return MatchmakingLogic.recordArrivals(log, entries, NOW, false, CONFIG)
+	end
+
+	TestRunner.it("forms a lone player's group early when nobody else joined in the window", function()
+		local alone = { entry(1, NOW - 11) }
+		local groups = MatchmakingLogic.selectGroups(alone, NOW, CONFIG, watched(alone))
+		TestRunner.expect(#groups):toBe(1)
+		TestRunner.expect(groups[1].npcSlots):toBe(5)
+	end)
+
+	TestRunner.it("still waits out the quiet timer itself", function()
+		local alone = { entry(1, NOW - 9) }
+		TestRunner.expect(#MatchmakingLogic.selectGroups(alone, NOW, CONFIG, watched(alone))):toBe(0)
+	end)
+
+	TestRunner.it("keeps the full timer when someone else joined in the window", function()
+		local pair = { entry(1, NOW - 20), entry(2, NOW - 15) }
+		TestRunner.expect(#MatchmakingLogic.selectGroups(pair, NOW, CONFIG, watched(pair))):toBe(0)
+	end)
+
+	TestRunner.it("counts someone who joined and already left or departed", function()
+		local log = watched({ entry(2, NOW - 50) })
+		local alone = { entry(1, NOW - 20) }
+		log = MatchmakingLogic.recordArrivals(log, alone, NOW, false, CONFIG)
+		TestRunner.expect(#MatchmakingLogic.selectGroups(alone, NOW, CONFIG, log)):toBe(0)
+	end)
+
+	TestRunner.it("forgets joins older than the window", function()
+		local log = watched({ entry(2, NOW - 95) })
+		local alone = { entry(1, NOW - 20) }
+		log = MatchmakingLogic.recordArrivals(log, alone, NOW, false, CONFIG)
+		TestRunner.expect(log.arrivals[2]):toBe(nil)
+		TestRunner.expect(#MatchmakingLogic.selectGroups(alone, NOW, CONFIG, log)):toBe(1)
+	end)
+
+	TestRunner.it("uses the full timer until the log has watched a whole window", function()
+		local alone = { entry(1, NOW - 20) }
+		local fresh =
+			MatchmakingLogic.recordArrivals(MatchmakingLogic.newArrivalLog(NOW - 30), alone, NOW, false, CONFIG)
+		TestRunner.expect(#MatchmakingLogic.selectGroups(alone, NOW, CONFIG, fresh)):toBe(0)
+		TestRunner.expect(#MatchmakingLogic.selectGroups(alone, NOW, CONFIG, nil)):toBe(0)
+	end)
+
+	TestRunner.it("restarts the window after a full page, which hides the newest joins", function()
+		local alone = { entry(1, NOW - 20) }
+		local log = MatchmakingLogic.recordArrivals(watched({}), alone, NOW, true, CONFIG)
+		TestRunner.expect(log.since):toBe(NOW)
+		TestRunner.expect(MatchmakingLogic.partialTimeoutFor(alone[1], log, NOW, CONFIG)):toBe(60)
+	end)
+
+	TestRunner.it("never makes the wait longer than the full timer", function()
+		local long = table.clone(CONFIG)
+		long.quietQueueTimeoutSeconds = 120
+		local alone = { entry(1, NOW - 20) }
+		TestRunner.expect(MatchmakingLogic.partialTimeoutFor(alone[1], watched(alone), NOW, long)):toBe(60)
+	end)
+
+	TestRunner.it("estimates the quiet timer in the queue status", function()
+		local alone = { entry(1, NOW - 4) }
+		local status = MatchmakingLogic.queueStatus(alone, 1, NOW, CONFIG, false, watched(alone))
+		TestRunner.expect(status.estimatedWaitSeconds):toBe(6)
 	end)
 end)
 

@@ -745,6 +745,8 @@ export type MatchmakingConfig = {
 	metaMapName: string, -- HashMap: the formation lease
 	groupSize: number, -- must equal playerCount
 	partialGroupTimeoutSeconds: number,
+	quietQueueTimeoutSeconds: number, -- the timer when nobody else joined in quietWindowSeconds
+	quietWindowSeconds: number,
 	partialGroupMinPlayers: number,
 	formationTickSeconds: number,
 	queuePageSize: number, -- GetRangeAsync count per tick
@@ -3257,6 +3259,8 @@ local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number
 	for _, field in
 		{
 			"partialGroupTimeoutSeconds",
+			"quietQueueTimeoutSeconds",
+			"quietWindowSeconds",
 			"formationTickSeconds",
 			"entryTtlSeconds",
 			"refreshIntervalSeconds",
@@ -3274,6 +3278,23 @@ local function checkMatchmakingConfig(mm: MatchmakingConfig, playerCount: number
 		if type(value) ~= "number" or value <= 0 or value > MEMORYSTORE_MAX_EXPIRATION_SECONDS then
 			bad(field, "must be positive and within MemoryStore's maximum expiration")
 		end
+	end
+
+	-- The quiet timer is a shortcut, never a longer wait, and the window
+	-- it looks back over must at least cover the quiet wait itself.
+	if
+		type(mm.quietQueueTimeoutSeconds) == "number"
+		and type(mm.partialGroupTimeoutSeconds) == "number"
+		and mm.quietQueueTimeoutSeconds > mm.partialGroupTimeoutSeconds
+	then
+		bad("quietQueueTimeoutSeconds", "must not exceed partialGroupTimeoutSeconds")
+	end
+	if
+		type(mm.quietWindowSeconds) == "number"
+		and type(mm.quietQueueTimeoutSeconds) == "number"
+		and mm.quietWindowSeconds < mm.quietQueueTimeoutSeconds
+	then
+		bad("quietWindowSeconds", "must be at least quietQueueTimeoutSeconds")
 	end
 
 	-- Two missed heartbeats in a row must not be enough to expire a

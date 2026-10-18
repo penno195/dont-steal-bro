@@ -2,7 +2,7 @@
 -- powerups.md #6. Full counter-play/stacking/reskin text lives in that
 -- doc; this is only the structured, game-code-facing subset. Effect
 -- application (full immobilize) and the anti-frustration hard-control
--- rules (post-effect immunity, diminishing returns, the 15s rolling
+-- rules (post-effect immunity, diminishing returns, the 22s rolling
 -- disable-time cap) are P2-8's job (Status Effects) - this file only
 -- declares the item, per Ground Rule 2. `hardControl = true` is what
 -- tells P2-8's resolver this item is subject to those rules at all.
@@ -17,7 +17,7 @@ local Freeze: Validate.PowerUpDef = {
 	kind = "Debuff",
 	role = "Attack",
 	target = "Aimed",
-	durationSeconds = 4.5, -- was 2.5, then 3.5; design-decisions.md §12
+	durationSeconds = 5.5, -- was 2.5, then 3.5, then 4.5; design-decisions.md §12
 	cooldownSeconds = 12,
 	rarity = "Uncommon",
 	hardControl = true,
