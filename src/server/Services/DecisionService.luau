@@ -421,6 +421,11 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			if BetrayalLogic.robbedBy(finalist.playerId, robberies) ~= nil then
 				DataService.recordRoundStat(player, "betrayed")
 			end
+			-- Payoff-loop step 9: a successful steal is a Steal pick
+			-- that won (owner, Q1's lifetime-stat titles case).
+			if finalist.choice == "Steal" and won then
+				DataService.recordRoundStat(player, "stealWins")
+			end
 		end
 
 		-- Their real result is now written - the Q4 forfeit fallback

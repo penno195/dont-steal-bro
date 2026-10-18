@@ -273,6 +273,21 @@ local function recordCard(player: Player, DataService: any): { steals: number, s
 	return { steals = stats.steals, shares = stats.shares, betrayed = stats.betrayed }
 end
 
+-- Payoff-loop step 9: each lifetime-title ladder's count, for the
+-- Locker's "12 / 50 wins" line. Hub only like `record`: a match server
+-- pushes StoreState mid-Studio, and a wins count ticking up there would
+-- tell a finalist they'd won before the reveal.
+local function lifetimeCounts(
+	player: Player,
+	DataService: any
+): { wins: number, studioVisits: number, stealWins: number }?
+	if not isHub or not DataService.isLoaded(player) then
+		return nil
+	end
+	local stats = DataService.getStats(player)
+	return { wins = stats.wins, studioVisits = stats.qualifications, stealWins = stats.stealWins }
+end
+
 local function pushState(player: Player)
 	local DataService = Loader.get("DataService") :: any
 
@@ -328,6 +343,9 @@ local function pushState(player: Player)
 		-- only like `cashOut`, so nobody else ever sees it (Q5's betrayal
 		-- applied case: not a public profile stat).
 		record = recordCard(player, DataService),
+		-- Payoff-loop step 9: the lifetime ladders' counts (the Locker's
+		-- Titles tab). Targeted and Hub only, like `record`.
+		lifetimeCounts = lifetimeCounts(player, DataService),
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
 		-- The Hub's level badge (payoff-loop step 1c). Worked out here

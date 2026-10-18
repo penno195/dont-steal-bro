@@ -51,6 +51,7 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Titles = require(ReplicatedStorage.Shared.Config.Titles)
+local LifetimeTitles = require(ReplicatedStorage.Shared.Config.LifetimeTitles)
 local Participants = require(ServerScriptService.Server.Participants)
 local NPCLogic = require(ServerScriptService.Server.NPCLogic)
 local TitleLogic = require(ServerScriptService.Server.TitleLogic)
@@ -58,6 +59,35 @@ local TitleLogic = require(ServerScriptService.Server.TitleLogic)
 local ladder: { TitleLogic.TitleDef } = {}
 for _, entry in Titles do
 	table.insert(ladder, entry.def :: any)
+end
+
+-- Payoff-loop step 9: the lifetime ladders (wins, Studio visits, steals
+-- that won). Their own registry, so they never become streak tiers, but
+-- they unlock into the same append-only owned list and share the one
+-- equipped slot - so every id lookup below checks both.
+local lifetimeLadder: { TitleLogic.LifetimeTitleDef } = {}
+for _, entry in LifetimeTitles do
+	table.insert(lifetimeLadder, entry.def :: any)
+end
+
+-- What a nametag or toast needs from a title of either kind.
+type ShownTitle = {
+	id: string,
+	displayName: string,
+	colorHex: string,
+	effect: ("Glow" | "Pulse" | "Rainbow")?,
+}
+
+local function findShown(titleId: string?): ShownTitle?
+	local def = TitleLogic.findById(ladder, titleId)
+	if def ~= nil then
+		return { id = def.id, displayName = def.displayName, colorHex = def.colorHex, effect = def.effect }
+	end
+	local lifetime = TitleLogic.findLifetimeById(lifetimeLadder, titleId)
+	if lifetime ~= nil then
+		return { id = lifetime.id, displayName = lifetime.displayName, colorHex = lifetime.colorHex, effect = nil }
+	end
+	return nil
 end
 
 -- What each racer is currently WEARING, by participant id - humans from
@@ -70,12 +100,16 @@ local wornTitleId: { [number]: string? } = {}
 -- so it can fire the notification for exactly the rungs just crossed.
 local lastKnownBestStreak: { [Player]: number } = {}
 
+-- The lifetime counts as this service last saw them, per player, for the
+-- same diff-not-recompute reason.
+local lastKnownLifetime: { [Player]: TitleLogic.LifetimeStats } = {}
+
 local function currentRoundState(): string
 	local RoundService = Loader.get("RoundService") :: any
 	return RoundService.getState() :: string
 end
 
-local function titlePayload(def: TitleLogic.TitleDef?): { [string]: any }?
+local function titlePayload(def: ShownTitle?): { [string]: any }?
 	if def == nil then
 		return nil
 	end
@@ -110,7 +144,7 @@ local function broadcastTitles()
 	if visible then
 		local CosmeticService = Loader.get("CosmeticService") :: any
 		for _, participant in Participants.all() do
-			local def = TitleLogic.findById(ladder, wornTitleId[participant.id])
+			local def = findShown(wornTitleId[participant.id])
 			local nameplateId = CosmeticService.equippedIdFor(participant.player, "Nameplate") :: string?
 			if def ~= nil or nameplateId ~= nil then
 				table.insert(
@@ -134,13 +168,50 @@ local function grant(player: Player, def: TitleLogic.TitleDef)
 	local DataService = Loader.get("DataService") :: any
 	DataService.unlockTitle(player, def.id)
 	Net.fireClient("TitleUnlocked", player, {
-		title = titlePayload(def),
+		title = titlePayload(findShown(def.id)),
 		-- Sent to the OWNER only, and it's their own number, which
 		-- they already know - the reason TitleUnlocked is targeted
 		-- rather than broadcast.
 		minStreak = def.minStreak,
 	})
 	print(string.format("TitleService: %s unlocked %q at bestStreak %d", player.Name, def.id, def.minStreak))
+end
+
+-- The lifetime half of `grant`. `lifetime` replaces `minStreak` (absent
+-- here, which is how the client tells the two kinds apart): the ladder
+-- and the count it took, the owner's own lifetime numbers.
+local function grantLifetime(player: Player, def: TitleLogic.LifetimeTitleDef)
+	local DataService = Loader.get("DataService") :: any
+	DataService.unlockTitle(player, def.id)
+	Net.fireClient("TitleUnlocked", player, {
+		title = titlePayload(findShown(def.id)),
+		lifetime = { stat = def.stat, threshold = def.threshold },
+	})
+	print(string.format("TitleService: %s unlocked %q at %s %d", player.Name, def.id, def.stat, def.threshold))
+end
+
+-- A profile's stats as the lifetime ladders count them. StudioVisits is
+-- `qualifications`, counted once per ranked Studio seat (DecisionService).
+local function lifetimeStatsFor(player: Player): TitleLogic.LifetimeStats
+	local stats = (Loader.get("DataService") :: any).getStats(player)
+	return { wins = stats.wins, studioVisits = stats.qualifications, stealWins = stats.stealWins }
+end
+
+-- Runs at Results only, never from `refreshFor`: ProgressionService calls
+-- that mid-Studio, and a "Veteran" toast there would tell a finalist they
+-- had won. Results is also when every one of this round's stats has
+-- landed (wins in ProgressionService, the Studio's in DecisionService).
+local function refreshLifetimeUnlocks(player: Player)
+	local DataService = Loader.get("DataService") :: any
+	local previous = lastKnownLifetime[player]
+	if previous == nil or not DataService.isLoaded(player) then
+		return
+	end
+	local now = lifetimeStatsFor(player)
+	for _, def in TitleLogic.lifetimeNewlyUnlocked(lifetimeLadder, previous, now) do
+		grantLifetime(player, def)
+	end
+	lastKnownLifetime[player] = now
 end
 
 -- Runs on every bestStreak change. Persists each newly crossed rung and
@@ -175,6 +246,14 @@ local function seedUnlocks(player: Player)
 		grant(player, def)
 	end
 	lastKnownBestStreak[player] = bestStreak
+
+	-- The first join after step 9 shipped is where existing players get
+	-- the Wins and StudioVisits rungs their history already earned.
+	local lifetime = lifetimeStatsFor(player)
+	for _, def in TitleLogic.lifetimeUnownedReached(lifetimeLadder, owned, lifetime) do
+		grantLifetime(player, def)
+	end
+	lastKnownLifetime[player] = lifetime
 end
 
 -- What a player should be shown wearing: their own choice if they made
@@ -184,7 +263,7 @@ local function resolveWornTitle(player: Player): string?
 	local DataService = Loader.get("DataService") :: any
 
 	local equipped = DataService.getEquippedTitle(player) :: string?
-	if equipped ~= nil and TitleLogic.findById(ladder, equipped) ~= nil then
+	if equipped ~= nil and findShown(equipped) ~= nil then
 		return equipped
 	end
 
@@ -327,6 +406,7 @@ function TitleService:init()
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		lastKnownBestStreak[player] = nil
+		lastKnownLifetime[player] = nil
 		wornTitleId[player.UserId] = nil
 	end)
 
@@ -342,6 +422,7 @@ function TitleService:init()
 				-- first moment this round's wins have been recorded -
 				-- so refresh unlocks before showing anything.
 				for _, player in Players:GetPlayers() do
+					refreshLifetimeUnlocks(player)
 					refreshPlayer(player)
 				end
 				assignNPCTitles()

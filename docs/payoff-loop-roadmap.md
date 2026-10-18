@@ -256,7 +256,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     `lifetimeUnlocked` / `lifetimeNewlyUnlocked` /
     `lifetimeUnownedReached` / `lifetimeNext` / `findLifetimeById` over
     a `LifetimeStats { wins, studioVisits, stealWins }`.
-  - [ ] 9b. Server: profile `stats.stealWins` (schema bump, ranked
+  - [x] 9b. Server: profile `stats.stealWins` (schema bump, ranked
     only), counted where a finalist's Steal resolves as a win;
     `TitleService` unlocks lifetime titles into the same append-only
     owned list after each round's stats land (the unlock remote, as the
@@ -264,6 +264,16 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     equipping and the nametag/broadcast find an id in either registry,
     still suppressed in-round; the Locker's StoreState gets each
     ladder's count.
+    Built as profile v22 (`stats.stealWins`, migration starts it at 0),
+    counted in DecisionService beside steals/shares (ranked only).
+    TitleService diffs `{ wins, qualifications, stealWins }` at Results
+    only (never from ProgressionService's mid-Studio `refreshFor`, so no
+    toast can tell a finalist they won before the reveal) and backfills
+    on join; `TitleUnlocked` carries `lifetime = { stat, threshold }` in
+    place of `minStreak`. `findShown` resolves an id in either registry
+    for equip, worn title and the broadcast. StoreState
+    `lifetimeCounts { wins, studioVisits, stealWins }` is Hub only, like
+    `record`. Unseen in Studio.
   - [ ] 9c. UI: the Locker's Titles list shows the three lifetime
     ladders under the streak ladder, with locked rungs and a "12 / 50
     wins" line from `lifetimeNext`; the unlock toast words a lifetime

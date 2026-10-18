@@ -22,6 +22,9 @@ export type Stats = {
 	-- never in practice. Shown in the Studio's reputation line and the
 	-- owner's own Hub record.
 	betrayed: number,
+	-- Schema v22 (payoff-loop step 9): Steal picks that won, the
+	-- StealWins lifetime-title ladder. Ranked only, like the rest.
+	stealWins: number,
 }
 
 export type OutcomeTag = "SoleStealer" | "LoneSharer" | "AllShare"
@@ -287,10 +290,19 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 21
+local CURRENT_SCHEMA_VERSION = 22
 
 local function defaultStats(): Stats
-	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0, betrayed = 0 }
+	return {
+		roundsPlayed = 0,
+		qualifications = 0,
+		steals = 0,
+		shares = 0,
+		wins = 0,
+		losses = 0,
+		betrayed = 0,
+		stealWins = 0,
+	}
 end
 
 function ProfileLogic.newProfileTemplate(): ProfileData
@@ -565,6 +577,19 @@ end
 migrations[20] = function(old: { [string]: any }): { [string]: any }
 	local next: { [string]: any } = table.clone(old)
 	next.schemaVersion = 21
+	return next
+end
+
+-- v21 -> v22 (steals that won): none. Past Studio results weren't kept,
+-- so every account's StealWins ladder starts at 0 (owner, 2026-10-18).
+migrations[21] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 22
+	if type(old.stats) == "table" then
+		local stats = table.clone(old.stats)
+		stats.stealWins = (stats.stealWins :: number?) or 0
+		next.stats = stats
+	end
 	return next
 end
 
