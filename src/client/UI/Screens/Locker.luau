@@ -89,6 +89,16 @@ export type Locker = {
 	-- Wear a title, or nil to go back to the highest rung.
 	equipTitle: (titleId: string?) -> (),
 	close: () -> (),
+	-- The Record tab (Hub menu pass, 2026-10-18): your shares, steals and
+	-- times robbed as body text, nil until StoreState brings them. `bank`
+	-- is the Hub's "Bank streak" button, shown while there's a streak to
+	-- bank; nil off the Hub.
+	record: () -> string?,
+	bank: {
+		available: () -> boolean,
+		open: () -> (),
+	}?,
+	initialTab: number?, -- 1-based into TABS; default Power
 
 	-- The community reward's tile, at the end of the Style grid while
 	-- it's on and not yet owned. `check` opens the join prompt and asks
@@ -105,7 +115,9 @@ local TABS: { { label: string, icon: string? } } = {
 	{ label = "Power", icon = "bolt" },
 	{ label = "Style", icon = "flame" },
 	{ label = "Titles", icon = "trophy" },
+	{ label = "Record", icon = "hub-record" },
 }
+local RECORD_TAB = #TABS
 
 -- Rarity is a coloured edge AND the word, as in the store.
 local RARITY_COLOR: { [string]: string } = { Common = "inkMuted", Uncommon = "success", Rare = "brand" }
@@ -656,7 +668,7 @@ end
 local function body(locker: Locker, height: () -> number, layout: MenuShell.BodyLayout): { Instance }
 	local pane = layout.pane
 	local cardW = (pane - Theme.spacing.sm) / 2
-	local tabIndex = source(1)
+	local tabIndex = source(locker.initialTab or 1)
 	local loaded = derive(function()
 		return locker.state() ~= nil
 	end)
@@ -836,6 +848,47 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 		})
 	end
 
+	local function recordTab(): Instance
+		local bank = locker.bank
+		local bankH = if bank then Theme.touch.primaryHeight + Theme.spacing.sm else 0
+		local bankButton = if bank
+			then C.Button({
+				label = "Bank streak",
+				variant = "primary",
+				icon = "hub-bank",
+				width = pane,
+				onActivate = bank.open,
+				position = UDim2.fromOffset(0, controlsTop),
+				order = 2,
+			})
+			else nil
+		if bank and bankButton then
+			vide.effect(function()
+				bankButton.Visible = bank.available()
+			end)
+		end
+		return create("Frame")({
+			Name = "Record",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			bankButton :: any,
+			Base.text("body", {
+				Name = "Record",
+				Position = function()
+					return UDim2.fromOffset(0, controlsTop + (if bank and bank.available() then bankH else 0))
+				end,
+				Size = UDim2.fromOffset(pane, 4 * Theme.type.body.size * 1.4),
+				Text = function()
+					return locker.record() or ""
+				end,
+				TextColor3 = Theme.color.ink,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+			}),
+		})
+	end
+
 	return {
 		C.TabBar({
 			tabs = TABS,
@@ -850,6 +903,7 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 					[1] = powerTab,
 					[2] = styleTab,
 					[3] = titlesTab,
+					[RECORD_TAB] = recordTab,
 				}) :: any
 			end,
 			[false] = function()
@@ -860,6 +914,8 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 end
 
 local Locker = {}
+
+Locker.RECORD_TAB = RECORD_TAB
 
 function Locker.mount(controller: any, locker: Locker): () -> ()
 	return MenuShell.mount(controller, {

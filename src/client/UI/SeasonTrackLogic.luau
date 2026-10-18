@@ -95,7 +95,8 @@ export type View = {
 
 -- The pass screen's "x / 6 active hours this week" bar (payoff-loop
 -- step 5c): how full it is, what it reads, and when the week resets.
-export type PlaytimeView = { fraction: number, text: string, resets: string }
+-- `short` is the Hub's always-on playtime row under the level pill.
+export type PlaytimeView = { fraction: number, text: string, short: string, resets: string }
 
 -- Whole hours as "6", else floored to a tenth ("2.5"), so the bar never
 -- reads the target before the server has granted the pass.
@@ -131,6 +132,11 @@ function SeasonTrackLogic.playtimeView(state: SeasonState): PlaytimeView?
 		fraction = active / p.targetSeconds,
 		text = string.format(
 			"Free pass: %s / %s active hours this week",
+			SeasonTrackLogic.hoursText(active),
+			SeasonTrackLogic.hoursText(p.targetSeconds)
+		),
+		short = string.format(
+			"%s / %s h",
 			SeasonTrackLogic.hoursText(active),
 			SeasonTrackLogic.hoursText(p.targetSeconds)
 		),

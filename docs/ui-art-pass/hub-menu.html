@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hub Menu Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<script src="../../assets/ui/hub-icons.js"></script>
+<style>
+  :root {
+    --bg: #120728; --surface: #21114A; --raised: #321C66; --line: #5A3FA0;
+    --rim: #FFD23F; --outline: #1B0B33; --ink: #FFFFFF; --muted: #C9BDF0;
+    --brand: #FF4FA3; --gold: #FFB703; --success: #3CCB7F;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Nunito, sans-serif; padding: 24px 16px 64px; }
+  h1, h2, .display { font-family: "Luckiest Guy", cursive; letter-spacing: .5px; font-weight: 400; }
+  h1 { font-size: 30px; margin: 0 0 4px; color: var(--rim); -webkit-text-stroke: 1px var(--outline); }
+  h2 { font-size: 20px; margin: 36px 0 10px; color: var(--rim); }
+  p, li { color: var(--muted); max-width: 820px; line-height: 1.5; }
+  .wrap { max-width: 960px; margin: 0 auto; }
+
+  /* ---- the phone (landscape, 844x390) ---- */
+  .phone { position: relative; width: 844px; max-width: 100%; aspect-ratio: 844 / 390; border-radius: 28px; overflow: hidden;
+    border: 8px solid #0a0418; box-shadow: 0 10px 40px #0008; margin: 12px 0;
+    background: linear-gradient(#3b2a6e 0%, #6a4a8c 38%, #2e6b4a 39%, #1f4d35 100%); }
+  .scale { position: absolute; inset: 0; transform-origin: 0 0; }
+  .rbx { position: absolute; top: 10px; left: 12px; display: flex; gap: 8px; }
+  .rbx span { width: 40px; height: 40px; border-radius: 12px; background: #0009; display: grid; place-items: center; color: #fff9; font: 700 11px Nunito; }
+  .note { position: absolute; font: 700 11px Nunito; color: #fff; background: #000a; padding: 3px 7px; border-radius: 6px; }
+
+  .topRow { position: absolute; top: 10px; right: 12px; display: flex; gap: 8px; align-items: flex-start; }
+  .pill { height: 40px; border-radius: 20px; background: linear-gradient(#2B1858, #170B33); border: 3px solid var(--rim);
+    box-shadow: 0 3px 0 #0B0420; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 4px; }
+  .pill img { width: 34px; height: 34px; }
+  .pill .num { font-family: "Luckiest Guy"; font-size: 20px; -webkit-text-stroke: .6px var(--outline); }
+  .plus { width: 28px; height: 28px; border-radius: 9px; background: linear-gradient(#FFE066, #FFB703); border: 2px solid var(--outline);
+    color: #2A1100; font: 900 18px Nunito; display: grid; place-items: center; }
+  .level { width: 210px; cursor: pointer; padding-right: 10px; }
+  .lvlBadge { width: 34px; height: 34px; border-radius: 50%; background: linear-gradient(#FFE066, #FFB703); border: 3px solid var(--outline);
+    color: #2A1100; font-family: "Luckiest Guy"; font-size: 18px; display: grid; place-items: center; flex: none; }
+  .lvlText { flex: 1; }
+  .lvlText small { display: block; font: 800 10px Nunito; color: var(--muted); letter-spacing: 1px; }
+  .bar { height: 9px; border-radius: 5px; background: #0B0420; overflow: hidden; border: 1px solid #0006; }
+  .bar i { display: block; height: 100%; background: linear-gradient(90deg, #8AF0AD, #3CCB7F); border-radius: 5px; }
+  .bar.gold i { background: linear-gradient(90deg, #FFE066, #FFB703); }
+  .chev { font: 900 14px Nunito; color: var(--rim); transition: transform .15s; }
+  .gearChip { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(#6C47F5, #4F2BD6); border: 2px solid #B9A6FF;
+    box-shadow: 0 3px 0 #2E1490; display: grid; place-items: center; }
+  .gearChip img { width: 30px; height: 30px; }
+
+  /* the drop-down under the level pill */
+  .levelCol { display: flex; flex-direction: column; gap: 6px; width: 210px; }
+  .card { border-radius: 14px; background: linear-gradient(#2B1858, #170B33); border: 2px solid var(--line); padding: 7px 9px; box-shadow: 0 3px 0 #0B0420; }
+  .card.play { border-color: var(--rim); }
+  .row { display: flex; align-items: center; gap: 8px; }
+  .row img { width: 26px; height: 26px; flex: none; }
+  .row .t { font: 800 11px Nunito; flex: 1; line-height: 1.2; }
+  .row .r { font: 800 10px Nunito; color: var(--rim); white-space: nowrap; }
+  .row + .row { margin-top: 7px; }
+  .row .bar { margin-top: 3px; height: 6px; }
+  .done .t { color: var(--muted); text-decoration: line-through; }
+  .tick { width: 18px; height: 18px; border-radius: 50%; background: var(--success); border: 2px solid var(--outline); flex: none;
+    color: #fff; font: 900 11px Nunito; display: grid; place-items: center; }
+  .drop { display: none; }
+  .open .drop { display: block; }
+  .open .chev { transform: rotate(180deg); }
+  .drop .head { white-space: nowrap; display: flex; justify-content: space-between; font: 800 10px Nunito; color: var(--muted); letter-spacing: 1px; margin-bottom: 6px; }
+
+  /* the launcher: three big buttons */
+  .launcher { display: flex; justify-content: space-between; margin-top: 6px; }
+  .open .launcher { display: none; }
+  .big { position: relative; width: 62px; height: 62px; border-radius: 18px; background: linear-gradient(#6C47F5, #4F2BD6);
+    border: 3px solid #B9A6FF; box-shadow: 0 5px 0 #2E1490, 0 6px 0 var(--outline); display: grid; place-items: center; }
+  .big img { width: 52px; height: 52px; margin-top: -2px; }
+  .big b { position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%); font-family: "Luckiest Guy"; font-size: 14px;
+    -webkit-text-stroke: .5px var(--outline); text-shadow: 0 2px 0 var(--outline); white-space: nowrap; }
+  .dot { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; border-radius: 50%; background: var(--brand); border: 2px solid var(--outline); }
+
+  .slots { position: absolute; bottom: 14px; right: 100px; display: flex; gap: 10px; }
+  .slots span { width: 58px; height: 58px; border-radius: 12px; background: #2a1550; border: 3px solid #F5A300; }
+  .slots span:first-child { border-color: var(--brand); }
+  .stick { position: absolute; left: 30px; bottom: 26px; width: 110px; height: 110px; border-radius: 50%; background: #0004; border: 2px solid #fff3; }
+  .jump { position: absolute; right: 26px; bottom: 26px; width: 70px; height: 70px; border-radius: 50%; background: #0004; border: 2px solid #fff3; }
+
+  /* tab panels */
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .panel { border-radius: 18px; background: linear-gradient(#2B1858, #170B33); border: 3px solid var(--rim); padding: 12px; }
+  .panel h3 { margin: 0 0 10px; display: flex; align-items: center; gap: 8px; font: 400 20px "Luckiest Guy"; }
+  .panel h3 img { width: 36px; height: 36px; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tab { flex: 1; min-width: 56px; border-radius: 10px; background: #321C66; border: 2px solid var(--line); padding: 5px 2px; text-align: center; font: 800 11px Nunito; color: var(--muted); }
+  .tab.on { background: linear-gradient(#FFE066, #FFB703); color: #2A1100; border-color: var(--outline); }
+  .tab .new { color: var(--brand); }
+  .panel p { font-size: 13px; margin: 10px 0 0; }
+
+  /* icon sheet */
+  .sheet { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+  .ic { text-align: center; }
+  .ic .pair { display: flex; gap: 8px; justify-content: center; align-items: center; }
+  .ic .light { width: 64px; height: 64px; border-radius: 14px; background: #e9e4f7; display: grid; place-items: center; }
+  .ic .light img { width: 52px; }
+  .ic code { font-size: 12px; color: var(--muted); }
+  .before { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+  .old { width: 64px; height: 64px; border-radius: 18px; background: linear-gradient(#6C47F5, #4F2BD6); border: 3px solid #B9A6FF;
+    display: grid; place-items: center; font-size: 30px; filter: grayscale(1) brightness(2); }
+  table { border-collapse: collapse; width: 100%; max-width: 820px; font-size: 14px; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--rim); font-weight: 800; }
+  td { color: var(--muted); }
+  td b { color: var(--ink); }
+  @media (max-width: 640px) { .phone { border-width: 4px; border-radius: 16px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Hub menu: fewer buttons, colour icons</h1>
+  <p>Mockup for approval before any Luau changes. Phone in landscape (844×390, the UI's reference size). Tap the level pill to open the drop-down.</p>
+
+  <h2>1 · Hub, drop-down closed</h2>
+  <div class="phone" data-phone>
+    <div class="scale">
+      <div class="rbx"><span>☰</span><span>💬</span></div>
+      <div class="note" style="top:56px;left:12px">Roblox's own top bar + chat live here</div>
+      <div class="topRow" data-top="closed"></div>
+      <div class="stick"></div><div class="jump"></div>
+    </div>
+  </div>
+
+  <h2>2 · Hub, drop-down open (daily challenges)</h2>
+  <div class="phone" data-phone>
+    <div class="scale">
+      <div class="rbx"><span>☰</span><span>💬</span></div>
+      <div class="topRow open" data-top="open"></div>
+      <div class="stick"></div><div class="jump"></div>
+    </div>
+  </div>
+  <p>The drop-down covers the three buttons while it's open (they'd run into the jump button if pushed down); tapping the pill again, or anywhere in the world, folds it back up. On a match server there's no coin or level pill, so the three buttons and the gear sit alone in the top-right corner.</p>
+
+  <h2>3 · What's inside the three buttons</h2>
+  <div class="panels" id="panels"></div>
+
+  <h2>4 · The icons</h2>
+  <div class="before" style="margin-bottom:12px">
+    <div class="old">🏃</div><span>→</span><span id="partyNew"></span>
+    <span>The running man was doing double duty as "Your record" <i>and</i> the practice party. Each gets its own art now.</span>
+  </div>
+  <div class="sheet" id="sheet"></div>
+
+  <h2>Where everything went</h2>
+  <table>
+    <tr><th>Today (up to 8 buttons)</th><th>After</th></tr>
+    <tr><td>🔥 Bank streak</td><td><b>Locker → Record tab</b>, a "Bank streak" button at the top of it. Pink dot on the Locker while you can bank.</td></tr>
+    <tr><td>🏃 Your record</td><td><b>Locker → Record tab</b></td></tr>
+    <tr><td>🎒 Locker</td><td><b>Locker</b>: Power · Style · Titles · Record</td></tr>
+    <tr><td>🛒 Store</td><td><b>Store</b>, tabs unchanged: Season · Bundles · Power · Style · Coins. Dot when a season reward is waiting.</td></tr>
+    <tr><td>✔ Daily challenges</td><td><b>Drop-down under the level pill</b></td></tr>
+    <tr><td>🏆 Leaderboards</td><td><b>Ranks</b>, its boards unchanged</td></tr>
+    <tr><td>⚙ Settings</td><td><b>Small gear chip</b> at the start of the top row, not a big button</td></tr>
+    <tr><td>🎁 Staff</td><td>Unchanged, staff accounts only</td></tr>
+  </table>
+  <p>On a match server the same layout shows Locker, Store, Ranks and the gear; the coin/level row and the drop-down stay Hub-only, as today.</p>
+</div>
+
+<script>
+  const I = (k, size = 128) => 'data:image/svg+xml;utf8,' + encodeURIComponent(HubIcons.svg(k, size));
+  const img = (k, cls = '') => `<img src="${I(k)}" alt="${k}" class="${cls}">`;
+
+  const coinSvg = `data:image/svg+xml;utf8,` + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="21" r="15" fill="#F5A300" stroke="#1B0B33" stroke-width="3"/><circle cx="20" cy="19" r="15" fill="#FFD23F" stroke="#1B0B33" stroke-width="3"/><circle cx="20" cy="19" r="8" fill="none" stroke="#C77700" stroke-width="3"/></svg>`);
+
+  const challenges = [
+    { t: 'Finish 12 tasks', p: 12, n: 12, r: '+40 · 30 XP' },
+    { t: 'Freeze 3 players', p: 1, n: 3, r: '+40 · 30 XP' },
+    { t: 'Win a round', p: 0, n: 1, r: '+80 · 60 XP' },
+  ];
+  const playCard = `<div class="card play"><div class="row">${img('playtime')}<div class="t">Free Season Pass<div class="bar gold"><i style="width:40%"></i></div></div><div class="r">2.4 / 6 h</div></div></div>`;
+  const dropCard = `<div class="card drop"><div class="head"><span>DAILY CHALLENGES</span><span>resets 7h 12m</span></div>` +
+    challenges.map((c) => `<div class="row ${c.p >= c.n ? 'done' : ''}">${c.p >= c.n ? '<span class="tick">✓</span>' : img('tasks')}<div class="t">${c.t}<div class="bar"><i style="width:${(100 * c.p) / c.n}%"></i></div></div><div class="r">${c.r}</div></div>`).join('') +
+    `<div class="row" style="margin-top:9px"><div class="t" style="color:var(--rim)">All 3 done: +150 coins · 100 XP</div><div class="r">1 swap left</div></div></div>`;
+
+  for (const top of document.querySelectorAll('[data-top]')) {
+    top.innerHTML = `<div class="gearChip">${img('settings')}</div>` +
+      `<div class="pill"><img src="${coinSvg}"><span class="num">1,250</span><span class="plus">+</span></div>` +
+      `<div class="levelCol"><div class="pill level" onclick="this.closest('.topRow').classList.toggle('open')"><span class="lvlBadge">7</span><div class="lvlText"><small>LEVEL · 2/3 TODAY</small><div class="bar"><i style="width:62%"></i></div></div><span class="chev">▼</span></div>${playCard}${dropCard}<div class="launcher" data-launcher></div></div>`;
+  }
+  for (const l of document.querySelectorAll('[data-launcher]')) {
+    l.innerHTML = [['locker', 'Locker', true], ['shop', 'Store', false], ['trophy', 'Ranks', false]]
+      .map(([k, label, dot]) => `<div class="big">${img(k)}<b>${label}</b>${dot ? '<span class="dot"></span>' : ''}</div>`).join('');
+  }
+
+  const panel = (icon, title, tabs, on, text) =>
+    `<div class="panel"><h3>${img(icon)}${title}</h3><div class="tabs">${tabs.map((t, i) => `<div class="tab ${i === on ? 'on' : ''}">${t}</div>`).join('')}</div><p>${text}</p></div>`;
+  document.getElementById('panels').innerHTML =
+    panel('locker', 'Locker', ['Power', 'Style', 'Titles', 'Record <span class="new">•</span>'], 3,
+      `<b>Record</b> is new: your shares, steals and times robbed, with the <b>Bank streak</b> button on top when you have a streak to bank (the dot on the Locker button says so).`) +
+    panel('shop', 'Store', ['Season', 'Bundles', 'Power', 'Style', 'Coins'], 0, 'No change inside. The coin pill\'s + still opens it on Coins.') +
+    panel('trophy', 'Ranks', ['Board 1', 'Board 2', 'Board 3', '…'], 0, 'The leaderboards screen as it is today, same boards, just a new name and icon.');
+
+  document.getElementById('partyNew').innerHTML = `<img src="${I('party')}" width="56">`;
+  const names = { locker: 'Locker', shop: 'Store', trophy: 'Ranks', settings: 'Settings', tasks: 'Daily challenges', playtime: 'Playtime pass', record: 'Record tab', bank: 'Bank streak', party: 'Practice party' };
+  document.getElementById('sheet').innerHTML = HubIcons.keys.map((k) =>
+    `<div class="ic"><div class="pair"><div class="big">${img(k)}</div><div class="light">${img(k)}</div></div><div style="font-weight:800;margin-top:12px">${names[k]}</div><code>${k}</code></div>`).join('');
+
+  // Scale the 844x390 stage to the phone's width.
+  const fit = () => document.querySelectorAll('[data-phone]').forEach((p) => {
+    const s = p.clientWidth / 844, st = p.querySelector('.scale');
+    st.style.width = '844px'; st.style.height = '390px'; st.style.transform = `scale(${s})`;
+  });
+  addEventListener('resize', fit); fit();
+</script>
+</body>
+</html>

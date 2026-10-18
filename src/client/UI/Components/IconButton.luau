@@ -30,6 +30,12 @@ export type Props = {
 	-- Icon edge in reference px. Default Theme.spacing.xl; a full-colour
 	-- icon that is itself a button (close-button) fills the whole edge.
 	iconSize: number?,
+	-- Button edge in reference px. Default Theme.touch.iconButton; the
+	-- Hub launcher's big buttons pass more.
+	edge: number?,
+	-- A word straddling the bottom edge, in the display font (the Hub
+	-- launcher's "Locker", "Store", "Ranks"). Default none.
+	caption: string?,
 	variant: ComponentLogic.Variant?, -- default "ghost"
 	disabled: (boolean | Base.Source<boolean>)?,
 	loading: (boolean | Base.Source<boolean>)?,
@@ -42,7 +48,7 @@ export type Props = {
 local function IconButton(props: Props): TextButton
 	local variant: ComponentLogic.Variant = props.variant or "ghost"
 	local loading: Base.Source<boolean> = Base.read(props.loading or false)
-	local edge = Theme.touch.iconButton
+	local edge = props.edge or Theme.touch.iconButton
 	local iconSize = props.iconSize or Theme.spacing.xl
 	local ghost = variant == "ghost"
 
@@ -102,6 +108,16 @@ local function IconButton(props: Props): TextButton
 						end,
 						Icons.view(props.icon, iconSize, ink),
 					}),
+					if props.caption
+						then Base.text("button", {
+							Name = "Caption",
+							AnchorPoint = Vector2.new(0.5, 0.5),
+							Position = UDim2.fromScale(0.5, 1),
+							Size = UDim2.new(1.4, 0, 0, Theme.type.caption.size + Theme.spacing.xs),
+							ZIndex = 4,
+							Text = props.caption,
+						})
+						else nil,
 					vide.show(loading, function()
 						local spinner = Base.spinner(Theme.spacing.lg, ink)
 						spinner.ZIndex = 3

@@ -56,6 +56,8 @@ describe("DailyChallengeViewLogic wording", function()
 		local s = DailyChallengeViewLogic.parse(payload()) :: DailyChallengeViewLogic.State
 		expect(DailyChallengeViewLogic.progressText(s.slots[1])):toBe("2/5")
 		expect(DailyChallengeViewLogic.progressText(s.slots[2])):toBe("Done")
+		expect(DailyChallengeViewLogic.levelCaption(s)):toBe("LEVEL · 1/2 TODAY")
+		expect(DailyChallengeViewLogic.levelCaption(nil)):toBe("LEVEL")
 	end)
 
 	it("only lets an unfinished slot be swapped while swaps are left", function()

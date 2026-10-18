@@ -66,12 +66,12 @@ local CashOutViewLogic = require(script.Parent.Parent.UI.CashOutViewLogic)
 local RecordViewLogic = require(script.Parent.Parent.UI.RecordViewLogic)
 local DailyChallengeViewLogic = require(script.Parent.Parent.UI.DailyChallengeViewLogic)
 local DailyChallengesScreen = require(script.Parent.Parent.UI.Screens.DailyChallenges)
-local Modal = require(script.Parent.Parent.UI.Components.Modal)
+local Base = require(script.Parent.Parent.UI.Components.Base)
 local ResultsLogic = require(script.Parent.Parent.UI.ResultsLogic)
 local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
 local SeasonTrackLogic = require(script.Parent.Parent.UI.SeasonTrackLogic)
 local Theme = require(script.Parent.Parent.UI.Theme)
-local Layout = require(script.Parent.Parent.UI.Layout)
+local HubCorner = require(script.Parent.Parent.UI.Screens.HubCorner)
 local LeaderboardsScreen = require(script.Parent.Parent.UI.Screens.Leaderboards)
 local LockerScreen = require(script.Parent.Parent.UI.Screens.Locker)
 local DropNames = require(script.Parent.Parent.UI.DropNames)
@@ -584,6 +584,11 @@ local function openChallenges()
 	})
 end
 
+local function bankCard(): CashOutViewLogic.Card?
+	local s = storeState()
+	return CashOutViewLogic.parse(if s then s.cashOut else nil)
+end
+
 local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, storeKey: string?)
 	closeMenu()
 	openMenu = menu
@@ -692,6 +697,24 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 				Net.fireServer("TitleEquipIntent", { titleId = titleId })
 			end,
 			close = closeMenu,
+			-- The Record tab (payoff-loop step 7's panel; the server sends
+			-- the record to the Hub only).
+			record = function(): string?
+				local s = storeState()
+				local record = RecordViewLogic.parse(if s then s.record else nil)
+				return if record then RecordViewLogic.body(record) else "Your record shows in the lobby."
+			end,
+			bank = if isHubServer()
+				then {
+					available = function(): boolean
+						return bankCard() ~= nil
+					end,
+					open = function()
+						closeMenu()
+						Loader.get("CashOutController").open()
+					end,
+				}
+				else nil,
 		})
 	elseif menu == "Leaderboards" then
 		unmountMenu =
@@ -761,27 +784,16 @@ end
 
 -- ===== launcher ==============================================================
 
--- The launcher's room, in reference px, between the coin pill above it
--- (CurrencyPill's 32 at md from the top, then a gap) and what's below:
--- on touch the jump button (THUMB_ZONES' ReservedJump), else the
--- power-up slots in the corner (RaceHUD: 60 slots, 14 key hints, 2 gap,
--- 8 margin) plus a gap. A short phone gets a second column instead of
--- buttons over the slots (playtest, 2026-10-17).
-local LAUNCHER_TOP = Theme.spacing.md + Theme.spacing.xxl + Theme.spacing.sm
-local LAUNCHER_SLOTS = 60 + 14 + 2 + Theme.spacing.sm + Theme.spacing.sm
-local JUMP_TOP = (function(): number
-	for _, zone in Layout.THUMB_ZONES["Landscape" :: Layout.Orientation] do
-		if zone.kind == "ReservedJump" then
-			return zone.rect.y
-		end
-	end
-	return 1
-end)()
-
-local function launcherRoom(height: number, touch: boolean): (number, number)
-	local bottom = if touch then height * JUMP_TOP - Theme.spacing.sm else height - LAUNCHER_SLOTS
-	return LAUNCHER_TOP, math.max(0, bottom - LAUNCHER_TOP)
-end
+-- The Hub menu pass (2026-10-18, docs/ui-art-pass/hub-menu.html): one
+-- top-right corner. Along the top, the Settings gear, the shields and
+-- coins, then a column headed by the level pill (Hub only: its playtime
+-- row and daily challenges drop-down, Screens/HubCorner) with three big
+-- buttons under it: Locker, Store, Ranks. The bank and "Your record"
+-- buttons moved into the Locker's Record tab, the challenges button into
+-- the drop-down. On a match server it's the gear and the three buttons.
+local BIG = 52 -- the launcher buttons' edge, reference px
+local BIG_ICON = 44
+local COLUMN_W = 3 * BIG + 2 * Theme.spacing.sm
 
 local function mountLauncher()
 	local gui = UIScaleController.createScreen("MenuLauncher", { displayOrder = Theme.displayOrder.hud })
@@ -795,6 +807,81 @@ local function mountLauncher()
 	end
 
 	vide.root(function()
+		local function big(icon: string, label: string, order: number, onActivate: () -> ()): TextButton
+			return C.IconButton({
+				icon = icon,
+				label = label,
+				caption = label,
+				edge = BIG,
+				iconSize = BIG_ICON,
+				variant = "secondary",
+				onActivate = onActivate,
+				order = order,
+				layoutOrder = order,
+			})
+		end
+		local lockerButton = big("hub-locker", "Locker", 2, function()
+			open("Locker")
+		end)
+		lockerButtonRef = lockerButton
+		-- A pink dot while there's a streak to bank (the Record tab).
+		create("Frame")({
+			Name = "Dot",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.new(1, -Theme.spacing.xs, 0, Theme.spacing.xs),
+			Size = UDim2.fromOffset(Theme.spacing.md + Theme.spacing.xxs, Theme.spacing.md + Theme.spacing.xxs),
+			BackgroundColor3 = Theme.color.brand,
+			ZIndex = 6,
+			Visible = function()
+				return bankCard() ~= nil
+			end,
+			Base.corner(Theme.radius.pill),
+			create("UIStroke")({ Color = Theme.color.outline, Thickness = 2 }),
+			Parent = lockerButton,
+		})
+		local buttons = create("Frame")({
+			Name = "Launcher",
+			Size = UDim2.fromOffset(COLUMN_W, BIG + Theme.spacing.sm),
+			BackgroundTransparency = 1,
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Right,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			lockerButton,
+			big("hub-shop", "Store", 3, function()
+				open("Store")
+			end),
+			big("hub-trophy", "Ranks", 4, function()
+				open("Leaderboards")
+			end),
+		}) :: Frame
+
+		local column: Frame = if inHub
+			then HubCorner.column({
+				width = COLUMN_W,
+				visible = coinsVisible,
+				level = function()
+					local s = storeState()
+					return if s and s.level then s.level.level else nil
+				end,
+				fraction = function()
+					local s = storeState()
+					return if s and s.level then ResultsLogic.levelFraction(s.level) else 0
+				end,
+				playtime = function()
+					local s = storeState()
+					return if s and s.season then SeasonTrackLogic.playtimeView(s.season :: any) else nil
+				end,
+				challenges = challengeState,
+				receivedAt = challengeReceivedAt,
+				openChallenges = openChallenges,
+				buttons = buttons,
+			})
+			else buttons
+		column.LayoutOrder = 5
+
 		local coins = C.CurrencyPill({
 			amount = function()
 				local s = storeState()
@@ -803,27 +890,9 @@ local function mountLauncher()
 			onActivate = function()
 				open("Store", "Currency")
 			end,
-			order = 0,
-			layoutOrder = 3,
+			order = 1,
+			layoutOrder = 4,
 		})
-		local level = vide.derive(function()
-			local s = storeState()
-			return if s then s.level else nil
-		end)
-		local badge = C.LevelBadge({
-			level = function()
-				local l = level()
-				return if l then l.level else 1
-			end,
-			fraction = function()
-				local l = level()
-				return if l then ResultsLogic.levelFraction(l) else 0
-			end,
-		})
-		badge.LayoutOrder = 1
-		vide.effect(function()
-			badge.Visible = level() ~= nil
-		end)
 		local shieldCount = vide.derive(function()
 			local s = storeState()
 			return (if s then ResultsLogic.parseShields(s.streakShields) else nil) or 0
@@ -831,222 +900,61 @@ local function mountLauncher()
 		local shields = C.CurrencyPill({
 			amount = shieldCount,
 			icon = "shield",
-			layoutOrder = 2,
+			layoutOrder = 3,
 		})
 		vide.effect(function()
-			shields.Visible = shieldCount() > 0
+			coins.Visible = coinsVisible()
+			shields.Visible = coinsVisible() and shieldCount() > 0
 		end)
-		-- One scaled row, anchored top-right, so the badge stays beside
-		-- the pill at any UI scale (a UIScale doesn't scale Position).
-		local row = create("Frame")({
-			Name = "Balances",
-			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -Theme.spacing.md, 0, Theme.spacing.md),
-			Size = UDim2.fromOffset(3 * coins.Size.X.Offset + 2 * Theme.spacing.sm, coins.Size.Y.Offset),
-			BackgroundTransparency = 1,
-			create("UIListLayout")({
-				FillDirection = Enum.FillDirection.Horizontal,
-				HorizontalAlignment = Enum.HorizontalAlignment.Right,
-				VerticalAlignment = Enum.VerticalAlignment.Center,
-				Padding = UDim.new(0, Theme.spacing.sm),
-				SortOrder = Enum.SortOrder.LayoutOrder,
-			}),
-			badge,
-			shields,
-			coins,
-		}) :: Frame
-		UIScaleController.attachScale(row)
-		create("Frame")({
-			Name = "CoinBalance",
-			Size = UDim2.fromScale(1, 1),
-			BackgroundTransparency = 1,
-			Visible = coinsVisible,
-			row,
-			Parent = gui,
+		local gear = C.IconButton({
+			icon = "hub-settings",
+			label = "Settings",
+			iconSize = Theme.spacing.xl + Theme.spacing.xs,
+			variant = "secondary",
+			onActivate = function()
+				open("Settings")
+			end,
+			order = 0,
+			layoutOrder = 2,
 		})
-	end)
-
-	vide.root(function()
-		-- The Hub adds the bank, record and challenges buttons under
-		-- Settings (payoff-loop steps 4, 7 and 8), and staff get one more
-		-- under those, for the staff panel.
-		local buttons = 4 + (if inHub then 3 else 0) + (if isStaff then 1 else 0)
-		local button, gap = Theme.touch.iconButton, Theme.spacing.md
-		-- Usable height in reference px (the column sits under the scale).
-		local rect = source(UIScaleController.getUsableRect())
-		vide.cleanup(UIScaleController.observeUsableRect(rect))
-		local room = vide.derive(function()
-			local top, tall = launcherRoom(
-				rect().height / math.max(C.Env.scale(), 0.01),
-				C.Env.inputMode() == Enum.PreferredInput.Touch
-			)
-			return { top = top, tall = tall, grid = Layout.buttonGrid(tall, buttons, button, gap) }
-		end)
-		local column = create("Frame")({
-			Name = "Launcher",
-			AnchorPoint = Vector2.new(1, 0.5),
-			-- Centred in its room, growing left as columns are added. A
-			-- UIScale doesn't scale Position, so the offset is scaled here.
-			Position = function()
-				local r = room()
-				return UDim2.new(1, -Theme.spacing.sm, 0, (r.top + r.tall / 2) * C.Env.scale())
-			end,
-			Size = function()
-				local grid = room().grid
-				return UDim2.fromOffset(
-					grid.columns * button + (grid.columns - 1) * gap,
-					grid.rows * button + (grid.rows - 1) * gap
-				)
-			end,
-			BackgroundTransparency = 1,
-			Visible = visible,
-			create("UIGridLayout")({
-				CellSize = UDim2.fromOffset(button, button),
-				CellPadding = UDim2.fromOffset(gap, gap),
-				FillDirection = Enum.FillDirection.Vertical,
-				FillDirectionMaxCells = function()
-					return room().grid.rows
-				end,
-				StartCorner = Enum.StartCorner.TopRight,
-				SortOrder = Enum.SortOrder.LayoutOrder,
-			}),
-			(function()
-				local lockerButton = C.IconButton({
-					icon = "locker",
-					label = "Locker",
-					variant = "secondary",
-					onActivate = function()
-						open("Locker")
-					end,
-					order = 1,
-					layoutOrder = 1,
-				})
-				lockerButtonRef = lockerButton
-				return lockerButton
-			end)(),
-			C.IconButton({
-				icon = "shop",
-				label = "Store",
-				variant = "secondary",
-				onActivate = function()
-					open("Store")
-				end,
-				order = 2,
-				layoutOrder = 2,
-			}),
-			C.IconButton({
-				icon = "trophy",
-				label = "Leaderboards",
-				variant = "secondary",
-				onActivate = function()
-					open("Leaderboards")
-				end,
-				order = 3,
-				layoutOrder = 3,
-			}),
-			C.IconButton({
-				icon = "settings",
-				label = "Settings",
-				variant = "secondary",
-				onActivate = function()
-					open("Settings")
-				end,
-				order = 4,
-				layoutOrder = 4,
-			}),
-			Parent = gui,
-		}) :: Frame
-		if inHub then
-			-- Banking the streak (payoff-loop step 4): Hub only, and only
-			-- once StoreState has brought the card (its owner's alone).
-			local bankButton = C.IconButton({
-				icon = "flame",
-				label = "Bank streak",
-				variant = "secondary",
-				onActivate = function()
-					closeMenu()
-					Loader.get("CashOutController").open()
-				end,
-				order = 5,
-				layoutOrder = 5,
-			})
-			vide.effect(function()
-				local s = storeState()
-				bankButton.Visible = CashOutViewLogic.parse(if s then s.cashOut else nil) ~= nil
-			end)
-			bankButton.Parent = column
-
-			-- "Your record" (payoff-loop step 7): your own shares, steals
-			-- and times robbed. Hub only, like the bank button.
-			local recordButton = C.IconButton({
-				icon = "rival",
-				label = RecordViewLogic.BUTTON_LABEL,
-				variant = "secondary",
-				onActivate = function()
-					local s = storeState()
-					local record = RecordViewLogic.parse(if s then s.record else nil)
-					if record == nil then
-						return
-					end
-					closeMenu()
-					local close: () -> ()
-					close = Modal.open({
-						title = RecordViewLogic.TITLE,
-						body = RecordViewLogic.body(record),
-						bodyLines = 3,
-						actions = {
-							{
-								label = "Close",
-								variant = "secondary",
-								onActivate = function()
-									close()
-								end,
-							},
-						},
-						dismissible = true,
-						onDismiss = function()
-							close()
-						end,
-					})
-				end,
-				order = 6,
-				layoutOrder = 6,
-			})
-			vide.effect(function()
-				local s = storeState()
-				recordButton.Visible = RecordViewLogic.parse(if s then s.record else nil) ~= nil
-			end)
-			recordButton.Parent = column
-
-			-- Today's daily challenges (payoff-loop step 8). Hub only:
-			-- the swap is refused anywhere else.
-			local challengesButton = C.IconButton({
-				icon = "check",
-				label = DailyChallengeViewLogic.BUTTON_LABEL,
-				variant = "secondary",
-				onActivate = openChallenges,
-				order = 7,
-				layoutOrder = 7,
-			})
-			vide.effect(function()
-				challengesButton.Visible = challengeState() ~= nil
-			end)
-			challengesButton.Parent = column
-		end
-		if isStaff then
-			C.IconButton({
+		local staff = if isStaff
+			then C.IconButton({
 				icon = "gift",
 				label = "Staff",
 				variant = "secondary",
 				onActivate = function()
 					open("Staff")
 				end,
-				order = 8,
-				layoutOrder = 8,
-			}).Parent =
-				column
-		end
-		UIScaleController.attachScale(column)
+				order = 6,
+				layoutOrder = 1,
+			})
+			else nil
+
+		-- One scaled row, anchored top-right, so everything keeps its
+		-- place beside the column at any UI scale.
+		local corner = create("Frame")({
+			Name = "Corner",
+			AnchorPoint = Vector2.new(1, 0),
+			Position = UDim2.new(1, -Theme.spacing.md, 0, Theme.spacing.md),
+			Size = UDim2.fromOffset(0, 0),
+			AutomaticSize = Enum.AutomaticSize.XY,
+			BackgroundTransparency = 1,
+			Visible = visible,
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				HorizontalAlignment = Enum.HorizontalAlignment.Right,
+				VerticalAlignment = Enum.VerticalAlignment.Top,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+			}),
+			staff :: any,
+			gear,
+			shields,
+			coins,
+			column,
+			Parent = gui,
+		}) :: Frame
+		UIScaleController.attachScale(corner)
 	end)
 end
 

@@ -83,9 +83,9 @@ local ICONS: { [string]: Icon } = {
 	-- Station markers (P7-6).
 	rival = { glyph = "👤", image = "rbxassetid://103224537713261" }, -- a rival is working at this station
 
-	-- The Hub's practice party button. Borrows the rival silhouette until
-	-- a two-person icon is drawn.
-	party = { glyph = "👥", image = "rbxassetid://103224537713261" },
+	-- The Hub's practice party button: two players, in colour
+	-- (assets/ui/hub-icons.js).
+	party = { glyph = "👥", image = "rbxassetid://104703047775875", fullColor = true },
 
 	-- One per power-up, keyed by PowerUpDef.id so a lookup needs no map.
 	freeze = { glyph = "❄", image = "rbxassetid://112112451877002" },
@@ -104,6 +104,17 @@ local ICONS: { [string]: Icon } = {
 	["info-button"] = { glyph = "i", image = "rbxassetid://91647157562980", fullColor = true },
 	["check-badge"] = { glyph = "✓", image = "rbxassetid://115035144784851", fullColor = true },
 	["cross-badge"] = { glyph = "✕", image = "rbxassetid://82032145962986", fullColor = true },
+	-- The Hub menu's full-colour art (assets/ui/hub-icons.js, approved
+	-- 2026-10-18 from docs/ui-art-pass/hub-menu.html). The plain keys
+	-- above stay as the tinted silhouettes tabs and rows use.
+	["hub-locker"] = { glyph = "🎒", image = "rbxassetid://127828965815401", fullColor = true },
+	["hub-shop"] = { glyph = "🛒", image = "rbxassetid://82843296461854", fullColor = true },
+	["hub-trophy"] = { glyph = "🏆", image = "rbxassetid://118463086229511", fullColor = true },
+	["hub-settings"] = { glyph = "⚙", image = "rbxassetid://138358826789920", fullColor = true },
+	["hub-tasks"] = { glyph = "📋", image = "rbxassetid://80748282295912", fullColor = true },
+	["hub-playtime"] = { glyph = "⏱", image = "rbxassetid://76059439549426", fullColor = true },
+	["hub-record"] = { glyph = "📊", image = "rbxassetid://102420453967206", fullColor = true },
+	["hub-bank"] = { glyph = "🐷", image = "rbxassetid://137129770273757", fullColor = true },
 	-- Drawn to match the pack's coins by scripts/make-ui-icons.ps1.
 	restart = { glyph = "🔄", image = "rbxassetid://132275802112019", fullColor = true },
 }

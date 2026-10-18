@@ -114,6 +114,22 @@ function DailyChallengeViewLogic.progressText(slot: Slot): string
 	return string.format("%d/%d", math.min(slot.progress, slot.target), slot.target)
 end
 
+-- The level pill's caption in the Hub (Hub menu pass): how many of
+-- today's challenges are done, "LEVEL · 1/2 TODAY". Plain "LEVEL"
+-- without a list.
+function DailyChallengeViewLogic.levelCaption(state: State?): string
+	if state == nil or #state.slots == 0 then
+		return "LEVEL"
+	end
+	local done = 0
+	for _, slot in state.slots do
+		if slot.done then
+			done += 1
+		end
+	end
+	return string.format("LEVEL · %d/%d TODAY", done, #state.slots)
+end
+
 -- Whether the row's Swap button works: a reroll left and the slot not
 -- finished (the server's own AlreadyDone / NoRerolls checks).
 function DailyChallengeViewLogic.canReroll(state: State, slot: Slot): boolean

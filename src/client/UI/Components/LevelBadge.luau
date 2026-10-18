@@ -5,6 +5,10 @@
 -- the left and a slim XP bar fills on the right, with "LV" over it so
 -- the bar doesn't rely on its fill alone. Display only: the level comes
 -- from the server (StoreState.level, LevelLogic.progressFor).
+--
+-- In the Hub (Hub menu pass, 2026-10-18) it heads the daily challenges
+-- drop-down: `onActivate` makes the whole pill a button, `open` turns
+-- its chevron, and `caption` replaces "LEVEL" ("LEVEL · 1/3 TODAY").
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
@@ -12,6 +16,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Base)
 local Env = require(script.Parent.Env)
+local Icons = require(script.Parent.Icons)
 local Theme = require(script.Parent.Parent.Theme)
 
 local create = vide.create
@@ -19,6 +24,10 @@ local create = vide.create
 export type Props = {
 	level: Base.Source<number>,
 	fraction: Base.Source<number>, -- 0..1 of the way to the next level
+	width: number?, -- reference px; default the coin pill's 112
+	caption: Base.Source<string>?, -- default "LEVEL"
+	open: Base.Source<boolean>?, -- shows a chevron, up while open
+	onActivate: (() -> ())?,
 	position: UDim2?,
 	anchorPoint: Vector2?,
 }
@@ -29,15 +38,18 @@ local WIDTH = Theme.spacing.xxxl * 2 + Theme.spacing.lg -- 112
 local INSET = Theme.spacing.sm
 local DISC = HEIGHT - Theme.spacing.xs
 local BAR = Theme.spacing.xs + Theme.spacing.xxs -- 6
+local CHEVRON = Theme.spacing.md
 
 local function LevelBadge(props: Props): Frame
 	local fraction = Env.animate(props.fraction, Theme.motion.slow)
 	local left = INSET + DISC + Theme.spacing.xs
+	local open = props.open
+	local right = Theme.spacing.md + (if open then CHEVRON + Theme.spacing.xs else 0)
 
 	local frame = create("Frame")({
 		Name = "LevelBadge",
 		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(WIDTH, HEIGHT),
+		Size = UDim2.fromOffset(props.width or WIDTH, HEIGHT),
 		Position = props.position or UDim2.new(),
 		AnchorPoint = props.anchorPoint or Vector2.zero,
 	}) :: Frame
@@ -76,9 +88,9 @@ local function LevelBadge(props: Props): Frame
 			Base.text("caption", {
 				Name = "Label",
 				Position = UDim2.fromOffset(left, Theme.spacing.xxs),
-				Size = UDim2.new(1, -(left + Theme.spacing.md), 0, HEIGHT / 2),
+				Size = UDim2.new(1, -(left + right), 0, HEIGHT / 2),
 				ZIndex = 3,
-				Text = "LEVEL",
+				Text = props.caption or "LEVEL",
 				TextColor3 = Theme.color.inkMuted,
 				TextXAlignment = Enum.TextXAlignment.Left,
 			}),
@@ -86,7 +98,7 @@ local function LevelBadge(props: Props): Frame
 				Name = "Track",
 				AnchorPoint = Vector2.new(0, 1),
 				Position = UDim2.new(0, left, 1, -(Theme.spacing.xs + Theme.spacing.xxs)),
-				Size = UDim2.new(1, -(left + Theme.spacing.md), 0, BAR),
+				Size = UDim2.new(1, -(left + right), 0, BAR),
 				BackgroundColor3 = Theme.color.background,
 				ZIndex = 3,
 				Base.corner(Theme.radius.pill),
@@ -106,6 +118,29 @@ local function LevelBadge(props: Props): Frame
 			}),
 		},
 	})
+	if open then
+		local chevron = Icons.view("chevron", CHEVRON, Theme.color.rim) :: ImageLabel
+		chevron.AnchorPoint = Vector2.new(1, 0.5)
+		chevron.Position = UDim2.new(1, -Theme.spacing.md, 0.5, 0)
+		chevron.ZIndex = 3
+		vide.effect(function()
+			chevron.Rotation = if open() then 0 else 180
+		end)
+		table.insert(children, chevron)
+	end
+	if props.onActivate then
+		table.insert(
+			children,
+			create("TextButton")({
+				Name = "Hit",
+				Size = UDim2.fromScale(1, 1),
+				BackgroundTransparency = 1,
+				Text = "",
+				ZIndex = 5,
+				Activated = props.onActivate,
+			})
+		)
+	end
 	for _, child in children do
 		child.Parent = frame
 	end
