@@ -55,6 +55,7 @@ local function validGameConfig(): Validate.GameConfig
 		},
 		streakCashOut = { minStreak = 3, coinsPerWinSquared = 25 },
 		playtimePass = { activeHoursPerWeek = 6, idleWindowSeconds = 120, maxCreditSeconds = 120 },
+		dailyChallenges = { picksPerDay = 3, maxWinPicks = 1, rerollsPerDay = 1, allDoneCoins = 50, allDoneXp = 100 },
 		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
 		powerUpUseRangeStuds = 24,
@@ -1230,6 +1231,15 @@ TestRunner.describe("Validate.checkGameConfig (round rewards)", function()
 			end,
 			function(c)
 				c.playtimePass = nil
+			end,
+			function(c)
+				c.dailyChallenges.maxWinPicks = 4 -- more than picksPerDay
+			end,
+			function(c)
+				c.dailyChallenges.rerollsPerDay = 1.5
+			end,
+			function(c)
+				c.dailyChallenges = nil
 			end,
 		}
 		for _, mutate in cases do
@@ -3344,5 +3354,98 @@ TestRunner.describe("Validate - level cosmetics", function()
 		local config = validGameConfig()
 		config.community.groupId = 1
 		TestRunner.expect(#runSelling({}, levelHat(10), config) > 0):toBeTruthy()
+	end)
+end)
+
+-- ===== daily challenges (payoff-loop step 8) ===============================
+
+local function validChallenge(id: string, metric: any?): Validate.DailyChallengeDef
+	return {
+		id = id,
+		enabled = true,
+		displayName = "Play %d rounds",
+		metric = metric or "RoundsPlayed",
+		target = 3,
+		coins = 25,
+		xp = 50,
+	}
+end
+
+-- Four challenges that need no win: exactly picksPerDay + rerollsPerDay.
+local function pool(): { { fileName: string, def: Validate.DailyChallengeDef } }
+	local entries = {}
+	for i = 1, 4 do
+		table.insert(entries, { fileName = "C" .. i .. ".luau", def = validChallenge("c" .. i) })
+	end
+	return entries
+end
+
+local function runChallenges(entries: { { fileName: string, def: Validate.DailyChallengeDef } }): { Validate.Issue }
+	return Validate.run({
+		gameConfig = validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = { { fileName = "Freeze.luau", def = validPowerUp("freeze") } },
+		titles = {},
+		dailyChallenges = entries,
+	})
+end
+
+TestRunner.describe("Validate - daily challenges (payoff-loop step 8)", function()
+	TestRunner.it("accepts a pool big enough for the picks and the reroll", function()
+		TestRunner.expect(#runChallenges(pool())):toBe(0)
+	end)
+
+	TestRunner.it("refuses a pool too small once win-only challenges are left out", function()
+		local entries = pool()
+		entries[4].def.metric = "Wins"
+		TestRunner.expect(#runChallenges(entries)):toBe(1)
+		entries = pool()
+		entries[4].def.enabled = false
+		TestRunner.expect(#runChallenges(entries)):toBe(1)
+	end)
+
+	TestRunner.it("checks powerUpId against the metric and the registry", function()
+		local entries = pool()
+		entries[1].def.metric = "Hits"
+		entries[1].def.powerUpId = "freeze"
+		TestRunner.expect(#runChallenges(entries)):toBe(0)
+		entries[1].def.powerUpId = "nope"
+		TestRunner.expect(#runChallenges(entries)):toBe(1)
+		entries = pool()
+		entries[1].def.powerUpId = "freeze" -- on a RoundsPlayed challenge
+		TestRunner.expect(#runChallenges(entries)):toBe(1)
+	end)
+
+	TestRunner.it("refuses bad fields, a stray format code and a duplicate id", function()
+		local cases: { (Validate.DailyChallengeDef) -> () } = {
+			function(d)
+				d.metric = "Steals" :: any
+			end,
+			function(d)
+				d.target = 0
+			end,
+			function(d)
+				d.coins = 2.5
+			end,
+			function(d)
+				d.coins = 0
+				d.xp = 0
+			end,
+			function(d)
+				d.displayName = "Play %d of %d"
+			end,
+			function(d)
+				d.displayName = "100% done"
+			end,
+		}
+		for _, mutate in cases do
+			local entries = pool()
+			mutate(entries[1].def)
+			TestRunner.expect(#runChallenges(entries) > 0):toBeTruthy()
+		end
+		local entries = pool()
+		entries[2].def.id = "c1"
+		TestRunner.expect(#runChallenges(entries) > 0):toBeTruthy()
 	end)
 end)

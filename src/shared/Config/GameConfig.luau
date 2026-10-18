@@ -122,6 +122,22 @@ local GameConfig: Validate.GameConfig = {
 		maxCreditSeconds = 120,
 	},
 
+	-- Daily challenges (payoff-loop step 8; design-decisions.md Q1's "a
+	-- payoff for every round" case). Each player draws picksPerDay of
+	-- Config/DailyChallenges' files per UTC day, at most maxWinPicks of
+	-- them needing a round win, and may swap rerollsPerDay unfinished
+	-- ones for free. Ranked rounds only. Each file pays its own coins +
+	-- XP; finishing the whole list pays the allDone bonus on top.
+	-- PLACEHOLDER: the bonus is about two placement payouts (owner,
+	-- 2026-10-18: coins + XP, per player, one free reroll, no practice).
+	dailyChallenges = {
+		picksPerDay = 3,
+		maxWinPicks = 1,
+		rerollsPerDay = 1,
+		allDoneCoins = 50,
+		allDoneXp = 100,
+	},
+
 	-- P2-7: PowerUpService's in-round inventory. The pre-game loadout
 	-- starts in these slots and field pickups fill whatever is empty
 	-- (powerups.md "Inventory and aiming", decided 2026-09-25). Range,

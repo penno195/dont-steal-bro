@@ -566,6 +566,38 @@ export type EventDef = {
 	view: string, -- the EventViews module that draws it
 }
 
+-- ===== DailyChallengeDef: payoff-loop step 8 ===============================
+-- One file per challenge in src/shared/Config/DailyChallenges/. Each
+-- player gets `dailyChallenges.picksPerDay` of them per UTC day, drawn
+-- per player (DailyChallengeLogic), and each pays coins + XP when its
+-- count reaches `target` over that day's ranked rounds (owner,
+-- 2026-10-18; practice never counts). Wins, SharedAndWon and StoleAndWon
+-- need a round win, so at most `maxWinPicks` of those go on one list.
+export type DailyChallengeMetric =
+	"RoundsPlayed" -- every ranked round played to the end
+	| "TasksDone"
+	| "StudioVisits" -- sat in the Studio as a finalist
+	| "FirstPlaces" -- crossed the line first
+	| "Hits" -- power-ups landed on a rival (only `powerUpId`'s, if set)
+	| "Wins"
+	| "SharedAndWon"
+	| "StoleAndWon"
+
+local DAILY_CHALLENGE_METRICS: { DailyChallengeMetric } =
+	{ "RoundsPlayed", "TasksDone", "StudioVisits", "FirstPlaces", "Hits", "Wins", "SharedAndWon", "StoleAndWon" }
+local DAILY_CHALLENGE_WIN_METRICS: { [string]: boolean } = { Wins = true, SharedAndWon = true, StoleAndWon = true }
+
+export type DailyChallengeDef = {
+	id: string,
+	enabled: boolean, -- false = never drawn
+	displayName: string, -- "Freeze %d players": an optional "%d" is filled with `target`
+	metric: DailyChallengeMetric,
+	target: number,
+	powerUpId: string?, -- Hits only: a registered power-up id
+	coins: number,
+	xp: number,
+}
+
 -- ===== SeasonDef: rewards-roadmap.md step 5 ==============================
 -- One file per season in src/shared/Config/Seasons/ (design-decisions.md
 -- Q1's 2026-09-30 revision, applied 2026-10-02). A season is one calendar
@@ -887,6 +919,15 @@ export type PlaytimePassConfig = {
 	maxCreditSeconds: number,
 }
 
+-- Daily challenges (payoff-loop step 8): DailyChallengeLogic's config.
+export type DailyChallengesConfig = {
+	picksPerDay: number,
+	maxWinPicks: number, -- challenges needing a round win, per list
+	rerollsPerDay: number, -- free swaps of an unfinished challenge
+	allDoneCoins: number, -- bonus for finishing the whole list
+	allDoneXp: number,
+}
+
 export type StudioTimers = {
 	introSeconds: number,
 	introNewPlayerSeconds: number,
@@ -926,6 +967,7 @@ export type GameConfig = {
 	roundRewards: RoundRewardsConfig,
 	streakCashOut: StreakCashOutConfig,
 	playtimePass: PlaytimePassConfig,
+	dailyChallenges: DailyChallengesConfig,
 
 	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
 	-- loadout (StoreService) starts in these slots; field pickups fill
@@ -2306,6 +2348,53 @@ function Validate.checkEvent(fileName: string, def: EventDef, issues: { Issue })
 	end
 	if type(def.view) ~= "string" or string.match(def.view, "^%a%w*$") == nil then
 		issue(issues, "Event", fileName, "view", "view must name a module in src/client/EventViews")
+	end
+end
+
+local function isWholeAtLeast(value: any, least: number): boolean
+	return type(value) == "number" and value >= least and value % 1 == 0
+end
+
+function Validate.checkDailyChallenge(fileName: string, def: DailyChallengeDef, issues: { Issue })
+	local function bad(field: string, message: string)
+		issue(issues, "DailyChallenge", fileName, field, message)
+	end
+
+	if not isNonEmptyString(def.id) then
+		bad("id", "id must be a non-empty string")
+	elseif #def.id > 64 then
+		bad("id", "id must be at most 64 characters")
+	end
+	if type(def.enabled) ~= "boolean" then
+		bad("enabled", "enabled must be a boolean")
+	end
+	if not isNonEmptyString(def.displayName) then
+		bad("displayName", "displayName must be a non-empty string")
+	else
+		-- One "%d" at most, and no other "%" escapes, so label()'s fill
+		-- can never print a stray format code.
+		local stripped, fills = string.gsub(def.displayName, "%%d", "")
+		if fills > 1 or string.find(stripped, "%", 1, true) ~= nil then
+			bad("displayName", 'displayName may hold one "%d" (the target) and no other "%"')
+		end
+	end
+	if not table.find(DAILY_CHALLENGE_METRICS, def.metric) then
+		bad("metric", "metric must be one of " .. table.concat(DAILY_CHALLENGE_METRICS, ", "))
+	end
+	if not isWholeAtLeast(def.target, 1) then
+		bad("target", "target must be a whole number, at least 1")
+	end
+	if def.powerUpId ~= nil and (def.metric ~= "Hits" or not isNonEmptyString(def.powerUpId)) then
+		bad("powerUpId", "powerUpId is only for a Hits challenge, and must name a power-up")
+	end
+	if not isWholeAtLeast(def.coins, 0) then
+		bad("coins", "coins must be a whole number, 0 or more")
+	end
+	if not isWholeAtLeast(def.xp, 0) then
+		bad("xp", "xp must be a whole number, 0 or more")
+	end
+	if def.coins == 0 and def.xp == 0 then
+		bad("coins", "a challenge must pay some coins or XP")
 	end
 end
 
@@ -4106,6 +4195,34 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 			end
 		end
 	end
+
+	-- Daily challenges (payoff-loop step 8). The registry's own pool
+	-- size is checked in Validate.run, which has the files.
+	local dc = config.dailyChallenges
+	if type(dc) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "dailyChallenges", "is missing")
+	else
+		local function bad(field: string, message: string)
+			issue(issues, "GameConfig", "GameConfig.luau", "dailyChallenges." .. field, message)
+		end
+		if not isWholeAtLeast(dc.picksPerDay, 1) or dc.picksPerDay > 5 then
+			bad("picksPerDay", "must be a whole number from 1 to 5")
+		end
+		if
+			not isWholeAtLeast(dc.maxWinPicks, 0)
+			or (type(dc.picksPerDay) == "number" and dc.maxWinPicks > dc.picksPerDay)
+		then
+			bad("maxWinPicks", "must be a whole number from 0 to picksPerDay")
+		end
+		if not isWholeAtLeast(dc.rerollsPerDay, 0) or dc.rerollsPerDay > 3 then
+			bad("rerollsPerDay", "must be a whole number from 0 to 3")
+		end
+		for _, field in { "allDoneCoins", "allDoneXp" } do
+			if not isWholeAtLeast((dc :: any)[field], 0) then
+				bad(field, "must be a whole number, 0 or more")
+			end
+		end
+	end
 end
 
 -- ===== cross-registry checks =============================================
@@ -4170,6 +4287,9 @@ export type RegistryInput = {
 
 	-- Staff tools step 5. Optional for the same reason.
 	events: { { fileName: string, def: EventDef } }?,
+
+	-- Payoff-loop step 8. Optional for the same reason.
+	dailyChallenges: { { fileName: string, def: DailyChallengeDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -4735,6 +4855,54 @@ function Validate.run(input: RegistryInput): { Issue }
 			Validate.checkEvent(entry.fileName, entry.def, issues)
 		end
 		checkDuplicateIds("Event", events :: any, issues)
+	end
+
+	-- ===== payoff-loop step 8's daily challenges ========================
+	local challenges = input.dailyChallenges
+	if challenges ~= nil then
+		local powerUpIds: { [string]: boolean } = {}
+		for _, entry in input.powerUps do
+			powerUpIds[entry.def.id] = true
+		end
+		local enabledWinless = 0
+		for _, entry in challenges do
+			Validate.checkDailyChallenge(entry.fileName, entry.def, issues)
+			local powerUpId = entry.def.powerUpId
+			if type(powerUpId) == "string" and not powerUpIds[powerUpId] then
+				issue(
+					issues,
+					"DailyChallenge",
+					entry.fileName,
+					"powerUpId",
+					string.format("powerUpId %q is not a registered power-up", powerUpId)
+				)
+			end
+			if entry.def.enabled == true and not DAILY_CHALLENGE_WIN_METRICS[entry.def.metric] then
+				enabledWinless += 1
+			end
+		end
+		checkDuplicateIds("DailyChallenge", challenges :: any, issues)
+
+		-- Every pick and every reroll must always find a challenge that
+		-- doesn't need a win, or a list could come up short or a reroll
+		-- be refused (DailyChallengeLogic.reroll's "NoCandidate").
+		local dc = input.gameConfig.dailyChallenges
+		if type(dc) == "table" and type(dc.picksPerDay) == "number" and type(dc.rerollsPerDay) == "number" then
+			local needed = dc.picksPerDay + dc.rerollsPerDay
+			if enabledWinless < needed then
+				issue(
+					issues,
+					"DailyChallenge",
+					"init.luau",
+					"enabled",
+					string.format(
+						"%d enabled challenge(s) don't need a win, but picksPerDay + rerollsPerDay needs %d",
+						enabledWinless,
+						needed
+					)
+				)
+			end
+		end
 	end
 
 	-- ===== rewards step 5's season cross-checks =========================

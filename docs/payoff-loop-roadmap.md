@@ -198,7 +198,30 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     Unseen in Studio when built.
 - [ ] **8. Daily challenges.** Three a day (e.g. "Freeze 5 players",
   "Reach the Studio twice", "Share and survive"), most doable without
-  winning. One config file per challenge.
+  winning. One config file per challenge. Owner's answers (Q1's applied
+  case): each pays coins + XP, drawn per player per UTC day, one free
+  reroll a day, ranked rounds only.
+  - [x] 8a. Config + pure logic + specs: `Config/DailyChallenges/` (one
+    file each: metric, target, coins, xp, optional `powerUpId` for a
+    Hits challenge; 9 PLACEHOLDER challenges, 2 needing a win),
+    `GameConfig.dailyChallenges` (picksPerDay 3, maxWinPicks 1,
+    rerollsPerDay 1, the all-done bonus), validated (the pool must hold
+    picksPerDay + rerollsPerDay enabled challenges needing no win), and
+    `src/server/DailyChallengeLogic.luau`: the per-player draw (a hash
+    of userId, day and id ranks every enabled challenge), the lazy
+    day reset, the reroll (next undrawn in the ranking; progress on the
+    swapped one is lost), `countFor` over a server-filled `RoundTally`,
+    and `applyRound`'s payout.
+  - [ ] 8b. Server: a profile field for `DailyChallengeLogic.State`
+    (schema bump); after each ranked round, a `RoundTally` from the
+    round's own records (tasks, place, Studio, win, locked choice, hits
+    by power-up id), its coins and XP paid through the round's
+    progression write (so challenge XP levels up like round XP); a
+    rate-limited reroll intent; today's list in a targeted payload
+    (labels, progress, rerolls left, time to the UTC reset).
+  - [ ] 8c. UI: a Hub challenges panel (three rows with progress bars,
+    the reroll button, the reset countdown) and a "Challenge done"
+    toast/pop-up after the round that finishes one.
 - [ ] **9. Lifetime-stat titles.** Titles for lifetime wins, Studio
   visits and successful steals, which everyone climbs over time,
   alongside the streak ladder (rungs past ~10 are near-unreachable at a

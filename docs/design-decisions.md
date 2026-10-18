@@ -421,6 +421,20 @@ From the 2026-10-17 game review: only wins paid anything, so roughly
   chat, so a button says nothing a keyboard couldn't. Wording is
   PLACEHOLDER: the owner approved the draft Promise and Threat lines;
   the Emote lines were written after emoji were ruled out.
+- **Daily challenges** (payoff-loop step 8, owner's answers
+  2026-10-18). Three a day, most doable without winning.
+  - **Each pays coins and XP**, and finishing all three pays a bonus
+    of both.
+  - **Drawn per player**, per UTC day, so lobbies don't all chase the
+    same goal.
+  - **One free reroll a day** swaps an unfinished challenge.
+  - **Ranked rounds only.** Practice never counts, the way it records
+    no steals or shares, so bots can't be farmed.
+  - Claude's calls: at most one of the three needs a round win; a
+    rerolled challenge loses its progress and never comes back that
+    day; a challenge removed or disabled mid-day counts nothing but can
+    still be rerolled. Challenges show only your own progress, and none
+    measures the streak, so Q7 isn't touched.
 
 All amounts are PLACEHOLDER, to be tuned in playtest.
 
