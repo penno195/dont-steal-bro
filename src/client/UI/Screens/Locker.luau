@@ -16,7 +16,9 @@
 --   Style  owned cosmetics. Tap to wear, tap again to take off.
 --   Titles the whole ladder, locked rungs greyed with the streak they
 --          need. Tap one to wear it; tap your pick again to go back to
---          wearing your highest (TitleService's default).
+--          wearing your highest (TitleService's default). Under it the
+--          three lifetime ladders (payoff-loop step 9), each on a fresh
+--          row behind a header card with its "12 / 50 wins" line.
 --
 -- LAYOUT: in landscape the controls sit in the left pane and the grid
 -- in the right (MenuShell's split). In portrait they stack, grid last.
@@ -78,8 +80,10 @@ export type Locker = {
 	setSlot: (slotIndex: number, powerUpId: string?) -> (),
 	repeatLast: () -> (),
 	equip: (cosmeticId: string, slot: string, wear: boolean) -> (),
-	-- The title ladder (config), and each title's name and colour.
+	-- The title ladder and the lifetime ladders (config), and each
+	-- title's name and colour.
 	titleLadder: { LockerLogic.TitleDef },
+	lifetimeLadder: { LockerLogic.LifetimeDef },
 	titleName: (titleId: string) -> string,
 	titleColor: (titleId: string) -> Color3,
 	-- Wear a title, or nil to go back to the highest rung.
@@ -554,7 +558,9 @@ local function titleCard(locker: Locker, row: () -> LockerLogic.TitleRow, index:
 	return Base.interactive({
 		name = "Title" .. index,
 		size = Vector2.new(width, CARD_H),
-		layoutOrder = index,
+		-- Config alone places a row (LockerLogic.titles), so its cell
+		-- never changes while the card lives.
+		layoutOrder = untrack(row).order,
 		order = 10 + index,
 		radius = Theme.radius.md,
 		disabled = locked,
@@ -587,13 +593,7 @@ local function titleCard(locker: Locker, row: () -> LockerLogic.TitleRow, index:
 						Position = UDim2.fromScale(0, 0.5),
 						Size = UDim2.fromScale(1, 0.5),
 						Text = function()
-							local r = row()
-							if not r.unlocked then
-								return string.format("Locked · best streak %d", r.minStreak)
-							elseif r.worn then
-								return if r.picked then "✓ Wearing" else "✓ Wearing (your highest)"
-							end
-							return string.format("Streak %d", r.minStreak)
+							return LockerLogic.titleDetail(row())
 						end,
 						TextColor3 = function()
 							return if row().worn then Theme.color.success else Theme.color.inkMuted
@@ -606,6 +606,48 @@ local function titleCard(locker: Locker, row: () -> LockerLogic.TitleRow, index:
 				end),
 			}
 		end,
+	})
+end
+
+-- A lifetime ladder's header: its name, then "12 / 50 wins" toward the
+-- next rung. Not a button, and drawn without a tile so it reads as a
+-- label over the rungs that follow it.
+local function ladderHeaderCard(header: () -> LockerLogic.LadderHeader, index: number): Instance
+	return create("Frame")({
+		Name = "Ladder" .. index,
+		LayoutOrder = untrack(header).order,
+		BackgroundTransparency = 1,
+		Base.padding(Theme.spacing.sm),
+		Base.text("label", {
+			Name = "Name",
+			Size = UDim2.fromScale(1, 0.5),
+			Text = function()
+				return LockerLogic.ladderName(header().stat)
+			end,
+			TextColor3 = Theme.color.ink,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+		Base.text("caption", {
+			Name = "Progress",
+			Position = UDim2.fromScale(0, 0.5),
+			Size = UDim2.fromScale(1, 0.5),
+			Text = function()
+				return LockerLogic.headerDetail(header())
+			end,
+			TextColor3 = Theme.color.inkMuted,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			TextXAlignment = Enum.TextXAlignment.Left,
+		}),
+	})
+end
+
+-- An empty cell that starts the next ladder on a fresh row.
+local function spacerCell(order: () -> number, index: number): Instance
+	return create("Frame")({
+		Name = "Spacer" .. index,
+		LayoutOrder = untrack(order),
+		BackgroundTransparency = 1,
 	})
 end
 
@@ -641,8 +683,13 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 	end)
 	local titleRows = derive(function(): { LockerLogic.TitleRow }
 		local s = locker.state()
-		return if s then LockerLogic.titles(s :: any, locker.titleLadder) else {}
+		return if s then LockerLogic.titles(s :: any, locker.titleLadder, locker.lifetimeLadder) else {}
 	end)
+	local ladderHeaders = derive(function(): { LockerLogic.LadderHeader }
+		local s = locker.state()
+		return if s then LockerLogic.ladderHeaders(s :: any, locker.titleLadder, locker.lifetimeLadder) else {}
+	end)
+	local titleSpacers = LockerLogic.titleSpacers(locker.titleLadder, locker.lifetimeLadder)
 
 	-- Where the grid goes, given how tall the controls above it are.
 	local controlsTop = TAB_H + Theme.spacing.sm
@@ -781,6 +828,10 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 				indexes(titleRows, function(row: () -> LockerLogic.TitleRow, index: number)
 					return titleCard(locker, row, index, cardW)
 				end) :: any,
+				indexes(ladderHeaders, ladderHeaderCard) :: any,
+				indexes(function()
+					return titleSpacers
+				end, spacerCell) :: any,
 			}) :: any,
 		})
 	end

@@ -227,12 +227,129 @@ describe("LockerLogic.titles", function()
 		local rows = LockerLogic.titles(state(), ladder)
 		expect(rows[1].unlocked):toBe(false)
 	end)
+
+	-- A 3-rung streak ladder, then Wins (2 rungs) and StealWins (1 rung).
+	local lifetime: { LockerLogic.LifetimeDef } = {
+		{ id = "veteran", stat = "Wins", threshold = 50 },
+		{ id = "sticky", stat = "StealWins", threshold = 1 },
+		{ id = "seen-it", stat = "Wins", threshold = 10 },
+	}
+
+	it("lists the lifetime ladders under the streak ladder, each on a fresh row", function()
+		local rows = LockerLogic.titles(state({ unlockedTitles = { "seen-it" } }), ladder, lifetime)
+		expect(#rows):toBe(6)
+		-- Streak fills cells 1-3; cell 4 pads, Wins' header is 5.
+		expect(rows[3].order):toBe(3)
+		expect(rows[4].titleId):toBe("seen-it")
+		expect(rows[4].ladder):toBe("Wins")
+		expect(rows[4].order):toBe(6)
+		expect(rows[4].unlocked):toBe(true)
+		expect(rows[5].titleId):toBe("veteran")
+		expect(rows[5].order):toBe(7)
+		-- Wins ends at 7; 8 pads, StealWins' header is 9.
+		expect(rows[6].titleId):toBe("sticky")
+		expect(rows[6].order):toBe(10)
+		expect(LockerLogic.titleSpacers(ladder, lifetime)[1]):toBe(4)
+		expect(LockerLogic.titleSpacers(ladder, lifetime)[2]):toBe(8)
+	end)
+
+	it("heads each lifetime ladder with its count toward the next rung", function()
+		local headers = LockerLogic.ladderHeaders(
+			state({
+				unlockedTitles = { "seen-it", "sticky" },
+				lifetimeCounts = { wins = 12, studioVisits = 3, stealWins = 4 },
+			}),
+			ladder,
+			lifetime
+		)
+		expect(#headers):toBe(2) -- no StudioVisits rungs, no header
+		expect(headers[1].stat):toBe("Wins")
+		expect(headers[1].order):toBe(5)
+		expect(LockerLogic.headerDetail(headers[1])):toBe("12 / 50 wins")
+		expect(headers[2].stat):toBe("StealWins")
+		expect(LockerLogic.headerDetail(headers[2])):toBe("All 1 earned")
+	end)
+
+	it("counts earned rungs when there are no counts (off the Hub)", function()
+		local headers = LockerLogic.ladderHeaders(state({ unlockedTitles = { "seen-it" } }), ladder, lifetime)
+		expect(headers[1].count):toBe(nil)
+		expect(LockerLogic.headerDetail(headers[1])):toBe("1 / 2 earned")
+	end)
+end)
+
+describe("LockerLogic.titleDetail", function()
+	local function row(overrides: { [string]: any }): LockerLogic.TitleRow
+		local r: { [string]: any } = {
+			titleId = "x",
+			ladder = "Streak",
+			threshold = 5,
+			unlocked = true,
+			worn = false,
+			picked = false,
+			order = 1,
+		}
+		for k, v in overrides do
+			r[k] = v
+		end
+		return r :: any
+	end
+
+	it("words a streak rung", function()
+		expect(LockerLogic.titleDetail(row({ unlocked = false }))):toBe("Locked · best streak 5")
+		expect(LockerLogic.titleDetail(row({}))):toBe("Streak 5")
+	end)
+
+	it("words a lifetime rung, singular at 1", function()
+		expect(LockerLogic.titleDetail(row({ ladder = "Wins", threshold = 50, unlocked = false }))):toBe(
+			"Locked · 50 wins"
+		)
+		expect(LockerLogic.titleDetail(row({ ladder = "StealWins", threshold = 1 }))):toBe("1 steal won")
+		expect(LockerLogic.titleDetail(row({ ladder = "StudioVisits", threshold = 10 }))):toBe("10 Studio visits")
+	end)
+
+	it("says what you're wearing", function()
+		expect(LockerLogic.titleDetail(row({ worn = true }))):toBe("✓ Wearing (your highest)")
+		expect(LockerLogic.titleDetail(row({ ladder = "Wins", worn = true, picked = true }))):toBe("✓ Wearing")
+	end)
+end)
+
+describe("LockerLogic.unlockToast", function()
+	it("names one title and what earned it", function()
+		expect(LockerLogic.unlockToast({ { name = "Veteran", lifetime = { stat = "Wins", threshold = 50 } } })):toBe(
+			"New title: Veteran (50 wins). Wear it from the Locker."
+		)
+		expect(LockerLogic.unlockToast({ { name = "Hot", minStreak = 5 } })):toBe(
+			"New title: Hot (best streak 5). Wear it from the Locker."
+		)
+	end)
+
+	it("counts several, and says nothing for none", function()
+		expect(LockerLogic.unlockToast({ { name = "A", minStreak = 1 }, { name = "B", minStreak = 3 } })):toBe(
+			"2 new titles! Wear one from the Locker."
+		)
+		expect(LockerLogic.unlockToast({})):toBe(nil)
+	end)
+
+	it("holds through the Studio and its reveal", function()
+		expect(LockerLogic.holdsUnlockToast("DecisionStudio", false)):toBe(true)
+		expect(LockerLogic.holdsUnlockToast("Qualified", false)):toBe(true)
+		expect(LockerLogic.holdsUnlockToast("Results", true)):toBe(true)
+		expect(LockerLogic.holdsUnlockToast("Results", false)):toBe(false)
+		expect(LockerLogic.holdsUnlockToast(nil, false)):toBe(false)
+	end)
 end)
 
 describe("LockerLogic.titleTap", function()
 	local function row(overrides: { [string]: any }): LockerLogic.TitleRow
-		local r: { [string]: any } =
-			{ titleId = "got-one", minStreak = 1, unlocked = true, worn = false, picked = false }
+		local r: { [string]: any } = {
+			titleId = "got-one",
+			ladder = "Streak",
+			threshold = 1,
+			unlocked = true,
+			worn = false,
+			picked = false,
+			order = 1,
+		}
 		for k, v in overrides do
 			r[k] = v
 		end

@@ -241,7 +241,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     `DailyChallengeViewLogic` and `ResultsLogic.parseChallenges`, both
     spec'd. Also fixed the launcher grid's count, which hadn't counted
     7c's record button. Unseen in Studio.
-- [ ] **9. Lifetime-stat titles.** Titles for lifetime wins, Studio
+- [x] **9. Lifetime-stat titles.** Titles for lifetime wins, Studio
   visits and successful steals, which everyone climbs over time,
   alongside the streak ladder (rungs past ~10 are near-unreachable at a
   ~20–25% round win rate). Owner's answers: Q1's "lifetime-stat
@@ -274,7 +274,17 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     for equip, worn title and the broadcast. StoreState
     `lifetimeCounts { wins, studioVisits, stealWins }` is Hub only, like
     `record`. Unseen in Studio.
-  - [ ] 9c. UI: the Locker's Titles list shows the three lifetime
+  - [x] 9c. UI: the Locker's Titles list shows the three lifetime
     ladders under the streak ladder, with locked rungs and a "12 / 50
     wins" line from `lifetimeNext`; the unlock toast words a lifetime
     title.
+    Built: `LockerLogic.titles` lists the streak ladder then Wins,
+    Studio visits and steals won, each lifetime ladder padded to a fresh
+    row behind a header card (`ladderHeaders`: "12 / 50 wins", "All 6
+    earned", or "2 / 6 earned" off the Hub). Grid cells come from config
+    alone, so a card never moves. TitleUnlocked is now a real toast in
+    MenuController (the old print in NametagController is gone): unlocks
+    within 1s share one toast, worded by `LockerLogic.unlockToast`, and
+    the toast waits out Qualified, the Studio and its reveal, since a
+    streak rung unlocks at the win write just before the reveal and would
+    otherwise tell a finalist they had won. Spec'd. Unseen in Studio.

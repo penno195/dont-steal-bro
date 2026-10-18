@@ -374,18 +374,6 @@ function NametagController:init()
 		refreshAllNametags()
 	end)
 
-	Net.onClientEvent("TitleUnlocked", function(payload: any)
-		-- No UI yet (P6-6 owns the notification toast); printing keeps
-		-- the unlock moment observable in Studio until there is one,
-		-- rather than the event silently going nowhere.
-		-- A lifetime title (payoff-loop step 9) carries `lifetime`
-		-- instead of `minStreak`.
-		local reached = if payload.lifetime ~= nil
-			then string.format("%s %d", tostring(payload.lifetime.stat), payload.lifetime.threshold)
-			else string.format("streak %d", payload.minStreak)
-		print(string.format("Title unlocked: %s (%s)", payload.title.displayName, reached))
-	end)
-
 	-- Rebuilt when reduced motion flips, so Pulse and Rainbow tags stop
 	-- (or start) straight away rather than at the next respawn.
 	Env.observe(Env.reducedMotion, function()

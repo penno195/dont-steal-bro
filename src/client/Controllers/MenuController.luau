@@ -58,6 +58,8 @@ local StoreConfig = require(ReplicatedStorage.Shared.Config.Store)
 local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local StoreOffers = require(ReplicatedStorage.Shared.StoreOffers)
 local Titles = require(ReplicatedStorage.Shared.Config.Titles)
+local LifetimeTitles = require(ReplicatedStorage.Shared.Config.LifetimeTitles)
+local LockerLogic = require(script.Parent.Parent.UI.LockerLogic)
 local BoardLogic = require(script.Parent.Parent.UI.BoardLogic)
 local C = require(script.Parent.Parent.UI.Components)
 local CashOutViewLogic = require(script.Parent.Parent.UI.CashOutViewLogic)
@@ -106,6 +108,9 @@ local FLOW_TICK = 0.5
 -- are to the minute, and the server refuses anything that just ended.
 local OFFER_TICK = 30
 local STUDIO_POLL = 0.25
+-- Title unlocks that land within this long share one toast (a join's
+-- backfill, or a round that crossed several rungs).
+local UNLOCK_GATHER = 1
 -- A staff gift waits this long before it pops, so a few given in quick
 -- succession share one pop-up.
 local GIFT_BATCH = 0.5
@@ -212,6 +217,14 @@ for _, entry in Titles do
 	titleNames[entry.def.id] = entry.def.displayName
 	titleColors[entry.def.id] = Color3.fromHex(entry.def.colorHex)
 	table.insert(titleLadder, { id = entry.def.id, minStreak = entry.def.minStreak })
+end
+-- The lifetime ladders (payoff-loop step 9), listed under the streak
+-- ladder in the Locker.
+local lifetimeLadder: { LockerLogic.LifetimeDef } = {}
+for _, entry in LifetimeTitles do
+	titleNames[entry.def.id] = entry.def.displayName
+	titleColors[entry.def.id] = Color3.fromHex(entry.def.colorHex)
+	table.insert(lifetimeLadder, { id = entry.def.id, stat = entry.def.stat, threshold = entry.def.threshold })
 end
 
 local seasonDefs: { [string]: SeasonTrackLogic.SeasonDef } = {}
@@ -668,6 +681,7 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 				Net.fireServer("StoreEquipIntent", { slot = slot, itemId = if wear then cosmeticId else nil })
 			end,
 			titleLadder = titleLadder,
+			lifetimeLadder = lifetimeLadder,
 			titleName = function(id: string): string
 				return titleNames[id] or id
 			end,
@@ -1199,6 +1213,39 @@ function MenuController:init()
 		if type(payload.state) == "string" then
 			onRoundState(payload.state)
 		end
+	end)
+
+	-- Title unlocks (P4-2, lifetime rungs from payoff-loop step 9), as a
+	-- toast. Gathered for a moment so a join's backfill is one toast, and
+	-- held through the Studio so a streak rung can't announce a win
+	-- before the reveal (LockerLogic.holdsUnlockToast).
+	local pendingUnlocks: { LockerLogic.Unlock } = {}
+	local unlockFlushing = false
+	Net.onClientEvent("TitleUnlocked", function(payload: any)
+		if type(payload) ~= "table" or type(payload.title) ~= "table" then
+			return
+		end
+		table.insert(pendingUnlocks, {
+			name = tostring(payload.title.displayName),
+			minStreak = payload.minStreak,
+			lifetime = payload.lifetime,
+		})
+		if unlockFlushing then
+			return
+		end
+		unlockFlushing = true
+		task.spawn(function()
+			task.wait(UNLOCK_GATHER)
+			while LockerLogic.holdsUnlockToast(roundState(), DecisionStudioController.isActive()) do
+				task.wait(STUDIO_POLL)
+			end
+			local text = LockerLogic.unlockToast(pendingUnlocks)
+			pendingUnlocks = {}
+			unlockFlushing = false
+			if text ~= nil then
+				C.Toast.show(text, "success")
+			end
+		end)
 	end)
 
 	-- Store.
