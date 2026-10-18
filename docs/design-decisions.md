@@ -435,6 +435,25 @@ From the 2026-10-17 game review: only wins paid anything, so roughly
     day; a challenge removed or disabled mid-day counts nothing but can
     still be rerolled. Challenges show only your own progress, and none
     measures the streak, so Q7 isn't touched.
+- **Lifetime-stat titles** (payoff-loop step 9, owner's answers
+  2026-10-18). Three more title ladders that only climb.
+  - **The ladders:** lifetime wins (10/50/100/250/500/1000), Studio
+    visits (ranked seats, 10/50/150/400/1000), and successful steals
+    (1/10/50/150/400). A successful steal is **a Steal pick that ended
+    as a winner**. It's a new counter, so it starts at 0 for everyone;
+    wins and visits backfill from existing stats. The owner took the
+    drafted names (`Config/LifetimeTitles/init.luau`); names and
+    thresholds are PLACEHOLDER.
+  - **One equipped slot**, shared with the streak ladder. A player who
+    hasn't picked a title still wears their top streak rung; a lifetime
+    title is only worn by choosing it in the Locker.
+  - **Hidden during a round** like every title (Q7's titles case), so
+    nothing about Q7 changes.
+  - Claude's calls: a separate registry rather than a field on the
+    streak ladder, so lifetime titles never become streak tiers for
+    currency, drops, cash-out or buy-back; ids are unique across both;
+    they're earn-only (no store grant can name one); bots don't wear
+    them; practice adds to none of the three counts.
 
 All amounts are PLACEHOLDER, to be tuned in playtest.
 

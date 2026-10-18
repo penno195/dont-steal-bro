@@ -29,6 +29,7 @@ local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
 local Seasons = require(ReplicatedStorage.Shared.Config.Seasons)
 local Events = require(ReplicatedStorage.Shared.Config.Events)
 local DailyChallenges = require(ReplicatedStorage.Shared.Config.DailyChallenges)
+local LifetimeTitles = require(ReplicatedStorage.Shared.Config.LifetimeTitles)
 local LightingPresets = require(ReplicatedStorage.Shared.Config.LightingPresets)
 
 local function formatIssues(issues: { Validate.Issue }): string
@@ -90,6 +91,7 @@ function ConfigValidator:init()
 		seasons = Seasons,
 		events = Events,
 		dailyChallenges = DailyChallenges,
+		lifetimeTitles = LifetimeTitles,
 	})
 
 	checkBuiltMaps(Maps :: any, issues)
@@ -100,7 +102,7 @@ function ConfigValidator:init()
 
 	print(
 		string.format(
-			"ConfigValidator: %d map(s), %d task(s), %d power-up(s), %d title(s), %d NPC personality(s), %d store entry(s), %d cosmetic(s), %d lighting preset(s), %d season(s), %d event(s), %d daily challenge(s) all valid",
+			"ConfigValidator: %d map(s), %d task(s), %d power-up(s), %d title(s), %d NPC personality(s), %d store entry(s), %d cosmetic(s), %d lighting preset(s), %d season(s), %d event(s), %d daily challenge(s), %d lifetime title(s) all valid",
 			#Maps,
 			#Tasks,
 			#PowerUps,
@@ -111,7 +113,8 @@ function ConfigValidator:init()
 			#LightingPresets,
 			#Seasons,
 			#Events,
-			#DailyChallenges
+			#DailyChallenges,
+			#LifetimeTitles
 		)
 	)
 end

@@ -230,4 +230,130 @@ function TitleLogic.pickNPCTitle(
 	return ladder[allowed]
 end
 
+-- ===== lifetime titles: payoff-loop step 9 ==============================
+-- Ladders for counts that only ever climb (lifetime wins, Studio visits,
+-- steals that won), beside the streak ladder. The same permanence
+-- argument as this file's header holds, one level up: these are
+-- functions of lifetime counters that are only ever incremented, and the
+-- owned list they unlock into is the same append-only one. They share the
+-- one equipped slot, but never feed `highestUnlocked` - a player who
+-- hasn't picked a title still wears their top streak rung (owner,
+-- 2026-10-18) - and never `pickNPCTitle`.
+
+-- Structurally identical to Validate.LifetimeTitleDef, duplicated for the
+-- same Lune reason as TitleDef above.
+export type LifetimeStat = "Wins" | "StudioVisits" | "StealWins"
+
+export type LifetimeTitleDef = {
+	id: string,
+	displayName: string,
+	colorHex: string,
+	stat: LifetimeStat,
+	threshold: number,
+}
+
+-- The three counters, as a profile's stats name them once 9b maps them:
+-- wins, qualifications, stealWins.
+export type LifetimeStats = {
+	wins: number,
+	studioVisits: number,
+	stealWins: number,
+}
+
+-- Display order of the ladders, so a list never depends on a filename.
+local LIFETIME_ORDER: { [LifetimeStat]: number } = { Wins = 1, StudioVisits = 2, StealWins = 3 }
+
+function TitleLogic.lifetimeCount(stats: LifetimeStats, stat: LifetimeStat): number
+	if stat == "Wins" then
+		return stats.wins
+	elseif stat == "StudioVisits" then
+		return stats.studioVisits
+	end
+	return stats.stealWins
+end
+
+local function byLadderThenThreshold(a: LifetimeTitleDef, b: LifetimeTitleDef): boolean
+	if a.stat ~= b.stat then
+		return LIFETIME_ORDER[a.stat] < LIFETIME_ORDER[b.stat]
+	end
+	return a.threshold < b.threshold
+end
+
+-- Every lifetime title these counts have earned, grouped by ladder
+-- (Wins, StudioVisits, StealWins), lowest rung first within each.
+function TitleLogic.lifetimeUnlocked(titles: { LifetimeTitleDef }, stats: LifetimeStats): { LifetimeTitleDef }
+	local unlocked: { LifetimeTitleDef } = {}
+	for _, def in titles do
+		if TitleLogic.lifetimeCount(stats, def.stat) >= def.threshold then
+			table.insert(unlocked, def)
+		end
+	end
+	table.sort(unlocked, byLadderThenThreshold)
+	return unlocked
+end
+
+-- The lifetime titles crossed between two snapshots of the counts, i.e.
+-- thresholds in (before, after] per ladder: what the unlock notification
+-- fires for after a round. Several at once is possible (a win that was
+-- also a Studio visit and a steal that won crosses up to three ladders).
+-- A count that went nowhere or backwards crosses nothing.
+function TitleLogic.lifetimeNewlyUnlocked(
+	titles: { LifetimeTitleDef },
+	before: LifetimeStats,
+	after: LifetimeStats
+): { LifetimeTitleDef }
+	local crossed: { LifetimeTitleDef } = {}
+	for _, def in titles do
+		local was = TitleLogic.lifetimeCount(before, def.stat)
+		local now = TitleLogic.lifetimeCount(after, def.stat)
+		if def.threshold > was and def.threshold <= now then
+			table.insert(crossed, def)
+		end
+	end
+	table.sort(crossed, byLadderThenThreshold)
+	return crossed
+end
+
+-- What a just-loaded profile has reached but doesn't own yet, the
+-- lifetime half of `unownedReached`. On the first join after 9b ships
+-- this is how existing players get the Wins and StudioVisits rungs their
+-- history already earned (StealWins has no history and starts at 0).
+function TitleLogic.lifetimeUnownedReached(
+	titles: { LifetimeTitleDef },
+	ownedIds: { string },
+	stats: LifetimeStats
+): { LifetimeTitleDef }
+	local missing: { LifetimeTitleDef } = {}
+	for _, def in TitleLogic.lifetimeUnlocked(titles, stats) do
+		if table.find(ownedIds, def.id) == nil then
+			table.insert(missing, def)
+		end
+	end
+	return missing
+end
+
+-- The next rung up one ladder from `count`, for the Locker's "12 / 50"
+-- line. nil once the top rung is reached (or the ladder is empty).
+function TitleLogic.lifetimeNext(titles: { LifetimeTitleDef }, stat: LifetimeStat, count: number): LifetimeTitleDef?
+	local best: LifetimeTitleDef? = nil
+	for _, def in titles do
+		if def.stat == stat and def.threshold > count and (best == nil or def.threshold < best.threshold) then
+			best = def
+		end
+	end
+	return best
+end
+
+function TitleLogic.findLifetimeById(titles: { LifetimeTitleDef }, titleId: string?): LifetimeTitleDef?
+	if titleId == nil then
+		return nil
+	end
+	for _, def in titles do
+		if def.id == titleId then
+			return def
+		end
+	end
+	return nil
+end
+
 return TitleLogic

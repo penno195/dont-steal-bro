@@ -264,6 +264,30 @@ export type TitleDef = {
 	effect: TitleEffect?, -- nil for most of the ladder; only the top tiers earn one
 }
 
+-- ===== LifetimeTitleDef: payoff-loop step 9 ===============================
+-- Titles for lifetime counts that only ever climb, beside the streak
+-- ladder (owner, 2026-10-18, design-decisions.md Q1). One file per title
+-- in src/shared/Config/LifetimeTitles/. A separate type and registry
+-- rather than a `stat` field on TitleDef, because TitleDef.minStreak is
+-- also the streak-rung axis for win currency, drop odds, cash-out and
+-- buy-back: a lifetime title in that list would bend all of them. Both
+-- kinds share the one owned list and the one equipped slot, so their
+-- ids must not collide (Validate.run).
+--   Wins          stats.wins
+--   StudioVisits  stats.qualifications (ranked Studio seats)
+--   StealWins     stats.stealWins: a Steal pick that ended as a winner
+export type LifetimeStat = "Wins" | "StudioVisits" | "StealWins"
+
+local LIFETIME_STATS: { LifetimeStat } = { "Wins", "StudioVisits", "StealWins" }
+
+export type LifetimeTitleDef = {
+	id: string,
+	displayName: string,
+	colorHex: string, -- "#rrggbb", as TitleDef.colorHex
+	stat: LifetimeStat,
+	threshold: number, -- unlocks when the stat reaches this; unique per stat
+}
+
 -- ===== CosmeticDef: P4-6 ==================================================
 -- gdd.md's cosmetics: a character skin, a trail, a victory emote, a
 -- podium decoration and reveal burst for the Decision Studio, a thrown
@@ -1728,6 +1752,43 @@ function Validate.checkTitle(fileName: string, def: TitleDef, issues: { Issue })
 			fileName,
 			"effect",
 			string.format("expected one of %s, got %s", table.concat(TITLE_EFFECTS, "/"), tostring(def.effect))
+		)
+	end
+end
+
+function Validate.checkLifetimeTitle(fileName: string, def: LifetimeTitleDef, issues: { Issue })
+	if not isNonEmptyString(def.id) then
+		issue(issues, "LifetimeTitle", fileName, "id", "id must be a non-empty string")
+	end
+	if not isNonEmptyString(def.displayName) then
+		issue(issues, "LifetimeTitle", fileName, "displayName", "displayName must be a non-empty string")
+	end
+	if not isNonEmptyString(def.colorHex) or not string.match(def.colorHex, "^#%x%x%x%x%x%x$") then
+		issue(
+			issues,
+			"LifetimeTitle",
+			fileName,
+			"colorHex",
+			string.format('expected "#rrggbb", got %s', tostring(def.colorHex))
+		)
+	end
+	if table.find(LIFETIME_STATS, def.stat) == nil then
+		issue(
+			issues,
+			"LifetimeTitle",
+			fileName,
+			"stat",
+			string.format("expected one of %s, got %s", table.concat(LIFETIME_STATS, "/"), tostring(def.stat))
+		)
+	end
+	-- 0 would hand the title to everyone on join, which is no title at all.
+	if type(def.threshold) ~= "number" or def.threshold < 1 or def.threshold % 1 ~= 0 then
+		issue(
+			issues,
+			"LifetimeTitle",
+			fileName,
+			"threshold",
+			string.format("expected a positive integer, got %s", tostring(def.threshold))
 		)
 	end
 end
@@ -4290,6 +4351,9 @@ export type RegistryInput = {
 
 	-- Payoff-loop step 8. Optional for the same reason.
 	dailyChallenges: { { fileName: string, def: DailyChallengeDef } }?,
+
+	-- Payoff-loop step 9. Optional for the same reason.
+	lifetimeTitles: { { fileName: string, def: LifetimeTitleDef } }?,
 }
 
 function Validate.run(input: RegistryInput): { Issue }
@@ -4901,6 +4965,48 @@ function Validate.run(input: RegistryInput): { Issue }
 						needed
 					)
 				)
+			end
+		end
+	end
+
+	-- ===== payoff-loop step 9's lifetime titles =========================
+	local lifetimeTitles = input.lifetimeTitles
+	if lifetimeTitles ~= nil then
+		for _, entry in lifetimeTitles do
+			Validate.checkLifetimeTitle(entry.fileName, entry.def, issues)
+		end
+		-- Streak and lifetime titles share one owned list and one equipped
+		-- slot, so an id is unique across both registries.
+		local both: { { fileName: string, def: { id: string } } } = {}
+		for _, entry in input.titles do
+			table.insert(both, entry :: any)
+		end
+		for _, entry in lifetimeTitles do
+			table.insert(both, entry :: any)
+		end
+		checkDuplicateIds("LifetimeTitle", both, issues)
+
+		-- One rung per count on each ladder, for the same total-order
+		-- reason the streak ladder's thresholds are unique.
+		local claimed: { [string]: string } = {}
+		for _, entry in lifetimeTitles do
+			local key = string.format("%s:%s", tostring(entry.def.stat), tostring(entry.def.threshold))
+			local existing = claimed[key]
+			if existing ~= nil then
+				issue(
+					issues,
+					"LifetimeTitle",
+					entry.fileName,
+					"threshold",
+					string.format(
+						"%s %s is already claimed by %s - each rung of a ladder needs its own",
+						tostring(entry.def.stat),
+						tostring(entry.def.threshold),
+						existing
+					)
+				)
+			else
+				claimed[key] = entry.def.id
 			end
 		end
 	end

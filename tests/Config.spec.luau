@@ -1532,6 +1532,68 @@ TestRunner.describe("Validate.checkTitle (P4-2 ladder)", function()
 	end)
 end)
 
+-- ===== payoff-loop step 9's lifetime titles ==============================
+
+local function validLifetimeTitle(id: string, stat: any, threshold: number): Validate.LifetimeTitleDef
+	return { id = id, displayName = "Test Lifetime", colorHex = "#c9b37a", stat = stat, threshold = threshold }
+end
+
+local function runWithLifetime(
+	lifetimeTitles: { { fileName: string, def: Validate.LifetimeTitleDef } }
+): { Validate.Issue }
+	return Validate.run({
+		gameConfig = validGameConfig(),
+		maps = {},
+		tasks = {},
+		powerUps = {},
+		titles = { { fileName = "GotOne.luau", def = validTitle("got-one", 1) } },
+		lifetimeTitles = lifetimeTitles,
+	})
+end
+
+TestRunner.describe("Validate lifetime titles (payoff-loop step 9)", function()
+	TestRunner.it("accepts one rung per ladder at the same count", function()
+		local issues = runWithLifetime({
+			{ fileName = "A.luau", def = validLifetimeTitle("a", "Wins", 10) },
+			{ fileName = "B.luau", def = validLifetimeTitle("b", "StudioVisits", 10) },
+			{ fileName = "C.luau", def = validLifetimeTitle("c", "StealWins", 10) },
+		})
+		TestRunner.expect(#issues):toBe(0)
+	end)
+
+	TestRunner.it("rejects two rungs of one ladder at the same count", function()
+		local issues = runWithLifetime({
+			{ fileName = "A.luau", def = validLifetimeTitle("a", "Wins", 10) },
+			{ fileName = "B.luau", def = validLifetimeTitle("b", "Wins", 10) },
+		})
+		TestRunner.expect(#issues):toBe(1)
+		TestRunner.expect(issues[1].field):toBe("threshold")
+	end)
+
+	TestRunner.it("rejects an id a streak title already uses, since they share one slot", function()
+		local issues = runWithLifetime({ { fileName = "A.luau", def = validLifetimeTitle("got-one", "Wins", 10) } })
+		TestRunner.expect(#issues):toBe(1)
+		TestRunner.expect(issues[1].field):toBe("id")
+	end)
+
+	TestRunner.it("rejects an unknown stat, a zero or fractional threshold and a bad colour", function()
+		for _, def in
+			{
+				validLifetimeTitle("a", "Losses", 10),
+				validLifetimeTitle("a", "Wins", 0),
+				validLifetimeTitle("a", "Wins", 2.5),
+				(function()
+					local d = validLifetimeTitle("a", "Wins", 10)
+					d.colorHex = "gold"
+					return d
+				end)(),
+			}
+		do
+			TestRunner.expect(#runWithLifetime({ { fileName = "A.luau", def = def } })):toBe(1)
+		end
+	end)
+end)
+
 -- ===== P4-5's store catalogue ============================================
 
 local function validProduct(key: string): Validate.StoreItemDef

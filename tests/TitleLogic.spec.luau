@@ -246,3 +246,85 @@ TestRunner.describe("TitleLogic.findById", function()
 		TestRunner.expect(TitleLogic.findById(LADDER, nil)):toBe(nil)
 	end)
 end)
+
+-- ===== payoff-loop step 9's lifetime titles =================================
+
+local LIFETIME: { TitleLogic.LifetimeTitleDef } = {
+	{ id = "veteran", displayName = "Veteran", colorHex = "#d4ae4f", stat = "Wins", threshold = 50 },
+	{ id = "seen-it-before", displayName = "Seen It Before", colorHex = "#c9b37a", stat = "Wins", threshold = 10 },
+	{ id = "finalist", displayName = "Finalist", colorHex = "#8fb3d9", stat = "StudioVisits", threshold = 10 },
+	{ id = "sticky-fingers", displayName = "Sticky Fingers", colorHex = "#d99a9a", stat = "StealWins", threshold = 1 },
+	{ id = "wanted", displayName = "Wanted", colorHex = "#e65252", stat = "StealWins", threshold = 50 },
+}
+
+local function counts(wins: number, studioVisits: number, stealWins: number): TitleLogic.LifetimeStats
+	return { wins = wins, studioVisits = studioVisits, stealWins = stealWins }
+end
+
+local function ids(defs: { TitleLogic.LifetimeTitleDef }): string
+	local out = {}
+	for _, def in defs do
+		table.insert(out, def.id)
+	end
+	return table.concat(out, ",")
+end
+
+TestRunner.describe("TitleLogic.lifetimeUnlocked", function()
+	TestRunner.it("unlocks nothing from a fresh profile", function()
+		TestRunner.expect(#TitleLogic.lifetimeUnlocked(LIFETIME, counts(0, 0, 0))):toBe(0)
+	end)
+
+	TestRunner.it("reads each ladder off its own count, exactly at the threshold", function()
+		TestRunner.expect(ids(TitleLogic.lifetimeUnlocked(LIFETIME, counts(10, 9, 1))))
+			:toBe("seen-it-before,sticky-fingers")
+	end)
+
+	TestRunner.it("groups by ladder then threshold, never by file order", function()
+		TestRunner.expect(ids(TitleLogic.lifetimeUnlocked(LIFETIME, counts(99, 10, 50))))
+			:toBe("seen-it-before,veteran,finalist,sticky-fingers,wanted")
+	end)
+end)
+
+TestRunner.describe("TitleLogic.lifetimeNewlyUnlocked", function()
+	TestRunner.it("fires for every ladder one round crosses", function()
+		-- A win that was also a Studio visit and a steal that won.
+		local crossed = TitleLogic.lifetimeNewlyUnlocked(LIFETIME, counts(9, 9, 0), counts(10, 10, 1))
+		TestRunner.expect(ids(crossed)):toBe("seen-it-before,finalist,sticky-fingers")
+	end)
+
+	TestRunner.it("fires nothing for a rung already behind the old count", function()
+		TestRunner.expect(#TitleLogic.lifetimeNewlyUnlocked(LIFETIME, counts(10, 10, 1), counts(11, 11, 2))):toBe(0)
+	end)
+
+	TestRunner.it("fires every rung a jump crosses, and nothing for a fall", function()
+		TestRunner.expect(ids(TitleLogic.lifetimeNewlyUnlocked(LIFETIME, counts(0, 0, 0), counts(60, 0, 0))))
+			:toBe("seen-it-before,veteran")
+		TestRunner.expect(#TitleLogic.lifetimeNewlyUnlocked(LIFETIME, counts(60, 10, 50), counts(0, 0, 0))):toBe(0)
+	end)
+end)
+
+TestRunner.describe("TitleLogic.lifetimeUnownedReached", function()
+	TestRunner.it("backfills what an existing profile's history already earned", function()
+		local missing = TitleLogic.lifetimeUnownedReached(LIFETIME, { "got-one", "seen-it-before" }, counts(55, 12, 0))
+		TestRunner.expect(ids(missing)):toBe("veteran,finalist")
+	end)
+end)
+
+TestRunner.describe("TitleLogic.lifetimeNext", function()
+	TestRunner.it("names the next rung up one ladder", function()
+		TestRunner.expect((TitleLogic.lifetimeNext(LIFETIME, "Wins", 0) :: any).id):toBe("seen-it-before")
+		TestRunner.expect((TitleLogic.lifetimeNext(LIFETIME, "Wins", 10) :: any).id):toBe("veteran")
+	end)
+
+	TestRunner.it("is nil past the top rung", function()
+		TestRunner.expect(TitleLogic.lifetimeNext(LIFETIME, "StudioVisits", 10)):toBe(nil)
+	end)
+end)
+
+TestRunner.describe("TitleLogic.findLifetimeById", function()
+	TestRunner.it("finds by id and is nil for a streak id or nil", function()
+		TestRunner.expect((TitleLogic.findLifetimeById(LIFETIME, "wanted") :: any).threshold):toBe(50)
+		TestRunner.expect(TitleLogic.findLifetimeById(LIFETIME, "got-one")):toBe(nil)
+		TestRunner.expect(TitleLogic.findLifetimeById(LIFETIME, nil)):toBe(nil)
+	end)
+end)

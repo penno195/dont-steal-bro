@@ -244,4 +244,27 @@ All amounts are PLACEHOLDER until a playtest tunes them.
 - [ ] **9. Lifetime-stat titles.** Titles for lifetime wins, Studio
   visits and successful steals, which everyone climbs over time,
   alongside the streak ladder (rungs past ~10 are near-unreachable at a
-  ~20–25% round win rate).
+  ~20–25% round win rate). Owner's answers: Q1's "lifetime-stat
+  titles" applied case (a successful steal = a Steal pick that won; one
+  shared equipped slot, top streak rung by default; hidden in-round).
+  - [x] 9a. Config + pure logic + specs: `Validate.LifetimeTitleDef`
+    (`stat` Wins / StudioVisits / StealWins, `threshold`) in its own
+    registry `src/shared/Config/LifetimeTitles/` (16 PLACEHOLDER
+    titles), checked by `Validate.checkLifetimeTitle` and `Validate.run`
+    (ids unique across both title registries, one rung per count per
+    ladder) and passed in by ConfigValidator. `TitleLogic`'s
+    `lifetimeUnlocked` / `lifetimeNewlyUnlocked` /
+    `lifetimeUnownedReached` / `lifetimeNext` / `findLifetimeById` over
+    a `LifetimeStats { wins, studioVisits, stealWins }`.
+  - [ ] 9b. Server: profile `stats.stealWins` (schema bump, ranked
+    only), counted where a finalist's Steal resolves as a win;
+    `TitleService` unlocks lifetime titles into the same append-only
+    owned list after each round's stats land (the unlock remote, as the
+    streak ladder's) and backfills on join via `lifetimeUnownedReached`;
+    equipping and the nametag/broadcast find an id in either registry,
+    still suppressed in-round; the Locker's StoreState gets each
+    ladder's count.
+  - [ ] 9c. UI: the Locker's Titles list shows the three lifetime
+    ladders under the streak ladder, with locked rungs and a "12 / 50
+    wins" line from `lifetimeNext`; the unlock toast words a lifetime
+    title.
