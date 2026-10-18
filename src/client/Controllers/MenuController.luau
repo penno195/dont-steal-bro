@@ -964,6 +964,19 @@ local heldGifts: { GiftLogic.Gift } = {}
 local giftSeen: { [string]: boolean } = {} -- ids shown or waiting
 local giftWaiting = false
 
+-- Blocks until no round is in play, the Studio is shut and the loading
+-- screen is gone, so a pop-up isn't opened under or over any of them.
+local function waitUntilClear()
+	local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
+	while
+		IN_PLAY[roundState() or ""]
+		or DecisionStudioController.isActive()
+		or playerGui:FindFirstChild("LoadingCover") ~= nil
+	do
+		task.wait(STUDIO_POLL)
+	end
+end
+
 local function showGifts()
 	local gifts = heldGifts
 	heldGifts = {}
@@ -1006,16 +1019,28 @@ local function holdGifts(gifts: { GiftLogic.Gift })
 		task.wait(GIFT_BATCH)
 		-- Sent as the profile loads, so on joining the Hub it would
 		-- otherwise pop up under the loading screen.
-		local playerGui = Players.LocalPlayer:WaitForChild("PlayerGui")
-		while
-			IN_PLAY[roundState() or ""]
-			or DecisionStudioController.isActive()
-			or playerGui:FindFirstChild("LoadingCover") ~= nil
-		do
-			task.wait(STUDIO_POLL)
-		end
+		waitUntilClear()
 		giftWaiting = false
 		showGifts()
+	end)
+end
+
+-- The "Earned by playtime" pass pop-up (payoff-loop step 5c). Match time
+-- counts toward the pass, so it can unlock mid-race: the pop-up waits,
+-- like the gifts, for the round and the Studio to be over.
+local function showPlaytimePass(def: SeasonTrackLogic.SeasonDef, before: SeasonTrackLogic.SeasonState)
+	task.spawn(function()
+		waitUntilClear()
+		local title, body = SeasonTrackLogic.playtimePassText(def, before)
+		ClaimPopup.open({
+			{
+				premium = true,
+				text = def.displayName .. " pass",
+				icon = "star",
+				image = imageByKey[def.passKey],
+			},
+		}, title, body)
+		Loader.get("AudioController").play("SeasonClaim")
 	end)
 end
 
@@ -1082,6 +1107,9 @@ function MenuController:init()
 				end
 				ClaimPopup.open(shown)
 				Loader.get("AudioController").play("SeasonClaim")
+			end
+			if SeasonTrackLogic.earnedByPlaytime(beforeSeason :: any, afterSeason) then
+				showPlaytimePass(def, beforeSeason :: any)
 			end
 		end
 		storeState(payload)

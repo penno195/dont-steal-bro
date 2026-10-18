@@ -657,6 +657,9 @@ local INDICATOR_H = 6
 local INDICATOR_ROW = INDICATOR_H + 2 * Theme.spacing.xs
 local INFO_ROW = Theme.type.body.size + Theme.spacing.sm -- the info line, with the indicator beside it
 local ARROW = 40
+-- The free-pass playtime bar (payoff-loop step 5c), under the strip while
+-- the pass isn't held: C.ProgressBar's label row and track, plus a gap.
+local PLAYTIME_ROW = Theme.type.caption.size + Theme.spacing.md + 2 * Theme.spacing.xs
 
 -- Stands in for an empty slot (a tier only the other row pays at), so a
 -- hidden tile's bindings never read nil.
@@ -1008,8 +1011,11 @@ local function seasonTrack(store: Store, height: () -> number, width: number, in
 					return view().premium.locked
 				end)
 				local bottomRow = if info then INFO_ROW else INDICATOR_ROW
+				local hasPlaytime = derive(function()
+					return view().playtime ~= nil
+				end)
 				local stripH = derive(function()
-					return math.max(0, height() - bottomRow)
+					return math.max(0, height() - bottomRow - (if hasPlaytime() then PLAYTIME_ROW else 0))
 				end)
 				-- Each column heads its two tiles with its win count.
 				local tileH = derive(function()
@@ -1213,6 +1219,39 @@ local function seasonTrack(store: Store, height: () -> number, width: number, in
 						}),
 					}),
 				}
+				-- This week's active time toward the free pass, until it's held.
+				-- Only read while hasPlaytime is true, so the cast never hides
+				-- a nil.
+				local function playtime(): SeasonTrackLogic.PlaytimeView
+					return view().playtime :: SeasonTrackLogic.PlaytimeView
+				end
+				table.insert(
+					children,
+					switch(hasPlaytime)({
+						[true] = function()
+							return create("Frame")({
+								Name = "Playtime",
+								Position = function()
+									return UDim2.fromOffset(0, stripH() + Theme.spacing.xs)
+								end,
+								Size = UDim2.new(1, 0, 0, PLAYTIME_ROW - Theme.spacing.xs),
+								BackgroundTransparency = 1,
+								C.ProgressBar({
+									value = function()
+										return playtime().fraction
+									end,
+									max = 1,
+									label = function()
+										return playtime().text
+									end,
+									valueText = function()
+										return playtime().resets
+									end,
+								}),
+							})
+						end,
+					}) :: any
+				)
 				if info then
 					table.insert(
 						children,

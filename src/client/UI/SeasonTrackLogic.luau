@@ -43,7 +43,14 @@ export type SeasonState = {
 	premiumWins: number,
 	freePaid: number,
 	premiumPaid: number,
+	-- Payoff-loop step 5b: "Playtime" when the pass was earned, nil when
+	-- bought or not held; and this week's active time toward the free
+	-- pass, nil once the pass is held.
+	passSource: string?,
+	playtime: Playtime?,
 }
+
+export type Playtime = { activeSeconds: number, targetSeconds: number, weekResetsIn: number }
 
 -- Rewards wait to be claimed (user decision 2026-10-09): "Claimable" is
 -- reached and unlocked but not yet claimed, "Next" the first item the
@@ -83,7 +90,78 @@ export type View = {
 	timeLeft: string,
 	free: TrackView,
 	premium: TrackView,
+	playtime: PlaytimeView?, -- nil once the pass is held
 }
+
+-- The pass screen's "x / 6 active hours this week" bar (payoff-loop
+-- step 5c): how full it is, what it reads, and when the week resets.
+export type PlaytimeView = { fraction: number, text: string, resets: string }
+
+-- Whole hours as "6", else floored to a tenth ("2.5"), so the bar never
+-- reads the target before the server has granted the pass.
+function SeasonTrackLogic.hoursText(seconds: number): string
+	local tenths = math.max(0, seconds) // 360
+	if tenths % 10 == 0 then
+		return string.format("%d", tenths // 10)
+	end
+	return string.format("%d.%d", tenths // 10, tenths % 10)
+end
+
+function SeasonTrackLogic.weekResetText(seconds: number): string
+	local days = seconds // 86400
+	if days >= 2 then
+		return string.format("resets in %d days", days)
+	elseif days == 1 then
+		return "resets in 1 day"
+	end
+	local hours = seconds // 3600
+	if hours >= 1 then
+		return string.format("resets in %dh", hours)
+	end
+	return "resets soon"
+end
+
+function SeasonTrackLogic.playtimeView(state: SeasonState): PlaytimeView?
+	local p = state.playtime
+	if p == nil or state.passSeen or p.targetSeconds <= 0 then
+		return nil
+	end
+	local active = math.clamp(p.activeSeconds, 0, p.targetSeconds)
+	return {
+		fraction = active / p.targetSeconds,
+		text = string.format(
+			"Free pass: %s / %s active hours this week",
+			SeasonTrackLogic.hoursText(active),
+			SeasonTrackLogic.hoursText(p.targetSeconds)
+		),
+		resets = SeasonTrackLogic.weekResetText(p.weekResetsIn),
+	}
+end
+
+-- Did the pass just arrive by playtime? passSource flipping to
+-- "Playtime" within one season. A first state (a join) never counts, so
+-- the pop-up isn't replayed on every visit.
+function SeasonTrackLogic.earnedByPlaytime(before: SeasonState?, after: SeasonState?): boolean
+	return before ~= nil
+		and after ~= nil
+		and before.id == after.id
+		and before.passSource ~= "Playtime"
+		and after.passSource == "Playtime"
+end
+
+-- The "Earned by playtime" pop-up's title and body. The target is read
+-- from the state before the grant, the last one that carried it.
+function SeasonTrackLogic.playtimePassText(def: SeasonDef, before: SeasonState): (string, string)
+	local hours = if before.playtime
+		then SeasonTrackLogic.hoursText(before.playtime.targetSeconds) .. " active hours"
+		else "Your playtime"
+	return "EARNED BY PLAYTIME!",
+		string.format(
+			"%s this week unlocked the %s pass. Its premium track is yours for the rest of the season.",
+			hours,
+			def.displayName
+		)
+end
 
 function SeasonTrackLogic.timeLeftText(seconds: number): string
 	local days = seconds // 86400
@@ -166,6 +244,7 @@ function SeasonTrackLogic.view(
 			grantText,
 			image
 		),
+		playtime = SeasonTrackLogic.playtimeView(state),
 	}
 end
 

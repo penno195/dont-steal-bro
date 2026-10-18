@@ -99,6 +99,11 @@ function SeasonPassPreview.mount(controller: any): () -> ()
 				premiumWins = scene.wins,
 				freePaid = scene.freePaid,
 				premiumPaid = scene.premiumPaid,
+				-- Payoff-loop step 5c: the free-pass bar, while the pass
+				-- isn't held (the server sends nil once it is).
+				playtime = if scene.passSeen
+					then nil
+					else { activeSeconds = 2.5 * 3600, targetSeconds = 6 * 3600, weekResetsIn = 3 * DAY + 3600 },
 			},
 		})
 	end

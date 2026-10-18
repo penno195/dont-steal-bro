@@ -25,7 +25,7 @@ export type Props = {
 	max: number,
 	-- Tokens.color key for the fill; default "primary".
 	color: string?,
-	label: string?,
+	label: (string | Base.Source<string>)?,
 	-- Text shown on the right of the label row; default "value/max".
 	valueText: (string | Base.Source<string>)?,
 	width: number?, -- reference px; default fills the parent

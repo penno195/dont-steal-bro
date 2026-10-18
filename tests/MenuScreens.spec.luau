@@ -709,6 +709,44 @@ describe("SeasonTrackLogic", function()
 		return s :: any
 	end
 
+	it("shows the week's playtime bar until the pass is held", function()
+		local playtime = { activeSeconds = 9000 + 359, targetSeconds = 6 * 3600, weekResetsIn = 3 * 86400 + 5 }
+		local view = SeasonTrackLogic.view(def, state({ playtime = playtime }), text)
+		local bar = view.playtime :: SeasonTrackLogic.PlaytimeView
+		expect(bar.text):toBe("Free pass: 2.5 / 6 active hours this week")
+		expect(bar.resets):toBe("resets in 3 days")
+		expect(bar.fraction):toBeCloseTo(9359 / 21600)
+		expect(SeasonTrackLogic.view(def, state({}), text).playtime):toBe(nil)
+		expect(SeasonTrackLogic.view(def, state({ passSeen = true, playtime = playtime }), text).playtime):toBe(nil)
+	end)
+
+	it("never reads the target or past it before the grant", function()
+		expect(SeasonTrackLogic.hoursText(6 * 3600 - 1)):toBe("5.9")
+		expect(SeasonTrackLogic.hoursText(0)):toBe("0")
+		local over = { activeSeconds = 99999, targetSeconds = 3600, weekResetsIn = 3599 }
+		local bar = SeasonTrackLogic.playtimeView(state({ playtime = over })) :: SeasonTrackLogic.PlaytimeView
+		expect(bar.fraction):toBe(1)
+		expect(bar.text):toBe("Free pass: 1 / 1 active hours this week")
+		expect(bar.resets):toBe("resets soon")
+		expect(SeasonTrackLogic.weekResetText(86400)):toBe("resets in 1 day")
+		expect(SeasonTrackLogic.weekResetText(7200)):toBe("resets in 2h")
+	end)
+
+	it("pops the playtime pass only when passSource flips to Playtime", function()
+		local before = state({ playtime = { activeSeconds = 21000, targetSeconds = 21600, weekResetsIn = 60 } })
+		local after = state({ passSeen = true, passSource = "Playtime" })
+		expect(SeasonTrackLogic.earnedByPlaytime(before, after)):toBe(true)
+		expect(SeasonTrackLogic.earnedByPlaytime(nil, after)):toBe(false) -- a join
+		expect(SeasonTrackLogic.earnedByPlaytime(after, after)):toBe(false)
+		expect(SeasonTrackLogic.earnedByPlaytime(before, state({ passSeen = true }))):toBe(false) -- bought
+		expect(SeasonTrackLogic.earnedByPlaytime(before, state({ id = "s2", passSource = "Playtime" }))):toBe(false)
+		local title, body = SeasonTrackLogic.playtimePassText(def, before)
+		expect(title):toBe("EARNED BY PLAYTIME!")
+		expect(body):toBe(
+			"6 active hours this week unlocked the Season 1 pass. Its premium track is yours for the rest of the season."
+		)
+	end)
+
 	it("marks claimed rows, then the next one, then locked", function()
 		local view = SeasonTrackLogic.view(def, state({}), text)
 		expect(view.free.rows[1].status):toBe("Claimed")
