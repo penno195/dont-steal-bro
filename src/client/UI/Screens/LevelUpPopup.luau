@@ -90,6 +90,13 @@ local function header(level: Level, cue: (string) -> ()): GuiObject
 			Base.corner(Theme.radius.pill),
 		}),
 	})
+	-- Hidden while empty, like ProgressBar's: at zero width its rounded
+	-- ends and gloss still drew a speck at the track's left end.
+	local function syncFillVisible()
+		fill.Visible = fill.Size.X.Scale > 0.001
+	end
+	fill:GetPropertyChangedSignal("Size"):Connect(syncFillVisible)
+	syncFillVisible()
 	local gained = Base.text("label", {
 		Name = "Gained",
 		Size = UDim2.new(0.5, 0, 0, CAPTION_ROW),
