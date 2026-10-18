@@ -63,6 +63,7 @@ local CashOutLogic = require(ServerScriptService.Server.CashOutLogic)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local SeasonLogic = require(ServerScriptService.Server.SeasonLogic)
 local ProgressionLogic = require(ServerScriptService.Server.ProgressionLogic)
+local DailyChallengeLogic = require(ServerScriptService.Server.DailyChallengeLogic)
 local RewardLogic = require(ServerScriptService.Server.RewardLogic)
 local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 local Participants = require(ServerScriptService.Server.Participants)
@@ -75,6 +76,9 @@ export type RoundResult = {
 	-- Only read on a win: which currency base the win pays
 	-- (RewardLogic.currencyFor). A win with none pays nothing and warns.
 	outcomeTag: ProfileLogic.OutcomeTag?,
+	-- A finalist's locked Studio choice, for the daily challenges'
+	-- "Share and survive" (payoff-loop step 8). nil for everyone else.
+	choice: ("Steal" | "Share")?,
 }
 
 type LedgerEntry = {
@@ -101,6 +105,9 @@ type LedgerEntry = {
 	-- A streak shield took this loss instead of the streak (payoff-loop
 	-- step 2): `after` kept the streak, and one shield was spent.
 	shieldSpent: boolean?,
+	-- What the round's daily challenges paid (payoff-loop step 8), set
+	-- by the write's challenge step. nil if the write never ran it.
+	challengePayout: DailyChallengeLogic.Payout?,
 }
 
 -- ===== season tracks (rewards-roadmap.md step 5) ===========================
@@ -172,6 +179,25 @@ local function performanceFor(player: Player, reason: ReasonCode): LevelLogic.Ro
 	}
 end
 
+-- The daily challenges' view of the same round (payoff-loop step 8):
+-- the performance above plus the locked choice and the hits by
+-- power-up id. All the server's own records again.
+local function tallyFor(
+	player: Player,
+	performance: LevelLogic.RoundPerformance,
+	choice: ("Steal" | "Share")?
+): DailyChallengeLogic.RoundTally
+	local PowerUpService = optionalService("PowerUpService")
+	return {
+		tasksDone = performance.tasksDone,
+		place = performance.place,
+		reachedStudio = performance.reachedStudio,
+		won = performance.won,
+		choice = choice,
+		hitsByPowerUp = if PowerUpService ~= nil then PowerUpService.getHitsByPowerUpFor(player.UserId) else {},
+	}
+end
+
 -- Every enabled level-only cosmetic (CosmeticDef.unlockLevel). Built per
 -- round, like dropPool, so it reads the registry as it stands.
 local function levelUnlocks(): { LevelLogic.LevelUnlock }
@@ -189,13 +215,15 @@ end
 -- stored XP, inside the write, and hands the award to `onAward` for the
 -- ledger and the audit line. Place coins and level-up coins are one
 -- Currency grant; each level cosmetic now due is a Cosmetic grant.
+-- `bonusXp` is the daily challenges' XP, which levels up with the round's.
 local function levelStepFor(
 	performance: LevelLogic.RoundPerformance,
 	onAward: (award: LevelLogic.RoundAward, cosmetics: { string }) -> ()
-): (xp: number, owned: { string }) -> (number, { RewardLogic.Grant })
-	return function(xp, owned)
+): (xp: number, owned: { string }, bonusXp: number) -> (number, { RewardLogic.Grant })
+	return function(xp, owned, bonusXp)
 		local unlocks = levelUnlocks()
-		local award = LevelLogic.award(GameConfig.roundRewards, xp, performance, LevelLogic.milestoneLevels(unlocks))
+		local award =
+			LevelLogic.award(GameConfig.roundRewards, xp, performance, LevelLogic.milestoneLevels(unlocks), bonusXp)
 		local grants: { RewardLogic.Grant } = {}
 		local coins = award.placeCurrency + award.levelUpCurrency
 		if coins > 0 then
@@ -301,7 +329,8 @@ local writeProgressionState: ((
 	seasonStep: any,
 	levelStep: any,
 	spendShield: boolean?,
-	bank: any
+	bank: any,
+	challengeStep: any
 ) -> { string })? =
 	nil
 
@@ -447,12 +476,21 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	local buyBackOffer = ProgressionLogic.buyBackOffer(result.roundId, before, result.reason, shielded)
 	-- Every round pays, win or lose (Q1, "a payoff for every round").
 	local levelCosmetics: { string } = {}
-	local levelStep = levelStepFor(performanceFor(player, result.reason), function(award, cosmetics)
+	local performance = performanceFor(player, result.reason)
+	local levelStep = levelStepFor(performance, function(award, cosmetics)
 		entry.levelAward = award
 		entry.levelCosmetics = cosmetics
 		levelCosmetics = cosmetics
 	end)
-	local rewardChanges = write(player, after, buyBackOffer, rewardWrite, seasonStep, levelStep, shielded)
+	-- Ranked rounds only: practice returned above (owner, 2026-10-18).
+	local challenges = optionalService("DailyChallengeService")
+	local challengeStep = if challenges ~= nil
+		then challenges.stepFor(player, tallyFor(player, performance, result.choice), function(payout)
+			entry.challengePayout = payout
+		end)
+		else nil
+	local rewardChanges =
+		write(player, after, buyBackOffer, rewardWrite, seasonStep, levelStep, shielded, nil, challengeStep)
 
 	DataService.recordRoundStat(player, ProgressionLogic.statForReason(result.reason))
 	if ProgressionLogic.isWin(result.reason) then
@@ -504,6 +542,21 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 				award.placeCurrency,
 				award.levelUpCurrency,
 				if #levelCosmetics > 0 then " cosmetics " .. table.concat(levelCosmetics, ",") else ""
+			)
+		)
+	end
+
+	local payout = entry.challengePayout
+	if payout ~= nil and #payout.completed > 0 then
+		print(
+			string.format(
+				"Progression: %s round=%s daily challenges done %s coins +%d xp +%d%s",
+				player.Name,
+				result.roundId,
+				table.concat(payout.completed, ","),
+				payout.coins,
+				payout.xp,
+				if payout.allDone then " (all done bonus)" else ""
 			)
 		)
 	end
@@ -604,6 +657,24 @@ local function levelPayload(entry: LedgerEntry): { [string]: any }?
 		placeCurrency = award.placeCurrency,
 		levelUpCurrency = award.levelUpCurrency,
 		cosmetics = entry.levelCosmetics or {},
+		-- Of xpGained, what the daily challenges paid (payoff-loop step 8).
+		challengeXp = award.bonusXp,
+	}
+end
+
+-- The daily challenges this round finished, for the results screen's
+-- "Challenge done" pop-up (payoff-loop step 8c). nil if none.
+local function challengesPayload(entry: LedgerEntry): { [string]: any }?
+	local payout = entry.challengePayout
+	local challenges = optionalService("DailyChallengeService")
+	if payout == nil or #payout.completed == 0 or challenges == nil then
+		return nil
+	end
+	return {
+		completed = challenges.labelsFor(payout.completed),
+		coins = payout.coins,
+		xp = payout.xp,
+		allDone = payout.allDone,
 	}
 end
 
@@ -676,6 +747,7 @@ local function sendRecaps()
 			bestStreakAfter = entry.after.bestStreak,
 			reward = rewardPayload(entry),
 			level = levelPayload(entry),
+			challenges = challengesPayload(entry),
 			practice = entry.practice,
 			-- Payoff-loop step 2: whether a shield kept this streak, this
 			-- player's finale guess (nil if they placed none), and the
@@ -689,6 +761,12 @@ local function sendRecaps()
 		-- isn't: it would land before DecisionReveal.
 		local StoreService = Loader.get("StoreService") :: any
 		StoreService.pushState(player)
+		-- The round's challenge progress, same timing, same reason: a
+		-- finished "Win a round" would tell a finalist they'd won.
+		local challenges = optionalService("DailyChallengeService")
+		if challenges ~= nil and not entry.practice then
+			challenges.push(player)
+		end
 	end
 end
 

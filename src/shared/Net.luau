@@ -1156,6 +1156,47 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Payoff-loop step 8: today's daily challenges. Client -> server:
+	-- "swap challenge `slot` for another" (the free daily reroll). The
+	-- server picks the replacement (DailyChallengeLogic.reroll) and
+	-- checks the reroll is left and the slot unfinished; the answer is a
+	-- DailyChallengeRerollResult and, on success, a new
+	-- DailyChallengeState. Any server, any round state: the list is no
+	-- streak, and a reroll mid-round only changes what the round counts
+	-- toward.
+	DailyChallengeRerollIntent = {
+		name = "DailyChallengeRerollIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({ slot = Net.number({ min = 1, max = 10, integer = true }) }),
+		rateLimit = { capacity = 2, refillPerSecond = 0.2 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted): how a reroll went. { status =
+	-- "Rerolled", slot } or { status = "Refused", reason }
+	-- (DailyChallengeLogic.RerollRefusal, or "NotLoaded"/"NotSaved").
+	DailyChallengeRerollResult = {
+		name = "DailyChallengeRerollResult",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> client (targeted): today's list, sent on load, after
+	-- each ranked round and after a reroll. { day, slots = { { id,
+	-- label, progress, target, done, coins, xp } }, rerollsLeft,
+	-- allDone = { coins, xp, paid }, resetsIn } - resetsIn is seconds to
+	-- the UTC midnight that draws a new list. Targeted only because it is
+	-- the player's own; it names no streak.
+	DailyChallengeState = {
+		name = "DailyChallengeState",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: a staff member gives a gift (staff-tools.md step
 	-- 2). Anyone can fire it; StaffService drops it unless the sender is
 	-- on liveOps.adminUserIds, with no reply, so its existence isn't

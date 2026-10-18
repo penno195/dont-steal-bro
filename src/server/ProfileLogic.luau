@@ -228,6 +228,24 @@ export type ProfileData = {
 	-- counted yet. A stale week or season reads as 0, so nothing resets
 	-- it on a schedule. Written only by PlaytimeService.
 	playtime: PlaytimeState?,
+
+	-- ===== schema v21, daily challenges ===================================
+
+	-- Today's three daily challenges and their progress (payoff-loop
+	-- step 8, DailyChallengeLogic.State). nil = never drawn. A list from
+	-- an older UTC day is redrawn the next time it's read, so nothing
+	-- resets it at midnight. Written only by the progression writer (a
+	-- round's progress and pay) and DailyChallengeService (the reroll).
+	dailyChallenges: DailyChallengeState?,
+}
+
+-- Structurally DailyChallengeLogic.State.
+export type DailyChallengeState = {
+	day: string,
+	slots: { { id: string, progress: number, done: boolean } },
+	drawn: { string },
+	rerollsUsed: number,
+	allDonePaid: boolean,
 }
 
 -- Structurally PlaytimeLogic.State.
@@ -269,7 +287,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 20
+local CURRENT_SCHEMA_VERSION = 21
 
 local function defaultStats(): Stats
 	return { roundsPlayed = 0, qualifications = 0, steals = 0, shares = 0, wins = 0, losses = 0, betrayed = 0 }
@@ -308,6 +326,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		bestBanked = 0,
 		streakRestoredAt = 0,
 		playtime = nil,
+		dailyChallenges = nil,
 	}
 end
 
@@ -538,6 +557,14 @@ migrations[19] = function(old: { [string]: any }): { [string]: any }
 		stats.betrayed = (stats.betrayed :: number?) or 0
 		next.stats = stats
 	end
+	return next
+end
+
+-- v20 -> v21 (daily challenges): none drawn. `dailyChallenges` is
+-- optional and drawn on first read, so this step only moves the version.
+migrations[20] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 21
 	return next
 end
 

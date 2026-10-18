@@ -212,13 +212,22 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     day reset, the reroll (next undrawn in the ranking; progress on the
     swapped one is lost), `countFor` over a server-filled `RoundTally`,
     and `applyRound`'s payout.
-  - [ ] 8b. Server: a profile field for `DailyChallengeLogic.State`
+  - [x] 8b. Server: a profile field for `DailyChallengeLogic.State`
     (schema bump); after each ranked round, a `RoundTally` from the
     round's own records (tasks, place, Studio, win, locked choice, hits
     by power-up id), its coins and XP paid through the round's
     progression write (so challenge XP levels up like round XP); a
     rate-limited reroll intent; today's list in a targeted payload
     (labels, progress, rerolls left, time to the UTC reset).
+    Built as profile v21 `dailyChallenges`, the writer's ChallengeStep
+    (run before the LevelStep, which gets its XP as
+    `LevelLogic.award`'s new `bonusXp`), `PowerUpService.
+    getHitsByPowerUpFor`, `RoundResult.choice` from DecisionService, and
+    `DailyChallengeService` (DailyChallengeRerollIntent/Result,
+    DailyChallengeState). Rerolls are Hub-only, and the after-round
+    push goes out at Results with the RoundRecap (which now carries
+    `challenges` and `level.challengeXp`), so a finished "Win a round"
+    can't tell a finalist they'd won before the reveal. Unseen in Studio.
   - [ ] 8c. UI: a Hub challenges panel (three rows with progress bars,
     the reroll button, the reset countdown) and a "Challenge done"
     toast/pop-up after the round that finishes one.

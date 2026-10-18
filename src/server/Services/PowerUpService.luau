@@ -149,6 +149,9 @@ local racerStates: { [number]: RacerState } = {}
 -- because a leaver's state is dropped on PlayerRemoving, and a Studio
 -- leaver's forfeit is still paid for what they did. Reset per race.
 local hitsThisRace: { [number]: number } = {}
+-- The same hits by power-up id, for the daily challenges' Hits metric
+-- (payoff-loop step 8, e.g. "Freeze 5 players"). Same scope and reset.
+local hitsByPowerUpThisRace: { [number]: { [string]: number } } = {}
 local pickupsFolder: Folder? = nil
 local mapRarityWeights: Validate.PowerUpRarityWeights? = nil
 
@@ -1016,6 +1019,9 @@ local function useFor(
 		-- (no single target) don't count.
 		if resolvedTarget ~= nil and resolvedTarget.id ~= racer.id then
 			hitsThisRace[racer.id] = (hitsThisRace[racer.id] or 0) + 1
+			local byPowerUp = hitsByPowerUpThisRace[racer.id] or {}
+			byPowerUp[def.id] = (byPowerUp[def.id] or 0) + 1
+			hitsByPowerUpThisRace[racer.id] = byPowerUp
 		end
 
 		-- Only a hit that landed shoves: a Shield or an immunity window
@@ -1222,6 +1228,7 @@ end
 local function beginRace()
 	EffectContext.assertRound("PowerUpService.beginRace")
 	hitsThisRace = {}
+	hitsByPowerUpThisRace = {}
 	startPickups(true)
 	grantLoadouts()
 end
@@ -1303,6 +1310,11 @@ local PowerUpService: Loader.Service = {
 	-- Power-ups this racer landed on a rival in the current race.
 	getHitsFor = function(racerId: number): number
 		return hitsThisRace[racerId] or 0
+	end,
+
+	-- The same hits by power-up id. A copy, so the caller can't edit the count.
+	getHitsByPowerUpFor = function(racerId: number): { [string]: number }
+		return table.clone(hitsByPowerUpThisRace[racerId] or {})
 	end,
 
 	-- Same shape as getInventoryFor.

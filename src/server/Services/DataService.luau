@@ -318,8 +318,18 @@ export type SeasonStep = (
 -- any level cosmetics now due (design-decisions.md Q1, "a payoff for
 -- every round"; LevelLogic). Same shape as SeasonStep and for the same
 -- reason: the step gets the stored lifetime XP and owned cosmetics, and
--- returns the new XP and the grants, in this one mutation.
-export type LevelStep = (xp: number, ownedCosmetics: { string }) -> (number, { StoreLogic.Grant })
+-- returns the new XP and the grants, in this one mutation. `bonusXp` is
+-- what the round's daily challenges paid (ChallengeStep below), so it
+-- levels up like round XP.
+export type LevelStep = (xp: number, ownedCosmetics: { string }, bonusXp: number) -> (number, { StoreLogic.Grant })
+
+-- A ranked round's daily-challenge progress (payoff-loop step 8). Gets
+-- the stored list (nil = never drawn) and returns the list to store,
+-- the grants for what it finished (coins) and the XP it paid, which the
+-- writer hands on to the LevelStep. Same mutation, same reason.
+export type ChallengeStep = (
+	state: ProfileLogic.DailyChallengeState?
+) -> (ProfileLogic.DailyChallengeState, { StoreLogic.Grant }, number)
 
 -- `spendShield` is ProgressionLogic.spendsShield's answer for this
 -- result (payoff-loop step 2): one streak shield goes in the same
@@ -343,7 +353,8 @@ export type ProgressionWriter = (
 	seasonStep: SeasonStep?,
 	levelStep: LevelStep?,
 	spendShield: boolean?,
-	bank: BankWrite?
+	bank: BankWrite?,
+	challengeStep: ChallengeStep?
 ) -> { string }
 
 local progressionWriterClaimedBy: string? = nil
@@ -370,7 +381,8 @@ local function writeProgressionState(
 	seasonStep: SeasonStep?,
 	levelStep: LevelStep?,
 	spendShield: boolean?,
-	bank: BankWrite?
+	bank: BankWrite?,
+	challengeStep: ChallengeStep?
 ): { string }
 	local d = writable(player)
 	if d == nil then
@@ -401,8 +413,17 @@ local function writeProgressionState(
 		-- and the step logs its own track items (SeasonLogic.describePaid).
 		applyGrantsTo(d, grants)
 	end
+	-- Before the level step, which adds the challenges' XP to the round's.
+	local challengeXp = 0
+	if challengeStep ~= nil then
+		local challengeState, grants, xp = challengeStep(d.dailyChallenges)
+		d.dailyChallenges = challengeState
+		challengeXp = xp
+		-- Not merged: ProgressionService logs what the challenges paid.
+		applyGrantsTo(d, grants)
+	end
 	if levelStep ~= nil then
-		local xpAfter, grants = levelStep((d.xp :: number?) or 0, table.clone(d.ownedCosmetics))
+		local xpAfter, grants = levelStep((d.xp :: number?) or 0, table.clone(d.ownedCosmetics), challengeXp)
 		d.xp = xpAfter
 		-- Not merged either: ProgressionService logs the round's award.
 		applyGrantsTo(d, grants)
@@ -486,6 +507,25 @@ end
 local function getPlaytime(player: Player): ProfileLogic.PlaytimeState?
 	local d = data(player)
 	return if d then d.playtime else nil
+end
+
+-- Today's daily challenges (payoff-loop step 8), as stored: possibly
+-- an older day's, which DailyChallengeLogic.forDay redraws on read.
+-- The setter is DailyChallengeService's reroll; a round's progress goes
+-- through the progression writer's ChallengeStep instead. Returns false
+-- if nothing was written (not loaded, read-only mode).
+local function getDailyChallenges(player: Player): ProfileLogic.DailyChallengeState?
+	local d = data(player)
+	return if d then d.dailyChallenges else nil
+end
+
+local function setDailyChallenges(player: Player, state: ProfileLogic.DailyChallengeState): boolean
+	local d = writable(player)
+	if d == nil then
+		return false
+	end
+	d.dailyChallenges = state
+	return true
 end
 
 local function setPlaytime(player: Player, state: ProfileLogic.PlaytimeState?): boolean
@@ -1129,6 +1169,8 @@ local DataService: Loader.Service = {
 	setEquippedCosmetic = setEquippedCosmetic,
 	getCurrency = getCurrency,
 	getXp = getXp,
+	getDailyChallenges = getDailyChallenges,
+	setDailyChallenges = setDailyChallenges,
 	getNavigationRounds = getNavigationRounds,
 	spendNavigationRound = spendNavigationRound,
 	getStreakSaves = getStreakSaves,

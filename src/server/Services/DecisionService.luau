@@ -400,6 +400,7 @@ local function computeOutcomeAndWriteProfiles(): Outcomes.OutcomeResult
 			roundId = roundId,
 			reason = ProgressionService.reasonForOutcome(outcome.branch, won),
 			outcomeTag = outcomeTag,
+			choice = finalist.choice,
 		})
 		personalResults[finalist.playerId] = {
 			streakBefore = streakBefore,

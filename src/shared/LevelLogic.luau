@@ -57,7 +57,8 @@ export type Progress = {
 }
 
 export type RoundAward = {
-	xpGained: number,
+	xpGained: number, -- the round's own XP plus bonusXp
+	bonusXp: number, -- of xpGained, what came from outside the round (daily challenges)
 	xpAfter: number,
 	levelBefore: number,
 	levelAfter: number,
@@ -127,15 +128,20 @@ end
 
 -- Everything one round pays a participant. `milestones` is every level
 -- that unlocks something (LevelLogic.milestoneLevels below); the ones
--- crossed this round come back in `milestonesReached`.
+-- crossed this round come back in `milestonesReached`. `bonusXp` is XP
+-- the round earned from elsewhere (payoff-loop step 8's daily
+-- challenges), added before the level is worked out so it levels up,
+-- pays level-up coins and crosses milestones exactly like round XP.
 function LevelLogic.award(
 	config: RoundRewardsConfig,
 	xpBefore: number,
 	performance: RoundPerformance,
-	milestones: { number }
+	milestones: { number },
+	bonusXp: number?
 ): RoundAward
 	local before = wholeAtLeastZero(xpBefore)
-	local gained = LevelLogic.roundXp(config.xp, performance)
+	local bonus = wholeAtLeastZero(bonusXp or 0)
+	local gained = LevelLogic.roundXp(config.xp, performance) + bonus
 	local after = before + gained
 	local levelBefore = LevelLogic.progressFor(config.level, before).level
 	local levelAfter = LevelLogic.progressFor(config.level, after).level
@@ -150,6 +156,7 @@ function LevelLogic.award(
 
 	return {
 		xpGained = gained,
+		bonusXp = bonus,
 		xpAfter = after,
 		levelBefore = levelBefore,
 		levelAfter = levelAfter,

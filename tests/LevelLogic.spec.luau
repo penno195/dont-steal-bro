@@ -121,6 +121,23 @@ TestRunner.describe("LevelLogic.award", function()
 		TestRunner.expect(award.milestonesReached[2]):toBe(3)
 	end)
 
+	TestRunner.it("levels up on bonus XP like round XP", function()
+		-- 90 XP + a 21 XP round + 120 bonus = 231: past level 2 and 3.
+		local award = LevelLogic.award(config(), 90, performance({ tasksDone = 2, place = 6 }), { 3 }, 120)
+		TestRunner.expect(award.xpGained):toBe(21 + 120)
+		TestRunner.expect(award.bonusXp):toBe(120)
+		TestRunner.expect(award.xpAfter):toBe(231)
+		TestRunner.expect(award.levelAfter):toBe(3)
+		TestRunner.expect(award.levelUpCurrency):toBe(100)
+		TestRunner.expect(award.milestonesReached[1]):toBe(3)
+	end)
+
+	TestRunner.it("ignores a negative or NaN bonus", function()
+		local base = performance({ tasksDone = 2, place = 6 })
+		TestRunner.expect(LevelLogic.award(config(), 0, base, {}, -50).xpGained):toBe(21)
+		TestRunner.expect(LevelLogic.award(config(), 0, base, {}, 0 / 0).bonusXp):toBe(0)
+	end)
+
 	TestRunner.it("pays no level-up coins past maxLevel", function()
 		local award = LevelLogic.award(config(), 1e9, performance({ tasksDone = 6 }), {})
 		TestRunner.expect(award.levelBefore):toBe(10)
