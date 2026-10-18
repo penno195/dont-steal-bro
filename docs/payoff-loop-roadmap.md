@@ -124,7 +124,25 @@ All amounts are PLACEHOLDER until a playtest tunes them.
   week (Mon–Sun UTC) unlocks the live season's premium track for the
   rest of that season, once per season. Time in a match always counts.
   Hub time counts only with player input in the last 2 minutes. Grants
-  through `SeasonLogic.buyPass`'s path with its own source tag.
+  through `SeasonLogic.buyPass`'s path with its own source tag. Owner's
+  answers (Q1's applied case): the count restarts at a season change,
+  even mid-week; practice-match time counts like the Hub (input-gated).
+  - [x] 5a. Config + pure logic + specs: `GameConfig.playtimePass`
+    (activeHoursPerWeek, idleWindowSeconds, maxCreditSeconds),
+    `src/server/PlaytimeLogic.luau` (what counts as active per context
+    Match/Practice/Hub, the lazy week + season reset, the per-credit
+    cap, when the pass falls due, the pass screen's progress), and
+    `SeasonLogic.buyPass`'s optional `source` ("Playtime" stored as
+    `passSource`; nil = bought, so no migration).
+  - [ ] 5b. Server: a profile field for `PlaytimeLogic.State` (schema
+    bump), a ticking credit per player (context from the place and
+    whether the match is practice; Hub/practice input stamped by the
+    server from a rate-limited activity intent), the grant through
+    `SeasonLogic.buyPass(..., "Playtime")` with an audit line, and the
+    week's progress in StoreState for the pass screen.
+  - [ ] 5c. UI: the pass screen's "x / 6 active hours this week" bar
+    (with when the week resets) while the pass isn't held, and an
+    "Earned by playtime" pass pop-up when it unlocks.
 - [ ] **6. Own-streak indicator in the Studio.** A finalist sees only
   their own streak ("Your streak: 6, at stake"), sent targeted, never
   replicated to others.

@@ -54,6 +54,7 @@ local function validGameConfig(): Validate.GameConfig
 			level = { firstLevelXp = 100, perLevelXp = 25, maxLevel = 200, levelUpCurrency = 50 },
 		},
 		streakCashOut = { minStreak = 3, coinsPerWinSquared = 25 },
+		playtimePass = { activeHoursPerWeek = 6, idleWindowSeconds = 120, maxCreditSeconds = 120 },
 		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
 		powerUpUseRangeStuds = 24,
@@ -1213,6 +1214,15 @@ TestRunner.describe("Validate.checkGameConfig (round rewards)", function()
 			end,
 			function(c)
 				c.streakCashOut = nil
+			end,
+			function(c)
+				c.playtimePass.activeHoursPerWeek = 0 -- the pass for joining
+			end,
+			function(c)
+				c.playtimePass.idleWindowSeconds = 1.5
+			end,
+			function(c)
+				c.playtimePass = nil
 			end,
 		}
 		for _, mutate in cases do

@@ -242,6 +242,7 @@ export type BuyBackOffer = {
 -- what stops a join or a retry paying an item twice.
 export type SeasonProgress = {
 	passSeenAt: number?,
+	passSource: ("Purchase" | "Playtime")?, -- nil = bought; "Playtime" = earned (payoff-loop step 5)
 	freeWins: number,
 	premiumWins: number,
 	freePaid: number,

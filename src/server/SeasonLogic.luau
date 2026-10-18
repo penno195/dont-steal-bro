@@ -58,6 +58,7 @@ export type Season = {
 -- migration.
 export type Progress = {
 	passSeenAt: number?, -- os.time() the season's pass was bought (or, before 2026-10-09, first seen owned); nil = not bought
+	passSource: PassSource?, -- how the pass was got; nil = bought (every pass before 2026-10-18 was)
 	freeWins: number,
 	premiumWins: number,
 	freePaid: number,
@@ -65,6 +66,11 @@ export type Progress = {
 }
 
 export type Track = "Free" | "Premium"
+
+-- How a season's pass was got: the developer product, or 6 active hours
+-- in one week (payoff-loop step 5, PlaytimeLogic). Both unlock the same
+-- premium track; the tag is for the audit line and the pass screen.
+export type PassSource = "Purchase" | "Playtime"
 
 export type Paid = {
 	track: Track,
@@ -149,6 +155,7 @@ end
 local function copy(progress: Progress): Progress
 	return {
 		passSeenAt = progress.passSeenAt,
+		passSource = progress.passSource,
 		freeWins = progress.freeWins,
 		premiumWins = progress.premiumWins,
 		freePaid = progress.freePaid,
@@ -213,17 +220,25 @@ function SeasonLogic.sync(progress: Progress?, season: Season, now: number): (Pr
 	return after, paid
 end
 
--- A pass purchase for this season. Unlocks the premium track: every
--- premium item the season's wins already reached becomes claimable.
--- `bought` is false (and nothing changes) outside the window or when
--- this season's pass is already held; StoreService refuses those before
--- prompting, so reaching it means a receipt raced the check.
-function SeasonLogic.buyPass(progress: Progress?, season: Season, now: number): (Progress?, boolean)
+-- A pass for this season, bought or earned by playtime (`source`, default
+-- Purchase). Unlocks the premium track: every premium item the season's
+-- wins already reached becomes claimable. `bought` is false (and nothing
+-- changes) outside the window or when this season's pass is already
+-- held, however it was got: once per season. StoreService refuses a
+-- purchase before prompting, so reaching it means a receipt raced the
+-- check; playtime asks PlaytimeLogic first, which stops once it's held.
+function SeasonLogic.buyPass(
+	progress: Progress?,
+	season: Season,
+	now: number,
+	source: PassSource?
+): (Progress?, boolean)
 	if not SeasonLogic.isLive(season, now) or (progress ~= nil and progress.passSeenAt ~= nil) then
 		return progress, false
 	end
 	local after = if progress ~= nil then copy(progress) else SeasonLogic.newProgress()
 	after.passSeenAt = now
+	after.passSource = if source == "Playtime" then "Playtime" else nil
 	return after, true
 end
 

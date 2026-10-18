@@ -399,6 +399,18 @@ From the 2026-10-17 game review: only wins paid anything, so roughly
   pass is a developer product recorded on the profile, so the game can
   grant it). Q8 isn't affected: everything on the track was already
   earnable free.
+  **Owner's answers (2026-10-18, step 5):**
+  - **Hours reset at a season change, even mid-week.** Only hours
+    inside the live season count, so a week that straddles the 1st
+    restarts its count that day: the old season's hours never earn the
+    new season's pass.
+  - **Practice matches count like the Hub**: only with input in the
+    last 2 minutes. Ranked match time always counts. Playing practice
+    is still playing, but AFK in a bot match earns nothing.
+  - Claude's calls: the earned pass is recorded as the season's pass
+    with a "Playtime" source tag, so it's once per season whichever way
+    it came (an earned pass can't then be bought, and vice versa); and
+    nothing counts while no season is live or once the pass is held.
 - **Quick-chat for the negotiation** (payoff-loop step 3, user
   decision 2026-10-17). Three sets of short one-tap phrases for mobile
   players: Promise, Threat and Emote. "Emotes" are short phrases like
@@ -1019,6 +1031,10 @@ From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
     out, so the round is a not-qualifying loss for them; the shield is
     granted when the Studio resolves, before that loss is written, and
     is spent on it if their streak is 1 or more. At streak 0 it's kept.
+  - **Owner's answer (2026-10-18): a guess on a finalist who left still
+    counts.** A Studio leaver's vote defaults to Share (Q4), so they can
+    be the lone sharer who walks out, and a guess on them pays a shield
+    like any other correct guess.
 
 ## 8. Are starting power-ups sold for Robux?
 

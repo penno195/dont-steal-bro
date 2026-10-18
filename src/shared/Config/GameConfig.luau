@@ -109,6 +109,19 @@ local GameConfig: Validate.GameConfig = {
 		coinsPerWinSquared = 25,
 	},
 
+	-- A free season pass for playtime (payoff-loop step 5; design-
+	-- decisions.md Q1's "a payoff for every round" case). This many
+	-- active hours inside one Mon-Sun UTC week, and inside the live
+	-- season, unlock that season's premium track. Ranked match time always
+	-- counts; Hub and practice-match time only with player input in the
+	-- last idleWindowSeconds. maxCreditSeconds caps one credit, so a stalled
+	-- tick can't bank a lump. PLACEHOLDER: 6 hours, 2 minutes (owner).
+	playtimePass = {
+		activeHoursPerWeek = 6,
+		idleWindowSeconds = 120,
+		maxCreditSeconds = 120,
+	},
+
 	-- P2-7: PowerUpService's in-round inventory. The pre-game loadout
 	-- starts in these slots and field pickups fill whatever is empty
 	-- (powerups.md "Inventory and aiming", decided 2026-09-25). Range,

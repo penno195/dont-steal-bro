@@ -881,6 +881,12 @@ export type StreakCashOutConfig = {
 	coinsPerWinSquared: number,
 }
 
+export type PlaytimePassConfig = {
+	activeHoursPerWeek: number,
+	idleWindowSeconds: number,
+	maxCreditSeconds: number,
+}
+
 export type StudioTimers = {
 	introSeconds: number,
 	introNewPlayerSeconds: number,
@@ -919,6 +925,7 @@ export type GameConfig = {
 	winRewards: WinRewardsConfig,
 	roundRewards: RoundRewardsConfig,
 	streakCashOut: StreakCashOutConfig,
+	playtimePass: PlaytimePassConfig,
 
 	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
 	-- loadout (StoreService) starts in these slots; field pickups fill
@@ -4067,6 +4074,27 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 					"GameConfig.luau",
 					"streakCashOut." .. field,
 					"must be a whole number, at least " .. minimum
+				)
+			end
+		end
+	end
+
+	-- The free pass for playtime (payoff-loop step 5). Positive whole
+	-- numbers: 0 hours would hand the pass to anyone who joins, and a 0
+	-- idle window or credit cap would mean no Hub time ever counts.
+	local playtime = config.playtimePass
+	if type(playtime) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "playtimePass", "is missing")
+	else
+		for _, field in { "activeHoursPerWeek", "idleWindowSeconds", "maxCreditSeconds" } do
+			local value = (playtime :: any)[field]
+			if type(value) ~= "number" or value < 1 or value % 1 ~= 0 then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"playtimePass." .. field,
+					"must be a whole number, at least 1"
 				)
 			end
 		end

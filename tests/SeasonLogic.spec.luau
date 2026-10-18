@@ -117,6 +117,26 @@ TestRunner.describe("SeasonLogic.buyPass", function()
 		local _, late = SeasonLogic.buyPass(nil, season(), 1090 * DAY)
 		TestRunner.expect(late):toBe(false)
 	end)
+
+	TestRunner.it("tags a playtime pass, and leaves a bought one untagged", function()
+		local earned = SeasonLogic.buyPass(nil, season(), DURING, "Playtime") :: SeasonLogic.Progress
+		TestRunner.expect(earned.passSource):toBe("Playtime")
+		TestRunner.expect(SeasonLogic.hasPass(earned)):toBe(true)
+		local bought = SeasonLogic.buyPass(nil, season(), DURING) :: SeasonLogic.Progress
+		TestRunner.expect(bought.passSource):toBe(nil)
+		-- The tag survives a later win's copy.
+		local after = SeasonLogic.recordWin(earned, season(), DURING + 60) :: SeasonLogic.Progress
+		TestRunner.expect(after.passSource):toBe("Playtime")
+	end)
+
+	TestRunner.it("is once per season: an earned pass can't then be bought, nor a bought one earned", function()
+		local earned = SeasonLogic.buyPass(nil, season(), DURING, "Playtime")
+		local _, buy = SeasonLogic.buyPass(earned, season(), DURING + 60)
+		TestRunner.expect(buy):toBe(false)
+		local bought = SeasonLogic.buyPass(nil, season(), DURING)
+		local _, earn = SeasonLogic.buyPass(bought, season(), DURING + 60, "Playtime")
+		TestRunner.expect(earn):toBe(false)
+	end)
 end)
 
 TestRunner.describe("SeasonLogic.claim", function()
