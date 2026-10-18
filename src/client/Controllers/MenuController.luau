@@ -197,6 +197,15 @@ for _, entry in PowerUps do
 	table.insert(powerUpIds, entry.def.id)
 end
 
+-- Power-up id -> display name, for the playtime starter pack's text.
+local function powerUpNames(): { [string]: string }
+	local names: { [string]: string } = {}
+	for id, def in powerUpDefs do
+		names[id] = def.displayName
+	end
+	return names
+end
+
 -- The Locker's Style tab groups cosmetics in this order: what you wear
 -- first, then what shows in the Studio.
 local COSMETIC_CATEGORY_ORDER = {
@@ -1054,6 +1063,25 @@ local function mountLauncher()
 						)
 					end
 				end,
+				starter = function()
+					local s = storeState()
+					return if s then SeasonTrackLogic.starterView(s.starterPack) else nil
+				end,
+				explainStarter = function()
+					local s = storeState()
+					local view = if s then SeasonTrackLogic.starterView(s.starterPack) else nil
+					if view then
+						local config = GameConfig.playtimeStarterPack
+						explainer(
+							"Free Starter Pack",
+							SeasonTrackLogic.starterExplainer(
+								config.activeMinutes,
+								SeasonTrackLogic.starterContents(config.rewardPowerUps, powerUpNames()),
+								view
+							)
+						)
+					end
+				end,
 				buttons = buttons,
 			})
 			else buttons
@@ -1281,6 +1309,39 @@ local function showPlaytimePass(def: SeasonTrackLogic.SeasonDef, before: SeasonT
 	end)
 end
 
+-- The one-off playtime starter pack's pop-up (owner, 2026-10-18). Match
+-- time counts toward it, so like the pass pop-up it waits for the round
+-- and the Studio to be over.
+local function showStarterPack(rewardPowerUps: { [string]: number })
+	task.spawn(function()
+		waitUntilClear()
+		local shown: { ClaimPopup.Reward } = {}
+		local ids: { string } = {}
+		for id in rewardPowerUps do
+			table.insert(ids, id)
+		end
+		table.sort(ids)
+		for _, id in ids do
+			local grant = { kind = "PowerUpStock", powerUpId = id, amount = rewardPowerUps[id] }
+			table.insert(shown, {
+				premium = true,
+				text = grantText(grant :: any),
+				icon = SeasonTrackLogic.iconFor(grant :: any),
+				image = grantImage(grant :: any),
+			})
+		end
+		ClaimPopup.open(
+			shown,
+			"FREE STARTER PACK!",
+			string.format(
+				"%d minutes of play earned you these power-ups. They're in your Locker, ready for your loadout.",
+				GameConfig.playtimeStarterPack.activeMinutes
+			)
+		)
+		Loader.get("AudioController").play("SeasonClaim")
+	end)
+end
+
 local MenuController: Loader.Controller = {
 	name = "MenuController",
 	dependencies = { "UIScaleController", "SettingsController", "DecisionStudioController" },
@@ -1389,6 +1450,11 @@ function MenuController:init()
 		end
 		storeState(payload)
 		stepFlow({ type = "State", state = payload })
+	end)
+	Net.onClientEvent("StarterPackGranted", function(payload: any)
+		if type(payload) == "table" and type(payload.rewardPowerUps) == "table" then
+			showStarterPack(payload.rewardPowerUps)
+		end
 	end)
 	Net.onClientEvent("CommunityRewardResult", function(payload: any)
 		communityBusy = false

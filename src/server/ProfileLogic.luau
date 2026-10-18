@@ -247,6 +247,15 @@ export type ProfileData = {
 	-- (LockerSeenLogic). Anything owned and not listed dots the tab.
 	-- Written by DataService.markLockerSeen when the tab is opened.
 	lockerSeen: LockerSeen,
+
+	-- ===== schema v24, the playtime starter pack ==========================
+
+	-- Lifetime active seconds toward the one-off free power-up starter
+	-- pack (GameConfig.playtimeStarterPack, PlaytimeLogic.creditStarter),
+	-- and whether it has been paid. Once claimed nothing counts again.
+	-- Written only by PlaytimeService and StoreService's grant.
+	starterPackSeconds: number,
+	starterPackClaimed: boolean,
 }
 
 -- Structurally LockerSeenLogic.Seen.
@@ -300,7 +309,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 23
+local CURRENT_SCHEMA_VERSION = 24
 
 local function defaultStats(): Stats
 	return {
@@ -350,6 +359,8 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		playtime = nil,
 		dailyChallenges = nil,
 		lockerSeen = { Power = {}, Style = {}, Titles = {} },
+		starterPackSeconds = 0,
+		starterPackClaimed = false,
 	}
 end
 
@@ -623,6 +634,16 @@ migrations[22] = function(old: { [string]: any }): { [string]: any }
 		Style = if type(old.ownedCosmetics) == "table" then table.clone(old.ownedCosmetics) else {},
 		Titles = if type(old.unlockedTitles) == "table" then table.clone(old.unlockedTitles) else {},
 	}
+	return next
+end
+
+-- v23 -> v24 (the playtime starter pack): nothing counted, not paid.
+-- Time played before this version doesn't count (owner, 2026-10-18).
+migrations[23] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 24
+	next.starterPackSeconds = 0
+	next.starterPackClaimed = false
 	return next
 end
 

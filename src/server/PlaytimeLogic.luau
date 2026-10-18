@@ -146,4 +146,58 @@ function PlaytimeLogic.progress(config: Config, state: State?, season: SeasonRef
 	}
 end
 
+-- ===== the starter pack ====================================================
+--
+-- A one-off free power-up pack (owner, 2026-10-18): activeMinutes of
+-- active time, counted for life rather than per week or season, pay
+-- GameConfig.playtimeStarterPack.rewardPowerUps once. "Active" is
+-- isActive above with the pass's own idle window and credit cap, so the
+-- two count the very same stretches.
+
+function PlaytimeLogic.starterTargetSeconds(activeMinutes: number): number
+	return activeMinutes * 60
+end
+
+-- Adds `seconds` to the lifetime count `counted`. Returns the new count
+-- and whether the pack is now due. Nothing counts once it's claimed.
+-- The count stops at the target, and `due` stays true until the claim
+-- is saved, so a grant that failed is retried by the next tick.
+function PlaytimeLogic.creditStarter(
+	config: Config,
+	activeMinutes: number,
+	counted: number,
+	claimed: boolean,
+	seconds: number
+): (number, boolean)
+	if claimed then
+		return counted, false
+	end
+	local amount = seconds
+	if amount ~= amount or amount < 0 then -- NaN or negative
+		amount = 0
+	end
+	local target = PlaytimeLogic.starterTargetSeconds(activeMinutes)
+	local after = math.min(counted + math.min(amount, config.maxCreditSeconds), target)
+	return after, after >= target
+end
+
+-- The power-up stock grants the pack pays, sorted by id so the audit
+-- line reads the same every time (like TutorialLogic.rewardGrants).
+function PlaytimeLogic.starterGrants(
+	rewardPowerUps: { [string]: number }
+): { { kind: "PowerUpStock", powerUpId: string, amount: number } }
+	local ids: { string } = {}
+	for id, count in rewardPowerUps do
+		if count > 0 then
+			table.insert(ids, id)
+		end
+	end
+	table.sort(ids)
+	local grants = {}
+	for _, id in ids do
+		table.insert(grants, { kind = "PowerUpStock" :: "PowerUpStock", powerUpId = id, amount = rewardPowerUps[id] })
+	end
+	return grants
+end
+
 return PlaytimeLogic

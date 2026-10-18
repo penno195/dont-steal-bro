@@ -10,6 +10,9 @@
 -- time. Where the player is comes from the server alone: which place
 -- this is, and whether this match is practice.
 --
+-- The same stretches also count toward the one-off starter pack
+-- (PlaytimeLogic.creditStarter), paid by StoreService.grantStarterPack.
+--
 -- When the count reaches the week's target, StoreService grants the
 -- live season's pass (SeasonLogic.buyPass, source "Playtime"), saved and
 -- audited there. PlaytimeLogic.credit keeps saying "due" until the pass
@@ -38,6 +41,9 @@ local TICK_SECONDS = 30
 -- screen's bar moves. Any other push (a purchase, a round) also carries
 -- it, so this is only for someone sitting in the Hub.
 local PUSH_EVERY_SECONDS = 300
+-- The starter pack's bar is only 30 minutes long, so it's pushed more
+-- often while it's counting.
+local STARTER_PUSH_EVERY_SECONDS = 60
 
 local isHub = false
 local lastTickAt: { [Player]: number } = {}
@@ -69,8 +75,32 @@ local function tickPlayer(player: Player, context: PlaytimeLogic.Context, nowUtc
 	if not PlaytimeLogic.isActive(config, context, nowUtc, lastInputAt[player]) then
 		return
 	end
+	-- The one-off starter pack counts the same stretch, for life and
+	-- with or without a live season.
+	local starterBefore, claimed = DataService.getStarterPack(player)
+	if next(GameConfig.playtimeStarterPack.rewardPowerUps) == nil then
+		claimed = true -- switched off: nothing to count toward
+	end
+	local starterAfter, starterDue = PlaytimeLogic.creditStarter(
+		config,
+		GameConfig.playtimeStarterPack.activeMinutes,
+		starterBefore,
+		claimed,
+		nowUtc - since
+	)
+	if starterAfter ~= starterBefore then
+		DataService.setStarterPackSeconds(player, starterAfter)
+	end
+	if starterDue and StoreService.grantStarterPack(player) then
+		lastPushAt[player] = nowUtc -- the grant pushed
+	end
+	local pushEvery = if claimed then PUSH_EVERY_SECONDS else STARTER_PUSH_EVERY_SECONDS
 	local season: SeasonLogic.Season? = StoreService.liveSeason()
 	if season == nil then
+		if not claimed and nowUtc - (lastPushAt[player] or 0) >= pushEvery then
+			lastPushAt[player] = nowUtc
+			StoreService.pushState(player)
+		end
 		return
 	end
 	local hasPass = SeasonLogic.hasPass(DataService.getSeasonProgress(player, season.id))
@@ -85,7 +115,7 @@ local function tickPlayer(player: Player, context: PlaytimeLogic.Context, nowUtc
 		end
 		return
 	end
-	if not hasPass and nowUtc - (lastPushAt[player] or 0) >= PUSH_EVERY_SECONDS then
+	if (not hasPass or not claimed) and nowUtc - (lastPushAt[player] or 0) >= pushEvery then
 		lastPushAt[player] = nowUtc
 		StoreService.pushState(player)
 	end

@@ -949,6 +949,13 @@ export type PlaytimePassConfig = {
 	maxCreditSeconds: number,
 }
 
+-- The one-off playtime starter pack: PlaytimeLogic.creditStarter's
+-- target, and the stock it pays (power-up id -> count; {} = no pack).
+export type PlaytimeStarterPackConfig = {
+	activeMinutes: number,
+	rewardPowerUps: { [string]: number },
+}
+
 -- Daily challenges (payoff-loop step 8): DailyChallengeLogic's config.
 export type DailyChallengesConfig = {
 	picksPerDay: number,
@@ -997,6 +1004,7 @@ export type GameConfig = {
 	roundRewards: RoundRewardsConfig,
 	streakCashOut: StreakCashOutConfig,
 	playtimePass: PlaytimePassConfig,
+	playtimeStarterPack: PlaytimeStarterPackConfig,
 	dailyChallenges: DailyChallengesConfig,
 
 	-- P2-7: the IN-ROUND inventory PowerUpService owns. The pre-game
@@ -4288,6 +4296,49 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		end
 	end
 
+	-- The playtime starter pack. The power-up ids are cross-checked in
+	-- Validate.run, which has the registry. An empty rewardPowerUps
+	-- switches the pack off.
+	local starter = config.playtimeStarterPack
+	if type(starter) ~= "table" then
+		issue(issues, "GameConfig", "GameConfig.luau", "playtimeStarterPack", "is missing")
+	else
+		if not isWholeAtLeast(starter.activeMinutes, 1) then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"playtimeStarterPack.activeMinutes",
+				"must be a whole number, at least 1"
+			)
+		end
+		if type(starter.rewardPowerUps) ~= "table" then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"playtimeStarterPack.rewardPowerUps",
+				"must be a table of power-up id -> count ({} switches the pack off)"
+			)
+		else
+			for id, count in starter.rewardPowerUps do
+				if type(id) ~= "string" or not isWholeAtLeast(count, 1) then
+					issue(
+						issues,
+						"GameConfig",
+						"GameConfig.luau",
+						"playtimeStarterPack.rewardPowerUps",
+						string.format(
+							"%s = %s: each count must be a whole number, 1 or more",
+							tostring(id),
+							tostring(count)
+						)
+					)
+				end
+			end
+		end
+	end
+
 	-- Daily challenges (payoff-loop step 8). The registry's own pool
 	-- size is checked in Validate.run, which has the files.
 	local dc = config.dailyChallenges
@@ -5386,6 +5437,39 @@ function Validate.run(input: RegistryInput): { Issue }
 					"GameConfig",
 					"GameConfig.luau",
 					"tutorial.rewardPowerUps",
+					string.format(
+						"%q is not loadout-eligible, so granting it as stock does nothing",
+						tostring(powerUpId)
+					)
+				)
+			end
+		end
+	end
+	-- The playtime starter pack pays into loadout stock too, so the same
+	-- two checks as the tutorial's reward.
+	local starterPack = (input.gameConfig :: any).playtimeStarterPack
+	if type(starterPack) == "table" and type(starterPack.rewardPowerUps) == "table" then
+		for powerUpId in starterPack.rewardPowerUps do
+			local found: any = nil
+			for _, entry in input.powerUps do
+				if entry.def.id == powerUpId then
+					found = entry.def
+				end
+			end
+			if found == nil then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"playtimeStarterPack.rewardPowerUps",
+					string.format("%q is not a power-up id", tostring(powerUpId))
+				)
+			elseif not (found.acquisition and found.acquisition.loadoutEligible) then
+				issue(
+					issues,
+					"GameConfig",
+					"GameConfig.luau",
+					"playtimeStarterPack.rewardPowerUps",
 					string.format(
 						"%q is not loadout-eligible, so granting it as stock does nothing",
 						tostring(powerUpId)

@@ -55,6 +55,7 @@ local function validGameConfig(): Validate.GameConfig
 		},
 		streakCashOut = { minStreak = 3, coinsPerWinSquared = 25 },
 		playtimePass = { activeHoursPerWeek = 6, idleWindowSeconds = 120, maxCreditSeconds = 120 },
+		playtimeStarterPack = { activeMinutes = 30, rewardPowerUps = {} }, -- off: registries vary per spec
 		dailyChallenges = { picksPerDay = 3, maxWinPicks = 1, rerollsPerDay = 1, allDoneCoins = 50, allDoneXp = 100 },
 		powerUpInventorySlots = 3,
 		powerUpFullInventoryPolicy = "Refuse",
@@ -1234,6 +1235,18 @@ TestRunner.describe("Validate.checkGameConfig (round rewards)", function()
 			end,
 			function(c)
 				c.playtimePass = nil
+			end,
+			function(c)
+				c.playtimeStarterPack.activeMinutes = 0 -- the pack for joining
+			end,
+			function(c)
+				c.playtimeStarterPack.rewardPowerUps = { "sprint-boost" } -- a list, not id -> count
+			end,
+			function(c)
+				c.playtimeStarterPack.rewardPowerUps = { ["sprint-boost"] = 1.5 }
+			end,
+			function(c)
+				c.playtimeStarterPack = nil
 			end,
 			function(c)
 				c.dailyChallenges.maxWinPicks = 4 -- more than picksPerDay
@@ -3136,6 +3149,12 @@ TestRunner.describe("Validate - tutorial reward", function()
 		config.tutorial.rewardPowerUps = { nope = 1 }
 		config.tutorial.rewardCosmeticId = "nope"
 		TestRunner.expect(count(runTutorial(config), "tutorial")):toBe(3)
+	end)
+
+	TestRunner.it("refuses a playtime starter pack power-up that doesn't exist", function()
+		local config = validGameConfig()
+		config.playtimeStarterPack.rewardPowerUps = { nope = 2, ["sprint-boost"] = 2 }
+		TestRunner.expect(count(runTutorial(config), "playtimeStarterPack")):toBe(1)
 	end)
 
 	TestRunner.it("refuses a cosmetic that is also a win drop or the community reward", function()

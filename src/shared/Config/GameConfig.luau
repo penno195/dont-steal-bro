@@ -122,6 +122,19 @@ local GameConfig: Validate.GameConfig = {
 		maxCreditSeconds = 120,
 	},
 
+	-- A one-off free power-up starter pack for playtime (owner,
+	-- 2026-10-18). This many active minutes, counted for life rather than
+	-- per week, pay rewardPowerUps into loadout stock once. Active means
+	-- the same as for playtimePass (its idle window and credit cap), and
+	-- the Hub's playtime panel swaps between the two until it's paid.
+	-- An empty rewardPowerUps switches the pack off.
+	-- PLACEHOLDER: 30 minutes; 2 each of three Commons, a taste of the
+	-- paid Starter Loadout Bundle's 5 each (owner).
+	playtimeStarterPack = {
+		activeMinutes = 30,
+		rewardPowerUps = { ["sprint-boost"] = 2, ["slow-field"] = 2, ["push-trip"] = 2 },
+	},
+
 	-- Daily challenges (payoff-loop step 8; design-decisions.md Q1's "a
 	-- payoff for every round" case). Each player draws picksPerDay of
 	-- Config/DailyChallenges' files per UTC day, at most maxWinPicks of

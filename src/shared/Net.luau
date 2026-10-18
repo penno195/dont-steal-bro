@@ -1514,6 +1514,17 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Server -> client (targeted at the earner only): the one-off playtime
+	-- starter pack was just paid, { rewardPowerUps = { [id]: count } },
+	-- for the claim pop-up. The stock itself arrives through StoreState.
+	StarterPackGranted = {
+		name = "StarterPackGranted",
+		direction = "ServerBroadcast",
+		schema = nil,
+		rateLimit = nil,
+		states = nil,
+	} :: RemoteDef,
+
 	-- Server -> client (targeted at its owner only, never fireAllClients):
 	-- this player's daily hunt (design-decisions.md Q1, "the daily
 	-- hunt"), { day = "YYYY-MM-DD", position = Vector3? }. `position` is

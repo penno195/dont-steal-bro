@@ -1,16 +1,17 @@
 --!strict
 --# selene: allow(mixed_table) -- Vide props + children, see Components/Base.luau
 -- The Hub's top-right column (Hub menu pass, 2026-10-18; mockup
--- docs/ui-art-pass/hub-menu.html): the level pill, the week's playtime
--- row under it (always shown while the free pass is still to earn), the
--- daily challenges drop-down the pill opens, and the launcher's buttons
--- under all that. While the drop-down is open it takes the buttons'
+-- docs/ui-art-pass/hub-menu.html): the level pill, the playtime row
+-- under it (the free pass, swapping with the one-off starter pack until
+-- that's paid), the daily challenges drop-down the pill opens, and the
+-- launcher's buttons under all that. While the drop-down is open it takes the buttons'
 -- place: pushed down, they'd run into the jump button.
 --
 -- Display only. The full challenges panel (with its Swap buttons) is
 -- still MenuController's modal; the drop-down's "Swap" opens it.
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
@@ -42,12 +43,18 @@ export type Props = {
 	-- A tapped row's explainer pop-up (playtest, 2026-10-18).
 	explain: (slot: Slot) -> (),
 	explainPlaytime: () -> (),
+	-- The one-off playtime starter pack, nil once paid, and its pop-up.
+	starter: () -> SeasonTrackLogic.StarterView?,
+	explainStarter: () -> (),
 	buttons: Instance, -- the launcher row, shown while the drop-down is shut
 }
 
 local PAD = Theme.spacing.sm
 local ICON = Theme.spacing.xl
 local BAR = Theme.spacing.xs + Theme.spacing.xxs
+-- The playtime panel's two rows take turns this often, scrolling up.
+local SWAP_SECONDS = 5
+local SCROLL = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut)
 
 local function bar(fraction: () -> number, gradient: ColorSequence, order: number): Frame
 	return create("Frame")({
@@ -238,30 +245,119 @@ function HubCorner.column(props: Props): Frame
 		badge.Visible = props.visible() and props.level() ~= nil
 	end)
 
-	local playtime = panel("Playtime", 2, Theme.color.rim, {
-		row(
-			1,
-			Icons.view("hub-playtime", ICON, Theme.color.ink),
-			function()
-				return "Free Season Pass"
-			end,
-			function()
-				return Theme.color.ink
-			end,
-			function()
-				local view = props.playtime()
-				return if view then view.fraction else 0
-			end,
-			GOLD,
-			function()
-				local view = props.playtime()
-				return if view then view.short else ""
-			end,
-			props.explainPlaytime
-		),
-	})
+	-- The playtime panel holds one row at a time: the free pass and, until
+	-- it's paid, the one-off starter pack. With both to show they take
+	-- turns, scrolling up every SWAP_SECONDS.
+	local passRow = row(
+		1,
+		Icons.view("hub-playtime", ICON, Theme.color.ink),
+		function()
+			return "Free Season Pass"
+		end,
+		function()
+			return Theme.color.ink
+		end,
+		function()
+			local view = props.playtime()
+			return if view then view.fraction else 0
+		end,
+		GOLD,
+		function()
+			local view = props.playtime()
+			return if view then view.short else ""
+		end,
+		props.explainPlaytime
+	)
+	local starterRow = row(
+		2,
+		Icons.view("tab-power", ICON, Theme.color.ink),
+		function()
+			return "Free Starter Pack"
+		end,
+		function()
+			return Theme.color.ink
+		end,
+		function()
+			local view = props.starter()
+			return if view then view.fraction else 0
+		end,
+		GREEN,
+		function()
+			local view = props.starter()
+			return if view then view.short else ""
+		end,
+		props.explainStarter
+	)
+	local ticker = create("Frame")({
+		Name = "Ticker",
+		LayoutOrder = 1,
+		Size = UDim2.new(1, 0, 0, ICON),
+		BackgroundTransparency = 1,
+		ClipsDescendants = true,
+		passRow,
+		starterRow,
+	}) :: Frame
+	local playtime = panel("Playtime", 2, Theme.color.rim, { ticker })
+
+	local hasPass = derive(function()
+		return props.playtime() ~= nil
+	end)
+	local hasStarter = derive(function()
+		return props.starter() ~= nil
+	end)
 	vide.effect(function()
-		playtime.Visible = props.visible() and props.playtime() ~= nil
+		playtime.Visible = props.visible() and (hasPass() or hasStarter())
+	end)
+	local function place(shown: Frame, hidden: Frame)
+		shown.Position = UDim2.fromScale(0, 0)
+		shown.Visible = true
+		hidden.Position = UDim2.fromScale(0, 1)
+		hidden.Visible = false
+	end
+	vide.effect(function()
+		local both = hasPass() and hasStarter()
+		if not both then
+			if hasStarter() then
+				place(starterRow, passRow)
+			else
+				place(passRow, starterRow)
+			end
+			return
+		end
+		-- Both: the starter pack first (the nearer goal), then turns.
+		place(starterRow, passRow)
+		local running = true
+		local tweens: { Tween } = {}
+		task.spawn(function()
+			local shown, hidden = starterRow, passRow
+			while true do
+				task.wait(SWAP_SECONDS)
+				if not running then
+					return
+				end
+				hidden.Position = UDim2.fromScale(0, 1)
+				hidden.Visible = true
+				tweens = {
+					TweenService:Create(shown, SCROLL, { Position = UDim2.fromScale(0, -1) }),
+					TweenService:Create(hidden, SCROLL, { Position = UDim2.fromScale(0, 0) }),
+				}
+				for _, tween in tweens do
+					tween:Play()
+				end
+				task.wait(SCROLL.Time)
+				if not running then
+					return
+				end
+				shown.Visible = false
+				shown, hidden = hidden, shown
+			end
+		end)
+		vide.cleanup(function()
+			running = false
+			for _, tween in tweens do
+				tween:Cancel()
+			end
+		end)
 	end)
 
 	-- The countdown ticks only while the drop-down is open.

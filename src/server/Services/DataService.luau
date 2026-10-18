@@ -540,6 +540,26 @@ local function setPlaytime(player: Player, state: ProfileLogic.PlaytimeState?): 
 	return true
 end
 
+-- The playtime starter pack's lifetime count and whether it's paid.
+-- PlaytimeService writes the count; StoreService's grant sets the claim
+-- through the receipt handle, in one save with the stock it pays.
+local function getStarterPack(player: Player): (number, boolean)
+	local d = data(player)
+	if d == nil then
+		return 0, false
+	end
+	return d.starterPackSeconds, d.starterPackClaimed
+end
+
+local function setStarterPackSeconds(player: Player, seconds: number): boolean
+	local d = writable(player)
+	if d == nil then
+		return false
+	end
+	d.starterPackSeconds = seconds
+	return true
+end
+
 -- ===== the receipt write gate (P4-5) =====================================
 --
 -- Everywhere else in this file, a caller gets a narrow typed accessor
@@ -1187,6 +1207,8 @@ local DataService: Loader.Service = {
 	getStreakRestoredAt = getStreakRestoredAt,
 	getPlaytime = getPlaytime,
 	setPlaytime = setPlaytime,
+	getStarterPack = getStarterPack,
+	setStarterPackSeconds = setStarterPackSeconds,
 
 	-- P4-5: see the receipt write gate above. Handed out once, to
 	-- StoreService, because ProcessReceipt needs durability facts no

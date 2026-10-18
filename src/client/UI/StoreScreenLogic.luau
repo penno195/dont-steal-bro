@@ -72,6 +72,9 @@ export type StoreState = {
 	-- season is running. SeasonTrackLogic.SeasonState's shape; loose here
 	-- because this module has no requires.
 	season: { [string]: any }?,
+	-- The one-off playtime starter pack's progress, nil once it's paid.
+	-- SeasonTrackLogic.StarterState's shape.
+	starterPack: { activeSeconds: number, targetSeconds: number }?,
 	-- The account level (payoff-loop step 1c): LevelLogic.Progress,
 	-- worked out by the server. The Hub's level badge.
 	level: { level: number, xpIntoLevel: number, xpForNext: number }?,

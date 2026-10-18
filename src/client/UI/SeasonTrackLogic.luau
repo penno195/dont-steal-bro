@@ -170,6 +170,55 @@ function SeasonTrackLogic.playtimeExplainer(hours: number, view: PlaytimeView): 
 	)
 end
 
+-- The one-off playtime starter pack (owner, 2026-10-18): StoreState's
+-- `starterPack`, nil once it's paid. Shares the Hub's playtime panel
+-- with the pass row, swapping between the two.
+export type StarterState = { activeSeconds: number, targetSeconds: number }
+export type StarterView = { fraction: number, short: string }
+
+function SeasonTrackLogic.starterView(state: StarterState?): StarterView?
+	if state == nil or state.targetSeconds <= 0 then
+		return nil
+	end
+	local active = math.clamp(state.activeSeconds, 0, state.targetSeconds)
+	return {
+		fraction = active / state.targetSeconds,
+		short = string.format(
+			"%s / %s",
+			SeasonTrackLogic.durationText(active),
+			SeasonTrackLogic.durationText(state.targetSeconds)
+		),
+	}
+end
+
+-- "2 Push-Trip, 2 Slow Field and 2 Sprint Boost", sorted by name.
+-- `names` maps a power-up id to its display name.
+function SeasonTrackLogic.starterContents(rewardPowerUps: { [string]: number }, names: { [string]: string }): string
+	local parts: { string } = {}
+	for id, count in rewardPowerUps do
+		table.insert(parts, string.format("%d %s", count, names[id] or id))
+	end
+	table.sort(parts, function(a, b)
+		return (a:match("^%d+ (.*)$") or a) < (b:match("^%d+ (.*)$") or b)
+	end)
+	if #parts <= 1 then
+		return parts[1] or ""
+	end
+	return table.concat(parts, ", ", 1, #parts - 1) .. " and " .. parts[#parts]
+end
+
+-- The pop-up the starter pack row opens.
+function SeasonTrackLogic.starterExplainer(minutes: number, contents: string, view: StarterView): string
+	return string.format(
+		"Play for %d active minutes to get a free power-up starter pack: %s. One per player.\n\n"
+			.. "Ranked rounds always count. Lobby and practice time counts while you're playing, not while you're away.\n\n"
+			.. "So far: %s.",
+		minutes,
+		contents,
+		view.short
+	)
+end
+
 -- Did the pass just arrive by playtime? passSource flipping to
 -- "Playtime" within one season. A first state (a join) never counts, so
 -- the pop-up isn't replayed on every visit.

@@ -225,6 +225,21 @@ local function seasonState(player: Player, DataService: any): { [string]: any }?
 	}
 end
 
+-- The playtime starter pack's lifetime count toward its target, or nil
+-- once it's paid, while the pack is switched off, or before the profile
+-- loads.
+local function starterPackState(player: Player, DataService: any): { [string]: any }?
+	if not DataService.isLoaded(player) then
+		return nil
+	end
+	local counted, claimed = DataService.getStarterPack(player)
+	if claimed or next(GameConfig.playtimeStarterPack.rewardPowerUps) == nil then
+		return nil
+	end
+	local target = PlaytimeLogic.starterTargetSeconds(GameConfig.playtimeStarterPack.activeMinutes)
+	return { activeSeconds = math.min(counted, target), targetSeconds = target }
+end
+
 -- The product that buys back this player's open streak offer, if it may
 -- be shown now and an enabled tier prices it (design-decisions.md Q7,
 -- "buying back a streak"). The server always picks the tier: the
@@ -351,6 +366,9 @@ local function pushState(player: Player)
 		lockerUnseen = if isHub and DataService.isLoaded(player) then DataService.getLockerUnseen(player) else nil,
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
+		-- The one-off playtime starter pack's progress, for the Hub's
+		-- playtime panel; nil once it's paid.
+		starterPack = starterPackState(player, DataService),
 		-- The Hub's level badge (payoff-loop step 1c). Worked out here
 		-- rather than on the client, which can't see LiveConfig's curve.
 		level = LevelLogic.progressFor(GameConfig.roundRewards.level, DataService.getXp(player)),
@@ -921,6 +939,45 @@ local function grantPlaytimePass(player: Player): boolean
 	return true
 end
 
+-- The one-off playtime starter pack (owner, 2026-10-18). PlaytimeService
+-- calls this when PlaytimeLogic.creditStarter says it's due. The stock
+-- and the claim land in one save, audited like a receipt grant. Returns
+-- whether the pack is paid now (here, or already), so a caller only
+-- retries a real failure.
+local STARTER_PACK_KEY = "playtime-starter-pack"
+
+local function grantStarterPack(player: Player): boolean
+	local getHandle = receiptHandleFor
+	if getHandle == nil then
+		return false
+	end
+	local handle = getHandle(player)
+	if handle == nil or not handle.isActive() then
+		return false
+	end
+	local data = handle.getData()
+	if data == nil or (Loader.get("LiveConfig") :: any).flags().readOnly then
+		return false
+	end
+	if data.starterPackClaimed then
+		return true
+	end
+	local after, changes = StoreLogic.applyGrants({
+		currency = data.currency,
+		powerUpStock = data.powerUpStock,
+		ownedCosmetics = data.ownedCosmetics,
+		unlockedTitles = data.unlockedTitles,
+		navigationRounds = data.navigationRounds,
+	}, PlaytimeLogic.starterGrants(GameConfig.playtimeStarterPack.rewardPowerUps) :: any)
+	data.powerUpStock = after.powerUpStock
+	data.starterPackClaimed = true
+	logGrant(player, STARTER_PACK_KEY, 0, nil, changes)
+	handle.save()
+	pushState(player)
+	Net.fireClient("StarterPackGranted", player, { rewardPowerUps = GameConfig.playtimeStarterPack.rewardPowerUps })
+	return true
+end
+
 -- ===== the community reward (design-decisions.md Q1) =====================
 
 -- One cosmetic, free to members of the game's Roblox group
@@ -1464,6 +1521,7 @@ local StoreService: Loader.Service = {
 		return liveSeason(os.time())
 	end,
 	grantPlaytimePass = grantPlaytimePass,
+	grantStarterPack = grantStarterPack,
 
 	-- Read-only, for a support tool or a test - never mutated by a
 	-- caller, since this hands back the live list by design (it is a

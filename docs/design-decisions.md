@@ -428,6 +428,15 @@ From the 2026-10-17 game review: only wins paid anything, so roughly
     with a "Playtime" source tag, so it's once per season whichever way
     it came (an earned pass can't then be bought, and vice versa); and
     nothing counts while no season is live or once the pass is held.
+  *Applied (owner, 2026-10-18): a playtime starter pack.* 30 active
+  minutes, counted the same way, pay a free power-up starter pack
+  **once per player, ever** (not weekly): 2 each of Sprint Boost, Slow
+  Field and Push-Trip, a taste of the paid Starter Loadout Bundle's 5
+  each. It shares the Hub's playtime panel with the pass row, the two
+  scrolling in turns until the pack is paid. Claude's calls: the
+  count is lifetime and needs no live season; time played before it
+  shipped doesn't count; and Q8 isn't affected, since all three are
+  Commons that spawn free on every map.
 - **Quick-chat for the negotiation** (payoff-loop step 3, user
   decision 2026-10-17). Three sets of short one-tap phrases for mobile
   players: Promise, Threat and Emote. "Emotes" are short phrases like
