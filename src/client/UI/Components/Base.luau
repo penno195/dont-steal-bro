@@ -18,6 +18,7 @@ local RunService = game:GetService("RunService")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
 
+local Click = require(script.Parent.Click)
 local ComponentLogic = require(script.Parent.ComponentLogic)
 local Env = require(script.Parent.Env)
 local Theme = require(script.Parent.Parent.Theme)
@@ -215,6 +216,8 @@ export type InteractiveProps = {
 	disabled: (boolean | Source<boolean>)?,
 	loading: (boolean | Source<boolean>)?,
 	onActivate: () -> (),
+	-- The tap's sound (Components/Click). Default "click".
+	sound: Click.Kind?,
 	-- Controller/keyboard navigation order (GuiObject.SelectionOrder):
 	-- lower is visited first when the group is entered.
 	order: number?,
@@ -317,6 +320,7 @@ function Base.interactive(props: InteractiveProps): TextButton
 		end,
 		Activated = function()
 			if ComponentLogic.acceptsInput(state()) then
+				Click.play(props.sound)
 				props.onActivate()
 			end
 		end,

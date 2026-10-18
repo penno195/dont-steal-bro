@@ -15,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Base)
+local Click = require(script.Parent.Click)
 local Env = require(script.Parent.Env)
 local Icons = require(script.Parent.Icons)
 local Theme = require(script.Parent.Parent.Theme)
@@ -128,7 +129,8 @@ local function LevelBadge(props: Props): Frame
 		end)
 		table.insert(children, chevron)
 	end
-	if props.onActivate then
+	local onActivate = props.onActivate
+	if onActivate then
 		table.insert(
 			children,
 			create("TextButton")({
@@ -137,7 +139,10 @@ local function LevelBadge(props: Props): Frame
 				BackgroundTransparency = 1,
 				Text = "",
 				ZIndex = 5,
-				Activated = props.onActivate,
+				Activated = function()
+					Click.play("click")
+					onActivate()
+				end,
 			})
 		)
 	end

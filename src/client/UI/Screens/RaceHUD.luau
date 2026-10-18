@@ -50,6 +50,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 local Clock = require(ReplicatedStorage.Shared.Clock)
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
+local Click = require(script.Parent.Parent.Components.Click)
 local Feel = require(script.Parent.Parent.Components.Feel)
 local HudLogic = require(script.Parent.Parent.HudLogic)
 local Layout = require(script.Parent.Parent.Layout)
@@ -1294,7 +1295,10 @@ local function navigationToggle(state: () -> string?, press: () -> ()): Frame
 					}),
 				}),
 			}),
-			Activated = press,
+			Activated = function()
+				Click.play("click")
+				press()
+			end,
 		}),
 	}) :: Frame
 end

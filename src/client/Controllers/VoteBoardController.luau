@@ -29,6 +29,7 @@ local TweenService = game:GetService("TweenService")
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local Maps = require(ReplicatedStorage.Shared.Config.Maps)
+local Click = require(script.Parent.Parent.UI.Components.Click)
 local Env = require(script.Parent.Parent.UI.Components.Env)
 local Focus = require(script.Parent.Parent.UI.Focus)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -214,6 +215,7 @@ local function buildCard(list: ScrollingFrame, mapId: string, index: number): Ca
 		if current == nil or current.revealed then
 			return
 		end
+		Click.play("click")
 		Net.fireServer("MapVoteIntent", { mapId = mapId })
 	end)
 

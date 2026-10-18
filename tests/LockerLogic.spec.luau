@@ -160,6 +160,38 @@ describe("LockerLogic.cosmetics", function()
 		expect(rows[1].slot):toBe(nil)
 		expect(rows[1].equipped):toBe(false)
 	end)
+
+	it("lists the unowned catalog after what's owned, locked and never worn", function()
+		local rows = LockerLogic.cosmetics(
+			state({ ownedCosmetics = { "trailA" }, equipped = { skin = "skinB" } }),
+			categoryOf,
+			slotFor,
+			nameOf,
+			{ "Skin", "Trail" },
+			{ "skinB", "trailA", "skinA", "gone" }
+		)
+		expect(#rows):toBe(3)
+		expect(rows[1].cosmeticId):toBe("trailA")
+		expect(rows[1].locked):toBe(false)
+		expect(rows[2].cosmeticId):toBe("skinA")
+		expect(rows[2].locked):toBe(true)
+		expect(rows[3].cosmeticId):toBe("skinB")
+		expect(rows[3].equipped):toBe(false)
+	end)
+end)
+
+describe("LockerLogic.howToGet", function()
+	it("names the most direct route, or nothing", function()
+		expect(LockerLogic.howToGet({ level = 5, store = true, pass = false, drop = false })):toBe(
+			"Reach level 5 to unlock it."
+		)
+		expect(LockerLogic.howToGet({ store = true, pass = true, drop = true })):toBe("Get it in the Store.")
+		expect(LockerLogic.howToGet({ store = false, pass = true, drop = true })):toBe("Win it on the season pass.")
+		expect(LockerLogic.howToGet({ store = false, pass = false, drop = true })):toBe(
+			"Can drop when you win a round."
+		)
+		expect(LockerLogic.howToGet({ store = false, pass = false, drop = false })):toBe(nil)
+	end)
 end)
 
 describe("LockerLogic.strip", function()

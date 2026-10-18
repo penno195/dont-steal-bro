@@ -265,6 +265,63 @@ end
 -- staff-tools.md step 4. The button shows for liveOps.adminUserIds only;
 -- StaffService re-checks the sender on every give.
 
+-- The Locker's Style tab shows every enabled cosmetic, locked where
+-- not owned (owner, 2026-10-18), all but the community reward, which has
+-- its own tile there. Sorted by LockerLogic.cosmetics.
+local cosmeticCatalog: { string } = {}
+for id, def in cosmeticDefs do
+	if def.enabled and id ~= GameConfig.community.rewardCosmeticId then
+		table.insert(cosmeticCatalog, id)
+	end
+end
+
+local function grantsCosmetic(grant: any, id: string): boolean
+	return grant.kind == "Cosmetic" and grant.cosmeticId == id
+end
+
+-- A locked cosmetic up close: the player wearing it, what it is, and
+-- where to get it right now.
+local function previewLockedCosmetic(id: string)
+	local def = cosmeticDefs[id]
+	if def == nil then
+		return
+	end
+	local store = false
+	for _, item in items do
+		if not isOffered(item) then
+			continue
+		end
+		for _, grant in (item :: any).grants or {} do
+			store = store or grantsCosmetic(grant, id)
+		end
+	end
+	local pass = false
+	for _, season in seasonDefs do
+		if not (season :: any).enabled then
+			continue
+		end
+		for _, track in { (season :: any).free, (season :: any).premium } do
+			for _, tier in track or {} do
+				pass = pass or grantsCosmetic(tier.grant, id)
+			end
+		end
+	end
+	local how = LockerLogic.howToGet({
+		level = def.unlockLevel,
+		store = store,
+		pass = pass,
+		drop = def.winDrop == true,
+	})
+	ItemPreview.open({
+		title = def.displayName,
+		-- A level item's description already says which level.
+		body = if how and def.unlockLevel == nil then def.description .. "\n" .. how else def.description,
+		def = def,
+		icon = "gem",
+		image = if def.previewIconAssetId ~= 0 then def.previewIconAssetId else nil,
+	})
+end
+
 local isStaff = StaffPanelLogic.isStaff(selfId, GameConfig.liveOps.adminUserIds)
 
 local staffCosmetics: { StaffPanelLogic.CosmeticEntry } = {}
@@ -692,6 +749,8 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 				return def and def.pictureAssetId
 			end,
 			categoryOrder = COSMETIC_CATEGORY_ORDER,
+			cosmeticCatalog = cosmeticCatalog,
+			previewLocked = previewLockedCosmetic,
 			community = {
 				offered = communityOffered,
 				name = cosmeticName(GameConfig.community.rewardCosmeticId),

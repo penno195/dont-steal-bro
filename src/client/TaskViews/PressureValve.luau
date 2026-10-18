@@ -250,6 +250,7 @@ return TaskViewBase.define({
 			size = Vector2.new(BUTTON, BUTTON),
 			radius = Theme.radius.pill,
 			anchorPoint = Vector2.new(0.5, 0),
+			sound = "none", -- a task input sounds through its own step cues
 			onActivate = function()
 				if not venting then
 					ctx.submit("TapSubmit")

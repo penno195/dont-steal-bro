@@ -202,6 +202,7 @@ return TaskViewBase.define({
 				layoutOrder = index,
 				order = (if kinds[id] == "slot" then 10 else 0) + index,
 				radius = Theme.radius.md,
+				sound = "none", -- a task input sounds through its own step cues
 				onActivate = function() end, -- Drag listens for Activated itself
 				visual = function()
 					-- The state colour (placed, held, hover verdict, reject)

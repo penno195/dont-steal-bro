@@ -116,6 +116,7 @@ function InputAdapters.Tap(props: TapProps): TextButton
 		name = props.name or "Tap",
 		size = props.size,
 		disabled = props.disabled,
+		sound = "none", -- a task input sounds through its own step cues
 		onActivate = props.onTap,
 		order = props.order,
 		position = props.position,
@@ -195,6 +196,7 @@ function InputAdapters.Hold(props: HoldProps): TextButton
 	local button = Base.interactive({
 		name = "Hold",
 		size = props.size,
+		sound = "none",
 		onActivate = function() end, -- driven by InputBegan/Ended, not Activated
 		position = props.position,
 		anchorPoint = props.anchorPoint,
@@ -441,6 +443,7 @@ function InputAdapters.Sequence(props: SequenceProps): Frame
 			name = "Key_" .. key.id,
 			size = props.keySize,
 			disabled = disabled,
+			sound = "none",
 			onActivate = function()
 				props.onPress(key.id)
 			end,
@@ -520,6 +523,7 @@ function InputAdapters.Timing(props: TimingProps): TextButton
 	return Base.interactive({
 		name = "Timing",
 		size = props.size,
+		sound = "none",
 		onActivate = props.onPress, -- touch, click, and A on the focused target
 		position = props.position,
 		anchorPoint = props.anchorPoint,

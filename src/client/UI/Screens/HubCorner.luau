@@ -16,6 +16,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Parent.Components.Base)
 local C = require(script.Parent.Parent.Components)
+local Click = require(script.Parent.Parent.Components.Click)
 local DailyChallengeViewLogic = require(script.Parent.Parent.DailyChallengeViewLogic)
 local Icons = require(script.Parent.Parent.Components.Icons)
 local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
@@ -152,7 +153,10 @@ local function row(
 			BackgroundTransparency = 1,
 			Text = "",
 			ZIndex = 5,
-			Activated = onActivate,
+			Activated = function()
+				Click.play("click")
+				onActivate()
+			end,
 		}),
 	}) :: Frame
 end

@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Base)
+local Click = require(script.Parent.Click)
 local ComponentLogic = require(script.Parent.ComponentLogic)
 local Icons = require(script.Parent.Icons)
 local Theme = require(script.Parent.Parent.Theme)
@@ -21,6 +22,8 @@ local show = vide.show
 export type Props = {
 	label: string | Base.Source<string>,
 	onActivate: () -> (),
+	-- Default: "close" for a Close or an X, else "click" (Click.kindFor).
+	sound: Click.Kind?,
 	variant: ComponentLogic.Variant?,
 	icon: string?,
 	-- Reference pixels. Defaults to a comfortable single-action width.
@@ -54,6 +57,7 @@ local function Button(props: Props): TextButton
 		disabled = props.disabled,
 		loading = loading,
 		onActivate = props.onActivate,
+		sound = props.sound or Click.kindFor(if type(props.label) == "string" then props.label else nil, nil),
 		order = props.order,
 		layoutOrder = props.layoutOrder,
 		position = props.position,

@@ -29,6 +29,7 @@ local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Base)
 local Button = require(script.Parent.Button)
+local Click = require(script.Parent.Click)
 local Env = require(script.Parent.Env)
 local IconButton = require(script.Parent.IconButton)
 local Theme = require(script.Parent.Parent.Theme)
@@ -434,6 +435,7 @@ function Modal.open(props: Props): () -> ()
 
 	local function dismiss()
 		if props.dismissible and props.onDismiss then
+			Click.play("close")
 			props.onDismiss()
 		end
 	end

@@ -161,6 +161,29 @@ AudioLogic.CUES = table.freeze({
 		cooldown = 0,
 	}),
 
+	-- Menus (owner, 2026-10-18): every button and tab clicks, and an X
+	-- or Close has its own softer swipe, so shutting a panel reads apart
+	-- from pressing something in it. Played by Components/Click through
+	-- Base.interactive. Short cooldowns: a fast double-tap still sounds.
+	UIClick = cue({
+		assetId = "rbxassetid://15675032796", -- Roblox_UI_Small_Click
+		category = "SFX",
+		volume = 0.5,
+		looped = false,
+		spatial = false,
+		priority = 30,
+		cooldown = 0.05,
+	}),
+	UIClose = cue({
+		assetId = "rbxassetid://15675037413", -- Roblox_UI_Paper_Swipe
+		category = "SFX",
+		volume = 0.6,
+		looped = false,
+		spatial = false,
+		priority = 30,
+		cooldown = 0.1,
+	}),
+
 	-- Race.
 	TimerTick = cue({
 		assetId = "rbxassetid://9114212929", -- PSE "Dvd Player Button 13": a hard, dry click

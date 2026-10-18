@@ -441,45 +441,83 @@ end
 
 -- ===== cosmetics ============================================================
 
--- One owned cosmetic and the equip slot it goes in. `slot` nil means its
+-- One cosmetic and the equip slot it goes in. `slot` nil means its
 -- category has no slot the client knows about (a newer server); the tile
--- shows it but can't equip it.
-export type CosmeticRow = { cosmeticId: string, slot: string?, equipped: boolean }
+-- shows it but can't equip it. `locked`: not owned, so a tap only
+-- previews it (owner, 2026-10-18).
+export type CosmeticRow = { cosmeticId: string, slot: string?, equipped: boolean, locked: boolean }
 
--- Owned cosmetics, grouped by category in `categoryOrder`, then by name.
+-- Owned cosmetics, grouped by category in `categoryOrder`, then by name;
+-- then every id in `catalog` the player doesn't own, locked, in the same
+-- order, so what you have always comes first.
 function LockerLogic.cosmetics(
 	state: State,
 	categoryOf: (string) -> string?,
 	slotFor: (string) -> string?,
 	nameOf: (string) -> string,
-	categoryOrder: { string }
+	categoryOrder: { string },
+	catalog: { string }?
 ): { CosmeticRow }
 	local rank: { [string]: number } = {}
 	for i, category in categoryOrder do
 		rank[category] = i
 	end
-	local out = {}
-	for _, id in state.ownedCosmetics do
-		local category = categoryOf(id)
-		if category == nil then
-			continue -- removed from config since it was granted; nothing to draw
+	local function sorted(ids: { string }, locked: boolean): { CosmeticRow }
+		local rows = {}
+		for _, id in ids do
+			local category = categoryOf(id)
+			if category == nil then
+				continue -- removed from config since it was granted; nothing to draw
+			end
+			local slot = slotFor(category)
+			table.insert(rows, {
+				cosmeticId = id,
+				slot = slot,
+				equipped = not locked and slot ~= nil and state.equipped[slot] == id,
+				locked = locked,
+			})
 		end
-		local slot = slotFor(category)
-		table.insert(out, {
-			cosmeticId = id,
-			slot = slot,
-			equipped = slot ~= nil and state.equipped[slot] == id,
-		})
+		table.sort(rows, function(a, b)
+			local ca = rank[categoryOf(a.cosmeticId) or ""] or math.huge
+			local cb = rank[categoryOf(b.cosmeticId) or ""] or math.huge
+			if ca ~= cb then
+				return ca < cb
+			end
+			return nameOf(a.cosmeticId) < nameOf(b.cosmeticId)
+		end)
+		return rows
 	end
-	table.sort(out, function(a, b)
-		local ca = rank[categoryOf(a.cosmeticId) or ""] or math.huge
-		local cb = rank[categoryOf(b.cosmeticId) or ""] or math.huge
-		if ca ~= cb then
-			return ca < cb
+	local out = sorted(state.ownedCosmetics, false)
+	local unowned = {}
+	local shown: { string } = catalog or {}
+	for _, id in shown do
+		if table.find(state.ownedCosmetics, id) == nil then
+			table.insert(unowned, id)
 		end
-		return nameOf(a.cosmeticId) < nameOf(b.cosmeticId)
-	end)
+	end
+	for _, row in sorted(unowned, true) do
+		table.insert(out, row)
+	end
 	return out
+end
+
+-- Where a locked cosmetic comes from, for its preview. The most direct
+-- route wins: a level unlock, then the Store, then the season pass,
+-- then a win drop. nil when nothing offers it right now (a limited
+-- edition off sale, a founder item).
+export type CosmeticSources = { level: number?, store: boolean, pass: boolean, drop: boolean }
+
+function LockerLogic.howToGet(sources: CosmeticSources): string?
+	if sources.level ~= nil then
+		return string.format("Reach level %d to unlock it.", sources.level)
+	elseif sources.store then
+		return "Get it in the Store."
+	elseif sources.pass then
+		return "Win it on the season pass."
+	elseif sources.drop then
+		return "Can drop when you win a round."
+	end
+	return nil
 end
 
 return LockerLogic

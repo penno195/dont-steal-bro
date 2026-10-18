@@ -40,6 +40,7 @@ local Maps = require(ReplicatedStorage.Shared.Config.Maps)
 local Events = require(ReplicatedStorage.Shared.Config.Events)
 local Net = require(ReplicatedStorage.Shared.Net)
 local AudioLogic = require(script.Parent.Parent.UI.AudioLogic)
+local Click = require(script.Parent.Parent.UI.Components.Click)
 local DecisionLogic = require(script.Parent.Parent.UI.DecisionLogic)
 
 local CUES = AudioLogic.CUES
@@ -431,6 +432,9 @@ function AudioController:init()
 	poolFolder.Parent = SoundService
 	soundGroup("Music")
 	soundGroup("SFX")
+	Click.bind(function(cueId)
+		play(cueId)
+	end)
 
 	Net.onClientEvent("RoundState", onRoundState)
 

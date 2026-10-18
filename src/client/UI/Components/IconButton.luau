@@ -13,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Base = require(script.Parent.Base)
+local Click = require(script.Parent.Click)
 local ComponentLogic = require(script.Parent.ComponentLogic)
 local Icons = require(script.Parent.Icons)
 local Theme = require(script.Parent.Parent.Theme)
@@ -27,6 +28,8 @@ export type Props = {
 	-- is the string a future tooltip/accessibility pass will read.
 	label: string,
 	onActivate: () -> (),
+	-- Default: "close" for a Close or an X, else "click" (Click.kindFor).
+	sound: Click.Kind?,
 	-- Icon edge in reference px. Default Theme.spacing.xl; a full-colour
 	-- icon that is itself a button (close-button) fills the whole edge.
 	iconSize: number?,
@@ -59,6 +62,7 @@ local function IconButton(props: Props): TextButton
 		disabled = props.disabled,
 		loading = loading,
 		onActivate = props.onActivate,
+		sound = props.sound or Click.kindFor(props.label, props.icon),
 		order = props.order,
 		layoutOrder = props.layoutOrder,
 		position = props.position,

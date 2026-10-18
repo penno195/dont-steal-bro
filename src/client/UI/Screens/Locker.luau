@@ -77,6 +77,11 @@ export type Locker = {
 	powerUpPicture: (powerUpId: string) -> number?,
 	-- Cosmetic categories in the order the Style tab groups them.
 	categoryOrder: { string },
+	-- Every cosmetic the Style tab shows, owned or not; what isn't owned
+	-- is locked, and a tap on it calls `previewLocked` (owner,
+	-- 2026-10-18). nil = owned only.
+	cosmeticCatalog: { string }?,
+	previewLocked: ((cosmeticId: string) -> ())?,
 	-- Put a power-up in a loadout slot, or take it out with nil.
 	setSlot: (slotIndex: number, powerUpId: string?) -> (),
 	repeatLast: () -> (),
@@ -466,12 +471,18 @@ local function cosmeticCard(
 		layoutOrder = index,
 		order = 10 + index,
 		radius = Theme.radius.md,
+		-- A locked one can't be worn, but a tap still previews it.
 		disabled = function()
-			return row().slot == nil
+			local r = row()
+			return if r.locked then locker.previewLocked == nil else r.slot == nil
 		end,
 		onActivate = function()
 			local r = row()
-			if r.slot ~= nil then
+			if r.locked then
+				if locker.previewLocked then
+					locker.previewLocked(r.cosmeticId)
+				end
+			elseif r.slot ~= nil then
 				locker.equip(r.cosmeticId, r.slot, not r.equipped)
 				tried(if r.equipped then nil else r.cosmeticId)
 			end
@@ -486,6 +497,18 @@ local function cosmeticCard(
 			picture.AnchorPoint = Vector2.new(0, 0.5)
 			picture.Position = UDim2.fromScale(0, 0.5)
 			picture.Size = UDim2.fromOffset(CARD_ICON, CARD_ICON)
+			-- Faded while locked, with the lock on its corner.
+			effect(function()
+				picture.ImageTransparency = if row().locked then 0.55 else 0
+			end)
+			local lock = Icons.view("lock", Theme.spacing.lg, Theme.color.inkMuted)
+			lock.AnchorPoint = Vector2.new(1, 1)
+			lock.Position = UDim2.fromOffset(CARD_ICON, CARD_ICON)
+			lock.ZIndex = 2
+			effect(function()
+				lock.Visible = row().locked
+			end)
+			lock.Parent = picture
 			return {
 				tileFill(state, rarity, {
 					picture,
@@ -495,6 +518,9 @@ local function cosmeticCard(
 						Size = UDim2.new(1, -(CARD_ICON + Theme.spacing.sm), 0.5, 0),
 						Text = function()
 							return locker.cosmeticName(row().cosmeticId)
+						end,
+						TextColor3 = function()
+							return if row().locked then Theme.color.inkMuted else Theme.color.ink
 						end,
 						TextTruncate = Enum.TextTruncate.AtEnd,
 						TextXAlignment = Enum.TextXAlignment.Left,
@@ -508,12 +534,16 @@ local function cosmeticCard(
 							if r.equipped then
 								return "✓ Wearing"
 							end
-							return string.format(
-								"%s · %s",
-								-- "StreakFlair" reads as "Streak Flair".
-								(string.gsub(locker.cosmeticCategory(r.cosmeticId) or "", "(%l)(%u)", "%1 %2")),
-								rarity() or ""
+							-- "StreakFlair" reads as "Streak Flair".
+							local category = (
+								string.gsub(locker.cosmeticCategory(r.cosmeticId) or "", "(%l)(%u)", "%1 %2")
 							)
+							-- Locked: the edge already says the rarity, and the
+							-- line has to fit beside the lock.
+							if r.locked then
+								return "Locked · " .. category
+							end
+							return string.format("%s · %s", category, rarity() or "")
 						end,
 						TextColor3 = function()
 							return if row().equipped then Theme.color.success else Theme.color.inkMuted
@@ -726,7 +756,8 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 			locker.cosmeticCategory,
 			StoreScreenLogic.slotFor,
 			locker.cosmeticName,
-			locker.categoryOrder
+			locker.categoryOrder,
+			locker.cosmeticCatalog
 		)
 	end)
 	local communityOffered = derive(function(): boolean
@@ -825,7 +856,7 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 				Name = "Hint",
 				Position = UDim2.fromOffset(0, controlsTop),
 				Size = UDim2.fromOffset(pane, STYLE_H),
-				Text = "Tap to wear it. Tap again to take it off.",
+				Text = "Tap to wear or take off. Tap a locked one to preview.",
 				TextColor3 = Theme.color.inkMuted,
 				TextWrapped = true,
 				TextXAlignment = Enum.TextXAlignment.Left,

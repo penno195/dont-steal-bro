@@ -53,6 +53,7 @@ local Loader = require(ReplicatedStorage.Shared.Loader)
 local Net = require(ReplicatedStorage.Shared.Net)
 local C = require(script.Parent.Parent.UI.Components)
 local Base = require(script.Parent.Parent.UI.Components.Base)
+local Click = require(script.Parent.Parent.UI.Components.Click)
 local HudLogic = require(script.Parent.Parent.UI.HudLogic)
 local Layout = require(script.Parent.Parent.UI.Layout)
 local OnboardingLogic = require(script.Parent.Parent.UI.OnboardingLogic)
@@ -367,6 +368,7 @@ local function card(): TextButton
 		Selectable = false,
 		Activated = function()
 			if showing() ~= nil then
+				Click.play("click")
 				dismiss()
 			end
 		end,

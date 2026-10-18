@@ -272,6 +272,7 @@ return TaskViewBase.define({
 			name = "SyncButton",
 			size = BUTTON,
 			radius = UDim.new(0, 20),
+			sound = "none", -- a task input sounds through its own step cues
 			onActivate = onTap,
 			visual = TaskArt.button("SYNC", BUTTON_COLOUR),
 		})
