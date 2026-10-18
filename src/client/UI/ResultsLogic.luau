@@ -53,6 +53,16 @@ export type RecapGuess = {
 	shieldEarned: boolean,
 }
 
+-- The daily challenges this round finished (payoff-loop step 8c;
+-- ProgressionService's challengesPayload). Already granted on arrival;
+-- the XP is inside the level beat's xpGained too.
+export type RecapChallenges = {
+	completed: { string }, -- labels, slot order; never empty
+	coins: number,
+	xp: number,
+	allDone: boolean, -- finished the whole list (bonus included above)
+}
+
 export type Recap = {
 	roundId: string,
 	reason: string, -- ProgressionLogic.ReasonCode
@@ -72,6 +82,7 @@ export type Recap = {
 	shieldSpent: boolean?,
 	guess: RecapGuess?, -- nil when they placed no guess
 	streakShields: number?, -- shields held now, after this round
+	challenges: RecapChallenges?, -- nil when the round finished none
 }
 
 export type RaceTally = {
@@ -173,7 +184,17 @@ end
 
 -- ===== sequencing ===========================================================
 
-export type BeatId = "Placement" | "Tasks" | "PowerUps" | "Finale" | "Rewards" | "Drop" | "Guess" | "Level" | "Streak"
+export type BeatId =
+	"Placement"
+	| "Tasks"
+	| "PowerUps"
+	| "Finale"
+	| "Rewards"
+	| "Drop"
+	| "Guess"
+	| "Level"
+	| "Challenges"
+	| "Streak"
 
 export type Beat = { id: BeatId, at: number }
 
@@ -214,6 +235,9 @@ function ResultsLogic.beats(recap: Recap?): { Beat }
 		end
 		if recap.level ~= nil then
 			table.insert(ids, "Level")
+		end
+		if recap.challenges ~= nil then
+			table.insert(ids, "Challenges")
 		end
 		table.insert(ids, "Streak")
 	end
@@ -375,6 +399,52 @@ function ResultsLogic.parseGuess(value: any): RecapGuess?
 		return nil
 	end
 	return { targetId = value.targetId, correct = value.correct, shieldEarned = value.shieldEarned }
+end
+
+-- A recap's challenges, checked for shape, like parseLevel. nil when
+-- none finished, so the beat is skipped.
+function ResultsLogic.parseChallenges(value: any): RecapChallenges?
+	if
+		type(value) ~= "table"
+		or type(value.completed) ~= "table"
+		or type(value.coins) ~= "number"
+		or type(value.xp) ~= "number"
+		or type(value.allDone) ~= "boolean"
+	then
+		return nil
+	end
+	local completed: { string } = {}
+	for _, label in value.completed do
+		if type(label) == "string" then
+			table.insert(completed, label)
+		end
+	end
+	if #completed == 0 then
+		return nil
+	end
+	return { completed = completed, coins = value.coins, xp = value.xp, allDone = value.allDone }
+end
+
+-- The challenge beat's caption: the one it finished by name, or a count.
+function ResultsLogic.challengesLabel(c: RecapChallenges): string
+	if c.allDone then
+		return "All daily challenges done!"
+	elseif #c.completed == 1 then
+		return "Challenge done: " .. c.completed[1]
+	end
+	return string.format("%d daily challenges done", #c.completed)
+end
+
+-- The challenge beat's value: what they paid.
+function ResultsLogic.challengesGains(c: RecapChallenges): string
+	local parts = {}
+	if c.coins > 0 then
+		table.insert(parts, string.format("+%d coins", c.coins))
+	end
+	if c.xp > 0 then
+		table.insert(parts, string.format("+%d XP", c.xp))
+	end
+	return if #parts > 0 then table.concat(parts, "  ") else "Done"
 end
 
 -- A shield count, or nil when it isn't a sane one.

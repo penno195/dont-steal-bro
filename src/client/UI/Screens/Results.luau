@@ -76,6 +76,7 @@ local LABELS: { [string]: string } = {
 	Finale = "Decision Studio",
 	Rewards = "Coins",
 	Guess = "Your guess",
+	Challenges = "Daily challenge",
 }
 
 -- The Drop card has neither: its label is the rarity and its icon the
@@ -87,6 +88,7 @@ local ICONS: { [string]: string } = {
 	Finale = "star",
 	Rewards = "coin",
 	Guess = "shield",
+	Challenges = "check",
 }
 
 -- Slides up and fades in when `shown` turns true; just appears under
@@ -466,12 +468,29 @@ local function body(store: Store, height: () -> number): { Instance }
 				return levelCard(level(), isShown("Level"), 8)
 			end
 		) :: any,
+		-- The daily challenges this round finished (payoff-loop step 8c).
+		statCard(
+			"Challenges",
+			function()
+				local recap = store.recap()
+				local c = if recap then recap.challenges else nil
+				return if c then ResultsLogic.challengesGains(c) else ""
+			end,
+			isShown("Challenges"),
+			9,
+			nil,
+			function()
+				local recap = store.recap()
+				local c = if recap then recap.challenges else nil
+				return if c then ResultsLogic.challengesLabel(c) else LABELS.Challenges
+			end
+		),
 		indexes(
 			derive(function()
 				return if streakDue() then { true } else {}
 			end),
 			function()
-				return streakCard(store, timedOut, isShown("Streak"), 9)
+				return streakCard(store, timedOut, isShown("Streak"), 10)
 			end
 		) :: any,
 	}) :: ScrollingFrame

@@ -196,7 +196,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     a modal of shares, steals and times robbed (`RecordViewLogic`).
     The Studio preview's lone-steal scene shows the Robbed line.
     Unseen in Studio when built.
-- [ ] **8. Daily challenges.** Three a day (e.g. "Freeze 5 players",
+- [x] **8. Daily challenges.** Three a day (e.g. "Freeze 5 players",
   "Reach the Studio twice", "Share and survive"), most doable without
   winning. One config file per challenge. Owner's answers (Q1's applied
   case): each pays coins + XP, drawn per player per UTC day, one free
@@ -228,9 +228,19 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     push goes out at Results with the RoundRecap (which now carries
     `challenges` and `level.challengeXp`), so a finished "Win a round"
     can't tell a finalist they'd won before the reveal. Unseen in Studio.
-  - [ ] 8c. UI: a Hub challenges panel (three rows with progress bars,
+  - [x] 8c. UI: a Hub challenges panel (three rows with progress bars,
     the reroll button, the reset countdown) and a "Challenge done"
     toast/pop-up after the round that finishes one.
+    Built as a Hub-only "Challenges" launcher button (shown once
+    DailyChallengeState arrives) opening a Modal of
+    `Screens/DailyChallenges` rows (label, reward, % bar, Swap), the
+    swaps-left line, the all-done bonus and a live countdown; a refused
+    swap toasts. The "Challenge done" beat is a Results card after the
+    level beat, from RoundRecap.challenges (so it lands at Results like
+    the rest, never before the reveal). Wording and parsing in
+    `DailyChallengeViewLogic` and `ResultsLogic.parseChallenges`, both
+    spec'd. Also fixed the launcher grid's count, which hadn't counted
+    7c's record button. Unseen in Studio.
 - [ ] **9. Lifetime-stat titles.** Titles for lifetime wins, Studio
   visits and successful steals, which everyone climbs over time,
   alongside the streak ladder (rungs past ~10 are near-unreachable at a

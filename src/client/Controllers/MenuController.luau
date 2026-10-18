@@ -62,6 +62,8 @@ local BoardLogic = require(script.Parent.Parent.UI.BoardLogic)
 local C = require(script.Parent.Parent.UI.Components)
 local CashOutViewLogic = require(script.Parent.Parent.UI.CashOutViewLogic)
 local RecordViewLogic = require(script.Parent.Parent.UI.RecordViewLogic)
+local DailyChallengeViewLogic = require(script.Parent.Parent.UI.DailyChallengeViewLogic)
+local DailyChallengesScreen = require(script.Parent.Parent.UI.Screens.DailyChallenges)
 local Modal = require(script.Parent.Parent.UI.Components.Modal)
 local ResultsLogic = require(script.Parent.Parent.UI.ResultsLogic)
 local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
@@ -359,6 +361,14 @@ local boards = source({} :: { [string]: BoardLogic.Payload })
 local recap = source(nil :: ResultsLogic.Recap?)
 local tally = source({ placement = nil, fieldSize = 0, tasksCompleted = 0, powerUpsUsed = 0 } :: ResultsLogic.RaceTally)
 local roundState = source(nil :: string?)
+-- Today's daily challenges (payoff-loop step 8c): DailyChallengeState,
+-- when it arrived, and whether a swap is waiting on the server.
+local challengeState = source(nil :: DailyChallengeViewLogic.State?)
+local challengeReceivedAt = source(0)
+local challengeRerolling = source(false)
+-- A swap's answer never came: let the buttons work again.
+local REROLL_TIMEOUT = 8
+local rerollSerial = 0
 
 -- step hands back the same table when nothing changed; only a real
 -- change is written, so the twice-a-second Tick doesn't re-run the store
@@ -513,6 +523,52 @@ local function closeMenu()
 	end
 	openMenu = nil
 	syncLauncher()
+end
+
+-- The Hub's daily challenges panel (payoff-loop step 8c).
+local function openChallenges()
+	if challengeState() == nil then
+		return
+	end
+	closeMenu()
+	local close: () -> ()
+	close = C.Modal.open({
+		title = DailyChallengeViewLogic.TITLE,
+		actions = {
+			{
+				label = "Close",
+				variant = "secondary",
+				onActivate = function()
+					close()
+				end,
+			},
+		},
+		dismissible = true,
+		onDismiss = function()
+			close()
+		end,
+		content = function()
+			return DailyChallengesScreen.content({
+				state = challengeState,
+				receivedAt = challengeReceivedAt,
+				rerolling = challengeRerolling,
+				onReroll = function(slot: number)
+					if challengeRerolling() then
+						return
+					end
+					challengeRerolling(true)
+					rerollSerial += 1
+					local mine = rerollSerial
+					Net.fireServer("DailyChallengeRerollIntent", { slot = slot })
+					task.delay(REROLL_TIMEOUT, function()
+						if rerollSerial == mine then
+							challengeRerolling(false)
+						end
+					end)
+				end,
+			})
+		end,
+	})
 end
 
 local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, storeKey: string?)
@@ -797,9 +853,10 @@ local function mountLauncher()
 	end)
 
 	vide.root(function()
-		-- The Hub adds a bank button under Settings (payoff-loop step 4),
-		-- and staff get one more under that, for the staff panel.
-		local buttons = 4 + (if inHub then 1 else 0) + (if isStaff then 1 else 0)
+		-- The Hub adds the bank, record and challenges buttons under
+		-- Settings (payoff-loop steps 4, 7 and 8), and staff get one more
+		-- under those, for the staff panel.
+		local buttons = 4 + (if inHub then 3 else 0) + (if isStaff then 1 else 0)
 		local button, gap = Theme.touch.iconButton, Theme.spacing.md
 		-- Usable height in reference px (the column sits under the scale).
 		local rect = source(UIScaleController.getUsableRect())
@@ -946,6 +1003,21 @@ local function mountLauncher()
 				recordButton.Visible = RecordViewLogic.parse(if s then s.record else nil) ~= nil
 			end)
 			recordButton.Parent = column
+
+			-- Today's daily challenges (payoff-loop step 8). Hub only:
+			-- the swap is refused anywhere else.
+			local challengesButton = C.IconButton({
+				icon = "check",
+				label = DailyChallengeViewLogic.BUTTON_LABEL,
+				variant = "secondary",
+				onActivate = openChallenges,
+				order = 7,
+				layoutOrder = 7,
+			})
+			vide.effect(function()
+				challengesButton.Visible = challengeState() ~= nil
+			end)
+			challengesButton.Parent = column
 		end
 		if isStaff then
 			C.IconButton({
@@ -955,8 +1027,8 @@ local function mountLauncher()
 				onActivate = function()
 					open("Staff")
 				end,
-				order = 7,
-				layoutOrder = 7,
+				order = 8,
+				layoutOrder = 8,
 			}).Parent =
 				column
 		end
@@ -1320,7 +1392,23 @@ function MenuController:init()
 			payload.guess = ResultsLogic.parseGuess(payload.guess)
 			payload.streakShields = ResultsLogic.parseShields(payload.streakShields)
 			payload.shieldSpent = payload.shieldSpent == true
+			payload.challenges = ResultsLogic.parseChallenges(payload.challenges)
 			recap(payload)
+		end
+	end)
+	-- Daily challenges (payoff-loop step 8c).
+	Net.onClientEvent("DailyChallengeState", function(payload: any)
+		local state = DailyChallengeViewLogic.parse(payload)
+		if state ~= nil then
+			challengeReceivedAt(os.clock())
+			challengeState(state)
+			challengeRerolling(false)
+		end
+	end)
+	Net.onClientEvent("DailyChallengeRerollResult", function(payload: any)
+		challengeRerolling(false)
+		if type(payload) == "table" and payload.status == "Refused" then
+			C.Toast.show(DailyChallengeViewLogic.refusalText(payload.reason), "warning")
 		end
 	end)
 	Net.onClientEvent("TaskQualificationResult", function(payload: any)

@@ -597,6 +597,50 @@ describe("ResultsLogic finale guess and shields (payoff-loop 2c)", function()
 	end)
 end)
 
+describe("ResultsLogic daily challenges (payoff-loop 8c)", function()
+	local function ids(r: ResultsLogic.Recap): string
+		local out = {}
+		for _, b in ResultsLogic.beats(r) do
+			table.insert(out, b.id)
+		end
+		return table.concat(out, ",")
+	end
+
+	it("adds a Challenges beat after the level and before the streak", function()
+		local r = recap("FailedToQualify", 0, 0, {
+			level = {
+				xpGained = 45,
+				before = { level = 1, xpIntoLevel = 0, xpForNext = 100 },
+				after = { level = 1, xpIntoLevel = 45, xpForNext = 100 },
+				placeCurrency = 0,
+				levelUpCurrency = 0,
+				cosmetics = {},
+			},
+			challenges = { completed = { "Finish 5 tasks" }, coins = 50, xp = 40, allDone = false },
+		})
+		expect(ids(r)):toBe("Placement,Tasks,PowerUps,Level,Challenges,Streak")
+	end)
+
+	it("parses, and drops a payload that finished nothing", function()
+		expect(ResultsLogic.parseChallenges(nil)):toBe(nil)
+		expect(ResultsLogic.parseChallenges({ completed = {}, coins = 0, xp = 0, allDone = false })):toBe(nil)
+		expect(ResultsLogic.parseChallenges({ completed = { "A" }, coins = "5", xp = 0, allDone = false })):toBe(nil)
+		local one =
+			ResultsLogic.parseChallenges({ completed = { "Finish 5 tasks", 7 }, coins = 50, xp = 40, allDone = false })
+		expect(one and #one.completed):toBe(1)
+		expect(ResultsLogic.challengesLabel(one :: any)):toBe("Challenge done: Finish 5 tasks")
+		expect(ResultsLogic.challengesGains(one :: any)):toBe("+50 coins  +40 XP")
+	end)
+
+	it("counts several, and calls out the whole list", function()
+		local two = { completed = { "A", "B" }, coins = 0, xp = 30, allDone = false }
+		expect(ResultsLogic.challengesLabel(two)):toBe("2 daily challenges done")
+		expect(ResultsLogic.challengesGains(two)):toBe("+30 XP")
+		local all = { completed = { "C" }, coins = 150, xp = 90, allDone = true }
+		expect(ResultsLogic.challengesLabel(all)):toBe("All daily challenges done!")
+	end)
+end)
+
 describe("ResultsLogic.placementText", function()
 	it("gets the ordinals right", function()
 		expect(ResultsLogic.placementText(1, 6)):toBe("1st of 6")
