@@ -240,7 +240,17 @@ export type ProfileData = {
 	-- resets it at midnight. Written only by the progression writer (a
 	-- round's progress and pay) and DailyChallengeService (the reroll).
 	dailyChallenges: DailyChallengeState?,
+
+	-- ===== schema v23, the Locker's "new" dots ============================
+
+	-- Per Locker tab, the ids the player has already looked at
+	-- (LockerSeenLogic). Anything owned and not listed dots the tab.
+	-- Written by DataService.markLockerSeen when the tab is opened.
+	lockerSeen: LockerSeen,
 }
+
+-- Structurally LockerSeenLogic.Seen.
+export type LockerSeen = { Power: { string }, Style: { string }, Titles: { string } }
 
 -- Structurally DailyChallengeLogic.State.
 export type DailyChallengeState = {
@@ -290,7 +300,7 @@ export type SeasonProgress = {
 	premiumPaid: number,
 }
 
-local CURRENT_SCHEMA_VERSION = 22
+local CURRENT_SCHEMA_VERSION = 23
 
 local function defaultStats(): Stats
 	return {
@@ -339,6 +349,7 @@ function ProfileLogic.newProfileTemplate(): ProfileData
 		streakRestoredAt = 0,
 		playtime = nil,
 		dailyChallenges = nil,
+		lockerSeen = { Power = {}, Style = {}, Titles = {} },
 	}
 end
 
@@ -590,6 +601,28 @@ migrations[21] = function(old: { [string]: any }): { [string]: any }
 		stats.stealWins = (stats.stealWins :: number?) or 0
 		next.stats = stats
 	end
+	return next
+end
+
+-- v22 -> v23 (the Locker's "new" dots): everything already owned counts
+-- as seen, so an existing account doesn't open to every tab dotted.
+migrations[22] = function(old: { [string]: any }): { [string]: any }
+	local next: { [string]: any } = table.clone(old)
+	next.schemaVersion = 23
+	local held = {}
+	if type(old.powerUpStock) == "table" then
+		for id, count in old.powerUpStock do
+			if type(count) == "number" and count > 0 then
+				table.insert(held, id)
+			end
+		end
+		table.sort(held)
+	end
+	next.lockerSeen = {
+		Power = held,
+		Style = if type(old.ownedCosmetics) == "table" then table.clone(old.ownedCosmetics) else {},
+		Titles = if type(old.unlockedTitles) == "table" then table.clone(old.unlockedTitles) else {},
+	}
 	return next
 end
 

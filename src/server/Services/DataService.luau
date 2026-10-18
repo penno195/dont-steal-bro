@@ -33,6 +33,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ProfileStoreLib = require(ServerScriptService.ServerPackages.ProfileStore)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local CashOutLogic = require(ServerScriptService.Server.CashOutLogic)
+local LockerSeenLogic = require(ServerScriptService.Server.LockerSeenLogic)
 local ProfileLogic = require(ServerScriptService.Server.ProfileLogic)
 local StoreLogic = require(ServerScriptService.Server.StoreLogic)
 local StaffGrantLogic = require(ServerScriptService.Server.StaffGrantLogic)
@@ -1062,6 +1063,32 @@ local function markTutorialRewardSeen(player: Player)
 	end
 end
 
+local function lockerOwned(d: ProfileLogic.ProfileData): LockerSeenLogic.Seen
+	return LockerSeenLogic.owned(d.powerUpStock, d.ownedCosmetics, d.unlockedTitles)
+end
+
+-- Which Locker tabs hold something the player hasn't looked at (schema
+-- v23), for the Locker's dots.
+local function getLockerUnseen(player: Player): LockerSeenLogic.Unseen
+	local d = data(player)
+	if d == nil then
+		return { Power = false, Style = false, Titles = false }
+	end
+	return LockerSeenLogic.unseen(lockerOwned(d), d.lockerSeen)
+end
+
+-- The player opened `tab`: everything in it now counts as seen. Only
+-- ever touches the dot records, never an item, so like markGiftsSeen it
+-- needs no claimed writer.
+local function markLockerSeen(player: Player, tab: LockerSeenLogic.Tab)
+	local d = writable(player)
+	if d ~= nil then
+		local seen = table.clone(d.lockerSeen)
+		seen[tab] = LockerSeenLogic.markSeen(seen[tab], lockerOwned(d)[tab])
+		d.lockerSeen = seen
+	end
+end
+
 local function getStats(player: Player): ProfileLogic.Stats
 	local d = data(player)
 	if d == nil then
@@ -1199,6 +1226,8 @@ local DataService: Loader.Service = {
 	hasTutorialReward = hasTutorialReward,
 	isTutorialRewardUnseen = isTutorialRewardUnseen,
 	markTutorialRewardSeen = markTutorialRewardSeen,
+	getLockerUnseen = getLockerUnseen,
+	markLockerSeen = markLockerSeen,
 	getStats = getStats,
 	recordRoundStat = recordRoundStat,
 	getUnlockedTitles = getUnlockedTitles,

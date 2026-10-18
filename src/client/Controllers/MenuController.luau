@@ -590,6 +590,25 @@ local function bankCard(): CashOutViewLogic.Card?
 	return CashOutViewLogic.parse(if s then s.cashOut else nil)
 end
 
+-- Whether the streak can be banked right now: the Record tab's dot.
+local function streakBankable(): boolean
+	local card = bankCard()
+	return card ~= nil and card.available
+end
+
+-- Whether a Locker tab ("Power", "Style", "Titles") holds something not
+-- yet looked at. The server only sends `lockerUnseen` to the Hub.
+local function lockerUnseen(tab: string): boolean
+	local s = storeState()
+	local unseen = if s then s.lockerUnseen else nil
+	return type(unseen) == "table" and unseen[tab] == true
+end
+
+-- The Hub launcher's Locker dot: any tab's dot.
+local function lockerHasNew(): boolean
+	return streakBankable() or lockerUnseen("Power") or lockerUnseen("Style") or lockerUnseen("Titles")
+end
+
 local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, storeKey: string?)
 	closeMenu()
 	openMenu = menu
@@ -710,9 +729,18 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 					available = function(): boolean
 						return bankCard() ~= nil
 					end,
+					ready = streakBankable,
 					open = function()
 						closeMenu()
 						Loader.get("CashOutController").open()
+					end,
+				}
+				else nil,
+			seen = if isHubServer()
+				then {
+					unseen = lockerUnseen,
+					mark = function(tab: string)
+						Net.fireServer("LockerSeenIntent", { tab = tab })
 					end,
 				}
 				else nil,
@@ -856,7 +884,9 @@ local function mountLauncher()
 			open("Locker")
 		end)
 		lockerButtonRef = lockerButton
-		-- A pink dot while there's a streak to bank (the Record tab).
+		-- A pink dot while any Locker tab has one: something new to look
+		-- at, or a streak that can be banked (not just a bank card: the
+		-- Hub always sends one, refusing below the minimum).
 		create("Frame")({
 			Name = "Dot",
 			AnchorPoint = Vector2.new(0.5, 0.5),
@@ -864,9 +894,7 @@ local function mountLauncher()
 			Size = UDim2.fromOffset(Theme.spacing.md + Theme.spacing.xxs, Theme.spacing.md + Theme.spacing.xxs),
 			BackgroundColor3 = Theme.color.brand,
 			ZIndex = 6,
-			Visible = function()
-				return bankCard() ~= nil
-			end,
+			Visible = lockerHasNew,
 			Base.corner(Theme.radius.pill),
 			create("UIStroke")({ Color = Theme.color.outline, Thickness = 2 }),
 			Parent = lockerButton,

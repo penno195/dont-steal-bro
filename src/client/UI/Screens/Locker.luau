@@ -33,6 +33,7 @@ local StoreScreenLogic = require(script.Parent.Parent.StoreScreenLogic)
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
 local Icons = require(script.Parent.Parent.Components.Icons)
+local TabBar = require(script.Parent.Parent.Components.TabBar)
 local MenuShell = require(script.Parent.MenuShell)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -92,11 +93,20 @@ export type Locker = {
 	-- The Record tab (Hub menu pass, 2026-10-18): your shares, steals and
 	-- times robbed as body text, nil until StoreState brings them. `bank`
 	-- is the Hub's "Bank streak" button, shown while there's a streak to
-	-- bank; nil off the Hub.
+	-- bank; nil off the Hub. `ready` is whether it can be banked right
+	-- now (long enough to), which puts a dot on the Record tab.
 	record: () -> string?,
 	bank: {
 		available: () -> boolean,
+		ready: () -> boolean,
 		open: () -> (),
+	}?,
+	-- The Power, Style and Titles dots (schema v23): `unseen` is whether
+	-- the tab (by label) holds something not yet looked at, and `mark`
+	-- tells the server it's been shown. nil off the Hub.
+	seen: {
+		unseen: (tab: string) -> boolean,
+		mark: (tab: string) -> (),
 	}?,
 	initialTab: number?, -- 1-based into TABS; default Power
 
@@ -111,7 +121,7 @@ export type Locker = {
 	}?,
 }
 
-local TABS: { { label: string, icon: string? } } = {
+local TABS: { TabBar.Tab } = {
 	{ label = "Power", icon = "tab-power" },
 	{ label = "Style", icon = "tab-style" },
 	{ label = "Titles", icon = "tab-titles" },
@@ -669,6 +679,35 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 	local pane = layout.pane
 	local cardW = (pane - Theme.spacing.sm) / 2
 	local tabIndex = source(locker.initialTab or 1)
+	-- The tabs carry the launcher's dot: Power, Style and Titles while
+	-- they hold something new, Record while a streak can be banked.
+	local tabs = table.clone(TABS)
+	local seen = locker.seen
+	if seen then
+		for i = 1, RECORD_TAB - 1 do
+			local label = TABS[i].label
+			tabs[i] = {
+				label = label,
+				icon = TABS[i].icon,
+				dot = function()
+					return seen.unseen(label)
+				end,
+			}
+		end
+		-- Showing a tab marks what's in it seen, so its dot clears.
+		effect(function()
+			local label = TABS[tabIndex()].label
+			if tabIndex() < RECORD_TAB and seen.unseen(label) then
+				untrack(function()
+					seen.mark(label)
+				end)
+			end
+		end)
+	end
+	if locker.bank then
+		local record = TABS[RECORD_TAB]
+		tabs[RECORD_TAB] = { label = record.label, icon = record.icon, dot = locker.bank.ready }
+	end
 	local loaded = derive(function()
 		return locker.state() ~= nil
 	end)
@@ -891,7 +930,7 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 
 	return {
 		C.TabBar({
-			tabs = TABS,
+			tabs = tabs,
 			selected = tabIndex,
 			onSelect = tabIndex,
 			width = pane,

@@ -346,6 +346,9 @@ local function pushState(player: Player)
 		-- Payoff-loop step 9: the lifetime ladders' counts (the Locker's
 		-- Titles tab). Targeted and Hub only, like `record`.
 		lifetimeCounts = lifetimeCounts(player, DataService),
+		-- The Locker's "new" dots, per tab. Hub only like `record`: a
+		-- title turning up new mid-Studio would give a result away.
+		lockerUnseen = if isHub and DataService.isLoaded(player) then DataService.getLockerUnseen(player) else nil,
 		loadoutSlots = GameConfig.store.loadoutSlots,
 		season = seasonState(player, DataService),
 		-- The Hub's level badge (payoff-loop step 1c). Worked out here
@@ -1508,6 +1511,14 @@ function StoreService:init()
 			return
 		end
 		handleLoadoutIntent(player, payload.slotIndex, payload.powerUpId)
+	end)
+
+	NetGuard.on("LockerSeenIntent", function(player: Player, payload: any)
+		if not isHub or not DataService.isLoaded(player) then
+			return
+		end
+		DataService.markLockerSeen(player, payload.tab)
+		pushState(player)
 	end)
 
 	NetGuard.on("StoreLoadoutRepeatIntent", function(player: Player)

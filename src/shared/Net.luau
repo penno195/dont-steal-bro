@@ -1367,6 +1367,20 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server, Hub only: the Locker's `tab` was opened, so
+	-- everything in it stops counting as new (LockerSeenLogic). Names a
+	-- tab, never ids: the server works out what's in it. StoreState
+	-- follows with the dots cleared.
+	LockerSeenIntent = {
+		name = "LockerSeenIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			tab = Net.stringEnum({ "Power", "Style", "Titles" }),
+		}),
+		rateLimit = { capacity = 4, refillPerSecond = 1 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: equip a cosmetic into a slot, or unequip with a
 	-- nil itemId. Validated against the player's own owned list
 	-- server-side - a client naming a cosmetic it never bought is

@@ -84,6 +84,8 @@ export type StoreState = {
 	-- The Hub's "Your record" panel (payoff-loop step 7):
 	-- RecordViewLogic.Record's shape, loose likewise. nil off the Hub.
 	record: { [string]: any }?,
+	-- The Locker's "new" dots, tab label -> boolean. nil off the Hub.
+	lockerUnseen: { [string]: boolean }?,
 }
 
 export type Category = "Season" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"

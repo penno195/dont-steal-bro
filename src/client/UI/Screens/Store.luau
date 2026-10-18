@@ -31,6 +31,7 @@ local SeasonTrackLogic = require(script.Parent.Parent.SeasonTrackLogic)
 local AvatarPreview = require(script.Parent.Parent.AvatarPreview)
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
+local TabBar = require(script.Parent.Parent.Components.TabBar)
 local MenuShell = require(script.Parent.MenuShell)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -89,7 +90,7 @@ export type Store = {
 	close: () -> (),
 }
 
-local CATEGORY_TAB: { [string]: { label: string, icon: string } } = {
+local CATEGORY_TAB: { [string]: TabBar.Tab } = {
 	Season = { label = "Season", icon = "tab-season" },
 	Bundles = { label = "Bundles", icon = "tab-bundles" },
 	PowerUps = { label = "Power", icon = "tab-power" },
@@ -1370,7 +1371,7 @@ local function body(store: Store, height: () -> number, layout: MenuShell.BodyLa
 		return store.state() ~= nil
 	end)
 
-	local tabs = {}
+	local tabs: { TabBar.Tab } = {}
 	for _, id in StoreScreenLogic.CATEGORIES do
 		table.insert(tabs, CATEGORY_TAB[id])
 	end

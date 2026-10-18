@@ -4,8 +4,9 @@
 -- UI art pass the indicator is a raised gold key (Base.raised, primary
 -- fill) that slides behind the selected tab on a stage-panel bar. The
 -- selected tab is marked three ways - a filled key vs bare, dark vs
--- muted ink, and the display face's outline dropped - so it doesn't
--- rest on colour.
+-- white ink, and the display face's outline dropped - so it doesn't
+-- rest on colour. (The bare tabs were muted lilac until the Hub menu
+-- pass playtest found them hard to read.)
 --
 -- Controller: tabs are ordinary selectable buttons (left/right moves
 -- focus, A picks), and L1/R1 step the selection from anywhere, the
@@ -27,7 +28,9 @@ local cleanup = vide.cleanup
 local create = vide.create
 local effect = vide.effect
 
-export type Tab = { label: string, icon: string? }
+-- `dot`: a pink "something here" dot in the tab's top-right corner while
+-- it returns true, like the Hub launcher's Locker dot.
+export type Tab = { label: string, icon: string?, dot: (() -> boolean)? }
 
 export type Props = {
 	tabs: { Tab },
@@ -56,7 +59,10 @@ local KEY_RADIUS = UDim.new(0, Theme.radius.lg.Offset - INSET)
 -- 20: the tabs' icons are full-colour art since the Hub menu pass, which
 -- needs a little more room than a silhouette to read.
 local ICON = Theme.spacing.lg + Theme.spacing.xs
-local LABEL_H = Theme.spacing.lg + Theme.spacing.xxs -- 18
+-- 22, the most the key's face has left under the icon (45 - 20 - 2 gap
+-- - 1 spare). At 18 the labels read small and thin on a phone
+-- (playtest, 2026-10-18); width, not height, now caps the long words.
+local LABEL_H = Theme.spacing.lg + Theme.spacing.xs + Theme.spacing.xxs
 
 -- A tab's icon. Full-colour art (the Hub menu pass) sits on a dark puck
 -- on the gold key, or the gold ones (season star, coins, bolt) vanish
@@ -90,17 +96,23 @@ end
 local function labelFor(tab: Tab, ink: () -> Color3, isSelected: () -> boolean): TextLabel
 	local label = Base.text("button", {
 		LayoutOrder = 2,
-		Size = if tab.icon then UDim2.new(1, -Theme.spacing.sm, 0, LABEL_H) else UDim2.new(1, -Theme.spacing.sm, 1, 0),
+		-- 1 px either side, not 4: five Store tabs leave 62 px, and
+		-- "Bundles" needs 59 at the 14 floor below.
+		Size = if tab.icon
+			then UDim2.new(1, -Theme.spacing.xxs, 0, LABEL_H)
+			else UDim2.new(1, -Theme.spacing.xxs, 1, 0),
 		Text = tab.label,
 		TextColor3 = ink,
 		-- Shrink to one line, never wrap (Base.text fits it).
 		TextWrapped = false,
 	})
-	-- A long word on a narrow bar may drop to the caption floor rather
-	-- than clip at the button style's 14.
+	-- A long word on a narrow bar may drop to 12 rather than clip at the
+	-- button style's 14: "Bundles" on five Store tabs when a narrow
+	-- landscape phone squeezes the pane under 312. Not to the caption's
+	-- 10, which read as thin (playtest, 2026-10-18).
 	local fit = label:FindFirstChildOfClass("UITextSizeConstraint")
 	if fit then
-		fit.MinTextSize = Theme.type.caption.min
+		fit.MinTextSize = Theme.type.caption.size
 	end
 	local outline = label:FindFirstChild("Outline") :: UIStroke?
 	if outline then
@@ -182,7 +194,7 @@ local function TabBar(props: Props): Frame
 			return props.selected() == i
 		end
 		local ink = function(): Color3
-			return if isSelected() then Theme.fill.primary.ink else Theme.color.inkMuted
+			return if isSelected() then Theme.fill.primary.ink else Theme.color.ink
 		end
 		local button = Base.interactive({
 			name = "Tab" .. i,
@@ -230,6 +242,22 @@ local function TabBar(props: Props): Frame
 				}
 			end,
 		})
+		local dot = tab.dot
+		if dot then
+			local edge = Theme.spacing.md
+			create("Frame")({
+				Name = "Dot",
+				AnchorPoint = Vector2.new(1, 0),
+				Position = UDim2.new(1, -INSET, 0, INSET),
+				Size = UDim2.fromOffset(edge, edge),
+				BackgroundColor3 = Theme.color.brand,
+				ZIndex = 6,
+				Visible = dot,
+				Base.corner(Theme.radius.pill),
+				create("UIStroke")({ Color = Theme.color.outline, Thickness = 2 }),
+				Parent = button,
+			})
+		end
 		button.Parent = tabsFrame
 	end
 	return bar
