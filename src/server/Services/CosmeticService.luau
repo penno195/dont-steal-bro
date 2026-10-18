@@ -1,8 +1,7 @@
 --!strict
 -- Cosmetics (P4-6): applying what the store already tracks ownership and
 -- equip state for (P4-5) onto real characters - skins, trails, and the
--- Decision Studio podium flourish, hats and back items - plus the victory
--- emote playback hook.
+-- Decision Studio podium flourish, hats and back items.
 -- The registry is config (src/shared/Config/Cosmetics/), the
 -- slot/category rules are pure (src/shared/CosmeticLogic.luau, tested
 -- headlessly in tests/CosmeticLogic.spec.luau), and this file is what
@@ -25,11 +24,9 @@
 -- ===== WHY "Emote" HAS NOTHING TO APPLY ON SPAWN =========================
 --
 -- Every other category is worn continuously; an emote is a one-shot
--- animation triggered at a moment (a win, a podium reveal) that lives in
--- a later, UI-facing task. `playEquippedEmote` is the hook that moment
--- calls into - loading and playing the equipped emote's Animation - and
--- deliberately nothing calls it yet. That's not a gap: there's nothing
--- to keep "applied" for an emote between one victory and the next.
+-- animation, played by the owner's own client (EmoteController: on a key
+-- or button, and on the podium when they win), which Roblox replicates
+-- to everyone else. There's nothing to keep "applied" between plays.
 --
 -- ===== INSTANCE-COUNT COST (docs/perf-budget.md) ========================
 --
@@ -439,45 +436,6 @@ local function equippedIdFor(player: Player?, category: string): string?
 	return if def ~= nil then def.id else nil
 end
 
--- ===== the victory emote hook ==============================================
-
--- Plays this player's equipped Emote once, if they have one enabled.
--- Never called from this file - it's the seam a later results/podium
--- task triggers at the moment a win actually happens. Returns whether
--- anything played, so that caller can decide what to do if not.
-local function playEquippedEmote(player: Player): boolean
-	local DataService = Loader.get("DataService") :: any
-	local equipped = DataService.getEquipped(player) :: { [string]: string }
-	local itemId = equipped[CosmeticLogic.slotFor("Emote") :: string]
-	local def = CosmeticLogic.findById(catalogue, itemId)
-	if def == nil or def.category ~= "Emote" or not def.enabled then
-		return false
-	end
-
-	local character = player.Character
-	if character == nil then
-		return false
-	end
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	if humanoid == nil then
-		return false
-	end
-	local existingAnimator = humanoid:FindFirstChildOfClass("Animator")
-	local animator: Animator
-	if existingAnimator == nil then
-		animator = Instance.new("Animator")
-		animator.Parent = humanoid
-	else
-		animator = existingAnimator
-	end
-
-	local animation = Instance.new("Animation")
-	animation.AnimationId = string.format("rbxassetid://%d", def.animationAssetId :: number)
-	local track = animator:LoadAnimation(animation)
-	track:Play()
-	return true
-end
-
 -- ===== Decision Studio podium, keyed to the live finale roster =============
 --
 -- Only humans get one: NPCs have no profile for DataService.getEquipped
@@ -522,7 +480,6 @@ local CosmeticService: Loader.Service = {
 
 	canEquip = canEquip,
 	refreshFor = refreshFor,
-	playEquippedEmote = playEquippedEmote,
 	equippedIdFor = equippedIdFor,
 }
 

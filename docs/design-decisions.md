@@ -1162,6 +1162,22 @@ From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
     be the lone sharer who walks out, and a guess on them pays a shield
     like any other correct guess.
 
+### Applied case: emotes (2026-10-18, user decision)
+
+- **On demand, everywhere:** hub, practice, the live race and the
+  Decision Studio. G on a keyboard, D-pad up on a gamepad, a button
+  beside jump on touch. It stops as soon as the player moves or jumps.
+  An emote says what someone owns, not their streak, so condition 1
+  isn't touched.
+- **One slot, one key.** It plays whatever is in the Locker's Emote
+  slot. There's no in-game picker while there's only one emote; a
+  wheel on the same button is the upgrade if the catalogue reaches
+  four or so. No emote equipped means no key action and no button.
+- **On the podium:** a finalist who wins plays it automatically when
+  the outcome lands on screen (the last card's turn + `outcomeAfter`),
+  never earlier, since a flex before then would give the result away.
+  Losers don't.
+
 ## 8. Are starting power-ups sold for Robux?
 
 **Decision:** Power-ups may be purchased with Robux, provided **every**
