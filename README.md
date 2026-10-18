@@ -10,7 +10,7 @@ Your win streak is the whole metagame. It only goes up. One loss takes it all.
 ## Status
 
 **All 57 tracker tasks are done (Phases 00–09), and the game is in
-Studio playtesting.** `lune run tests/run` passes 1,206 cases across 46
+Studio playtesting.** `lune run tests/run` passes 2,011 cases across 80
 spec files. What's still open is listed under [What's left](#whats-left)
 below; the phase-by-phase history follows.
 
@@ -262,32 +262,63 @@ Playtesting has driven the work since the tracker finished:
   server only**, because design-decisions.md Q7 allows streaks there and
   nowhere a rival you're about to race can read them (see that file's
   applied cases).
+- **Store and season pass:** a two-row season pass screen with claim
+  buttons and a claim pop-up. Season 1 is live (five wearable hats and
+  back items, running to 2026-12-01) on a monthly developer product.
+  Sale windows and limited editions show on spinning Hub plinths. Items
+  can be tried on your own avatar before buying. Also: a Streak Save
+  product, a daily hidden pickup in the Hub, and a free backpack for
+  joining the community group.
+- **Staff tools:** staff can grant items and gifts to players (shown as
+  a pop-up in the lobby) and run themed Hub events.
+- **Tutorial:** a spotlighted Hub walkthrough (practice area, Locker,
+  loadout), then a guided practice round on Factory with easy bots and
+  paused explainers. Finishing pays once per account: the Rookie Cap,
+  100 coins, a Freeze, and exactly enough XP to level up. All of it is
+  revealed back in the Hub with a prize spin, then a level-up pop-up
+  whose XP bar fills to show how levels work.
+- **A payoff for every round** (`docs/payoff-loop-roadmap.md`): XP and
+  account levels with level cosmetics at 5, 10 and 25. Also a finale
+  guess that earns streak shields, quick-chat lines in the Studio,
+  banking a streak for coins in the Hub, and a season pass earned by
+  playtime. Plus a one-off 30-minute starter pack, a "Robbed by" record,
+  daily challenges, and lifetime title ladders.
+- **Rounds:** at most 12 field power-ups per round with a rarity ring
+  on each, a finale card showing what each prize is worth, a compass
+  and NAV route on the HUD, and bots that spread out.
+- **UI:** a three-button Hub menu with a level drop-down, "new" dots in
+  the Locker, and click and close sounds. Reward pop-ups queue, so each
+  waits for the last to be closed instead of replacing it.
+- **Analytics:** quits, the tutorial funnel and script errors.
 
 ### What's left
 
+- **Studio playtesting of recent work.** Much of the work since
+  2026-10-15 has only been checked headlessly. Unseen in Studio so far:
+  - most of the payoff-loop features;
+  - the later tutorial steps (Locker, the round's Freeze step, the step
+    pictures);
+  - the real Match → Hub path for the tutorial reward;
+  - the analytics;
+  - the starter pack.
+  A party needs a multi-client playtest, staff tools need a live
+  two-Hub test, and recent UI needs checking on a phone.
 - **Maps.** All 11 map definitions exist. The four wave-1 maps (School,
-  Factory, Museum, Laboratory) are built in the Match place's
-  `ServerStorage.Maps` and enabled, with primitive-part dressing that
-  still needs a real-asset art pass. The other seven stay
-  `enabled = false` until their geometry is built.
-- **Store products and places.** The four Robux developer products are
-  live, and the Hub and Match places are published with their place ids
-  set, so matchmaking and teleporting run live. The monthly Season Pass
-  is a developer product still to be created in Creator Hub
-  (`Store/SeasonPass.luau`, `assetId = 0`); the old Season 1 game pass
-  is retired.
-- **Monthly season pass** (design-decisions.md, 2026-10-09). The rules
-  are built: calendar-month seasons, both tracks counting every season
-  win, and one reusable pass product. Still to do, one per session: the
-  two-row tier screen, a wearable (hat/back) cosmetic type, and the
-  items and their pass images. See `docs/next-stages.md` step 1a.
+  Factory, Museum, Laboratory) are built and art-passed in the Match
+  place's `ServerStorage.Maps` and enabled. The Match place must be
+  republished for the art pass to go live. The other seven stay
+  `enabled = false`, and no more maps get built before launch.
+- **Store products and places.** The Robux developer products, including
+  the monthly Season Pass (`Store/SeasonPass.luau`) and Streak Save, are
+  live. The Hub and Match places are published with their place ids set,
+  so matchmaking and teleporting run live.
 - **Win rewards: price tuning only.** Q1's 2026-09-30 revision is built
   (`docs/rewards-roadmap.md` steps 1–7a): a win pays coins plus a chance
   at a drop, shown in the Decision Studio and Results; daily and weekly
   board winners are paid through ProfileStore messages; seasons have
   free and premium tracks on the store's Season tab; and coins buy
-  power-ups. Season 1 and the drop cosmetics stay disabled until their
-  assets exist. Offline delivery of board payouts needs a published
+  power-ups. Season 1 is enabled; drop cosmetics stay disabled until
+  their assets exist. Offline delivery of board payouts needs a published
   place to test.
 - **Economy numbers.** Step 7a priced everything on paper (25 coins = 1
   power-up, about 29 Robux), but the amounts, drop odds and per-rung
@@ -329,6 +360,7 @@ Playtesting has driven the work since the tracker finished:
 | [`docs/security-audit.md`](docs/security-audit.md), [`docs/perf-report.md`](docs/perf-report.md), [`docs/audio-and-feel.md`](docs/audio-and-feel.md) | The remote-surface audit, the performance pass, and audio and game feel. |
 | [`docs/playtest-protocol.md`](docs/playtest-protocol.md), [`docs/live-ops.md`](docs/live-ops.md) | How to run and triage a playtest, and the live-ops feature flags. |
 | [`docs/telemetry-schema.md`](docs/telemetry-schema.md), [`docs/launch-review.md`](docs/launch-review.md), [`docs/store-page.md`](docs/store-page.md), [`docs/liveops-roadmap.md`](docs/liveops-roadmap.md) | Launch: telemetry events, the soft-launch review loop, the store page brief, and the season plan. |
+| [`docs/next-stages.md`](docs/next-stages.md), [`docs/rewards-roadmap.md`](docs/rewards-roadmap.md), [`docs/payoff-loop-roadmap.md`](docs/payoff-loop-roadmap.md), [`docs/staff-tools.md`](docs/staff-tools.md) | Work since the tracker: the launch plan, win rewards, the per-round payoff loop, and staff tools. |
 | [`docs/build-plan.html`](docs/build-plan.html) | The production tracker: 57 tasks in 10 phases, each with a paste-ready prompt and a model recommendation. Open it in a browser. |
 
 Attach the first two to any AI session working on this project. The architecture
