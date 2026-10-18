@@ -899,11 +899,12 @@ Net.Remotes = {
 	} :: RemoteDef,
 
 	-- Server -> one finalist: their own stakes for the stakes panel -
-	-- {soleStealer, loneSharer, allShare, stealDropChance, shareDropChance}
-	-- at the rung a win
-	-- would put them on (design-decisions.md Q1's 2026-10-08 case).
-	-- Fired once, with DecisionParticipants. Targeted (fireClient), never
-	-- broadcast: the amounts scale with the streak (Q7 condition 1).
+	-- {soleStealer, loneSharer, allShare, stealDropChance, shareDropChance,
+	-- streak} at the rung a win would put them on (design-decisions.md
+	-- Q1's 2026-10-08 case), plus their own streak for the Studio's
+	-- "at stake" line (payoff-loop step 6). Fired once, with
+	-- DecisionParticipants. Targeted (fireClient), never broadcast: it
+	-- carries a streak (Q7 condition 1).
 	DecisionStakes = {
 		name = "DecisionStakes",
 		direction = "ServerBroadcast",

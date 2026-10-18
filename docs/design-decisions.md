@@ -1004,7 +1004,15 @@ From the 2026-10-17 game review (`docs/payoff-loop-roadmap.md`).
 - **Own-streak indicator.** In the Decision Studio a finalist sees
   **their own** streak at stake. Condition 1 is about other players
   seeing it, so it's sent only to that finalist (targeted), the same way
-  `DecisionPersonalResult` already is.
+  `DecisionPersonalResult` already is. **Owner's answers (2026-10-18,
+  step 6):**
+  - It reads **"Your streak: 6, at stake" even when they hold a streak
+    shield**, though a loss there spends a shield instead.
+  - At **streak 0** it reads **"No streak yet: win to start one"**.
+  - Claude's calls: it rides on the targeted `DecisionStakes`, so a
+    practice match (no stakes, nothing at stake) shows no line; it shows
+    from the intro until the reveal, where the result panel names the
+    streak.
 - **Finale guesses.** Every player knocked out of the race gets a
   **Guess Token** and picks the finalist who walks out. A correct guess
   earns a **streak credit**, but only when the result is **a single

@@ -156,9 +156,14 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     (`earnedByPlaytime`; never on a join), held until no round, Studio
     or loading screen is up. The Studio preview's two pass-less scenes
     show the bar at 2.5 / 6.
-- [ ] **6. Own-streak indicator in the Studio.** A finalist sees only
+- [x] **6. Own-streak indicator in the Studio.** A finalist sees only
   their own streak ("Your streak: 6, at stake"), sent targeted, never
-  replicated to others.
+  replicated to others. Built as a `streak` field on the targeted
+  `DecisionStakes` (so practice, which sends no stakes, shows none) and
+  a flame pill under the Studio header from the intro until the reveal
+  (`PayoutLogic.ownStreakLine`). Owner's answers (Q7's applied case):
+  "at stake" even with a shield held; at 0 it reads "No streak yet: win
+  to start one". Unseen in Studio when built.
 - [ ] **7. Betrayal card + trust stat.** After a reveal, a betrayed
   sharer gets a "Robbed by X" card. Lifetime "times betrayed" and a
   share/steal trust record, built on the existing Studio history (Q5).

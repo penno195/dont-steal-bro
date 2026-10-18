@@ -124,6 +124,7 @@ export type Stakes = {
 	allShare: number,
 	stealDropChance: number, -- 0..1, a sole stealer's win
 	shareDropChance: number, -- 0..1, a sharer's win
+	streak: number?, -- your own streak (payoff-loop step 6); nil hides its line only
 }
 
 export type StakesCopy = {
@@ -148,7 +149,19 @@ function PayoutLogic.parseStakes(raw: any): Stakes?
 		allShare = raw.allShare,
 		stealDropChance = math.clamp(raw.stealDropChance, 0, 1),
 		shareDropChance = math.clamp(raw.shareDropChance, 0, 1),
+		-- Optional: a bad streak drops its line, not the whole panel.
+		streak = if type(raw.streak) == "number" and raw.streak >= 0 then math.floor(raw.streak) else nil,
 	})
+end
+
+-- The Studio's own-streak line (payoff-loop step 6; design-decisions.md
+-- Q7). "At stake" even with a shield held (owner, 2026-10-18), and at 0
+-- there's nothing to lose, so it points at the win instead.
+function PayoutLogic.ownStreakLine(streak: number): string
+	if streak <= 0 then
+		return "No streak yet: win to start one"
+	end
+	return string.format("Your streak: %d, at stake", streak)
 end
 
 -- A button's own stakes. Share's large number is the all-share amount,

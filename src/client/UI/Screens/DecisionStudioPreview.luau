@@ -30,6 +30,7 @@ local PREVIEW_STAKES = PayoutLogic.parseStakes({
 	allShare = 30,
 	stealDropChance = 0.28,
 	shareDropChance = 0.14,
+	streak = 6,
 })
 
 local source = vide.source

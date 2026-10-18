@@ -699,11 +699,15 @@ end
 -- finale card's prize boxes (design-decisions.md Q1, "a much bigger
 -- reason to steal"). The same RewardLogic calls rollReward makes, so
 -- neither can promise a different number from the one a win pays.
+-- `streak` is their own current streak, for the Studio's "Your streak:
+-- 6, at stake" line (payoff-loop step 6): it reaches only them.
 local function stakesFor(player: Player): { [string]: number }
 	local DataService = Loader.get("DataService") :: any
-	local rung = RewardLogic.rungFor(rungThresholds, (DataService.getStreak(player) :: number) + 1)
+	local streak = DataService.getStreak(player) :: number
+	local rung = RewardLogic.rungFor(rungThresholds, streak + 1)
 	local config = GameConfig.winRewards
 	return {
+		streak = streak,
 		soleStealer = RewardLogic.currencyFor(config, "SoleStealer", rung),
 		loneSharer = RewardLogic.currencyFor(config, "LoneSharer", rung),
 		allShare = RewardLogic.currencyFor(config, "AllShare", rung),

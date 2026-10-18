@@ -143,4 +143,23 @@ describe("PayoutLogic stakes", function()
 		expect(PayoutLogic.tileLine(s, "Small")):toBe("27 coins · 30% drop")
 		expect(PayoutLogic.tileLine(s, "Nothing")):toBe(nil)
 	end)
+
+	it("carries your own streak, and drops only that line when it's bad", function()
+		expect((PayoutLogic.parseStakes(raw) :: PayoutLogic.Stakes).streak):toBe(nil)
+		local withStreak = table.clone(raw) :: any
+		withStreak.streak = 6
+		expect((PayoutLogic.parseStakes(withStreak) :: PayoutLogic.Stakes).streak):toBe(6)
+		withStreak.streak = -1
+		local bad = PayoutLogic.parseStakes(withStreak) :: PayoutLogic.Stakes
+		expect(bad.streak):toBe(nil)
+		expect(bad.soleStealer):toBe(275)
+		withStreak.streak = "6"
+		expect((PayoutLogic.parseStakes(withStreak) :: PayoutLogic.Stakes).streak):toBe(nil)
+	end)
+
+	it("words the own-streak line", function()
+		expect(PayoutLogic.ownStreakLine(6)):toBe("Your streak: 6, at stake")
+		expect(PayoutLogic.ownStreakLine(1)):toBe("Your streak: 1, at stake")
+		expect(PayoutLogic.ownStreakLine(0)):toBe("No streak yet: win to start one")
+	end)
 end)

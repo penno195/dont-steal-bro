@@ -1531,7 +1531,47 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 			}),
 		})
 
-		local info = stack("Info", COLUMN, GAP, { header, seatsRow, notice })
+		-- Your own streak, at stake (payoff-loop step 6). It rides on
+		-- your targeted stakes, so only you ever see it (Q7 condition 1),
+		-- and a practice match sends none. Gone at the reveal, where the
+		-- result panel names the streak instead.
+		local ownStreak = derive(function(): number?
+			local s = if store.stakes then store.stakes() else nil
+			return if s then s.streak else nil
+		end)
+		local streakIcon = Icons.view("flame", NOTICE_SPINNER, Theme.color.ink)
+		streakIcon.LayoutOrder = 1
+		local streakPill = create("Frame")({
+			Name = "OwnStreak",
+			LayoutOrder = 4,
+			Size = UDim2.fromOffset(COLUMN, NOTICE_H),
+			BackgroundColor3 = Base.STAGE_BACKGROUND,
+			Visible = function()
+				return store.isFinalist() and ownStreak() ~= nil and stage() ~= "Reveal"
+			end,
+			Base.corner(Theme.radius.pill),
+			Base.stage(),
+			Base.padding(Theme.spacing.sm),
+			create("UIListLayout")({
+				FillDirection = Enum.FillDirection.Horizontal,
+				Padding = UDim.new(0, Theme.spacing.sm),
+				SortOrder = Enum.SortOrder.LayoutOrder,
+				HorizontalAlignment = Enum.HorizontalAlignment.Center,
+				VerticalAlignment = Enum.VerticalAlignment.Center,
+			}),
+			streakIcon :: any,
+			Base.text("label", {
+				Name = "Text",
+				LayoutOrder = 2,
+				Size = UDim2.fromOffset(0, NOTICE_SPINNER),
+				AutomaticSize = Enum.AutomaticSize.X,
+				Text = function()
+					local streak = ownStreak()
+					return if streak then PayoutLogic.ownStreakLine(streak) else ""
+				end,
+			}),
+		})
+		local info = stack("Info", COLUMN, GAP, { header, seatsRow, notice, streakPill })
 		info.Parent = gui
 		cleanup(controller.attachScale(info))
 
