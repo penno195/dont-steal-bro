@@ -58,6 +58,10 @@ describe("DailyChallengeViewLogic wording", function()
 		expect(DailyChallengeViewLogic.progressText(s.slots[2])):toBe("Done")
 		expect(DailyChallengeViewLogic.levelCaption(s)):toBe("LEVEL · 1/2 TODAY")
 		expect(DailyChallengeViewLogic.levelCaption(nil)):toBe("LEVEL")
+		expect(DailyChallengeViewLogic.explainer(s.slots[1], "Finish %d tasks today.")):toBe(
+			"Finish 5 tasks today.\n\nProgress: 2/5   Reward: +50 coins  +40 XP"
+		)
+		expect(DailyChallengeViewLogic.explainer(s.slots[2], nil)):toBe("Done! You got +50 coins  +40 XP.")
 	end)
 
 	it("only lets an unfinished slot be swapped while swaps are left", function()

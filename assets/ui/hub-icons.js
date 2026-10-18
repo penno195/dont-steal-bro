@@ -157,6 +157,74 @@
     ],
   };
 
+  // ---- Menu tabs (TabBar), same style, drawn bold for their small size ----
+  const calendar = (id, label, top) => [
+    grad(id, '#FFFFFF', '#E4DCFF') + grad(id + '-top', top[0], top[1]),
+    `<rect x="16" y="22" width="96" height="92" rx="16" fill="url(#${id})" ${line}/>
+     <path d="M16 54 V38 Q16 22 32 22 H96 Q112 22 112 38 V54Z" fill="url(#${id}-top)" ${line}/>
+     <rect x="36" y="8" width="12" height="26" rx="6" fill="#B9A6FF" ${line}/>
+     <rect x="80" y="8" width="12" height="26" rx="6" fill="#B9A6FF" ${line}/>
+     <text x="64" y="104" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="50" fill="${INK}">${label}</text>`,
+  ];
+  Object.assign(ICONS, {
+    // Power-ups: a yellow lightning bolt.
+    'tab-power': [
+      grad('tp-bolt', '#FFF09A', '#FFB703'),
+      `<path d="M74 8 L26 72 H58 L48 120 L102 50 H70 Z" fill="url(#tp-bolt)" ${line}/>
+       ${gloss(56, 40, 6, 14, 35)}`,
+    ],
+    // Style (cosmetics): a pink tee.
+    'tab-style': [
+      grad('ts-tee', '#FF8CC6', '#E0307E'),
+      `<path d="M44 16 Q64 32 84 16 L118 36 L104 64 L92 58 V116 H36 V58 L24 64 L10 36 Z" fill="url(#ts-tee)" ${line}/>
+       <path d="M48 20 Q64 40 80 20" fill="none" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>
+       <polygon points="${star(64, 80, 14)}" fill="#FFD23F" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>
+       ${gloss(40, 48, 6, 12, 15)}`,
+    ],
+    // Titles: a ribbon banner.
+    'tab-titles': [
+      grad('tt-band', '#8F6BFF', '#4F2BD6') + grad('tt-tail', '#FF8CC6', '#E0307E'),
+      `<path d="M6 54 H30 V96 H6 L18 75Z" fill="url(#tt-tail)" ${line}/>
+       <path d="M122 54 H98 V96 H122 L110 75Z" fill="url(#tt-tail)" ${line}/>
+       <rect x="20" y="38" width="88" height="48" rx="8" fill="url(#tt-band)" ${line}/>
+       <rect x="34" y="56" width="60" height="10" rx="5" fill="#FFD23F"/>
+       ${gloss(44, 47, 16, 4, 0)}`,
+    ],
+    // The season pass: a gold star.
+    'tab-season': [
+      GOLD('tse-gold'),
+      `<polygon points="${star(64, 66, 58, 26)}" fill="url(#tse-gold)" ${line}/>
+       ${gloss(50, 50, 8, 5, -30)}`,
+    ],
+    // Bundles: a blue gem.
+    'tab-bundles': [
+      grad('tb-gem', '#8CE0FF', '#2A6AE0') + grad('tb-top', '#E0F6FF', '#8CC8FF'),
+      `<path d="M30 20 H98 L122 50 L64 118 L6 50 Z" fill="url(#tb-gem)" ${line}/>
+       <path d="M30 20 H98 L122 50 H6 Z" fill="url(#tb-top)" ${line}/>
+       <path d="M44 50 L64 118 L84 50 M44 50 L54 20 M84 50 L74 20" fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round"/>`,
+    ],
+    // Coins: a short stack.
+    'tab-coins': [
+      GOLD('tc-gold'),
+      `${[86, 66].map((y) => `<ellipse cx="64" cy="${y + 10}" rx="46" ry="16" fill="#F5A300" ${line}/><ellipse cx="64" cy="${y}" rx="46" ry="16" fill="url(#tc-gold)" ${line}/>`).join('')}
+       <circle cx="64" cy="40" r="32" fill="url(#tc-gold)" ${line}/>
+       <circle cx="64" cy="40" r="17" fill="none" stroke="#C77700" stroke-width="5"/>
+       ${gloss(50, 26, 9, 4, -30)}`,
+    ],
+    // Leaderboards: today's page, the week's page, and the all-time crown.
+    'tab-daily': calendar('td-cal', '1', ['#FF6B6B', '#F03E3E']),
+    'tab-weekly': calendar('tw-cal', '7', ['#8F6BFF', '#4F2BD6']),
+    'tab-alltime': [
+      GOLD('ta-gold'),
+      `<path d="M14 40 L40 66 L64 22 L88 66 L114 40 L104 104 H24 Z" fill="url(#ta-gold)" ${line}/>
+       <rect x="22" y="98" width="84" height="18" rx="5" fill="#F5A300" ${line}/>
+       <circle cx="64" cy="80" r="9" fill="#FF4FA3" stroke="${INK}" stroke-width="4"/>
+       <circle cx="38" cy="84" r="6" fill="#5AC8FA" stroke="${INK}" stroke-width="3.5"/>
+       <circle cx="90" cy="84" r="6" fill="#5AC8FA" stroke="${INK}" stroke-width="3.5"/>
+       ${gloss(44, 70, 5, 10, 20)}`,
+    ],
+  });
+
   // The whole icon as an SVG string. `shadow` bakes in the drop shadow.
   const svg = (key, size = 128, shadow = true) => {
     const [defs, body] = ICONS[key];

@@ -3426,6 +3426,7 @@ local function validChallenge(id: string, metric: any?): Validate.DailyChallenge
 		id = id,
 		enabled = true,
 		displayName = "Play %d rounds",
+		description = "Play %d ranked rounds to the end.",
 		metric = metric or "RoundsPlayed",
 		target = 3,
 		coins = 25,
@@ -3499,6 +3500,12 @@ TestRunner.describe("Validate - daily challenges (payoff-loop step 8)", function
 			end,
 			function(d)
 				d.displayName = "100% done"
+			end,
+			function(d)
+				d.description = ""
+			end,
+			function(d)
+				d.description = "Be 100% sure"
 			end,
 		}
 		for _, mutate in cases do

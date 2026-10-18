@@ -53,8 +53,37 @@ local KEY_RADIUS = UDim.new(0, Theme.radius.lg.Offset - INSET)
 -- The icon sits ABOVE the label (the mockup's tab), so the label gets the
 -- tab's whole width: beside it, five tabs left "Season" 44 px and it
 -- broke into "SEASO / N" (Store, 2026-10-09).
-local ICON = Theme.spacing.lg
+-- 20: the tabs' icons are full-colour art since the Hub menu pass, which
+-- needs a little more room than a silhouette to read.
+local ICON = Theme.spacing.lg + Theme.spacing.xs
 local LABEL_H = Theme.spacing.lg + Theme.spacing.xxs -- 18
+
+-- A tab's icon. Full-colour art (the Hub menu pass) sits on a dark puck
+-- on the gold key, or the gold ones (season star, coins, bolt) vanish
+-- into it (playtest, 2026-10-18).
+local function iconFor(key: string, ink: () -> Color3, isSelected: () -> boolean): GuiObject
+	local icon = Icons.view(key, ICON, ink)
+	if not Icons.get(key).fullColor then
+		return icon
+	end
+	icon.ZIndex = 2
+	local puck = ICON + Theme.spacing.sm
+	return create("Frame")({
+		Name = "IconHolder",
+		Size = UDim2.fromOffset(ICON, ICON),
+		BackgroundTransparency = 1,
+		create("Frame")({
+			Name = "Puck",
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(puck, puck),
+			BackgroundColor3 = Theme.color.surface,
+			Visible = isSelected,
+			Base.corner(Theme.radius.pill),
+		}),
+		icon,
+	})
+end
 
 -- A tab's label in the display face. Its outline only shows on the bare
 -- (muted) tabs: dark ink on the gold key can't take a dark outline.
@@ -195,7 +224,7 @@ local function TabBar(props: Props): Frame
 							Padding = UDim.new(0, Theme.spacing.xxs),
 							SortOrder = Enum.SortOrder.LayoutOrder,
 						}),
-						(if tab.icon then Icons.view(tab.icon, ICON, ink) else nil) :: any,
+						(if tab.icon then iconFor(tab.icon, ink, isSelected) else nil) :: any,
 						labelFor(tab, ink, isSelected),
 					}),
 				}

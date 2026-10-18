@@ -112,9 +112,9 @@ export type Locker = {
 }
 
 local TABS: { { label: string, icon: string? } } = {
-	{ label = "Power", icon = "bolt" },
-	{ label = "Style", icon = "flame" },
-	{ label = "Titles", icon = "trophy" },
+	{ label = "Power", icon = "tab-power" },
+	{ label = "Style", icon = "tab-style" },
+	{ label = "Titles", icon = "tab-titles" },
 	{ label = "Record", icon = "hub-record" },
 }
 local RECORD_TAB = #TABS

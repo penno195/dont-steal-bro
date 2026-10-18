@@ -306,8 +306,9 @@ local function body(store: Store, height: () -> number): { Instance }
 	end)
 
 	local tabs = {}
+	local TAB_ICONS: { [string]: string } = { Daily = "tab-daily", Weekly = "tab-weekly", AllTime = "tab-alltime" }
 	for _, id in BoardLogic.TABS do
-		table.insert(tabs, { label = TAB_LABELS[id], icon = if id == "AllTime" then "trophy" else "star" })
+		table.insert(tabs, { label = TAB_LABELS[id], icon = TAB_ICONS[id] or "tab-season" })
 	end
 
 	local prizes = derive(function(): BoardLogic.Prizes

@@ -144,6 +144,19 @@ function SeasonTrackLogic.playtimeView(state: SeasonState): PlaytimeView?
 	}
 end
 
+-- The pop-up the Hub's playtime row opens (Hub menu pass): how the free
+-- pass is earned. `hours` is GameConfig.playtimePass.activeHoursPerWeek.
+function SeasonTrackLogic.playtimeExplainer(hours: number, view: PlaytimeView): string
+	return string.format(
+		"Play %s active hours in one week to unlock this season's paid pass for free.\n\n"
+			.. "Ranked rounds always count. Lobby and practice time counts while you're playing, not while you're away.\n\n"
+			.. "This week: %s (%s).",
+		SeasonTrackLogic.hoursText(hours * 3600),
+		view.short,
+		view.resets
+	)
+end
+
 -- Did the pass just arrive by playtime? passSource flipping to
 -- "Playtime" within one season. A first state (a join) never counts, so
 -- the pop-up isn't replayed on every visit.

@@ -8,6 +8,7 @@ local PlayRounds: Validate.DailyChallengeDef = {
 	id = "play-rounds",
 	enabled = true,
 	displayName = "Play %d rounds",
+	description = "Play %d ranked rounds all the way to the end. Practice rounds don't count.",
 	metric = "RoundsPlayed",
 	target = 3,
 	coins = 25,

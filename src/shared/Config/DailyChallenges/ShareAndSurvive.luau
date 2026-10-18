@@ -8,6 +8,7 @@ local ShareAndSurvive: Validate.DailyChallengeDef = {
 	id = "share-and-survive",
 	enabled = true,
 	displayName = "Share and survive",
+	description = "Reach the Decision Studio, pick Share, and still come out a winner.",
 	metric = "SharedAndWon",
 	target = 1,
 	coins = 40,

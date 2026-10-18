@@ -759,6 +759,11 @@ describe("SeasonTrackLogic", function()
 		local bar = view.playtime :: SeasonTrackLogic.PlaytimeView
 		expect(bar.text):toBe("Free pass: 2.5 / 6 active hours this week")
 		expect(bar.short):toBe("2.5 / 6 h")
+		expect(SeasonTrackLogic.playtimeExplainer(6, bar)):toBe(
+			"Play 6 active hours in one week to unlock this season's paid pass for free.\n\n"
+				.. "Ranked rounds always count. Lobby and practice time counts while you're playing, not while you're away.\n\n"
+				.. "This week: 2.5 / 6 h (resets in 3 days)."
+		)
 		expect(bar.resets):toBe("resets in 3 days")
 		expect(bar.fraction):toBeCloseTo(9359 / 21600)
 		expect(SeasonTrackLogic.view(def, state({}), text).playtime):toBe(nil)

@@ -8,6 +8,7 @@ local FreezePlayers: Validate.DailyChallengeDef = {
 	id = "freeze-players",
 	enabled = true,
 	displayName = "Freeze %d players",
+	description = "Hit rivals with the Freeze power-up %d times in ranked rounds. Grab it from a pickup on the map or bring it in your loadout.",
 	metric = "Hits",
 	target = 5,
 	powerUpId = "freeze",

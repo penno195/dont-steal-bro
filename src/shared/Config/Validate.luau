@@ -615,6 +615,9 @@ export type DailyChallengeDef = {
 	id: string,
 	enabled: boolean, -- false = never drawn
 	displayName: string, -- "Freeze %d players": an optional "%d" is filled with `target`
+	-- The pop-up a tapped challenge opens in the Hub: what counts and
+	-- how, in a sentence or two. Same optional "%d" as displayName.
+	description: string,
 	metric: DailyChallengeMetric,
 	target: number,
 	powerUpId: string?, -- Hits only: a registered power-up id
@@ -2429,14 +2432,17 @@ function Validate.checkDailyChallenge(fileName: string, def: DailyChallengeDef, 
 	if type(def.enabled) ~= "boolean" then
 		bad("enabled", "enabled must be a boolean")
 	end
-	if not isNonEmptyString(def.displayName) then
-		bad("displayName", "displayName must be a non-empty string")
-	else
-		-- One "%d" at most, and no other "%" escapes, so label()'s fill
-		-- can never print a stray format code.
-		local stripped, fills = string.gsub(def.displayName, "%%d", "")
-		if fills > 1 or string.find(stripped, "%", 1, true) ~= nil then
-			bad("displayName", 'displayName may hold one "%d" (the target) and no other "%"')
+	-- One "%d" at most, and no other "%" escapes, so the fill can never
+	-- print a stray format code.
+	for _, field in { "displayName", "description" } do
+		local text = (def :: any)[field]
+		if not isNonEmptyString(text) then
+			bad(field, field .. " must be a non-empty string")
+		else
+			local stripped, fills = string.gsub(text, "%%d", "")
+			if fills > 1 or string.find(stripped, "%", 1, true) ~= nil then
+				bad(field, field .. ' may hold one "%d" (the target) and no other "%"')
+			end
 		end
 	end
 	if not table.find(DAILY_CHALLENGE_METRICS, def.metric) then

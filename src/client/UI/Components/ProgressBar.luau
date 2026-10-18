@@ -33,6 +33,7 @@ export type Props = {
 }
 
 local TRACK = Theme.spacing.md -- 12 px tall
+local RIM = 2
 
 local function ProgressBar(props: Props): Frame
 	local value: Base.Source<number> = Base.read(props.value)
@@ -79,17 +80,20 @@ local function ProgressBar(props: Props): Frame
 				TextXAlignment = Enum.TextXAlignment.Right,
 			})
 			else nil) :: any,
+		-- The rim draws outside the track, so the track steps in by its
+		-- width: a full-width bar inside a clipping parent (the store's
+		-- season page) otherwise lost its rounded ends (playtest, 2026-10-18).
 		create("Frame")({
 			Name = "Track",
 			AnchorPoint = Vector2.new(0, 1),
-			Position = UDim2.fromScale(0, 1),
-			Size = UDim2.new(1, 0, 0, TRACK),
+			Position = UDim2.new(0, RIM, 1, -RIM),
+			Size = UDim2.new(1, -2 * RIM, 0, TRACK),
 			BackgroundColor3 = Theme.color.background,
 			Base.corner(Theme.radius.pill),
 			create("UIStroke")({
 				ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 				Color = Theme.color.rim,
-				Thickness = 2,
+				Thickness = RIM,
 			}),
 			create("Frame")({
 				Name = "Fill",

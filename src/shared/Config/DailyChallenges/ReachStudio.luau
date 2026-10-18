@@ -8,6 +8,7 @@ local ReachStudio: Validate.DailyChallengeDef = {
 	id = "reach-studio",
 	enabled = true,
 	displayName = "Reach the Studio %d times",
+	description = "Finish in the top 3 to get a seat in the Decision Studio, %d times today.",
 	metric = "StudioVisits",
 	target = 2,
 	coins = 30,

@@ -8,6 +8,7 @@ local CrossFirst: Validate.DailyChallengeDef = {
 	id = "cross-first",
 	enabled = true,
 	displayName = "Cross the line first",
+	description = "Be the first player to finish all your tasks in a ranked round.",
 	metric = "FirstPlaces",
 	target = 1,
 	coins = 30,

@@ -90,11 +90,11 @@ export type Store = {
 }
 
 local CATEGORY_TAB: { [string]: { label: string, icon: string } } = {
-	Season = { label = "Season", icon = "star" },
-	Bundles = { label = "Bundles", icon = "gem" },
-	PowerUps = { label = "Power", icon = "bolt" },
-	Cosmetics = { label = "Style", icon = "flame" },
-	Currency = { label = "Coins", icon = "coin" },
+	Season = { label = "Season", icon = "tab-season" },
+	Bundles = { label = "Bundles", icon = "tab-bundles" },
+	PowerUps = { label = "Power", icon = "tab-power" },
+	Cosmetics = { label = "Style", icon = "tab-style" },
+	Currency = { label = "Coins", icon = "tab-coins" },
 }
 
 -- Keyed by StoreScreenLogic.Rarity. Brand for Rare so it reads as the

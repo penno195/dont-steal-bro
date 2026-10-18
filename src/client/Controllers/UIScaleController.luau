@@ -205,6 +205,11 @@ export type ScreenOptions = {
 	-- screen edges (under the notch too). Nothing interactive should
 	-- ever be full-bleed: a button there can sit under a camera cutout.
 	fullBleed: boolean?,
+	-- UI that may rise into the top bar's band: ScreenInsets =
+	-- DeviceSafeInsets, still clear of notches. Roblox's own buttons own
+	-- the band's left end (GuiService.TopbarInset is the free part), so
+	-- only right-anchored UI asks for this: the Hub's corner.
+	topbar: boolean?,
 }
 
 -- The one way to create a ScreenGui, so no screen forgets its insets.
@@ -232,6 +237,8 @@ function UIScaleController.createScreen(name: string, options: ScreenOptions): S
 	if options.fullBleed then
 		gui.ScreenInsets = Enum.ScreenInsets.None
 		gui.ClipToDeviceSafeArea = false
+	elseif options.topbar then
+		gui.ScreenInsets = Enum.ScreenInsets.DeviceSafeInsets
 	else
 		gui.ScreenInsets = Enum.ScreenInsets.CoreUISafeInsets
 	end

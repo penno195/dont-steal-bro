@@ -114,6 +114,29 @@ function DailyChallengeViewLogic.progressText(slot: Slot): string
 	return string.format("%d/%d", math.min(slot.progress, slot.target), slot.target)
 end
 
+-- The pop-up a tapped challenge opens (Hub menu pass): the file's
+-- `description` with its "%d" filled, then where it stands and what it
+-- pays. `description` is nil for a challenge this client has no file
+-- for (a newer server), which still gets the progress and reward.
+function DailyChallengeViewLogic.explainer(slot: Slot, description: string?): string
+	local lines = {}
+	if description ~= nil and description ~= "" then
+		local filled = string.gsub(description, "%%d", tostring(slot.target))
+		table.insert(lines, filled)
+	end
+	local reward = DailyChallengeViewLogic.rewardText(slot.coins, slot.xp)
+	if slot.done then
+		table.insert(lines, if reward ~= "" then "Done! You got " .. reward .. "." else "Done!")
+	else
+		table.insert(
+			lines,
+			string.format("Progress: %s", DailyChallengeViewLogic.progressText(slot))
+				.. (if reward ~= "" then "   Reward: " .. reward else "")
+		)
+	end
+	return table.concat(lines, "\n\n")
+end
+
 -- The level pill's caption in the Hub (Hub menu pass): how many of
 -- today's challenges are done, "LEVEL · 1/2 TODAY". Plain "LEVEL"
 -- without a list.

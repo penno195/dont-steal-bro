@@ -115,6 +115,16 @@ local ICONS: { [string]: Icon } = {
 	["hub-playtime"] = { glyph = "⏱", image = "rbxassetid://76059439549426", fullColor = true },
 	["hub-record"] = { glyph = "📊", image = "rbxassetid://102420453967206", fullColor = true },
 	["hub-bank"] = { glyph = "🐷", image = "rbxassetid://137129770273757", fullColor = true },
+	-- The menu tabs (Store, Locker, Leaderboards) in the same style.
+	["tab-power"] = { glyph = "⚡", image = "rbxassetid://115206414493863", fullColor = true },
+	["tab-style"] = { glyph = "👕", image = "rbxassetid://126158275845000", fullColor = true },
+	["tab-titles"] = { glyph = "🎗", image = "rbxassetid://107815448117785", fullColor = true },
+	["tab-season"] = { glyph = "★", image = "rbxassetid://130554425638149", fullColor = true },
+	["tab-bundles"] = { glyph = "◆", image = "rbxassetid://87810046465175", fullColor = true },
+	["tab-coins"] = { glyph = "¢", image = "rbxassetid://107203517845181", fullColor = true },
+	["tab-daily"] = { glyph = "1", image = "rbxassetid://93249581810218", fullColor = true },
+	["tab-weekly"] = { glyph = "7", image = "rbxassetid://103459982221120", fullColor = true },
+	["tab-alltime"] = { glyph = "👑", image = "rbxassetid://86123071780479", fullColor = true },
 	-- Drawn to match the pack's coins by scripts/make-ui-icons.ps1.
 	restart = { glyph = "🔄", image = "rbxassetid://132275802112019", fullColor = true },
 }

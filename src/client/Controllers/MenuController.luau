@@ -49,6 +49,7 @@ local Workspace = game:GetService("Workspace")
 local vide = require(ReplicatedStorage.Packages.Vide)
 
 local Cosmetics = require(ReplicatedStorage.Shared.Config.Cosmetics)
+local DailyChallenges = require(ReplicatedStorage.Shared.Config.DailyChallenges)
 local Events = require(ReplicatedStorage.Shared.Config.Events)
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
@@ -792,11 +793,42 @@ end
 -- buttons moved into the Locker's Record tab, the challenges button into
 -- the drop-down. On a match server it's the gear and the three buttons.
 local BIG = 52 -- the launcher buttons' edge, reference px
+
+-- Daily challenge files by id, for a tapped row's description.
+local challengeDefs: { [string]: any } = {}
+for _, entry in DailyChallenges do
+	challengeDefs[entry.def.id] = entry.def
+end
+
+-- A Hub drop-down row's explainer pop-up.
+local function explainer(title: string, body: string)
+	local close: () -> ()
+	close = C.Modal.open({
+		title = title,
+		body = body,
+		bodyLines = 5,
+		actions = {
+			{
+				label = "Got it",
+				variant = "primary",
+				onActivate = function()
+					close()
+				end,
+			},
+		},
+		dismissible = true,
+		onDismiss = function()
+			close()
+		end,
+	})
+end
 local BIG_ICON = 44
 local COLUMN_W = 3 * BIG + 2 * Theme.spacing.sm
 
 local function mountLauncher()
-	local gui = UIScaleController.createScreen("MenuLauncher", { displayOrder = Theme.displayOrder.hud })
+	-- In the top bar's band (right of Roblox's buttons), so the corner
+	-- doesn't start a whole bar's height down (playtest, 2026-10-18).
+	local gui = UIScaleController.createScreen("MenuLauncher", { displayOrder = Theme.displayOrder.hud, topbar = true })
 	local visible = source(true)
 	local coinsVisible = source(false)
 	local inHub = isHubServer()
@@ -877,6 +909,20 @@ local function mountLauncher()
 				challenges = challengeState,
 				receivedAt = challengeReceivedAt,
 				openChallenges = openChallenges,
+				explain = function(slot: DailyChallengeViewLogic.Slot)
+					local def = challengeDefs[slot.id]
+					explainer(slot.label, DailyChallengeViewLogic.explainer(slot, def and def.description))
+				end,
+				explainPlaytime = function()
+					local s = storeState()
+					local view = if s and s.season then SeasonTrackLogic.playtimeView(s.season :: any) else nil
+					if view then
+						explainer(
+							"Free Season Pass",
+							SeasonTrackLogic.playtimeExplainer(GameConfig.playtimePass.activeHoursPerWeek, view)
+						)
+					end
+				end,
 				buttons = buttons,
 			})
 			else buttons
@@ -935,7 +981,7 @@ local function mountLauncher()
 		local corner = create("Frame")({
 			Name = "Corner",
 			AnchorPoint = Vector2.new(1, 0),
-			Position = UDim2.new(1, -Theme.spacing.md, 0, Theme.spacing.md),
+			Position = UDim2.new(1, -Theme.spacing.md, 0, Theme.spacing.sm),
 			Size = UDim2.fromOffset(0, 0),
 			AutomaticSize = Enum.AutomaticSize.XY,
 			BackgroundTransparency = 1,

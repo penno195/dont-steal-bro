@@ -8,6 +8,7 @@ local WinRound: Validate.DailyChallengeDef = {
 	id = "win-round",
 	enabled = true,
 	displayName = "Win a round",
+	description = "Win a ranked round: reach the Decision Studio and come out a winner, so your streak goes up.",
 	metric = "Wins",
 	target = 1,
 	coins = 40,

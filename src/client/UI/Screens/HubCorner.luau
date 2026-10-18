@@ -38,6 +38,9 @@ export type Props = {
 	challenges: () -> State?,
 	receivedAt: () -> number, -- os.clock() when `challenges` arrived
 	openChallenges: () -> (), -- the full panel, with the swaps
+	-- A tapped row's explainer pop-up (playtest, 2026-10-18).
+	explain: (slot: Slot) -> (),
+	explainPlaytime: () -> (),
 	buttons: Instance, -- the launcher row, shown while the drop-down is shut
 }
 
@@ -93,7 +96,8 @@ local function panel(name: string, order: number, rim: Color3, children: { any }
 	return create("Frame")(props) :: Frame
 end
 
--- Icon on the left, a label over a bar in the middle, a note on the right.
+-- Icon on the left, a label over a bar in the middle, a note on the
+-- right. The whole row is a button for its explainer pop-up.
 local function row(
 	order: number,
 	icon: GuiObject,
@@ -101,7 +105,8 @@ local function row(
 	labelColor: () -> Color3,
 	fraction: () -> number,
 	gradient: ColorSequence,
-	note: () -> string
+	note: () -> string,
+	onActivate: () -> ()
 ): Frame
 	local NOTE_W = 64
 	icon.AnchorPoint = Vector2.new(0, 0.5)
@@ -141,13 +146,21 @@ local function row(
 			TextColor3 = Theme.color.rim,
 			TextXAlignment = Enum.TextXAlignment.Right,
 		}),
+		create("TextButton")({
+			Name = "Hit",
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Text = "",
+			ZIndex = 5,
+			Activated = onActivate,
+		}),
 	}) :: Frame
 end
 
 local GOLD = ColorSequence.new(Theme.fill.primary.top, Theme.fill.primary.bottom)
 local GREEN = ColorSequence.new(Theme.fill.share.top, Theme.color.success)
 
-local function challengeRow(slot: () -> Slot, index: number): Frame
+local function challengeRow(props: Props, slot: () -> Slot, index: number): Frame
 	local icon = create("Frame")({
 		Name = "Icon",
 		Size = UDim2.fromOffset(ICON, ICON),
@@ -178,6 +191,9 @@ local function challengeRow(slot: () -> Slot, index: number): Frame
 		function()
 			local s = slot()
 			return if s.done then "Done" else DailyChallengeViewLogic.rewardText(s.coins, 0)
+		end,
+		function()
+			props.explain(slot())
 		end
 	)
 end
@@ -236,7 +252,8 @@ function HubCorner.column(props: Props): Frame
 			function()
 				local view = props.playtime()
 				return if view then view.short else ""
-			end
+			end,
+			props.explainPlaytime
 		),
 	})
 	vide.effect(function()
@@ -288,7 +305,9 @@ function HubCorner.column(props: Props): Frame
 			TextColor3 = Theme.color.inkMuted,
 			TextXAlignment = Enum.TextXAlignment.Left,
 		}),
-		indexes(slots, challengeRow) :: any,
+		indexes(slots, function(slot: () -> Slot, index: number)
+			return challengeRow(props, slot, index)
+		end) :: any,
 		create("Frame")({
 			Name = "Foot",
 			LayoutOrder = 100,
