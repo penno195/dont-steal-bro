@@ -288,3 +288,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     the toast waits out Qualified, the Studio and its reveal, since a
     streak rung unlocks at the win write just before the reveal and would
     otherwise tell a finalist they had won. Spec'd. Unseen in Studio.
+    Follow-up: the server now holds streak unlocks too.
+    TitleService.refreshFor does nothing in Qualified/DecisionStudio
+    (`TitleLogic.mayAnnounceUnlock`), and Results' refresh grants the
+    rung, so TitleUnlocked never reaches a client before the reveal.

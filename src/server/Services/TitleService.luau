@@ -370,8 +370,15 @@ local TitleService: Loader.Service = {
 
 	-- Called by ProgressionService after a streak change, so an unlock
 	-- notification lands in the same beat as the win that earned it
-	-- rather than on the next join.
-	refreshFor = refreshPlayer,
+	-- rather than on the next join. Except mid-Studio, where that beat
+	-- is just before the reveal: held there (TitleLogic.mayAnnounceUnlock)
+	-- and granted by Results' refresh below, since the baseline in
+	-- lastKnownBestStreak only moves when a rung is actually granted.
+	refreshFor = function(player: Player)
+		if TitleLogic.mayAnnounceUnlock((Loader.get("RoundService") :: any).getState()) then
+			refreshPlayer(player)
+		end
+	end,
 
 	refreshAll = function()
 		for _, player in Players:GetPlayers() do

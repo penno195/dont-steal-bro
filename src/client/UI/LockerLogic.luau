@@ -429,10 +429,10 @@ function LockerLogic.unlockToast(unlocks: { Unlock }): string?
 	return string.format("New title: %s (%s). Wear it from the Locker.", u.name, earned)
 end
 
--- Whether to hold the toast back. A streak rung unlocks at the win's
--- write, which for a finalist is just before the Studio's reveal, so a
--- toast then would tell them they'd won. Held through Qualified, the
--- Studio and its reveal (which can run on into Results).
+-- Whether to hold the toast back. The server already holds streak
+-- unlocks until Results (TitleLogic.mayAnnounceUnlock), but the Studio's
+-- reveal can still be playing then, and a toast over it would spoil the
+-- outcome. Held through Qualified, the Studio and its reveal.
 local HOLD_STATES: { [string]: boolean } = { Qualified = true, DecisionStudio = true }
 
 function LockerLogic.holdsUnlockToast(roundState: string?, studioActive: boolean): boolean

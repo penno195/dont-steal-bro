@@ -577,6 +577,8 @@ local function applyRoundResult(player: Player, result: RoundResult): Progressio
 	-- threshold, and the unlock should land in the same beat as the win
 	-- that earned it rather than on the player's next join. Only ever
 	-- called AFTER the write, so TitleService reads the new bestStreak.
+	-- Mid-Studio TitleService holds it until Results (before the reveal
+	-- it would be a tell; TitleLogic.mayAnnounceUnlock).
 	if after.bestStreak > before.bestStreak then
 		local ok, titleService = pcall(function()
 			return Loader.get("TitleService")

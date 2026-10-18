@@ -172,6 +172,17 @@ function TitleLogic.isVisibleInState(roundState: string, showDuringRound: boolea
 	return VISIBLE_STATES[roundState] == true
 end
 
+-- Whether a streak rung crossed now may be granted and announced now.
+-- A win is written while the round is still in the Studio, just before
+-- the reveal, so an unlock sent then would tell a finalist they'd won.
+-- Held in those states; Results' refresh grants it (the baseline isn't
+-- moved until then, so nothing is lost).
+local HOLD_UNLOCK_STATES: { [string]: boolean } = { Qualified = true, DecisionStudio = true }
+
+function TitleLogic.mayAnnounceUnlock(roundState: string): boolean
+	return HOLD_UNLOCK_STATES[roundState] ~= true
+end
+
 -- ===== NPC titles ===========================================================
 
 -- P4-2: "titles must appear for NPCs too, drawn from a plausible fake

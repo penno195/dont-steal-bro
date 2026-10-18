@@ -159,6 +159,20 @@ TestRunner.describe("TitleLogic.canEquip", function()
 	end)
 end)
 
+TestRunner.describe("TitleLogic.mayAnnounceUnlock", function()
+	TestRunner.it("holds a streak unlock through Qualified and the Studio", function()
+		-- The win is written before the reveal; an unlock then is a tell.
+		TestRunner.expect(TitleLogic.mayAnnounceUnlock("Qualified")):toBe(false)
+		TestRunner.expect(TitleLogic.mayAnnounceUnlock("DecisionStudio")):toBe(false)
+	end)
+
+	TestRunner.it("announces at Results and anywhere outside the Studio", function()
+		for _, state in { "WaitingForPlayers", "Race", "Results", "Cleanup" } do
+			TestRunner.expect(TitleLogic.mayAnnounceUnlock(state)):toBe(true)
+		end
+	end)
+end)
+
 TestRunner.describe("TitleLogic.isVisibleInState - design-decisions.md Q7", function()
 	TestRunner.it("shows titles in the pre-round lobby and after the result", function()
 		TestRunner.expect(TitleLogic.isVisibleInState("WaitingForPlayers", false)):toBe(true)
