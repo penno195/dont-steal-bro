@@ -17,12 +17,26 @@ in-game UI.
 
 Upload order is the table order: the steal-or-share hero goes first.
 
+**Live since 2026-10-18:** the owner's own art replaced the Studio
+captures at the top of the page.
+
+- **Icon:** `icon-steal-share.jpg` (1024×1024). It's split down a
+  diagonal: a robber with a money bag on red for STEAL, and two noobs
+  passing coins on green for SHARE. It has no text, so it still reads at
+  about 150 px. `icon.png` is retired.
+- **Thumbnail 1:** the owner's bank-robber art ("DON'T STEAL BRO!").
+  It isn't stored in this repo. The `thumb-*` captures above follow it,
+  so the page still shows real gameplay.
+
+The icon and thumbnail 1 are deliberately different images. The one
+piece of busy art was unreadable at icon size.
+
 ## Uploading (owner)
 
 Creator Hub → Creations → *Don't Steal Bro!* → **Configure → Places** →
 the start place (the Hub, 96878739507497, marked with a star):
 
-- **Icon:** set the media type to Image, then Change, then `icon.png`.
+- **Icon:** set the media type to Image, then Change, then `icon-steal-share.jpg`.
 - **Thumbnails:** add the five `thumb-*` files in order. The page holds
   up to 10.
 
