@@ -757,12 +757,12 @@ describe("SeasonTrackLogic", function()
 		local playtime = { activeSeconds = 9000 + 359, targetSeconds = 6 * 3600, weekResetsIn = 3 * 86400 + 5 }
 		local view = SeasonTrackLogic.view(def, state({ playtime = playtime }), text)
 		local bar = view.playtime :: SeasonTrackLogic.PlaytimeView
-		expect(bar.text):toBe("Free pass: 2.5 / 6 active hours this week")
-		expect(bar.short):toBe("2.5 / 6 h")
+		expect(bar.text):toBe("Free pass: 2h 35m / 6h active this week")
+		expect(bar.short):toBe("2h 35m / 6h")
 		expect(SeasonTrackLogic.playtimeExplainer(6, bar)):toBe(
 			"Play 6 active hours in one week to unlock this season's paid pass for free.\n\n"
 				.. "Ranked rounds always count. Lobby and practice time counts while you're playing, not while you're away.\n\n"
-				.. "This week: 2.5 / 6 h (resets in 3 days)."
+				.. "This week: 2h 35m / 6h (resets in 3 days)."
 		)
 		expect(bar.resets):toBe("resets in 3 days")
 		expect(bar.fraction):toBeCloseTo(9359 / 21600)
@@ -773,11 +773,15 @@ describe("SeasonTrackLogic", function()
 	it("never reads the target or past it before the grant", function()
 		expect(SeasonTrackLogic.hoursText(6 * 3600 - 1)):toBe("5.9")
 		expect(SeasonTrackLogic.hoursText(0)):toBe("0")
+		expect(SeasonTrackLogic.durationText(6 * 3600 - 1)):toBe("5h 59m")
+		expect(SeasonTrackLogic.durationText(0)):toBe("0m")
+		expect(SeasonTrackLogic.durationText(6 * 60 + 59)):toBe("6m")
+		expect(SeasonTrackLogic.durationText(3600 + 6 * 60)):toBe("1h 6m")
 		local over = { activeSeconds = 99999, targetSeconds = 3600, weekResetsIn = 3599 }
 		local bar = SeasonTrackLogic.playtimeView(state({ playtime = over })) :: SeasonTrackLogic.PlaytimeView
 		expect(bar.fraction):toBe(1)
-		expect(bar.text):toBe("Free pass: 1 / 1 active hours this week")
-		expect(bar.short):toBe("1 / 1 h")
+		expect(bar.text):toBe("Free pass: 1h / 1h active this week")
+		expect(bar.short):toBe("1h / 1h")
 		expect(bar.resets):toBe("resets soon")
 		expect(SeasonTrackLogic.weekResetText(86400)):toBe("resets in 1 day")
 		expect(SeasonTrackLogic.weekResetText(7200)):toBe("resets in 2h")

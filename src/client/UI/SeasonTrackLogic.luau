@@ -93,7 +93,7 @@ export type View = {
 	playtime: PlaytimeView?, -- nil once the pass is held
 }
 
--- The pass screen's "x / 6 active hours this week" bar (payoff-loop
+-- The pass screen's "x / 6h active this week" bar (payoff-loop
 -- step 5c): how full it is, what it reads, and when the week resets.
 -- `short` is the Hub's always-on playtime row under the level pill.
 export type PlaytimeView = { fraction: number, text: string, short: string, resets: string }
@@ -106,6 +106,19 @@ function SeasonTrackLogic.hoursText(seconds: number): string
 		return string.format("%d", tenths // 10)
 	end
 	return string.format("%d.%d", tenths // 10, tenths % 10)
+end
+
+-- The playtime bar's clock: "6m", "1h 6m", "6h". Floored to the minute
+-- for the same reason as hoursText.
+function SeasonTrackLogic.durationText(seconds: number): string
+	local minutes = math.max(0, seconds) // 60
+	local h, m = minutes // 60, minutes % 60
+	if h == 0 then
+		return string.format("%dm", m)
+	elseif m == 0 then
+		return string.format("%dh", h)
+	end
+	return string.format("%dh %dm", h, m)
 end
 
 function SeasonTrackLogic.weekResetText(seconds: number): string
@@ -131,14 +144,14 @@ function SeasonTrackLogic.playtimeView(state: SeasonState): PlaytimeView?
 	return {
 		fraction = active / p.targetSeconds,
 		text = string.format(
-			"Free pass: %s / %s active hours this week",
-			SeasonTrackLogic.hoursText(active),
-			SeasonTrackLogic.hoursText(p.targetSeconds)
+			"Free pass: %s / %s active this week",
+			SeasonTrackLogic.durationText(active),
+			SeasonTrackLogic.durationText(p.targetSeconds)
 		),
 		short = string.format(
-			"%s / %s h",
-			SeasonTrackLogic.hoursText(active),
-			SeasonTrackLogic.hoursText(p.targetSeconds)
+			"%s / %s",
+			SeasonTrackLogic.durationText(active),
+			SeasonTrackLogic.durationText(p.targetSeconds)
 		),
 		resets = SeasonTrackLogic.weekResetText(p.weekResetsIn),
 	}
