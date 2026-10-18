@@ -162,6 +162,12 @@ the chat stays open, with your locked card beside it.
 A mis-tap here is unforgivable, so a lock takes **0.8 s of unbroken hold**
 (`DecisionLogic.TIMING.holdSeconds`):
 
+**On a touch screen (2026-10-18)** the buttons stay dim with a 3-2-1
+countdown for the first 3 s after lock-in opens, and a touch hold is
+**1.5 s** (`touchArmSeconds` / `touchHoldSeconds`), because the corners
+are where the joystick and jump button were. A touch that lands during
+the countdown is ignored until it is lifted and pressed again.
+
 - A white fill rises through the button while you hold. Letting go early,
   or sliding more than 24 px off the button, cancels.
 - A second thumb on the other button is ignored, not switched to. The
@@ -242,6 +248,15 @@ packet, but the reveal runs for about 7 s. The Studio screen therefore
 stays up through Results until the player taps Continue or the round
 leaves Results. **P6-6's results screen should wait on
 `DecisionStudioController.isActive()`.**
+
+The staging holds through Results too (2026-10-18 playtest): finalists
+stay anchored on their podiums, spectators stay on the balcony, and the
+client keeps movement held. Cleanup releases it all, under the
+"Back to the lobby" cover (`LoadingCover`) that comes up the moment the
+round reaches Cleanup and stays until the teleport's own identical
+screen takes over. The default lighting is restored 0.5 s into Cleanup,
+behind that cover. In Studio, which can't teleport, the cover lifts
+after 3 s, once everyone has respawned.
 
 ## Text chat only
 

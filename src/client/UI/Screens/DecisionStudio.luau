@@ -111,7 +111,7 @@ export type Store = {
 	keyboard: (() -> number?)?, -- on-screen keyboard's top edge, screen pixels; nil when closed
 	-- The ready-up notice (DecisionLogic.waitingNotice); nil hides it.
 	waiting: (() -> string?)?,
-	press: (choice: Choice) -> (),
+	press: (choice: Choice, touch: boolean?) -> (), -- touch holds longer (DecisionLogic.holdSecondsFor)
 	release: (choice: Choice) -> (),
 	dismiss: () -> (),
 	-- The finalist's own chat line, sent into the Negotiate channel.
@@ -811,19 +811,27 @@ local function holdFace(choice: Choice, store: Store): Frame
 	return holder
 end
 
-local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, order: number): Frame
+-- `armLeft` is the seconds until a touch press is taken
+-- (DecisionLogic.touchArmLeft): on a touch screen the button stays dim,
+-- counting down, for that long after it opens.
+local function holdButton(
+	choice: Choice,
+	store: Store,
+	enabled: () -> boolean,
+	armLeft: () -> number,
+	order: number
+): Frame
 	local readNow = store.now or Clock.now
+	local touchArming = derive(function()
+		return enabled() and armLeft() > 0 and Env.inputMode() == Enum.PreferredInput.Touch
+	end)
 	local fraction = source(0)
 	local mine = derive(function()
 		local c = store.confirm()
 		return c.state == "Holding" and c.choice == choice
 	end)
 	local hb = RunService.Heartbeat:Connect(function()
-		fraction(
-			if mine()
-				then DecisionLogic.holdFraction(store.confirm(), readNow(), DecisionLogic.TIMING.holdSeconds)
-				else 0
-		)
+		fraction(if mine() then DecisionLogic.holdFraction(store.confirm(), readNow()) else 0)
 	end)
 	cleanup(function()
 		hb:Disconnect()
@@ -859,17 +867,29 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 			Base.corner(Theme.radius.lg),
 		}),
 		-- Dimmed until Negotiate opens: visible early so the thumb knows
-		-- where it's going, inert until it's allowed to go there.
+		-- where it's going, inert until it's allowed to go there. On a
+		-- touch screen it stays dim a few seconds longer, counting down.
 		create("Frame")({
 			Name = "Dim",
 			Size = UDim2.fromScale(1, 1),
 			BackgroundColor3 = Theme.color.background,
 			BackgroundTransparency = 0.45,
 			Visible = function()
-				return not enabled()
+				return not enabled() or touchArming()
 			end,
 			ZIndex = 3,
 			Base.corner(Theme.radius.lg),
+			Base.text("display", {
+				Name = "ArmCountdown",
+				AnchorPoint = Vector2.new(0.5, 0.5),
+				Position = UDim2.fromScale(0.5, 0.5),
+				Size = UDim2.fromScale(0.5, 0.6),
+				ZIndex = 4,
+				Text = function()
+					return tostring(math.ceil(armLeft()))
+				end,
+				Visible = touchArming,
+			}),
 		}),
 	}) :: TextButton
 
@@ -879,10 +899,13 @@ local function holdButton(choice: Choice, store: Store, enabled: () -> boolean, 
 	local owner: any? = nil
 	local c1 = button.InputBegan:Connect(function(input: InputObject)
 		local kind = input.UserInputType
-		if (kind == Enum.UserInputType.Touch or kind == Enum.UserInputType.MouseButton1) and enabled() then
+		local touch = kind == Enum.UserInputType.Touch
+		-- A touch that lands while still arming is dropped, not held over:
+		-- it has to be lifted and put down again once the count is done.
+		if (touch or kind == Enum.UserInputType.MouseButton1) and enabled() and not (touch and armLeft() > 0) then
 			if owner == nil then
-				owner = if kind == Enum.UserInputType.Touch then input else "mouse"
-				store.press(choice)
+				owner = if touch then input else "mouse"
+				store.press(choice, touch)
 			end
 		end
 	end)
@@ -1323,15 +1346,15 @@ function DecisionStudio.confirmer(
 			state(DecisionLogic.OPEN) -- Choose closed under the thumb
 			return
 		end
-		local nextState, lockedNow = DecisionLogic.tick(c, readNow(), DecisionLogic.TIMING.holdSeconds)
+		local nextState, lockedNow = DecisionLogic.tick(c, readNow())
 		if lockedNow then
 			state(nextState)
 			send(nextState.choice :: Choice)
 		end
 	end)
-	local function press(choice: Choice)
+	local function press(choice: Choice, touch: boolean?)
 		if allowed() then
-			state(DecisionLogic.press(state(), choice, readNow()))
+			state(DecisionLogic.press(state(), choice, readNow(), DecisionLogic.holdSecondsFor(touch == true)))
 		end
 	end
 	local function release(choice: Choice)
@@ -1426,6 +1449,14 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 		end)
 		local chooseOpen = derive(function()
 			return store.isFinalist() and DecisionLogic.canLock(store.phase()) and not selfLocked()
+		end)
+		-- When lock-in opened on this screen, for the touch arm delay.
+		local openedAt = source(nil :: number?)
+		effect(function()
+			openedAt(if chooseOpen() then readNow() else nil)
+		end)
+		local armLeft = derive(function()
+			return DecisionLogic.touchArmLeft(openedAt(), now())
 		end)
 
 		-- Header: title, hint, (i), countdown. Titles carries the outcome
@@ -1615,8 +1646,8 @@ function DecisionStudio.mount(controller: any, store: Store): () -> ()
 		-- in the bottom-right: one per thumb on a phone held sideways,
 		-- and the middle of the screen - where the finalists stand and
 		-- their chat bubbles show - stays clear.
-		local stealButton = holdButton("Steal", store, chooseOpen, 1)
-		local shareButton = holdButton("Share", store, chooseOpen, 2)
+		local stealButton = holdButton("Steal", store, chooseOpen, armLeft, 1)
+		local shareButton = holdButton("Share", store, chooseOpen, armLeft, 2)
 		local buttonsUp = derive(function()
 			local s = stage()
 			return store.isFinalist() and not selfLocked() and (s == "Intro" or s == "Negotiate" or s == "Choose")

@@ -160,6 +160,9 @@ if hubPlaceId ~= 0 and game.PlaceId == hubPlaceId then
 	baseText = "Loading lobby"
 end
 
+-- Kept for the round's end (showReturnCover), before anything fades it.
+local returnTemplate = gui:Clone()
+
 -- A still copy of this cover replaces Roblox's own teleport screen for
 -- the next hop (Hub -> Match, or Match -> Hub), and the next place's
 -- cover is identical, so the trip reads as one screen. Studio can't
@@ -191,12 +194,64 @@ if isHub then
 	return
 end
 
+-- THE ROUND'S END. At Cleanup the server releases the Studio's podiums,
+-- restores the default lighting and sends everyone home, and the
+-- teleport takes seconds, so the cover comes back - "Back to the lobby",
+-- the same screen the teleport shows - rather than leaving the player
+-- loose on the set under the wrong lighting (2026-10-18 playtest).
+-- Studio can't teleport (everyone respawns instead), so there it lifts
+-- again after STUDIO_RETURN_SECONDS.
+local STUDIO_RETURN_SECONDS = 3
+local returnCover: ScreenGui? = nil
+
+local function showReturnCover()
+	if returnCover ~= nil then
+		return
+	end
+	local cover = returnTemplate:Clone()
+	returnCover = cover
+	local coverBackdrop = cover:FindFirstChildWhichIsA("Frame") :: Frame
+	local labels: { TextLabel } = {}
+	for _, child in coverBackdrop:GetChildren() do
+		if child:IsA("TextLabel") then
+			table.insert(labels, child)
+			child.TextTransparency = 1
+		end
+	end
+	local coverStatus = cover:FindFirstChild("TeleportStatus", true) :: TextLabel
+	coverBackdrop.BackgroundTransparency = 1
+	cover.Parent = playerGui
+	-- Quick: the lighting flips at the same moment.
+	local info = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	TweenService:Create(coverBackdrop, info, { BackgroundTransparency = 0 }):Play()
+	for _, label in labels do
+		TweenService:Create(label, info, { TextTransparency = 0 }):Play()
+	end
+	task.spawn(function()
+		local dots = 0
+		while cover.Parent ~= nil do
+			dots = (dots + 1) % 4
+			coverStatus.Text = "Back to the lobby" .. string.rep(".", dots)
+			task.wait(0.35)
+		end
+	end)
+	if RunService:IsStudio() then
+		task.delay(STUDIO_RETURN_SECONDS, function()
+			settleCamera()
+			cover:Destroy()
+			returnCover = nil
+		end)
+	end
+end
+
 local function check()
 	local state = Workspace:GetAttribute("RoundState")
 	if typeof(state) ~= "string" then
 		return
 	end
-	if ON_MAP[state] then
+	if state == "Cleanup" then
+		showReturnCover()
+	elseif ON_MAP[state] then
 		-- Placement happens at Loading, but the character's new position
 		-- can land a frame or two after the attribute does.
 		task.wait(0.2)

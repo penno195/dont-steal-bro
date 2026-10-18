@@ -19,7 +19,9 @@
 --     - over the fence onto the rocks, down to the floor - is put
 --     straight back.
 --   - A character that respawns mid-finale is put back in its place.
--- Leaving DecisionStudio releases the anchors. The set stays until the
+-- Staging holds through Results, so nobody walks off the set while the
+-- reveal is still playing (2026-10-18 playtest); Cleanup releases the
+-- anchors, under the client's "Back to the lobby" cover. The set stays until the
 -- server shuts down: at Cleanup, MatchTeleportService sends everyone
 -- home, and the floor must still be there while they go.
 --
@@ -365,7 +367,6 @@ function StudioStageService:init()
 	DecisionService.onPhaseEnter("Intro", function()
 		beginStaging()
 	end)
-	RoundService.onExit("DecisionStudio", endStaging)
 	-- The set is NOT destroyed at Cleanup: that's when MatchTeleportService
 	-- sends everyone home, and a teleport takes seconds - destroying the
 	-- floor under them dropped players into the void mid-teleport. A

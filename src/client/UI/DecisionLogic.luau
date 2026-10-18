@@ -50,6 +50,12 @@ export type Stage = "Waiting" | "Intro" | "Negotiate" | "Choose" | "Locked" | "R
 -- changes HOW each step appears (a cut, not a flip), never WHEN.
 DecisionLogic.TIMING = table.freeze({
 	holdSeconds = 0.8, -- hold-to-confirm; long enough that a brushed thumb can't lock
+	-- Touch only (owner, 2026-10-18): the buttons sit where the joystick
+	-- and jump button were, so a resting thumb could lock in. A touch
+	-- hold is longer, and the buttons stay inert for the first
+	-- touchArmSeconds after lock-in opens.
+	touchHoldSeconds = 1.5,
+	touchArmSeconds = 3.0,
 	ackTimeout = 1.5, -- resend the same choice if no DecisionLockedIn came back
 	ackRetries = 2,
 	-- Slowed 2026-09-26, and twice more 2026-10-08 (owner: "a couple of
@@ -471,20 +477,34 @@ end
 -- HOLD TO CONFIRM ----------------------------------------------------
 
 -- Open -> Holding(choice) on press; back to Open if released early;
--- Locked(choice) once held for holdSeconds. Locked never leaves Locked:
--- there is no undo, and the server would refuse one anyway.
+-- Locked(choice) once held for the press's own holdSeconds (longer on
+-- touch, holdSecondsFor). Locked never leaves Locked: there is no undo,
+-- and the server would refuse one anyway.
 export type ConfirmState = "Open" | "Holding" | "Locked"
-export type Confirm = { state: ConfirmState, choice: Choice?, startedAt: number }
+export type Confirm = { state: ConfirmState, choice: Choice?, startedAt: number, holdSeconds: number }
 
-DecisionLogic.OPEN = table.freeze({ state = "Open", choice = nil, startedAt = 0 } :: Confirm)
+DecisionLogic.OPEN = table.freeze({ state = "Open", choice = nil, startedAt = 0, holdSeconds = 0 } :: Confirm)
+
+function DecisionLogic.holdSecondsFor(touch: boolean): number
+	return if touch then DecisionLogic.TIMING.touchHoldSeconds else DecisionLogic.TIMING.holdSeconds
+end
+
+-- Seconds until a touch press is taken, counted from when lock-in opened
+-- on this screen (`openedAt`; nil while it's shut).
+function DecisionLogic.touchArmLeft(openedAt: number?, now: number): number
+	if openedAt == nil then
+		return DecisionLogic.TIMING.touchArmSeconds
+	end
+	return math.max(0, openedAt + DecisionLogic.TIMING.touchArmSeconds - now)
+end
 
 -- A press while already holding (a second thumb on the other button) is
 -- ignored rather than switching: the first deliberate hold owns it.
-function DecisionLogic.press(c: Confirm, choice: Choice, now: number): Confirm
+function DecisionLogic.press(c: Confirm, choice: Choice, now: number, holdSeconds: number): Confirm
 	if c.state ~= "Open" then
 		return c
 	end
-	return table.freeze({ state = "Holding", choice = choice, startedAt = now } :: Confirm)
+	return table.freeze({ state = "Holding", choice = choice, startedAt = now, holdSeconds = holdSeconds } :: Confirm)
 end
 
 function DecisionLogic.release(c: Confirm, choice: Choice): Confirm
@@ -496,20 +516,22 @@ end
 
 -- Returns the new state and whether THIS tick is the one that locked
 -- (so the caller sends exactly one intent).
-function DecisionLogic.tick(c: Confirm, now: number, holdSeconds: number): (Confirm, boolean)
-	if c.state ~= "Holding" or now - c.startedAt < holdSeconds then
+function DecisionLogic.tick(c: Confirm, now: number): (Confirm, boolean)
+	if c.state ~= "Holding" or now - c.startedAt < c.holdSeconds then
 		return c, false
 	end
-	return table.freeze({ state = "Locked", choice = c.choice, startedAt = c.startedAt } :: Confirm), true
+	local lockedState: Confirm =
+		{ state = "Locked", choice = c.choice, startedAt = c.startedAt, holdSeconds = c.holdSeconds }
+	return table.freeze(lockedState), true
 end
 
-function DecisionLogic.holdFraction(c: Confirm, now: number, holdSeconds: number): number
+function DecisionLogic.holdFraction(c: Confirm, now: number): number
 	if c.state == "Locked" then
 		return 1
-	elseif c.state ~= "Holding" or holdSeconds <= 0 then
+	elseif c.state ~= "Holding" or c.holdSeconds <= 0 then
 		return 0
 	end
-	return math.clamp((now - c.startedAt) / holdSeconds, 0, 1)
+	return math.clamp((now - c.startedAt) / c.holdSeconds, 0, 1)
 end
 
 -- REVEAL TIMELINE ----------------------------------------------------

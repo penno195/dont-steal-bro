@@ -150,8 +150,16 @@ end
 
 function LightingService:start()
 	local RoundService = Loader.get("RoundService") :: any
+	-- A beat late, so each client's "Back to the lobby" cover
+	-- (LoadingCover) is up before the lighting visibly flips. Skipped if
+	-- a (debug) new round has applied its own preset meanwhile.
 	RoundService.onEnter("Cleanup", function()
-		LightingService.restore()
+		local ending = activePresetId
+		task.delay(0.5, function()
+			if activePresetId == ending then
+				LightingService.restore()
+			end
+		end)
 	end)
 end
 

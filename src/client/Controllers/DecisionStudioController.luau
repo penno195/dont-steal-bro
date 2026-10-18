@@ -265,6 +265,7 @@ local function hide()
 		unmount = nil
 	end
 	stopTalk()
+	setWatching(false) -- the screen held the only way back out
 end
 
 local store: DecisionStudio.Store = {
@@ -632,11 +633,11 @@ function DecisionStudioController:init()
 		end
 		if payload.state == "DecisionStudio" then
 			show()
-		else
+		elseif payload.state ~= "Results" then
+			-- Held through Results, like the server's staging, so nobody
+			-- walks off the set mid-reveal.
 			unwatchPlacement()
-			if payload.state ~= "Results" then
-				hide()
-			end
+			hide()
 		end
 	end)
 

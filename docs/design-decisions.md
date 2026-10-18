@@ -794,6 +794,15 @@ for either clock.
   who left counts as locked. An all-bot finale just uses the Choose
   timing. Rule: `FinaleRoster.humansAllLocked`; `NPCBrain` acts on
   `DecisionService.onHumansLocked`.
+- **Touch lock-in is slower** (user decision, 2026-10-18, after a phone
+  playtest: STEAL/SHARE sit where the joystick and jump button were, so
+  a resting thumb locked people in by accident). On a touch screen the
+  buttons stay dim, counting 3-2-1, for the first
+  `DecisionLogic.TIMING.touchArmSeconds` (3 s) after lock-in opens, and
+  a touch has to be held `touchHoldSeconds` (1.5 s) instead of 0.8 s. A
+  touch that lands while still counting down is dropped; it has to be
+  lifted and put down again. Mouse, keyboard and gamepad are unchanged.
+  The buttons stay in the corners.
 
 ### Applied case: buying back a streak (2026-10-08, user decision)
 
