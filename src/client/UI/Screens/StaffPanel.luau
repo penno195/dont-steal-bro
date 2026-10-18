@@ -33,11 +33,17 @@
 -- body. Events shows what's on, a chip per event, a minutes box with
 -- quick picks, and a footer with Stop (while one is on) and Start, both
 -- two taps like Give. Starting replaces whatever is on, in every lobby.
+--
+-- ANNOUNCE TAB (step 6). A message box with a character counter, a
+-- standing warning that it shows mid-race too and must never mention a
+-- streak (owner, 2026-10-18: that's staff's job, Q7 condition 1), and a
+-- footer with Send, two taps like Give. It shows in every server.
 
 local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local vide = require(ReplicatedStorage.Packages.Vide)
+local AnnounceLogic = require(ReplicatedStorage.Shared.AnnounceLogic)
 
 local C = require(script.Parent.Parent.Components)
 local Base = require(script.Parent.Parent.Components.Base)
@@ -95,6 +101,12 @@ export type Store = {
 	eventResult: () -> StaffPanelLogic.Result?,
 	eventBusy: () -> boolean,
 	sendEvent: (payload: { [string]: any }) -> (),
+
+	-- Announcements (step 6): the same reply/busy pair, for
+	-- StaffAnnounceIntent.
+	announceResult: () -> StaffPanelLogic.Result?,
+	announceBusy: () -> boolean,
+	sendAnnounce: (payload: { [string]: any }) -> (),
 }
 
 local function chipWidth(perRow: number): number
@@ -785,10 +797,155 @@ local function eventBody(store: Store): Frame
 	})
 end
 
+local MESSAGE_H = 2 * CHIP_H
+
+local function announceBody(store: Store): Frame
+	local text = source("")
+
+	local built = derive(function(): { payload: { [string]: any }?, missing: string? }
+		local cleaned, missing = AnnounceLogic.clean(text())
+		if cleaned == nil then
+			return { payload = nil, missing = missing }
+		end
+		return { payload = { text = cleaned }, missing = nil }
+	end)
+
+	-- ----- two taps, and the reply ------------------------------------------
+	local armed = source(false)
+	local replyShown = source(false)
+	effect(function()
+		built()
+		armed(false)
+		replyShown(false)
+	end)
+	effect(function()
+		if store.announceResult() ~= nil then
+			replyShown(true)
+		end
+	end)
+
+	local function onSend()
+		local payload = untrack(built).payload
+		if payload == nil or untrack(store.announceBusy) then
+			return
+		end
+		if not untrack(armed) then
+			armed(true)
+			return
+		end
+		armed(false)
+		store.sendAnnounce(payload)
+	end
+
+	-- ----- the form ----------------------------------------------------------
+	-- The shared box, made multi-line: the text wraps instead of running
+	-- off the end. A typed newline becomes a space (AnnounceLogic.clean).
+	local box = textBox("Type the announcement", text, LIST_W, 2)
+	box.Size = UDim2.fromOffset(LIST_W, MESSAGE_H)
+	box.MultiLine = true
+	box.TextWrapped = true
+	box.TextTruncate = Enum.TextTruncate.None
+	box.TextYAlignment = Enum.TextYAlignment.Top
+
+	local counter = derive(function(): { line: string, over: boolean }
+		local line, over = AnnounceLogic.counter(text())
+		return { line = line, over = over }
+	end)
+
+	-- ----- footer ------------------------------------------------------------
+	local status = derive(function(): string
+		local result = store.announceResult()
+		if replyShown() and result ~= nil then
+			return result.message
+		end
+		if built().payload == nil then
+			return if text() == "" then "Shows big on every screen, in every server" else built().missing or ""
+		end
+		return if armed() then "Send to every server now?" else "Shows big on every screen, in every server"
+	end)
+	local statusColor = derive(function(): Color3
+		local result = store.announceResult()
+		if replyShown() and result ~= nil then
+			return if result.ok then Theme.color.success else Theme.color.danger
+		end
+		if armed() then
+			return Theme.color.warning
+		end
+		return if built().payload == nil and text() ~= "" then Theme.color.danger else Theme.color.inkMuted
+	end)
+
+	return body("Announce", {
+		form({
+			caption("Message", 1),
+			box,
+			Base.text("caption", {
+				Name = "Counter",
+				LayoutOrder = 3,
+				Size = UDim2.fromOffset(LIST_W, CAPTION_H),
+				Text = function()
+					return counter().line
+				end,
+				TextColor3 = function()
+					return if counter().over then Theme.color.danger else Theme.color.inkMuted
+				end,
+				TextXAlignment = Enum.TextXAlignment.Right,
+			}) :: Instance,
+			Base.text("caption", {
+				Name = "Warning",
+				LayoutOrder = 4,
+				Size = UDim2.fromOffset(LIST_W, 2 * CAPTION_H),
+				Text = "It shows mid-race too. Never mention anyone's streak.",
+				TextColor3 = Theme.color.warning,
+				TextWrapped = true,
+				TextXAlignment = Enum.TextXAlignment.Left,
+				TextYAlignment = Enum.TextYAlignment.Top,
+			}) :: Instance,
+		}),
+		create("Frame")({
+			Name = "Footer",
+			AnchorPoint = Vector2.new(0, 1),
+			Position = UDim2.fromScale(0, 1),
+			Size = UDim2.fromOffset(INNER, FOOTER_H),
+			BackgroundTransparency = 1,
+			Base.text("label", {
+				Name = "Status",
+				AnchorPoint = Vector2.new(0, 0.5),
+				Position = UDim2.fromScale(0, 0.5),
+				Size = UDim2.new(1, -(GIVE_W + Theme.spacing.sm), 1, 0),
+				Text = status,
+				TextColor3 = statusColor,
+				TextXAlignment = Enum.TextXAlignment.Left,
+			}) :: Instance,
+			C.Button({
+				label = derive(function()
+					if store.announceBusy() then
+						return "Sending"
+					end
+					return if armed() then "Tap to confirm" else "Send"
+				end),
+				variant = "primary",
+				compact = true,
+				width = GIVE_W,
+				disabled = derive(function()
+					return built().payload == nil
+				end),
+				loading = store.announceBusy,
+				onActivate = onSend,
+				order = 900,
+				anchorPoint = Vector2.new(1, 0.5),
+				position = UDim2.fromScale(1, 0.5),
+			}),
+		}),
+	})
+end
+
+type Tab = "Gifts" | "Events" | "Announce"
+local TABS: { Tab } = { "Gifts", "Events", "Announce" }
+
 local function window(store: Store): Frame
-	local tab = source("Gifts" :: "Gifts" | "Events")
+	local tab = source("Gifts" :: Tab)
 	local tabs: { any } = {}
-	for i, name in { "Gifts", "Events" } :: { "Gifts" | "Events" } do
+	for i, name in TABS do
 		table.insert(
 			tabs,
 			chip(name, function()
@@ -802,7 +959,7 @@ local function window(store: Store): Frame
 		Name = "Tabs",
 		AnchorPoint = Vector2.new(1, 0.5),
 		Position = UDim2.new(1, -(CLOSE_SIZE + Theme.spacing.sm), 0.5, 0),
-		Size = UDim2.fromOffset(2 * TAB_W + GAP, CHIP_H),
+		Size = UDim2.fromOffset(#TABS * TAB_W + (#TABS - 1) * GAP, CHIP_H),
 		BackgroundTransparency = 1,
 		create("UIListLayout")({
 			FillDirection = Enum.FillDirection.Horizontal,
@@ -832,7 +989,7 @@ local function window(store: Store): Frame
 					Position = UDim2.fromScale(0, 0.5),
 					Size = UDim2.new(
 						1,
-						-(2 * TAB_W + GAP + CLOSE_SIZE + 2 * Theme.spacing.sm),
+						-(#TABS * TAB_W + (#TABS - 1) * GAP + CLOSE_SIZE + 2 * Theme.spacing.sm),
 						0,
 						HEADER_H - Theme.spacing.sm
 					),
@@ -865,6 +1022,11 @@ local function window(store: Store): Frame
 					return tab() == "Events"
 				end, function()
 					return eventBody(store)
+				end) :: any,
+				show(function()
+					return tab() == "Announce"
+				end, function()
+					return announceBody(store)
 				end) :: any,
 			}),
 		},

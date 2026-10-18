@@ -77,6 +77,31 @@ finishes it.
   `EventDiscoAnchor`. Tested in Studio solo: start, stop, a bad id, a
   restart picking up a running event. Cross-server delivery needs a
   live test with two Hub servers.*
+- [x] **6. Announcements.** Staff type a line in the staff panel and it
+  shows as a big banner for every player in every live server (Hub,
+  match and practice), not just their own.
+  *Built 2026-10-18. Owner: it shows **at once everywhere, mid-race
+  included**, and keeping streaks out of it is **staff's job** (Q7
+  condition 1): the Announce tab warns "It shows mid-race too. Never
+  mention anyone's streak." and nothing scans the text for it. The
+  panel's third tab has a message box (120 characters, counted by
+  `AnnounceLogic`, shared with the server) and Send (two taps).
+  `AnnounceService` checks staff, tidies and caps the text, holds each
+  staff member to one per `announceCooldownSeconds`, filters it with
+  `TextService` (`FilterStringAsync` then
+  `GetNonChatStringForBroadcastAsync`, in the sender's name), refuses
+  one the filter wiped out or one over MessagingService's 1KB, shows it
+  in its own server and publishes on `liveOps.announceTopic`. Every
+  server subscribes and drops repeats and anything over 2 min old.
+  A failed publish tells staff only their server got it. Audit at
+  `liveOps.announceAuditKey`. `AnnouncementController` draws the
+  banner in the upper third ("ANNOUNCEMENT FROM <NAME>", the message
+  in the display face, stroked, on a dark band with a gold rim): it
+  drops in, holds for its reading time, fades, and up to 3 more wait
+  their turn. The look is in constants at the top of the controller,
+  to swap for the Squishie merge game's style. Not yet tested: a
+  Studio solo run (filter, banner, cooldown), then a live test with
+  two servers (a Hub and a match) for cross-server delivery.*
 
 ## Settled (owner, 2026-10-12)
 

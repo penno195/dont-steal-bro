@@ -664,6 +664,12 @@ export type LiveOpsConfig = {
 	eventAuditKey: string, -- event starts and stops
 	eventAuditLogCap: number,
 	eventTopic: string, -- MessagingService topic that tells every server at once
+	announceTopic: string, -- MessagingService topic for staff announcements (step 6)
+	announceAuditKey: string, -- announcements' audit log, same DataStore
+	announceAuditLogCap: number,
+	announceCooldownSeconds: number, -- per staff member, between announcements
+	announceMinSeconds: number, -- banner hold time bounds
+	announceMaxSeconds: number,
 	adminUserIds: { number },
 	tunablePaths: { string }, -- "<root>.<seg>..."; "*" = one segment, trailing "**" = any depth
 }
@@ -3779,6 +3785,8 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 				"eventKey",
 				"eventAuditKey",
 				"eventTopic",
+				"announceTopic",
+				"announceAuditKey",
 			}
 		do
 			if not isNonEmptyString((liveOps :: any)[field]) then
@@ -3811,12 +3819,15 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		-- The event keys share the one DataStore, so each names its own
 		-- record (the checks above cover the older three).
 		local keys: { [string]: string } = {}
-		for _, field in { "envelopeKey", "auditKey", "staffAuditKey", "eventKey", "eventAuditKey" } do
+		for _, field in { "envelopeKey", "auditKey", "staffAuditKey", "eventKey", "eventAuditKey", "announceAuditKey" } do
 			local key = (liveOps :: any)[field]
 			if type(key) ~= "string" then
 				continue
 			end
-			if keys[key] ~= nil and (field == "eventKey" or field == "eventAuditKey") then
+			if
+				keys[key] ~= nil
+				and (field == "eventKey" or field == "eventAuditKey" or field == "announceAuditKey")
+			then
 				issue(
 					issues,
 					"GameConfig",
@@ -3830,6 +3841,27 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 		end
 		if type(liveOps.eventAuditLogCap) ~= "number" or liveOps.eventAuditLogCap < 1 then
 			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.eventAuditLogCap", "must be at least 1")
+		end
+		-- Announcements (staff-tools.md step 6). Its own topic, so an
+		-- event message is never read as a banner or the other way round.
+		if liveOps.announceTopic == liveOps.eventTopic then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.announceTopic", "must differ from eventTopic")
+		end
+		if type(liveOps.announceAuditLogCap) ~= "number" or liveOps.announceAuditLogCap < 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.announceAuditLogCap", "must be at least 1")
+		end
+		if type(liveOps.announceCooldownSeconds) ~= "number" or liveOps.announceCooldownSeconds < 0 then
+			issue(issues, "GameConfig", "GameConfig.luau", "liveOps.announceCooldownSeconds", "must be 0 or more")
+		end
+		local minHold, maxHold = liveOps.announceMinSeconds, liveOps.announceMaxSeconds
+		if type(minHold) ~= "number" or type(maxHold) ~= "number" or minHold <= 0 or maxHold < minHold then
+			issue(
+				issues,
+				"GameConfig",
+				"GameConfig.luau",
+				"liveOps.announceMaxSeconds",
+				"announceMinSeconds must be above 0 and announceMaxSeconds at least that"
+			)
 		end
 		for i, userId in liveOps.adminUserIds do
 			if type(userId) ~= "number" or userId <= 0 or userId ~= math.floor(userId) then

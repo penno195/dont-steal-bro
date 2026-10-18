@@ -809,6 +809,17 @@ local GameConfig: Validate.GameConfig = {
 		eventAuditKey = "staffEvents",
 		eventAuditLogCap = 200,
 		eventTopic = "LiveEvent",
+		-- Announcements (staff-tools.md step 6): a staff line shown as a
+		-- banner in every server. The topic carries it; each one is
+		-- audited under its own key. One per staff member per cooldown,
+		-- in the server they send from. The banner stays up for its
+		-- reading time, kept within the two bounds.
+		announceTopic = "StaffAnnounce",
+		announceAuditKey = "staffAnnouncements",
+		announceAuditLogCap = 200,
+		announceCooldownSeconds = 10,
+		announceMinSeconds = 4,
+		announceMaxSeconds = 10,
 		-- The developers' Roblox user ids. Empty = nobody can run admin
 		-- commands (edit the DataStore by hand instead).
 		adminUserIds = {

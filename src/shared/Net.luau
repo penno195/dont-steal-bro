@@ -1199,6 +1199,39 @@ Net.Remotes = {
 		direction = "ServerBroadcast",
 	} :: RemoteDef,
 
+	-- Client -> server: a staff member announces a line to every server
+	-- (staff-tools.md step 6). Gated like StaffGrantIntent: AnnounceService
+	-- drops it with no reply unless the sender is on liveOps.adminUserIds.
+	-- maxLength is AnnounceLogic.MAX_BYTES, copied (this file has no
+	-- requires); AnnounceLogic.clean then counts characters. Allowed in
+	-- every round state, though the panel only opens between rounds.
+	StaffAnnounceIntent = {
+		name = "StaffAnnounceIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			text = Net.string({ minLength = 1, maxLength = 480 }),
+		}),
+		rateLimit = { capacity = 2, refillPerSecond = 0.1 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Server -> the staff member who sent a StaffAnnounceIntent: { ok,
+	-- message }, the same shape StaffPanelLogic.readResult reads.
+	StaffAnnounceResult = {
+		name = "StaffAnnounceResult",
+		direction = "ServerBroadcast",
+	} :: RemoteDef,
+
+	-- Server -> everyone in the server (fireAllClients): a staff
+	-- announcement to show as a banner, { text (already filtered),
+	-- from = the staff member's display name }. Sent in every server,
+	-- mid-race too (owner, 2026-10-18). Staff are told never to mention
+	-- a streak in one (Q7 condition 1).
+	Announcement = {
+		name = "Announcement",
+		direction = "ServerBroadcast",
+	} :: RemoteDef,
+
 	-- Server -> one player (fireClient), Hub only (staff-tools.md step
 	-- 3): { gifts = the profile's unseenGifts }, each { id, from = the
 	-- staff member's display name, kind, amount?, cosmeticId? }. Sent

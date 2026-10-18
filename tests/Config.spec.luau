@@ -276,6 +276,12 @@ local function validGameConfig(): Validate.GameConfig
 			eventAuditKey = "staffEvents",
 			eventAuditLogCap = 200,
 			eventTopic = "LiveEvent",
+			announceTopic = "StaffAnnounce",
+			announceAuditKey = "staffAnnouncements",
+			announceAuditLogCap = 200,
+			announceCooldownSeconds = 10,
+			announceMinSeconds = 4,
+			announceMaxSeconds = 10,
 			adminUserIds = { 12345 },
 			tunablePaths = { "game.roundTimers.*", "game.npc.**", "powerUp.*.durationSeconds" },
 		},
@@ -2582,6 +2588,24 @@ TestRunner.describe("Validate.checkGameConfig (P8-5 liveOps)", function()
 		end)):toBe(1)
 		TestRunner.expect(#issuesWith(function(lo)
 			lo.eventAuditLogCap = 0
+		end)):toBe(1)
+	end)
+
+	TestRunner.it("rejects announcement settings that clash or make no sense", function()
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.announceTopic = lo.eventTopic
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.announceAuditKey = lo.staffAuditKey
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.announceAuditLogCap = 0
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.announceCooldownSeconds = -1
+		end)):toBe(1)
+		TestRunner.expect(#issuesWith(function(lo)
+			lo.announceMaxSeconds = 2
 		end)):toBe(1)
 	end)
 

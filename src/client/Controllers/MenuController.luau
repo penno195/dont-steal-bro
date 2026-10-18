@@ -319,6 +319,24 @@ local function staffSendEvent(payload: { [string]: any })
 	end)
 end
 
+-- Announcements (step 6): the panel's third tab.
+local staffAnnounceResult = source(nil :: StaffPanelLogic.Result?)
+local staffAnnounceBusy = source(false)
+local staffAnnounceSent = 0
+
+local function staffSendAnnounce(payload: { [string]: any })
+	staffAnnounceBusy(true)
+	staffAnnounceSent += 1
+	local sent = staffAnnounceSent
+	Net.fireServer("StaffAnnounceIntent", payload)
+	task.delay(STAFF_REPLY_WAIT, function()
+		if sent == staffAnnounceSent and staffAnnounceBusy() then
+			staffAnnounceBusy(false)
+			staffAnnounceResult({ ok = false, message = "No reply from the server. Wait a moment and try again." })
+		end
+	end)
+end
+
 local function grantText(grant: StoreScreenLogic.Grant): string
 	if grant.kind == "Currency" then
 		return string.format("%d coins", grant.amount or 0)
@@ -638,6 +656,7 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 	elseif menu == "Staff" then
 		staffResult(nil)
 		staffEventResult(nil)
+		staffAnnounceResult(nil)
 		readLiveEvent()
 		refreshStaffPlayers()
 		unmountMenu = StaffPanelScreen.mount(UIScaleController, {
@@ -659,6 +678,9 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 			eventResult = staffEventResult,
 			eventBusy = staffEventBusy,
 			sendEvent = staffSendEvent,
+			announceResult = staffAnnounceResult,
+			announceBusy = staffAnnounceBusy,
+			sendAnnounce = staffSendAnnounce,
 		})
 	else
 		unmountMenu = SettingsScreen.mount(UIScaleController, {
@@ -1185,6 +1207,13 @@ function MenuController:init()
 			if result ~= nil then
 				staffEventBusy(false)
 				staffEventResult(result)
+			end
+		end)
+		Net.onClientEvent("StaffAnnounceResult", function(payload: any)
+			local result = StaffPanelLogic.readResult(payload)
+			if result ~= nil then
+				staffAnnounceBusy(false)
+				staffAnnounceResult(result)
 			end
 		end)
 		ReplicatedStorage:GetAttributeChangedSignal("LiveEventId"):Connect(readLiveEvent)

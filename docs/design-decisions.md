@@ -820,6 +820,16 @@ is `staff-tools.md`.
   look** (Taco Tuesday: raining tacos and disco balls, after the
   Squishie merge game's taco event). Nothing about an event touches a
   streak, so Q7 is unaffected.
+- **Announcements** (2026-10-18): staff type a line in the staff panel
+  and it shows as a big banner in **every server at once**, Hub, match
+  and practice, **mid-race and in the Decision Studio included**. The
+  text is staff's own words, so it could name a player's streak during
+  a live round, which Q7 condition 1 forbids. The owner chose to make
+  that **staff's responsibility**, not a filter's: the panel always
+  warns "It shows mid-race too. Never mention anyone's streak.", and
+  the server applies Roblox's text filter only. If a leak does happen,
+  the audit log (`staffAnnouncements`) names who sent it. See
+  `staff-tools.md` step 6.
 
 ### Applied case: the first-time tutorial (2026-10-10, user decision)
 

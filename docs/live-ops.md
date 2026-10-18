@@ -91,6 +91,17 @@ Staff use the staff panel's Events tab; to end an event by hand in an
 emergency, delete the `liveEvent` key in the Creator Hub, and every
 lobby drops it at its next refresh.
 
+Announcements (`staff-tools.md` step 6) aren't stored: each one goes out
+once on the `announceTopic` MessagingService topic (`StaffAnnounce`), and
+only servers running at that moment show it. Each is logged under
+`announceAuditKey` (`staffAnnouncements`), capped at
+`announceAuditLogCap` (200): the time, the staff user id, what they
+`typed`, what players were `shown` after the text filter, and
+`reachedEveryServer` (false = the publish failed and only the sender's
+server showed it). One announcement per staff member every
+`announceCooldownSeconds` (10). The banner stays up for its reading
+time, between `announceMinSeconds` (4) and `announceMaxSeconds` (10).
+
 ## What each switch does
 
 | Switch | Where | Behaviour when off |
