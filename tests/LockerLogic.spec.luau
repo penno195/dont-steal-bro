@@ -185,6 +185,9 @@ describe("LockerLogic.howToGet", function()
 		expect(LockerLogic.howToGet({ level = 5, store = true, pass = false, drop = false })):toBe(
 			"Reach level 5 to unlock it."
 		)
+		expect(LockerLogic.howToGet({ tutorial = true, store = true, pass = false, drop = false })):toBe(
+			"Finish the tutorial to get it."
+		)
 		expect(LockerLogic.howToGet({ store = true, pass = true, drop = true })):toBe("Get it in the Store.")
 		expect(LockerLogic.howToGet({ store = false, pass = true, drop = true })):toBe("Win it on the season pass.")
 		expect(LockerLogic.howToGet({ store = false, pass = false, drop = true })):toBe(

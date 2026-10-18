@@ -502,14 +502,17 @@ function LockerLogic.cosmetics(
 end
 
 -- Where a locked cosmetic comes from, for its preview. The most direct
--- route wins: a level unlock, then the Store, then the season pass,
--- then a win drop. nil when nothing offers it right now (a limited
--- edition off sale, a founder item).
-export type CosmeticSources = { level: number?, store: boolean, pass: boolean, drop: boolean }
+-- route wins: a level unlock, the tutorial, then the Store, then the
+-- season pass, then a win drop. nil when nothing offers it right now (a
+-- limited edition off sale, a season over), and the Locker then hides
+-- it from anyone who doesn't own it (owner, 2026-10-18).
+export type CosmeticSources = { level: number?, tutorial: boolean?, store: boolean, pass: boolean, drop: boolean }
 
 function LockerLogic.howToGet(sources: CosmeticSources): string?
 	if sources.level ~= nil then
 		return string.format("Reach level %d to unlock it.", sources.level)
+	elseif sources.tutorial then
+		return "Finish the tutorial to get it."
 	elseif sources.store then
 		return "Get it in the Store."
 	elseif sources.pass then

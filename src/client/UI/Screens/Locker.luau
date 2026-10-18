@@ -77,10 +77,11 @@ export type Locker = {
 	powerUpPicture: (powerUpId: string) -> number?,
 	-- Cosmetic categories in the order the Style tab groups them.
 	categoryOrder: { string },
-	-- Every cosmetic the Style tab shows, owned or not; what isn't owned
-	-- is locked, and a tap on it calls `previewLocked` (owner,
-	-- 2026-10-18). nil = owned only.
-	cosmeticCatalog: { string }?,
+	-- The cosmetics the Style tab shows beside what's owned, read live
+	-- (a sale or season ending drops them); what isn't owned is locked,
+	-- and a tap on it calls `previewLocked` (owner, 2026-10-18). nil =
+	-- owned only.
+	cosmeticCatalog: (() -> { string })?,
 	previewLocked: ((cosmeticId: string) -> ())?,
 	-- Put a power-up in a loadout slot, or take it out with nil.
 	setSlot: (slotIndex: number, powerUpId: string?) -> (),
@@ -757,7 +758,7 @@ local function body(locker: Locker, height: () -> number, layout: MenuShell.Body
 			StoreScreenLogic.slotFor,
 			locker.cosmeticName,
 			locker.categoryOrder,
-			locker.cosmeticCatalog
+			if locker.cosmeticCatalog then locker.cosmeticCatalog() else nil
 		)
 	end)
 	local communityOffered = derive(function(): boolean

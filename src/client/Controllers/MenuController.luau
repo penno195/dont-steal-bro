@@ -265,63 +265,6 @@ end
 -- staff-tools.md step 4. The button shows for liveOps.adminUserIds only;
 -- StaffService re-checks the sender on every give.
 
--- The Locker's Style tab shows every enabled cosmetic, locked where
--- not owned (owner, 2026-10-18), all but the community reward, which has
--- its own tile there. Sorted by LockerLogic.cosmetics.
-local cosmeticCatalog: { string } = {}
-for id, def in cosmeticDefs do
-	if def.enabled and id ~= GameConfig.community.rewardCosmeticId then
-		table.insert(cosmeticCatalog, id)
-	end
-end
-
-local function grantsCosmetic(grant: any, id: string): boolean
-	return grant.kind == "Cosmetic" and grant.cosmeticId == id
-end
-
--- A locked cosmetic up close: the player wearing it, what it is, and
--- where to get it right now.
-local function previewLockedCosmetic(id: string)
-	local def = cosmeticDefs[id]
-	if def == nil then
-		return
-	end
-	local store = false
-	for _, item in items do
-		if not isOffered(item) then
-			continue
-		end
-		for _, grant in (item :: any).grants or {} do
-			store = store or grantsCosmetic(grant, id)
-		end
-	end
-	local pass = false
-	for _, season in seasonDefs do
-		if not (season :: any).enabled then
-			continue
-		end
-		for _, track in { (season :: any).free, (season :: any).premium } do
-			for _, tier in track or {} do
-				pass = pass or grantsCosmetic(tier.grant, id)
-			end
-		end
-	end
-	local how = LockerLogic.howToGet({
-		level = def.unlockLevel,
-		store = store,
-		pass = pass,
-		drop = def.winDrop == true,
-	})
-	ItemPreview.open({
-		title = def.displayName,
-		-- A level item's description already says which level.
-		body = if how and def.unlockLevel == nil then def.description .. "\n" .. how else def.description,
-		def = def,
-		icon = "gem",
-		image = if def.previewIconAssetId ~= 0 then def.previewIconAssetId else nil,
-	})
-end
-
 local isStaff = StaffPanelLogic.isStaff(selfId, GameConfig.liveOps.adminUserIds)
 
 local staffCosmetics: { StaffPanelLogic.CosmeticEntry } = {}
@@ -450,6 +393,84 @@ local function stepFlow(event: StoreScreenLogic.FlowEvent)
 	if nextFlow ~= current then
 		flow(nextFlow)
 	end
+end
+
+-- ===== locked cosmetics ======================================================
+-- The Locker's Style tab shows what the player owns, then every enabled
+-- cosmetic they could still get right now, locked (owner, 2026-10-18).
+-- One nothing offers any more (a season over, a limited edition off
+-- sale) is hidden from those who don't own it. The community reward has
+-- its own tile there, so it's left out.
+
+local function grantsCosmetic(grant: any, id: string): boolean
+	return grant.kind == "Cosmetic" and grant.cosmeticId == id
+end
+
+-- Reads serverNow and storeState, so a caller inside a derive follows
+-- sales and seasons as they start and end.
+local function cosmeticSources(id: string): LockerLogic.CosmeticSources
+	local def = cosmeticDefs[id]
+	local store = false
+	for _, item in items do
+		if not isOffered(item) then
+			continue
+		end
+		for _, grant in (item :: any).grants or {} do
+			store = store or grantsCosmetic(grant, id)
+		end
+	end
+	-- Only the live season's tracks: the server names it in StoreState.
+	local pass = false
+	local s = storeState()
+	local season = if s and s.season then seasonDefs[s.season.id] else nil
+	if season ~= nil then
+		for _, track in { (season :: any).free, (season :: any).premium } do
+			for _, tier in track or {} do
+				pass = pass or grantsCosmetic(tier.grant, id)
+			end
+		end
+	end
+	return {
+		level = def and def.unlockLevel,
+		tutorial = GameConfig.tutorial.enabled and id == GameConfig.tutorial.rewardCosmeticId,
+		store = store,
+		pass = pass,
+		drop = def ~= nil and def.winDrop == true,
+	}
+end
+
+local function cosmeticCatalog(): { string }
+	local out = {}
+	for id, def in cosmeticDefs do
+		if
+			def.enabled
+			and id ~= GameConfig.community.rewardCosmeticId
+			and LockerLogic.howToGet(cosmeticSources(id)) ~= nil
+		then
+			table.insert(out, id)
+		end
+	end
+	return out
+end
+
+-- A locked cosmetic up close: the player wearing it, what it is, and
+-- where to get it right now.
+local function previewLockedCosmetic(id: string)
+	local def = cosmeticDefs[id]
+	if def == nil then
+		return
+	end
+	local sources = cosmeticSources(id)
+	local how = LockerLogic.howToGet(sources)
+	-- A level or tutorial item's description already says how.
+	local said = sources.level ~= nil or sources.tutorial == true
+	ItemPreview.open({
+		title = def.displayName,
+		body = if how and not said then def.description .. "\n" .. how else def.description,
+		def = def,
+		icon = "gem",
+		image = if def.previewIconAssetId ~= 0 then def.previewIconAssetId else nil,
+	})
 end
 
 -- ===== the community reward ================================================

@@ -379,6 +379,14 @@ there "Got it" works as before.
   billboard picture** (StoreItemDef.plinthModel); the Season Pass's is a
   golden ticket.
 
+- *Applied (2026-10-18, user decision):* **the Locker shows locked
+  cosmetics.** The Style tab lists every enabled cosmetic: owned first,
+  then the rest locked. A tap on a locked one previews it on the avatar
+  with how to get it (a level, the tutorial, the Store, the live
+  season's track, or a win drop). **One nothing offers any more** (a
+  season over, a limited edition past its end date) **is hidden from
+  players who don't own it**; owners still see and wear it.
+
 ### Applied case: a payoff for every round (2026-10-17, user decision)
 
 From the 2026-10-17 game review: only wins paid anything, so roughly
