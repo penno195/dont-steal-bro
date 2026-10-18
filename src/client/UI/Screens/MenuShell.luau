@@ -105,6 +105,14 @@ export type Props = {
 -- Mounts the screen; returns the unmount.
 function MenuShell.mount(controller: any, props: Props): () -> ()
 	local gui = controller.createScreen(props.name, { displayOrder = Theme.displayOrder.panel }) :: ScreenGui
+	-- The backdrop is its own full-bleed screen just under the menu, so it
+	-- runs up behind Roblox's top bar instead of leaving a strip of the
+	-- world above the menu (playtest, 2026-10-18). The menu itself stays
+	-- in the safe area, clear of the top bar's buttons.
+	local backdropGui = controller.createScreen(
+		props.name .. "Backdrop",
+		{ displayOrder = Theme.displayOrder.panel - 1, fullBleed = true }
+	) :: ScreenGui
 
 	local destroy = vide.root(function()
 		local rect = source(controller.getUsableRect() :: Layout.Rect)
@@ -132,7 +140,7 @@ function MenuShell.mount(controller: any, props: Props): () -> ()
 			BackgroundColor3 = Theme.color.background,
 			BorderSizePixel = 0,
 			Active = true, -- swallow taps so nothing behind the menu fires
-			Parent = gui,
+			Parent = backdropGui,
 		})
 
 		local column = create("Frame")({
@@ -247,6 +255,7 @@ function MenuShell.mount(controller: any, props: Props): () -> ()
 		exitFocus()
 		destroy()
 		gui:Destroy()
+		backdropGui:Destroy()
 	end
 end
 

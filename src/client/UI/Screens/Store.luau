@@ -651,7 +651,10 @@ local CHIP_H = 18 -- the wins tab and the status banner
 -- on a phone (playtest, 2026-10-17).
 local NAME_H = Theme.type.body.size + Theme.spacing.xxs
 local CORNER_ICON = 16
-local TILE_MIN = 72
+-- Only a floor for an absurdly short screen: the tiles otherwise shrink
+-- to fit the strip. A 72 floor hung the free row's bottom off the strip
+-- once the playtime bar took its row (playtest, 2026-10-18).
+local TILE_MIN = 52
 local LIP = Theme.lip.small
 local INDICATOR_H = 6
 local INDICATOR_ROW = INDICATOR_H + 2 * Theme.spacing.xs

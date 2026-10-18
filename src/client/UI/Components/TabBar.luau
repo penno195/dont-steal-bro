@@ -67,7 +67,7 @@ local function iconFor(key: string, ink: () -> Color3, isSelected: () -> boolean
 		return icon
 	end
 	icon.ZIndex = 2
-	local puck = ICON + Theme.spacing.sm
+	local puck = ICON + Theme.spacing.xxs
 	return create("Frame")({
 		Name = "IconHolder",
 		Size = UDim2.fromOffset(ICON, ICON),
