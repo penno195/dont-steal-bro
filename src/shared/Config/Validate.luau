@@ -704,6 +704,7 @@ export type TelemetryConfig = {
 	batchSize: number,
 	flushIntervalSeconds: number,
 	perMinuteLimit: number, -- 0 = no limit
+	errorsPerMinute: number, -- ScriptError events per server per minute, server and client together
 	studioEcho: boolean, -- Studio only: print each event, since Studio can't send them
 }
 
@@ -3930,6 +3931,9 @@ function Validate.checkGameConfig(config: GameConfig, issues: { Issue })
 				"telemetry.perMinuteLimit",
 				"must not be negative (0 means no limit)"
 			)
+		end
+		if type(telemetry.errorsPerMinute) ~= "number" or telemetry.errorsPerMinute < 1 then
+			issue(issues, "GameConfig", "GameConfig.luau", "telemetry.errorsPerMinute", "must be at least 1")
 		end
 	end
 

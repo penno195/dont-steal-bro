@@ -47,6 +47,10 @@ with that file.
 | `taskAbandoned` | TaskHandlerService | the player closes a race task's view (`Closed`) or starts another station (`Switched`). Not a solve waiting out its floor, a re-roll at the same station, practice, or the round ending |
 | `powerUpCollected` | PowerUpService | a field pickup (`Pickup`) or a pre-game loadout item (`Loadout`) |
 | `powerUpUsed` | PowerUpService | an item was spent: `Landed` if applied, `Refused` if blocked or the target was gone on impact. Cooldown / no-target refusals spend nothing and aren't logged |
+| `playerLeft` (internal) | Telemetry's own `PlayerRemoving` | every player leaving any server, before the queue flushes |
+| `leftWhileQueued` | MatchmakingService | its `PlayerRemoving` handler, for a player with a ticket (the two handlers run in no set order) |
+| `tutorialStep` (internal) | `TutorialStepIntent` | HubIntroController as each hub step opens or is skipped; OnboardingController as each guided-round pop-up opens |
+| `scriptError` (internal) | `ScriptContext.Error` on the server; `ClientErrorReport` from ErrorReportController | an uncaught error, within `errorsPerMinute` per server |
 
 NPC ids are dropped by the sink, so callers pass racer ids freely.
 
@@ -121,20 +125,68 @@ the step reached, and choice and branch are on the custom events below.
 | `RoundEnded` | `roundEnded(raceSeconds, humanFinishers, humans)`, anchor | race seconds (floored) | `Map` | `Finishers` (humans) | `Humans` (still here at Results) |
 | `TaskAbandoned` | `taskAbandoned(who, taskId, seconds, exit)` | seconds spent (floored) | `Task` | `Map` | `Exit` (`Closed`/`Switched`) |
 | `PowerUpCollected` | `powerUpCollected(who, powerUpId, source)` | – | `PowerUp` | `Source` (`Pickup`/`Loadout`) | `Map` |
+| `PlayerLeft` | on `PlayerRemoving` | seconds in this server (floored) | `Place` (`Hub`/`PracticeHub`/`Match`/`Practice`/`Tutorial`) | `Where` (below) | `Session` band (`0-1m`/`1-5m`/`5-15m`/`15-30m`/`30-60m`/`60m+`) |
+| `TutorialSkipped` | `TutorialStepIntent` with `skipped` | – | `Step` (`Hub welcome`, the only step with Skip) | | |
+| `ScriptError` | server or client uncaught error | – | `Side` (`Server`/`Client`) | `Origin` (`Module line N`, first stack frame) | `Place` |
 
 `Map` on a custom event comes from the round context, so it's `none`
 in the hub. `ReturnedToHub`'s reason comes from TeleportData, which the
 client controls, so only the three reasons the match server sends are
 kept. `PowerUpUsed` and `PowerUpCollected` are never logged from hub practice (P5-5).
 
+`PlayerLeft`'s `Where`: `Tutorial <step>` while the tutorial is
+running (the last onboarding step this server saw), else `Queued` or
+`Hub` on a hub, else the round state (`Loading`, `Race`,
+`DecisionStudio`, …). A hub session and a match session are different
+servers, so `Session` is time in this server, not in the game. Read it
+as: many `Place: Match` + `Where: Race` + `Session: 0-1m` = something
+in the first minute of a race drives people out.
+
+`ScriptError` never carries the message (it can hold player names);
+`Origin` is the module and line of the first stack frame, with a client
+path's `Players.<name>` prefix dropped. Client errors are deduplicated
+on the client (each origin once per session, at most 10) and both sides
+share `GameConfig.telemetry.errorsPerMinute` per server. Server errors
+are logged against any player in the server, so a server with no
+players drops them.
+
 `UserQueued`, `UserMatched`, `RoundStarted`, `AllTasksCompleted`,
 `Qualified`, `FinaleEntered`, `ChoiceLocked` and `ResultReceived` are no
 longer custom events; they are the funnel steps above.
 
+## Onboarding funnel (the tutorial)
+
+`AnalyticsService:LogOnboardingFunnelStepEvent`, the platform's own
+first-time-user funnel: one per account, each step counted the first
+time it's reached. Steps are `TelemetryLogic.ONBOARDING_STEPS`, the
+Hub's (`OnboardingLogic.HUB_STEPS`) then the guided round's
+(`OnboardingLogic.STEPS`); a spec fails if either list changes without
+it.
+
+| # | Step | # | Step |
+|---|---|---|---|
+| 1 | `Hub welcome` | 8 | `Hub loadout` |
+| 2 | `Hub rivals` | 9 | `Hub close` |
+| 3 | `Hub aim` | 10 | `Hub play` |
+| 4 | `Hub station` | 11 | `Round station` |
+| 5 | `Hub task` | 12 | `Round task` |
+| 6 | `Hub locker` | 13 | `Round freeze` |
+| 7 | `Hub gift` | 14 | `Round finish` |
+
+A step is logged when it **opens**, so the drop between two steps is
+"saw this one, never got the next". A skipped step (no practice area
+answered, no Freeze to fire) is back-filled by the platform. The client
+reports the step (`TutorialStepIntent`); the server drops any name not
+in the list, so a spoofed report only skews that account's own row.
+Skip is `TutorialSkipped`, not a step.
+
 ## Five dashboard questions
 
-1. **Where do players drop off?** The two funnels: Queued → Matched in
-   the hub, then Started → … → ResultReceived per round, split by map.
+1. **Where do players drop off?** The onboarding funnel for new
+   players; then Queued → Matched in the hub, then Started → … →
+   ResultReceived per round, split by map. `PlayerLeft` by `Where` says
+   where the ones who quit actually were; `ScriptError` by `Origin`
+   says whether something broke first.
 2. **Do power-ups feel good?** `PowerUpUsed` by `Result` per power-up.
    High `Refused` = immunity/range/cooldown too punishing.
 3. **Is the finale balanced?** `FinaleOutcome` by `Branch`;

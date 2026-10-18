@@ -765,6 +765,10 @@ local GameConfig: Validate.GameConfig = {
 		-- Per-event-name rate limit. 0 = no limit, >0 = max events per
 		-- minute. Applied per player. PLACEHOLDER.
 		perMinuteLimit = 0,
+		-- ScriptError events per server per minute, server and client
+		-- errors together. An error in a Heartbeat loop fires 60 times a
+		-- second; this keeps it to a handful of rows that still show it.
+		errorsPerMinute = 20,
 		-- Roblox only accepts analytics from a published game's server,
 		-- so in Studio every event is dropped. true prints each one to
 		-- Output instead, to check what would have been sent.

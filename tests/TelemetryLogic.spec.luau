@@ -5,6 +5,7 @@
 
 local TestRunner = require("./TestRunner")
 local TelemetryLogic = require("../src/server/TelemetryLogic")
+local OnboardingLogic = require("../src/client/UI/OnboardingLogic")
 
 local round: TelemetryLogic.RoundContext = { roundId = "job:1", mapId = "School", humans = 4 }
 
@@ -176,11 +177,109 @@ TestRunner.describe("TelemetryLogic custom events", function()
 			TelemetryLogic.powerUpCollected("p", "Pickup", "m"),
 			TelemetryLogic.roundEnded("m", 1, 0, 1),
 			TelemetryLogic.streakWin(1, 0, "m"),
+			TelemetryLogic.playerLeft({ place = "Hub", queued = false }, 5),
+			TelemetryLogic.tutorialSkipped("Hub welcome"),
+			TelemetryLogic.scriptError("Server", "X:1", "Match"),
 		}
 		for _, record in records do
 			for key in record.fields do
 				TestRunner.expect(type(key) == "number" and key >= 1 and key <= 3):toBe(true)
 			end
 		end
+	end)
+end)
+
+TestRunner.describe("TelemetryLogic onboarding funnel", function()
+	TestRunner.it("lists the Hub's steps then the guided round's, in order", function()
+		local expected: { string } = {}
+		for _, step in OnboardingLogic.HUB_STEPS do
+			table.insert(expected, "Hub " .. step.id)
+		end
+		for _, step in OnboardingLogic.STEPS do
+			table.insert(expected, "Round " .. step.id)
+		end
+		TestRunner.expect(#TelemetryLogic.ONBOARDING_STEPS):toBe(#expected)
+		for index, step in TelemetryLogic.ONBOARDING_STEPS do
+			TestRunner.expect(step.flow .. " " .. step.id):toBe(expected[index])
+		end
+	end)
+
+	TestRunner.it("numbers steps from 1 and keeps the name", function()
+		local first = TelemetryLogic.onboardingStep("Hub welcome")
+		TestRunner.expect(first.kind):toBe("Onboarding")
+		TestRunner.expect(first.step):toBe(1)
+		TestRunner.expect(first.stepName):toBe("Hub welcome")
+		local last = TelemetryLogic.onboardingStep("Round finish")
+		TestRunner.expect(last.step):toBe(#TelemetryLogic.ONBOARDING_STEPS)
+	end)
+
+	TestRunner.it("drops anything that isn't a step", function()
+		TestRunner.expect(TelemetryLogic.onboardingStepName("Hub", "welcome")):toBe("Hub welcome")
+		TestRunner.expect(TelemetryLogic.onboardingStepName("Round", "station")):toBe("Round station")
+		TestRunner.expect(TelemetryLogic.onboardingStepName("Hub", "freeze")):toBe(nil)
+		TestRunner.expect(TelemetryLogic.onboardingStepName("Lobby", "welcome")):toBe(nil)
+		TestRunner.expect(TelemetryLogic.onboardingStepName("Hub", 3)):toBe(nil)
+		TestRunner.expect(TelemetryLogic.onboardingStepName(nil, "welcome")):toBe(nil)
+	end)
+end)
+
+TestRunner.describe("TelemetryLogic.playerLeft", function()
+	TestRunner.it("bands the session at the edges", function()
+		TestRunner.expect(TelemetryLogic.sessionBand(0)):toBe("0-1m")
+		TestRunner.expect(TelemetryLogic.sessionBand(59)):toBe("0-1m")
+		TestRunner.expect(TelemetryLogic.sessionBand(60)):toBe("1-5m")
+		TestRunner.expect(TelemetryLogic.sessionBand(300)):toBe("5-15m")
+		TestRunner.expect(TelemetryLogic.sessionBand(900)):toBe("15-30m")
+		TestRunner.expect(TelemetryLogic.sessionBand(1800)):toBe("30-60m")
+		TestRunner.expect(TelemetryLogic.sessionBand(99999)):toBe("60m+")
+		TestRunner.expect(TelemetryLogic.sessionBand(-5)):toBe("0-1m")
+	end)
+
+	TestRunner.it("says where they were", function()
+		TestRunner.expect(TelemetryLogic.leftWhere({ place = "Hub", queued = false })):toBe("Hub")
+		TestRunner.expect(TelemetryLogic.leftWhere({ place = "PracticeHub", queued = true })):toBe("Queued")
+		TestRunner.expect(TelemetryLogic.leftWhere({ place = "Match", roundState = "Race", queued = false })):toBe("Race")
+		TestRunner.expect(TelemetryLogic.leftWhere({ place = "Match", queued = false })):toBe("unknown")
+		-- A running tutorial wins over everything else.
+		TestRunner.expect(TelemetryLogic.leftWhere({ place = "Hub", queued = true, tutorialStep = "Hub play" }))
+			:toBe("Tutorial Hub play")
+		TestRunner.expect(
+			TelemetryLogic.leftWhere({ place = "Tutorial", roundState = "Race", queued = false, tutorialStep = "Round freeze" })
+		):toBe("Tutorial Round freeze")
+	end)
+
+	TestRunner.it("carries the seconds and three fields", function()
+		local record = TelemetryLogic.playerLeft({ place = "Match", roundState = "DecisionStudio", queued = false }, 125.7)
+		TestRunner.expect(record.name):toBe("PlayerLeft")
+		TestRunner.expect(record.value):toBe(125)
+		TestRunner.expect(record.fields[1]):toBe("Place: Match")
+		TestRunner.expect(record.fields[2]):toBe("Where: DecisionStudio")
+		TestRunner.expect(record.fields[3]):toBe("Session: 1-5m")
+	end)
+end)
+
+TestRunner.describe("TelemetryLogic script errors", function()
+	TestRunner.it("keeps the first frame's module and line", function()
+		local server = "ServerScriptService.Server.Services.TaskService:642 function finish\nServerScriptService.Server:3"
+		TestRunner.expect(TelemetryLogic.errorOrigin(server, "TaskService")):toBe("TaskService line 642")
+	end)
+
+	TestRunner.it("never keeps a client path's player name", function()
+		local client = "Players.SomeName.PlayerScripts.Client.Controllers.MenuController:88 function open"
+		TestRunner.expect(TelemetryLogic.errorOrigin(client, nil)):toBe("MenuController line 88")
+	end)
+
+	TestRunner.it("falls back to the script, then to unknown", function()
+		TestRunner.expect(TelemetryLogic.errorOrigin("", "RoundService")):toBe("RoundService")
+		TestRunner.expect(TelemetryLogic.errorOrigin(nil, nil)):toBe("unknown")
+		TestRunner.expect(TelemetryLogic.errorOrigin({}, "")):toBe("unknown")
+	end)
+
+	TestRunner.it("logs side, origin and place, no message", function()
+		local record = TelemetryLogic.scriptError("Client", "MenuController line 88", "Hub")
+		TestRunner.expect(record.name):toBe("ScriptError")
+		TestRunner.expect(record.fields[1]):toBe("Side: Client")
+		TestRunner.expect(record.fields[2]):toBe("Origin: MenuController line 88")
+		TestRunner.expect(record.fields[3]):toBe("Place: Hub")
 	end)
 end)

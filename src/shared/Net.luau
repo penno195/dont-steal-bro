@@ -1354,6 +1354,40 @@ Net.Remotes = {
 		states = nil,
 	} :: RemoteDef,
 
+	-- Client -> server, analytics only: a tutorial step just opened
+	-- (`flow` "Hub" or "Round", `step` an OnboardingLogic step id), or
+	-- with `skipped`, the player pressed Skip on it. Telemetry drops any
+	-- step not in TelemetryLogic.ONBOARDING_STEPS. Changes nothing but
+	-- the onboarding funnel, so a spoofed one only skews this account's
+	-- own row.
+	TutorialStepIntent = {
+		name = "TutorialStepIntent",
+		direction = "ServerIntent",
+		schema = Net.struct({
+			flow = Net.stringEnum({ "Hub", "Round" }),
+			step = Net.string({ maxLength = 24 }),
+			skipped = Net.boolean(),
+		}),
+		rateLimit = { capacity = 4, refillPerSecond = 0.5 },
+		states = nil,
+	} :: RemoteDef,
+
+	-- Client -> server, analytics only: an uncaught error in a client
+	-- script (ScriptContext.Error), for Telemetry's ScriptError event.
+	-- Only the trace goes up, never the message (it can hold names);
+	-- the server keeps "Module line N" from its first frame
+	-- (TelemetryLogic.errorOrigin). Tight limit: an error in a render
+	-- loop fires every frame.
+	ClientErrorReport = {
+		name = "ClientErrorReport",
+		direction = "ServerIntent",
+		schema = Net.struct({ trace = Net.string({ maxLength = 300 }) }),
+		-- Capacity = ErrorReportController's whole session cap, so a
+		-- burst of honest reports is never rejected (and flagged).
+		rateLimit = { capacity = 10, refillPerSecond = 0.1 },
+		states = nil,
+	} :: RemoteDef,
+
 	-- Client -> server: the gift pop-up showed everything up to and
 	-- including `upToId`, so those leave the queue. Hub only; it can
 	-- only clear pop-up records, never a gift (StaffGrantLogic.markSeen).

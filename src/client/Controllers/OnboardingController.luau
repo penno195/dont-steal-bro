@@ -175,6 +175,8 @@ local function syncPopup(current: OnboardingLogic.Step?)
 		closePopup()
 	end
 	local id = current.id
+	-- Analytics only: Telemetry's onboarding funnel.
+	Net.fireServer("TutorialStepIntent", { flow = "Round", step = id, skipped = false })
 	local function gotIt()
 		if popupId() == id then
 			acked[id] = true

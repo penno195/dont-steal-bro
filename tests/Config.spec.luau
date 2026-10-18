@@ -261,6 +261,7 @@ local function validGameConfig(): Validate.GameConfig
 			batchSize = 50,
 			flushIntervalSeconds = 10,
 			perMinuteLimit = 0,
+			errorsPerMinute = 20,
 			studioEcho = false,
 		},
 		titleDisplayDuringRound = false,

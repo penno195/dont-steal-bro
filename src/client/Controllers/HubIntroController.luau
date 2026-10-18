@@ -84,6 +84,12 @@ local roundState: string? = nil
 local open = false
 local closeCurrent: (() -> ())? = nil
 
+-- Analytics only (Telemetry's onboarding funnel): a step opened, or
+-- was skipped.
+local function reportStep(id: OnboardingLogic.HubStepId, skipped: boolean)
+	Net.fireServer("TutorialStepIntent", { flow = "Hub", step = id, skipped = skipped })
+end
+
 local function closeStep()
 	if closeCurrent then
 		closeCurrent()
@@ -182,6 +188,7 @@ local function showCard(index: number, step: OnboardingLogic.HubStep)
 			then {
 				label = OnboardingLogic.HUB_BUTTONS.skip,
 				onActivate = function()
+					reportStep(step.id, true)
 					finish(false)
 				end,
 			}
@@ -190,6 +197,7 @@ local function showCard(index: number, step: OnboardingLogic.HubStep)
 		-- carries on, so there's no way to strand the flow halfway.
 		dismissible = step.skip == true,
 		onDismiss = function()
+			reportStep(step.id, true)
 			finish(false)
 		end,
 	})
@@ -319,6 +327,9 @@ end
 
 function showStep(index: number)
 	local step = OnboardingLogic.HUB_STEPS[index]
+	if step ~= nil then
+		reportStep(step.id, false)
+	end
 	if step == nil then
 		finish(false)
 	elseif step.gift then

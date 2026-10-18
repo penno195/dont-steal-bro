@@ -8,8 +8,9 @@
 -- What each event is called and which fields it carries is decided in
 -- src/server/TelemetryLogic.luau (pure, tested); docs/telemetry-schema.md
 -- is the table. This file only finds the Player, rate-limits, queues and
--- makes the call: LogFunnelStepEvent for the two funnels, LogCustomEvent
--- for everything else. (The old AnalyticsService:FireEvent is deprecated.)
+-- makes the call: LogFunnelStepEvent for the two funnels,
+-- LogOnboardingFunnelStepEvent for the tutorial, LogCustomEvent for
+-- everything else. (The old AnalyticsService:FireEvent is deprecated.)
 --
 -- Callers pass a Player or a user id. A user id with no Player in this
 -- server (an NPC's negative id, or someone who already left) is dropped:
@@ -27,12 +28,15 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local ScriptContext = game:GetService("ScriptContext")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Workspace = game:GetService("Workspace")
 local Analytics = game:GetService("AnalyticsService")
 
 local GameConfig = require(ReplicatedStorage.Shared.Config.GameConfig)
 local Loader = require(ReplicatedStorage.Shared.Loader)
 local EffectContext = require(ServerScriptService.Server.EffectContext)
+local StreakTagLogic = require(ServerScriptService.Server.StreakTagLogic)
 local TelemetryLogic = require(ServerScriptService.Server.TelemetryLogic)
 
 type Record = TelemetryLogic.Record
@@ -73,6 +77,17 @@ local state = {
 	-- Event names whose call has already failed once, so a broken sink
 	-- warns once per name instead of every event.
 	warned = {} :: { [string]: true },
+	-- PlayerLeft's facts. joinedAt: os.clock() on joining this server.
+	-- tutorialStep: the last onboarding step this server saw them open,
+	-- cleared by Skip or the last step. queuedOnLeave: MatchmakingService
+	-- saw them leave while queued (its PlayerRemoving handler and ours
+	-- run in no set order, so whichever runs second still knows).
+	joinedAt = {} :: { [Player]: number },
+	tutorialStep = {} :: { [Player]: string },
+	queuedOnLeave = {} :: { [Player]: true },
+	-- ScriptError's per-server budget: count this minute, and when the
+	-- minute ends.
+	errors = { count = 0, resetAt = 0 },
 }
 
 -- ===== players =============================================================
@@ -162,6 +177,8 @@ local function send(item: Queued)
 				record.stepName,
 				fields
 			)
+		elseif record.kind == "Onboarding" then
+			Analytics:LogOnboardingFunnelStepEvent(item.player, record.step :: number, record.stepName, fields)
 		else
 			Analytics:LogCustomEvent(item.player, record.name, record.value, fields)
 		end
@@ -355,11 +372,101 @@ local function streakWin(who: Who, streak: number)
 	log(resolve(who), TelemetryLogic.streakWin(streak, if round ~= nil then round.bots else nil, roundMapId()))
 end
 
+-- ===== tutorial, quits and errors ===========================================
+
+-- Which kind of server this is. Read live, not cached: the match kind
+-- is settled before Loading, but a player can leave before that.
+local function place(): TelemetryLogic.Place
+	local hub = StreakTagLogic.isHub(
+		game.PlaceId,
+		GameConfig.matchmaking.hubPlaceId,
+		IS_STUDIO,
+		Workspace:FindFirstChild("Hub") ~= nil
+	)
+	if hub then
+		if (Loader.get("MatchmakingService") :: any).isPracticeHub() == true then
+			return "PracticeHub"
+		end
+		return "Hub"
+	end
+	local teleports = Loader.get("MatchTeleportService") :: any
+	if teleports.isTutorialMatch() == true then
+		return "Tutorial"
+	elseif teleports.isPracticeMatch() == true then
+		return "Practice"
+	end
+	return "Match"
+end
+
+-- TutorialStepIntent. The funnel itself counts each step once per
+-- account; the remembered step is for PlayerLeft's Where.
+local function tutorialStep(player: Player, payload: any)
+	local name = TelemetryLogic.onboardingStepName(payload.flow, payload.step)
+	if name == nil then
+		return
+	end
+	if payload.skipped then
+		state.tutorialStep[player] = nil
+		log(player, TelemetryLogic.tutorialSkipped(name))
+		return
+	end
+	local steps = TelemetryLogic.ONBOARDING_STEPS
+	local last = steps[#steps]
+	if name == last.flow .. " " .. last.id then
+		state.tutorialStep[player] = nil
+	else
+		state.tutorialStep[player] = name
+	end
+	log(player, TelemetryLogic.onboardingStep(name))
+end
+
+-- MatchmakingService's PlayerRemoving handler, for a player leaving
+-- while queued (see state.queuedOnLeave).
+local function leftWhileQueued(player: Player)
+	-- No joinedAt: our handler already ran (and saw the ticket itself).
+	if state.joinedAt[player] ~= nil then
+		state.queuedOnLeave[player] = true
+	end
+end
+
+local function playerLeft(player: Player)
+	local where: TelemetryLogic.Place = place()
+	local queued = state.queuedOnLeave[player] == true
+	if not queued and (where == "Hub" or where == "PracticeHub") then
+		queued = (Loader.get("MatchmakingService") :: any).isQueued(player) == true
+	end
+	local facts: TelemetryLogic.LeaveFacts = {
+		place = where,
+		roundState = if where == "Hub" or where == "PracticeHub"
+			then nil
+			else (Loader.get("RoundService") :: any).getState(),
+		queued = queued,
+		tutorialStep = state.tutorialStep[player],
+	}
+	local joinedAt = state.joinedAt[player]
+	log(player, TelemetryLogic.playerLeft(facts, if joinedAt ~= nil then os.clock() - joinedAt else 0))
+end
+
+-- Server and client errors share one budget per server per minute.
+local function scriptError(player: Player?, side: string, origin: string)
+	local now = os.clock()
+	local budget = state.errors
+	if now >= budget.resetAt then
+		budget.count = 0
+		budget.resetAt = now + 60
+	end
+	if budget.count >= GameConfig.telemetry.errorsPerMinute then
+		return
+	end
+	budget.count += 1
+	log(player, TelemetryLogic.scriptError(side, origin, place()))
+end
+
 -- ===== service ===============================================================
 
 local TelemetryService: Loader.Service = {
 	name = "Telemetry",
-	dependencies = {},
+	dependencies = { "NetGuard" },
 
 	-- Matchmaking funnel (hub)
 	userQueued = userQueued,
@@ -389,6 +496,9 @@ local TelemetryService: Loader.Service = {
 	roundEnded = roundEnded,
 	streakWin = streakWin,
 
+	-- Quits (PlayerLeft)
+	leftWhileQueued = leftWhileQueued,
+
 	-- Explicit flush for tests and edge cases (BindToClose, etc)
 	flush = flush,
 }
@@ -396,10 +506,33 @@ local TelemetryService: Loader.Service = {
 function TelemetryService:init()
 	-- A leaving player's queued events go out while they're still a
 	-- Player; after this they can't be logged against.
+	local function joined(player: Player)
+		state.joinedAt[player] = os.clock()
+	end
+	Players.PlayerAdded:Connect(joined)
+	for _, player in Players:GetPlayers() do
+		joined(player)
+	end
 	Players.PlayerRemoving:Connect(function(player)
+		playerLeft(player)
 		flush()
 		state.queueSessions[player] = nil
+		state.joinedAt[player] = nil
+		state.tutorialStep[player] = nil
+		state.queuedOnLeave[player] = nil
 	end)
+
+	-- Uncaught errors. Server ones are logged against the anchor (any
+	-- player here; none = nowhere to log them); client ones against the
+	-- reporting player.
+	ScriptContext.Error:Connect(function(_message: string, trace: string, origin: Instance?)
+		scriptError(anchor(), "Server", TelemetryLogic.errorOrigin(trace, if origin then origin.Name else nil))
+	end)
+	local NetGuard = Loader.get("NetGuard") :: any
+	NetGuard.on("ClientErrorReport", function(player: Player, payload: any)
+		scriptError(player, "Client", TelemetryLogic.errorOrigin(payload.trace, nil))
+	end)
+	NetGuard.on("TutorialStepIntent", tutorialStep)
 	game:BindToClose(function()
 		flush()
 	end)

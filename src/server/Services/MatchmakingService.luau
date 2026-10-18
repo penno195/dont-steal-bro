@@ -981,6 +981,10 @@ function MatchmakingService:init()
 	end)
 
 	Players.PlayerRemoving:Connect(function(player: Player)
+		-- For Telemetry's PlayerLeft, whose handler may run after this one.
+		if tickets[player] ~= nil then
+			Loader.get("Telemetry").leftWhileQueued(player)
+		end
 		leaveQueue(player, false)
 	end)
 end

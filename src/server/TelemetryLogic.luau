@@ -33,7 +33,7 @@
 
 local TelemetryLogic = {}
 
-export type Kind = "Funnel" | "Custom"
+export type Kind = "Funnel" | "Onboarding" | "Custom"
 
 -- One AnalyticsService call, described as data. `fields` is in slot
 -- order: fields[1] goes to CustomField01, and so on. A nil slot is left
@@ -42,7 +42,7 @@ export type Record = {
 	kind: Kind,
 	name: string, -- the funnel name, or the custom event name
 	value: number?, -- custom events only
-	sessionId: string?, -- funnels only
+	sessionId: string?, -- funnels only (not the onboarding one)
 	step: number?, -- funnels only
 	stepName: string?, -- funnels only
 	fields: { string? },
@@ -82,6 +82,46 @@ end
 
 local ROUND_STEP_NAMES = namesByStep(TelemetryLogic.RoundStep :: any)
 local MATCHMAKING_STEP_NAMES = namesByStep(TelemetryLogic.MatchmakingStep :: any)
+
+-- The tutorial, as the platform's onboarding funnel: one per account,
+-- each step counted the first time it's reached. The Hub's steps
+-- (OnboardingLogic.HUB_STEPS) then the guided round's
+-- (OnboardingLogic.STEPS), in order; tests/TelemetryLogic.spec.luau
+-- fails if either list changes without this one. The client reports a
+-- step as it opens (TutorialStepIntent), so a step's drop is "saw it,
+-- never reached the next one".
+TelemetryLogic.ONBOARDING_STEPS = table.freeze({
+	{ flow = "Hub", id = "welcome" },
+	{ flow = "Hub", id = "rivals" },
+	{ flow = "Hub", id = "aim" },
+	{ flow = "Hub", id = "station" },
+	{ flow = "Hub", id = "task" },
+	{ flow = "Hub", id = "locker" },
+	{ flow = "Hub", id = "gift" },
+	{ flow = "Hub", id = "loadout" },
+	{ flow = "Hub", id = "close" },
+	{ flow = "Hub", id = "play" },
+	{ flow = "Round", id = "station" },
+	{ flow = "Round", id = "task" },
+	{ flow = "Round", id = "freeze" },
+	{ flow = "Round", id = "finish" },
+})
+
+-- "Hub welcome" -> its step number. Anything else a client sends is
+-- dropped, so it can't mint funnel steps.
+local ONBOARDING_INDEX: { [string]: number } = {}
+for index, step in TelemetryLogic.ONBOARDING_STEPS do
+	ONBOARDING_INDEX[step.flow .. " " .. step.id] = index
+end
+
+-- The step's name ("Hub welcome"), or nil if `flow`/`id` isn't a step.
+function TelemetryLogic.onboardingStepName(flow: any, id: any): string?
+	if type(flow) ~= "string" or type(id) ~= "string" then
+		return nil
+	end
+	local name = flow .. " " .. id
+	return if ONBOARDING_INDEX[name] ~= nil then name else nil
+end
 
 -- ===== field values ========================================================
 
@@ -185,6 +225,17 @@ function TelemetryLogic.matchmakingStep(sessionId: string, step: number): Record
 		sessionId = sessionId,
 		step = step,
 		stepName = MATCHMAKING_STEP_NAMES[step],
+		fields = {},
+	}
+end
+
+-- `name` from onboardingStepName.
+function TelemetryLogic.onboardingStep(name: string): Record
+	return {
+		kind = "Onboarding",
+		name = "Onboarding",
+		step = ONBOARDING_INDEX[name],
+		stepName = name,
 		fields = {},
 	}
 end
@@ -323,6 +374,106 @@ function TelemetryLogic.streakWin(streak: number, bots: number?, mapId: string):
 		TelemetryLogic.field("Streak", TelemetryLogic.streakBand(streak)),
 		TelemetryLogic.field("Bots", if bots ~= nil then bots else "unknown"),
 		TelemetryLogic.field("Map", mapId),
+	})
+end
+
+-- ===== quits ===============================================================
+
+-- Seconds in this server, banded for splitting; the exact figure is the
+-- value. Hub sessions and match sessions are separate servers, so a
+-- player who quits 20s into a match is "0-1m" there.
+local SESSION_BANDS: { { lo: number, label: string } } = {
+	{ lo = 3600, label = "60m+" },
+	{ lo = 1800, label = "30-60m" },
+	{ lo = 900, label = "15-30m" },
+	{ lo = 300, label = "5-15m" },
+	{ lo = 60, label = "1-5m" },
+	{ lo = 0, label = "0-1m" },
+}
+
+function TelemetryLogic.sessionBand(seconds: number): string
+	for _, band in SESSION_BANDS do
+		if seconds >= band.lo then
+			return band.label
+		end
+	end
+	return "0-1m"
+end
+
+-- Which kind of server the player left: "Hub", "PracticeHub" (a party's
+-- private hub), "Match", "Practice" (a practice match) or "Tutorial"
+-- (the guided round).
+export type Place = "Hub" | "PracticeHub" | "Match" | "Practice" | "Tutorial"
+
+export type LeaveFacts = {
+	place: Place,
+	roundState: string?, -- match servers: RoundService's state
+	queued: boolean, -- hub servers: in the matchmaking queue
+	tutorialStep: string?, -- the last onboarding step this server saw, if the tutorial is still running
+}
+
+-- Where they were when they left. Every value is from a fixed set (the
+-- round states, the onboarding steps, and three words), so the field
+-- can't run past the platform's 8,000 combinations.
+function TelemetryLogic.leftWhere(facts: LeaveFacts): string
+	if facts.tutorialStep ~= nil then
+		return "Tutorial " .. facts.tutorialStep
+	end
+	if facts.place == "Hub" or facts.place == "PracticeHub" then
+		return if facts.queued then "Queued" else "Hub"
+	end
+	return facts.roundState or "unknown"
+end
+
+-- Every player leaving, from every server. Value: seconds they were in
+-- this server. Read with Where: a pile-up at one step or round state
+-- is the thing to look at.
+function TelemetryLogic.playerLeft(facts: LeaveFacts, seconds: number): Record
+	return custom("PlayerLeft", math.floor(seconds), {
+		TelemetryLogic.field("Place", facts.place),
+		TelemetryLogic.field("Where", TelemetryLogic.leftWhere(facts)),
+		TelemetryLogic.field("Session", TelemetryLogic.sessionBand(seconds)),
+	})
+end
+
+-- The welcome card's Skip (the only step that has one). `name` from
+-- onboardingStepName.
+function TelemetryLogic.tutorialSkipped(name: string): Record
+	return custom("TutorialSkipped", nil, {
+		TelemetryLogic.field("Step", name),
+	})
+end
+
+-- ===== script errors =======================================================
+
+-- "Module line N" from a stack trace's first frame: the deepest script
+-- the error came through. Only the last path segment is kept, which
+-- drops a client trace's "Players.<name>." prefix (no PII) and keeps
+-- the field to one value per line of code. `scriptName` is the fallback
+-- when there's no trace (an error from a disconnected thread, say).
+function TelemetryLogic.errorOrigin(trace: any, scriptName: any): string
+	if type(trace) == "string" then
+		local firstLine = string.match(trace, "^[^\n]*") or ""
+		local module, line = string.match(firstLine, "([%w_]+):(%d+)")
+		if module ~= nil and line ~= nil then
+			return module .. " line " .. line
+		end
+	end
+	if type(scriptName) == "string" and scriptName ~= "" then
+		return scriptName
+	end
+	return "unknown"
+end
+
+-- An uncaught script error. `side` is "Server" or "Client" (forwarded
+-- by ClientErrorReport). No message text: it can carry player names
+-- and makes every row unique; the origin is enough to find it in the
+-- Creator Hub's error report or by reading the line.
+function TelemetryLogic.scriptError(side: string, origin: string, place: Place): Record
+	return custom("ScriptError", nil, {
+		TelemetryLogic.field("Side", side),
+		TelemetryLogic.field("Origin", origin),
+		TelemetryLogic.field("Place", place),
 	})
 end
 
