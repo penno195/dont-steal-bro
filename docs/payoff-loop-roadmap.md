@@ -120,7 +120,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
 
 ## Also approved (after the four above)
 
-- [ ] **5. Free season pass for playtime.** 6 **active** hours in one
+- [x] **5. Free season pass for playtime.** 6 **active** hours in one
   week (Mon–Sun UTC) unlocks the live season's premium track for the
   rest of that season, once per season. Time in a match always counts.
   Hub time counts only with player input in the last 2 minutes. Grants
@@ -146,9 +146,16 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     `StoreService.grantPlaytimePass`. StoreState's `season` gains
     `passSource` and `playtime = { activeSeconds, targetSeconds,
     weekResetsIn }` (nil once the pass is held).
-  - [ ] 5c. UI: the pass screen's "x / 6 active hours this week" bar
+  - [x] 5c. UI: the pass screen's "x / 6 active hours this week" bar
     (with when the week resets) while the pass isn't held, and an
-    "Earned by playtime" pass pop-up when it unlocks.
+    "Earned by playtime" pass pop-up when it unlocks. Built as a
+    `C.ProgressBar` row under the Season tab's track
+    (`SeasonTrackLogic.playtimeView`; hours floor to a tenth so it never
+    reads 6/6 before the grant) and a ClaimPopup card when `passSource`
+    flips to "Playtime" between two StoreStates of one season
+    (`earnedByPlaytime`; never on a join), held until no round, Studio
+    or loading screen is up. The Studio preview's two pass-less scenes
+    show the bar at 2.5 / 6.
 - [ ] **6. Own-streak indicator in the Studio.** A finalist sees only
   their own streak ("Your streak: 6, at stake"), sent targeted, never
   replicated to others.
