@@ -1236,7 +1236,7 @@ local function chatBox(store: Store, order: number): Frame
 		Name = "QuickPopup",
 		-- Above the Quick button, its left edge on the chat line's.
 		AnchorPoint = Vector2.new(0, 1),
-		Position = UDim2.new(0, 0, 0, -Theme.spacing.sm),
+		Position = UDim2.fromOffset(0, -Theme.spacing.sm),
 		Size = UDim2.fromOffset(popupW, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		BackgroundColor3 = Base.STAGE_BACKGROUND,
