@@ -81,6 +81,9 @@ export type StoreState = {
 	-- shape, loose here because this module has no requires. nil off
 	-- the Hub.
 	cashOut: { [string]: any }?,
+	-- The Hub's "Your record" panel (payoff-loop step 7):
+	-- RecordViewLogic.Record's shape, loose likewise. nil off the Hub.
+	record: { [string]: any }?,
 }
 
 export type Category = "Season" | "Bundles" | "PowerUps" | "Cosmetics" | "Currency"

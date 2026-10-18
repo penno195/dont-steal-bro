@@ -61,6 +61,8 @@ local Titles = require(ReplicatedStorage.Shared.Config.Titles)
 local BoardLogic = require(script.Parent.Parent.UI.BoardLogic)
 local C = require(script.Parent.Parent.UI.Components)
 local CashOutViewLogic = require(script.Parent.Parent.UI.CashOutViewLogic)
+local RecordViewLogic = require(script.Parent.Parent.UI.RecordViewLogic)
+local Modal = require(script.Parent.Parent.UI.Components.Modal)
 local ResultsLogic = require(script.Parent.Parent.UI.ResultsLogic)
 local StoreScreenLogic = require(script.Parent.Parent.UI.StoreScreenLogic)
 local SeasonTrackLogic = require(script.Parent.Parent.UI.SeasonTrackLogic)
@@ -902,6 +904,48 @@ local function mountLauncher()
 				bankButton.Visible = CashOutViewLogic.parse(if s then s.cashOut else nil) ~= nil
 			end)
 			bankButton.Parent = column
+
+			-- "Your record" (payoff-loop step 7): your own shares, steals
+			-- and times robbed. Hub only, like the bank button.
+			local recordButton = C.IconButton({
+				icon = "rival",
+				label = RecordViewLogic.BUTTON_LABEL,
+				variant = "secondary",
+				onActivate = function()
+					local s = storeState()
+					local record = RecordViewLogic.parse(if s then s.record else nil)
+					if record == nil then
+						return
+					end
+					closeMenu()
+					local close: () -> ()
+					close = Modal.open({
+						title = RecordViewLogic.TITLE,
+						body = RecordViewLogic.body(record),
+						bodyLines = 3,
+						actions = {
+							{
+								label = "Close",
+								variant = "secondary",
+								onActivate = function()
+									close()
+								end,
+							},
+						},
+						dismissible = true,
+						onDismiss = function()
+							close()
+						end,
+					})
+				end,
+				order = 6,
+				layoutOrder = 6,
+			})
+			vide.effect(function()
+				local s = storeState()
+				recordButton.Visible = RecordViewLogic.parse(if s then s.record else nil) ~= nil
+			end)
+			recordButton.Parent = column
 		end
 		if isStaff then
 			C.IconButton({
@@ -911,8 +955,8 @@ local function mountLauncher()
 				onActivate = function()
 					open("Staff")
 				end,
-				order = 6,
-				layoutOrder = 6,
+				order = 7,
+				layoutOrder = 7,
 			}).Parent =
 				column
 		end

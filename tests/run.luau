@@ -83,5 +83,6 @@ require("./PrizeRevealLogic.spec")
 require("./GuessViewLogic.spec")
 require("./CashOutLogic.spec")
 require("./CashOutViewLogic.spec")
+require("./RecordViewLogic.spec")
 
 TestRunner.run()

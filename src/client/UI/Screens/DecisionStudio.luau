@@ -1041,6 +1041,18 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 		local p = payout()
 		return if p and p.drop then { p.drop } else {}
 	end)
+	-- "Robbed by X" (payoff-loop step 7): a sharer who lost to a lone
+	-- stealer, named from the seats. Only ever on your own result.
+	local robbed = derive(function(): string?
+		return DecisionLogic.robbedByLine(store.personal(), function(id: number): string?
+			for _, seat in store.seats() do
+				if seat.id == id then
+					return seat.name
+				end
+			end
+			return nil
+		end)
+	end)
 	return create("Frame")({
 		Name = "Result",
 		LayoutOrder = order,
@@ -1096,6 +1108,20 @@ local function resultPanel(copy: () -> DecisionLogic.ResultCopy?, store: Store, 
 		indexes(drops, function(drop: () -> PayoutLogic.Drop)
 			return dropRow(drop(), payout, store)
 		end) :: any,
+		-- A loser's line, so it takes the drop row's slot (3): the two
+		-- never show together.
+		Base.text("title", {
+			Name = "Robbed",
+			LayoutOrder = 3,
+			Size = UDim2.new(1, 0, 0, Theme.type.title.size + Theme.spacing.xxs),
+			Text = function()
+				return robbed() or ""
+			end,
+			Visible = function()
+				return robbed() ~= nil
+			end,
+			TextColor3 = Theme.color.danger,
+		}),
 		Base.text("title", {
 			Name = "Streak",
 			LayoutOrder = 4,

@@ -208,7 +208,18 @@ function DecisionStudioPreview.mount(controller: any): () -> ()
 				},
 				revealAt = Clock.now() + 0.2,
 			}))
-			personal(table.freeze({ streakBefore = 7, streakAfter = if won then 8 else 0, won = won }))
+			-- A sharer who lost to a lone stealer is robbed by them
+			-- (payoff-loop step 7), so the "Robbed by" line shows too.
+			local stealers = {}
+			for id, choice in scene.choices do
+				if choice == "Steal" then
+					table.insert(stealers, id)
+				end
+			end
+			local robbedBy = if not won and scene.choices[SELF] == "Share" and #stealers == 1 then stealers[1] else nil
+			personal(
+				table.freeze({ streakBefore = 7, streakAfter = if won then 8 else 0, won = won, robbedBy = robbedBy })
+			)
 			local length = DecisionLogic.revealLength(3) + 4
 			local waited = 0
 			while running and reveal() ~= nil and waited < length do

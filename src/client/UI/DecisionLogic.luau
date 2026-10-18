@@ -24,7 +24,9 @@ export type Phase = "Intro" | "Negotiate" | "Choose" | "Reveal" | "Resolve"
 export type Prize = "Big" | "Medium" | "Small" | "Nothing"
 export type Tone = "win" | "loss" | "neutral"
 
-export type Reputation = { steals: number, shares: number }
+-- `betrayed` (payoff-loop step 7): the times they shared and lost to a
+-- lone stealer. 0 when an older server leaves it out.
+export type Reputation = { steals: number, shares: number, betrayed: number }
 
 export type Reveal = {
 	choices: { [number]: Choice },
@@ -34,7 +36,9 @@ export type Reveal = {
 	revealAt: number,
 }
 
-export type Personal = { streakBefore: number, streakAfter: number, won: boolean }
+-- `robbedBy` (payoff-loop step 7): the lone stealer's id when you
+-- shared and lost to them; nil otherwise.
+export type Personal = { streakBefore: number, streakAfter: number, won: boolean, robbedBy: number? }
 
 -- Which screen to show. "Locked" is Choose after you've committed, and
 -- the gap between the last lock and the reveal packet landing.
@@ -127,7 +131,11 @@ function DecisionLogic.parseReputation(list: any): { [number]: Reputation }
 	for _, entry in list :: { any } do
 		local id = if type(entry) == "table" then toId(entry.playerId) else nil
 		if id ~= nil and type(entry.steals) == "number" and type(entry.shares) == "number" then
-			out[id] = table.freeze({ steals = math.max(0, entry.steals), shares = math.max(0, entry.shares) })
+			out[id] = table.freeze({
+				steals = math.max(0, entry.steals),
+				shares = math.max(0, entry.shares),
+				betrayed = if type(entry.betrayed) == "number" then math.max(0, math.floor(entry.betrayed)) else 0,
+			})
 		end
 	end
 	return out
@@ -144,6 +152,7 @@ function DecisionLogic.parsePersonal(payload: any): Personal?
 		streakBefore = payload.streakBefore,
 		streakAfter = payload.streakAfter,
 		won = payload.won == true,
+		robbedBy = toId(payload.robbedBy),
 	})
 end
 
@@ -168,6 +177,29 @@ function DecisionLogic.reputationSplit(rep: Reputation?): ReputationSplit?
 end
 
 DecisionLogic.NO_HISTORY = "No history yet"
+
+-- The tag's second line (payoff-loop step 7, Q5's betrayal applied
+-- case): how often this finalist shared and got robbed. nil at 0, so a
+-- clean record adds nothing.
+function DecisionLogic.robbedLine(rep: Reputation?): string?
+	if rep == nil or rep.betrayed <= 0 then
+		return nil
+	end
+	return string.format("Robbed %d×", rep.betrayed)
+end
+
+-- The "Robbed by X" line on your own result card (payoff-loop step 7):
+-- only a sharer who lost to a lone stealer gets it, from the targeted
+-- DecisionPersonalResult. `nameOf` reads the seat names; a stealer
+-- whose seat can't be found still gets the line, unnamed.
+function DecisionLogic.robbedByLine(personal: Personal?, nameOf: (id: number) -> string?): string?
+	local id = if personal then personal.robbedBy else nil
+	if id == nil then
+		return nil
+	end
+	local name = nameOf(id)
+	return if name ~= nil and name ~= "" then string.format("Robbed by %s", name) else "Robbed by the thief"
+end
 
 -- QUICK CHAT -----------------------------------------------------------
 

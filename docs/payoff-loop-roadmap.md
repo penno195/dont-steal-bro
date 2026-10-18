@@ -164,7 +164,7 @@ All amounts are PLACEHOLDER until a playtest tunes them.
   (`PayoutLogic.ownStreakLine`). Owner's answers (Q7's applied case):
   "at stake" even with a shield held; at 0 it reads "No streak yet: win
   to start one". Unseen in Studio when built.
-- [ ] **7. Betrayal card + trust stat.** After a reveal, a betrayed
+- [x] **7. Betrayal card + trust stat.** After a reveal, a betrayed
   sharer gets a "Robbed by X" card. Lifetime "times betrayed" and a
   share/steal trust record, built on the existing Studio history (Q5).
   Owner's answers: Q5's "betrayal card and trust stat" applied case.
@@ -186,8 +186,16 @@ All amounts are PLACEHOLDER until a playtest tunes them.
     id) on the targeted `DecisionPersonalResult`, `betrayed` on each
     reputation entry (`NPCBrain.historyFor` rolls the bot's), and a
     Hub-only `record = { steals, shares, betrayed }` on StoreState.
-  - [ ] 7c. UI: the "Robbed by X" card after the reveal, "robbed N×" in
+  - [x] 7c. UI: the "Robbed by X" card after the reveal, "robbed N×" in
     the Studio reputation line, and the Hub's "Your record" panel.
+    Built as a red "Robbed by X" line on your own Studio result card
+    (`DecisionLogic.robbedByLine`, named from the seats), a second red
+    "Robbed 3×" line under the over-head record tag once betrayed > 0
+    (`DecisionLogic.robbedLine`; the tag grows upward and bubbles lift
+    to clear it), and a Hub-only "Your record" launcher button opening
+    a modal of shares, steals and times robbed (`RecordViewLogic`).
+    The Studio preview's lone-steal scene shows the Robbed line.
+    Unseen in Studio when built.
 - [ ] **8. Daily challenges.** Three a day (e.g. "Freeze 5 players",
   "Reach the Studio twice", "Share and survive"), most doable without
   winning. One config file per challenge.

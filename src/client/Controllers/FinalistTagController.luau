@@ -8,6 +8,9 @@
 -- counts, from DecisionParticipants only, so it exists for the Studio
 -- and nowhere else. Never a streak (Q7). A first-timer's 0/0 reads "No
 -- history yet"; an NPC sends a small rolled history like a light player's.
+-- Under it, once they've been betrayed, a second line "Robbed 3×"
+-- (payoff-loop step 7, Q5's betrayal applied case); the tag grows a
+-- line upward for it, so the record line never moves or shrinks.
 --
 -- Built the NametagController way (see its performance header): one
 -- TextLabel per tag, AlwaysOnTop off, LightInfluence 0, no per-frame
@@ -41,7 +44,8 @@ local CHECK_INTERVAL = 1
 local STEAL_HEX = "#" .. Theme.color.danger:ToHex()
 local SHARE_HEX = "#" .. Theme.color.success:ToHex()
 
-local records: { [number]: string } = {} -- racer id -> rich text; empty = no tags
+type Lines = { record: string, robbed: string? } -- `record` is rich text
+local records: { [number]: Lines } = {} -- racer id -> lines; empty = no tags
 local checkThread: thread? = nil
 local bubbleOffsetBefore: number? = nil -- set while bubbles are lifted
 
@@ -51,8 +55,17 @@ local function liftBubbles(lift: boolean)
 		return
 	end
 	if lift and bubbleOffsetBefore == nil then
+		-- Bubble chat has one offset for every head, so one tag with a
+		-- "Robbed" line lifts them all by its extra line.
+		local extra = 0
+		for _, lines in records do
+			if lines.robbed ~= nil then
+				extra = TAG_STUDS.Y
+				break
+			end
+		end
 		bubbleOffsetBefore = config.VerticalStudsOffset
-		config.VerticalStudsOffset += BUBBLE_LIFT_STUDS
+		config.VerticalStudsOffset += BUBBLE_LIFT_STUDS + extra
 	elseif not lift and bubbleOffsetBefore ~= nil then
 		config.VerticalStudsOffset = bubbleOffsetBefore :: number
 		bubbleOffsetBefore = nil
@@ -79,7 +92,7 @@ local function tagOn(character: Model): BillboardGui?
 	return if existing ~= nil and existing:IsA("BillboardGui") then existing else nil
 end
 
-local function attach(character: Model, text: string)
+local function attach(character: Model, lines: Lines)
 	local head = character:FindFirstChild("Head")
 	if head == nil or not head:IsA("BasePart") then
 		return
@@ -108,21 +121,43 @@ local function attach(character: Model, text: string)
 		label.TextStrokeColor3 = Color3.new(0, 0, 0)
 		label.Parent = created
 
+		local robbed = label:Clone()
+		robbed.Name = "Robbed"
+		robbed.RichText = false
+		robbed.TextColor3 = Theme.color.danger
+		robbed.Parent = created
+
 		created.Parent = head
 		billboard = created
 	end
-	local label = (billboard :: BillboardGui):FindFirstChild("Record")
-	if label ~= nil and label:IsA("TextLabel") and label.Text ~= text then
-		label.Text = text
+	local tag = billboard :: BillboardGui
+	local count = if lines.robbed ~= nil then 2 else 1
+	-- One TAG_STUDS line each, stacked up from the same bottom edge.
+	tag.Size = UDim2.fromScale(TAG_STUDS.X, TAG_STUDS.Y * count)
+	tag.StudsOffsetWorldSpace = Vector3.new(0, OFFSET_STUDS + TAG_STUDS.Y * (count - 1) / 2, 0)
+	local label = tag:FindFirstChild("Record")
+	if label ~= nil and label:IsA("TextLabel") then
+		label.Size = UDim2.fromScale(1, 1 / count)
+		label.Position = UDim2.fromScale(0, 0)
+		if label.Text ~= lines.record then
+			label.Text = lines.record
+		end
+	end
+	local robbed = tag:FindFirstChild("Robbed")
+	if robbed ~= nil and robbed:IsA("TextLabel") then
+		robbed.Visible = lines.robbed ~= nil
+		robbed.Size = UDim2.fromScale(1, 1 / count)
+		robbed.Position = UDim2.fromScale(0, 1 / count)
+		robbed.Text = lines.robbed or ""
 	end
 end
 
 local function ensureAll()
 	local nametags = Loader.get("NametagController") :: any
-	for id, text in records do
+	for id, lines in records do
 		local character = nametags.characterFor(id) :: Model?
 		if character ~= nil then
-			attach(character, text)
+			attach(character, lines)
 		end
 	end
 end
@@ -155,7 +190,7 @@ function FinalistTagController:init()
 		local reps = DecisionLogic.parseReputation(payload.reputation)
 		for _, raw in (payload.qualifierIds or {}) :: { any } do
 			if type(raw) == "number" then
-				records[raw] = textFor(reps[raw])
+				records[raw] = { record = textFor(reps[raw]), robbed = DecisionLogic.robbedLine(reps[raw]) }
 			end
 		end
 		liftBubbles(true)

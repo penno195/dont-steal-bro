@@ -113,16 +113,19 @@ end)
 describe("DecisionLogic.reputationSplit", function()
 	it("says nothing damning about a first-timer (or an NPC)", function()
 		expect(DecisionLogic.reputationSplit(nil)):toBe(nil)
-		expect(DecisionLogic.reputationSplit({ steals = 0, shares = 0 })):toBe(nil)
+		expect(DecisionLogic.reputationSplit({ steals = 0, shares = 0, betrayed = 0 })):toBe(nil)
 	end)
 
 	it("splits into two rounded percentages that add to 100", function()
-		local s = DecisionLogic.reputationSplit({ steals = 8, shares = 5 }) :: DecisionLogic.ReputationSplit
+		local s =
+			DecisionLogic.reputationSplit({ steals = 8, shares = 5, betrayed = 0 }) :: DecisionLogic.ReputationSplit
 		expect(s.steal):toBe(62)
 		expect(s.share):toBe(38)
-		local third = DecisionLogic.reputationSplit({ steals = 1, shares = 2 }) :: DecisionLogic.ReputationSplit
+		local third =
+			DecisionLogic.reputationSplit({ steals = 1, shares = 2, betrayed = 0 }) :: DecisionLogic.ReputationSplit
 		expect(third.steal + third.share):toBe(100)
-		local all = DecisionLogic.reputationSplit({ steals = 1, shares = 0 }) :: DecisionLogic.ReputationSplit
+		local all =
+			DecisionLogic.reputationSplit({ steals = 1, shares = 0, betrayed = 0 }) :: DecisionLogic.ReputationSplit
 		expect(all.steal):toBe(100)
 		expect(all.share):toBe(0)
 	end)
@@ -134,7 +137,39 @@ describe("DecisionLogic.reputationSplit", function()
 			"nope",
 		})
 		expect(reps[5].steals):toBe(2)
+		expect(reps[5].betrayed):toBe(0) -- an older server sends none
 		expect(DecisionLogic.parseReputation(nil)[5]):toBe(nil)
+	end)
+end)
+
+describe("DecisionLogic betrayal lines (payoff-loop step 7)", function()
+	it("reads betrayed off the participants list", function()
+		local reps = DecisionLogic.parseReputation({
+			{ playerId = 5, steals = 2, shares = 3, betrayed = 2 },
+			{ playerId = -1, steals = 0, shares = 4, betrayed = -3 },
+		})
+		expect(reps[5].betrayed):toBe(2)
+		expect(reps[-1].betrayed):toBe(0)
+	end)
+
+	it("adds a tag line only once someone has been robbed", function()
+		expect(DecisionLogic.robbedLine(nil)):toBe(nil)
+		expect(DecisionLogic.robbedLine({ steals = 1, shares = 4, betrayed = 0 })):toBe(nil)
+		expect(DecisionLogic.robbedLine({ steals = 1, shares = 4, betrayed = 3 })):toBe("Robbed 3×")
+	end)
+
+	it("names the thief on a robbed sharer's own result", function()
+		local personal = DecisionLogic.parsePersonal({ streakBefore = 2, streakAfter = 0, won = false, robbedBy = -4 })
+		local names = { [-4] = "Bot Bob" }
+		local function nameOf(id: number): string?
+			return names[id]
+		end
+		expect(DecisionLogic.robbedByLine(personal, nameOf)):toBe("Robbed by Bot Bob")
+		names[-4] = nil
+		expect(DecisionLogic.robbedByLine(personal, nameOf)):toBe("Robbed by the thief")
+		local clean = DecisionLogic.parsePersonal({ streakBefore = 2, streakAfter = 0, won = false })
+		expect(DecisionLogic.robbedByLine(clean, nameOf)):toBe(nil)
+		expect(DecisionLogic.robbedByLine(nil, nameOf)):toBe(nil)
 	end)
 end)
 
