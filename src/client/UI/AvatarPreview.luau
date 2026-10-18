@@ -123,11 +123,17 @@ local function dress(copy: Model, def: Def): Animation?
 		local accessory = WearLook.accessory(def)
 		if accessory then
 			accessory.Name = "Preview" .. def.category
+			-- Sized as the server's AddAccessory sizes it for this body.
+			local fit = copy:GetAttribute(WearLook.fitAttribute(def.category))
+			if typeof(fit) == "Vector3" then
+				WearLook.fit(accessory, fit)
+			end
 			if not WearLook.weld(copy, accessory) then
 				accessory:Destroy()
 			end
 		end
 	elseif def.category == "Skin" then
+		WearLook.clearBodyTextures(copy)
 		local shirt = copy:FindFirstChildOfClass("Shirt") or Instance.new("Shirt")
 		local pants = copy:FindFirstChildOfClass("Pants") or Instance.new("Pants")
 		if (def.shirtAssetId or 0) > 0 then

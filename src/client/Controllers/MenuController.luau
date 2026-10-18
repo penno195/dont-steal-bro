@@ -363,6 +363,27 @@ local function grantText(grant: StoreScreenLogic.Grant): string
 	return grant.kind
 end
 
+-- What a grant does, for the Store's panel (playtest 2026-10-18: a
+-- power-up's tile said nothing about it). nil for coins, titles and
+-- passes, which say it in their name.
+local function grantDescription(grant: StoreScreenLogic.Grant): string?
+	if grant.kind == "PowerUpStock" and grant.powerUpId then
+		local def = powerUpDefs[grant.powerUpId]
+		if def == nil then
+			return nil
+		end
+		local text = def.description .. "."
+		if def.durationSeconds >= 1 then
+			text ..= string.format(" Lasts %gs.", def.durationSeconds)
+		end
+		return text
+	elseif grant.kind == "Cosmetic" and grant.cosmeticId then
+		local def = cosmeticDefs[grant.cosmeticId]
+		return if def then def.description else nil
+	end
+	return nil
+end
+
 -- A season pass tile up close (the Store's `preview`).
 local function previewSeasonItem(row: SeasonTrackLogic.Row, premium: boolean)
 	local grant = row.grant
@@ -747,6 +768,7 @@ local function open(menu: Menu, storeCategory: StoreScreenLogic.Category?, store
 			priceOf = priceOf,
 			rarityOf = rarityOf,
 			grantText = grantText,
+			grantDescription = grantDescription,
 			cosmeticName = cosmeticName,
 			cosmeticDef = function(id: string): any?
 				return cosmeticDefs[id]
@@ -990,7 +1012,9 @@ local function mountLauncher()
 	local coinsVisible = source(false)
 	local inHub = isHubServer()
 	syncLauncher = function()
-		local free = openMenu == nil and not IN_PLAY[roundState() or ""]
+		-- The Studio's reveal outlives its round state into Results
+		-- (header): the launcher waits it out too (playtest, 2026-10-18).
+		local free = openMenu == nil and not IN_PLAY[roundState() or ""] and not DecisionStudioController.isActive()
 		visible(free)
 		coinsVisible(free and inHub)
 	end
@@ -1227,6 +1251,7 @@ local function onRoundState(state: string)
 					return
 				end
 			end
+			syncLauncher()
 			if openMenu == nil then
 				open("Results")
 			end

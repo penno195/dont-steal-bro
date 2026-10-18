@@ -227,7 +227,13 @@ function PickupLook.show(part: BasePart, color: Color3, source: Instance?, rarit
 		motes.Color = ColorSequence.new(color:Lerp(Color3.new(1, 1, 1), 0.3))
 		motes.Enabled = true
 	end
+	PickupLook.setVisual(part, source)
+end
 
+-- Swaps the icon inside a lit orb for a clone of `source` (nil: none),
+-- leaving the shell, lights and sprites alone. The daily hunt's drop
+-- turns through every item this way.
+function PickupLook.setVisual(part: BasePart, source: Instance?)
 	clearVisual(part)
 	if source == nil or not source:IsA("Model") then
 		return

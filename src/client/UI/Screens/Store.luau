@@ -68,6 +68,9 @@ export type Store = {
 	rarityOf: (StoreScreenLogic.Grant) -> string?,
 	-- One line per grant ("500 coins", "Founder's Trail"), for the panel.
 	grantText: (StoreScreenLogic.Grant) -> string,
+	-- What a grant does ("Run faster for a few seconds. Lasts 7s."), shown
+	-- under a one-grant item's contents; nil when its name says it.
+	grantDescription: (StoreScreenLogic.Grant) -> string?,
 	cosmeticName: (cosmeticId: string) -> string,
 	-- A cosmetic's config, for the try-on preview; nil if unknown.
 	cosmeticDef: (cosmeticId: string) -> any?,
@@ -475,7 +478,10 @@ local function panel(
 				table.insert(lines, store.grantText(grant))
 			end
 		end
-		return table.concat(lines, " · ")
+		local text = table.concat(lines, " · ")
+		-- A bundle's grants are listed by name only: no room for each.
+		local about = if #i.grants == 1 then store.grantDescription(i.grants[1]) else nil
+		return if about then text .. "\n\n" .. about else text
 	end)
 	local targets = derive(function(): { StoreScreenLogic.EquipTarget }
 		local i = item()

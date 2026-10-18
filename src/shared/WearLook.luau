@@ -58,6 +58,86 @@ function WearLook.accessory(def: CosmeticLogic.CosmeticDef): Accessory?
 	return accessory
 end
 
+-- ===== Fit: the engine's accessory rescale, measured ======================
+--
+-- Humanoid:AddAccessory resizes a Classic accessory to the body it goes
+-- on: on an Rthro-proportioned head the Rookie Cap comes out at 0.625x,
+-- non-uniformly with BodyProportionScale, and differently again per body
+-- part. The menus' preview can't call it (a copy in a ViewportFrame gets
+-- no weld and no rescale, client or not), so it showed the cap 1.6x too
+-- big, down over the face (2026-10-18 playtest). Rather than copy the
+-- engine's scale tables, the server measures the result once per
+-- character (CosmeticService) and stores it here; the copy is a clone,
+-- so it carries the attribute into the preview.
+
+-- The character attribute holding `category`'s fit (a Vector3).
+function WearLook.fitAttribute(category: string): string
+	return "DSBWearFit" .. category
+end
+
+-- An invisible, meshless stand-in for `category`'s accessory: its
+-- Handle's size after AddAccessory is the engine's rescale. nil for a
+-- category that isn't worn.
+function WearLook.probe(category: string): Accessory?
+	local attachmentName = CosmeticLogic.wearAttachmentFor(category)
+	if attachmentName == nil then
+		return nil
+	end
+	local accessory = Instance.new("Accessory")
+	accessory.AccessoryType = ACCESSORY_TYPE[category]
+	local handle = Instance.new("Part")
+	handle.Name = "Handle"
+	handle.Size = Vector3.one
+	handle.Transparency = 1
+	handle.CanCollide = false
+	handle.CanQuery = false
+	handle.CanTouch = false
+	handle.Massless = true
+	handle.Parent = accessory
+	local attachment = Instance.new("Attachment")
+	attachment.Name = attachmentName
+	attachment.Parent = handle
+	return accessory
+end
+
+-- Scales `accessory` (from WearLook.accessory) as AddAccessory would on
+-- a body whose measured fit is `fit`: the mesh and the attachment's
+-- offset, per axis, in the handle's own space.
+function WearLook.fit(accessory: Accessory, fit: Vector3)
+	local handle = accessory:FindFirstChild("Handle")
+	if handle == nil or not handle:IsA("BasePart") then
+		return
+	end
+	handle.Size *= fit
+	local mesh = handle:FindFirstChildOfClass("SpecialMesh")
+	if mesh ~= nil then
+		mesh.Scale *= fit
+	end
+	local attachment = handle:FindFirstChildOfClass("Attachment")
+	if attachment ~= nil then
+		local cf = attachment.CFrame
+		attachment.CFrame = CFrame.new(cf.Position * fit) * cf.Rotation
+	end
+end
+
+-- ===== Skin: classic clothing on a textured body ==========================
+--
+-- A body part's own TextureID draws over a Shirt and Pants, so on a
+-- textured avatar (Rthro, robots: the owner's own) the Founder's Kit
+-- showed nothing at all (2026-10-18 playtest). Wearing a skin clears the
+-- body parts' textures, all but the Head's (the face). Returns what was
+-- cleared, to put back on unequip.
+function WearLook.clearBodyTextures(character: Model): { [MeshPart]: string }
+	local cleared: { [MeshPart]: string } = {}
+	for _, child in character:GetChildren() do
+		if child:IsA("MeshPart") and child.Name ~= "Head" and child.TextureID ~= "" then
+			cleared[child] = child.TextureID
+			child.TextureID = ""
+		end
+	end
+	return cleared
+end
+
 -- Welds `accessory` onto `character` at its matching body attachment by
 -- hand, as Humanoid:AddAccessory would. For a model that isn't a live
 -- character (the preview's copy in a ViewportFrame), where AddAccessory

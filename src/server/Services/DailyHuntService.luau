@@ -22,6 +22,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+local ServerStorage = game:GetService("ServerStorage")
 local Workspace = game:GetService("Workspace")
 
 local Loader = require(ReplicatedStorage.Shared.Loader)
@@ -137,6 +138,20 @@ local function claim(player: Player)
 	pushState(player)
 end
 
+-- The drop is drawn on its owner's client (DailyHuntController) as a
+-- gold power-up pickup turning through every item's icon, and the client
+-- can't see ServerStorage: the icon models (a handful of primitives each)
+-- are copied to ReplicatedStorage.DailyHuntPickupModels.
+local function sharePickupModels()
+	local source = ServerStorage:FindFirstChild("PowerUpModels")
+	if source == nil then
+		return
+	end
+	local folder = source:Clone()
+	folder.Name = "DailyHuntPickupModels"
+	folder.Parent = ReplicatedStorage
+end
+
 local DailyHuntService: Loader.Service = {
 	name = "DailyHuntService",
 	dependencies = { "NetGuard", "DataService", "LiveConfig", "StoreService" },
@@ -157,6 +172,7 @@ function DailyHuntService:init()
 	NetGuard.on("DailyHuntClaim", function(player: Player)
 		claim(player)
 	end)
+	sharePickupModels()
 end
 
 function DailyHuntService:start()

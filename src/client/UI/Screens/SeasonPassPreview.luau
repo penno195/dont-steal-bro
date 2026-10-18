@@ -180,6 +180,9 @@ function SeasonPassPreview.mount(controller: any): () -> ()
 			return nil
 		end,
 		grantText = grantText,
+		grantDescription = function()
+			return nil
+		end,
 		cosmeticName = function(id: string)
 			local cosmetic = cosmeticDefs[id]
 			return if cosmetic then cosmetic.displayName else id

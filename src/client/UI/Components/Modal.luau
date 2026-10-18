@@ -323,6 +323,11 @@ function Modal.card(props: Props): Frame
 				Size = UDim2.new(1, -(Theme.touch.iconButton + Theme.spacing.sm), 1, 0),
 				Text = props.title,
 				TextXAlignment = Enum.TextXAlignment.Left,
+				-- One line, fitted once (Base.fitOneLine). Engine TextScaled
+				-- re-picked its wrap at every step of the enter grow, so
+				-- "Save your streak of 2?" flicked onto two lines and back
+				-- as the card opened and closed (2026-10-18 phone video).
+				TextWrapped = false,
 			}),
 			(if props.dismissible and props.onDismiss
 				then IconButton({

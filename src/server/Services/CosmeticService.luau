@@ -79,12 +79,19 @@ end
 -- behind. Keyed by the character Model, never the Player, so a mid-round
 -- respawn - a brand new Model - starts from ITS OWN real outfit, never a
 -- stale capture from the character that just died.
-type SkinRestore = { shirtTemplate: string?, pantsTemplate: string? }
+-- `textures` are the body parts' own TextureIDs, cleared so the clothing
+-- shows (WearLook.clearBodyTextures).
+type SkinRestore = { shirtTemplate: string?, pantsTemplate: string?, textures: { [MeshPart]: string }? }
 local skinRestoreFor: { [Model]: SkinRestore } = {}
 
 local function removeSkin(character: Model)
 	local restore = skinRestoreFor[character]
 	skinRestoreFor[character] = nil
+	if restore ~= nil and restore.textures ~= nil then
+		for part, texture in restore.textures do
+			part.TextureID = texture
+		end
+	end
 
 	local shirt = character:FindFirstChildOfClass("Shirt")
 	if shirt ~= nil and shirt:GetAttribute(OWNED_ATTRIBUTE) == true then
@@ -139,7 +146,11 @@ local function applySkin(character: Model, def: CosmeticLogic.CosmeticDef)
 	pants:SetAttribute(OWNED_ATTRIBUTE, true)
 	pants.PantsTemplate = string.format("rbxassetid://%d", def.pantsAssetId :: number)
 
-	skinRestoreFor[character] = { shirtTemplate = originalShirtTemplate, pantsTemplate = originalPantsTemplate }
+	skinRestoreFor[character] = {
+		shirtTemplate = originalShirtTemplate,
+		pantsTemplate = originalPantsTemplate,
+		textures = WearLook.clearBodyTextures(character),
+	}
 end
 
 -- ===== Trail: our own Instances, always safe to just destroy ==============
@@ -281,6 +292,26 @@ local function removeWear(character: Model, category: string)
 		hidden[category] = nil
 		for _, accessory in list do
 			accessory.Parent = character
+		end
+	end
+end
+
+-- Stores the engine's accessory rescale for this body on the character
+-- (WearLook.fit), for the menus' try-on preview. The probe is added and
+-- removed in one step, so it never replicates or renders.
+local function measureWearFit(character: Model)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid == nil then
+		return
+	end
+	for _, category in WEAR_CATEGORIES do
+		local probe = WearLook.probe(category)
+		if probe ~= nil then
+			probe:SetAttribute(OWNED_ATTRIBUTE, true) -- never hidden as a clash
+			humanoid:AddAccessory(probe)
+			local handle = probe:FindFirstChild("Handle") :: BasePart
+			character:SetAttribute(WearLook.fitAttribute(category), handle.Size)
+			probe:Destroy()
 		end
 	end
 end
@@ -498,11 +529,31 @@ local CosmeticService: Loader.Service = {
 function CosmeticService:init()
 	local RoundService = Loader.get("RoundService") :: any
 
-	Players.PlayerAdded:Connect(function(player: Player)
+	-- The avatar's body parts and scale values land after CharacterAdded:
+	-- measure the wear fit then, and re-apply, so a skin clears the
+	-- textures of the body parts that stayed.
+	local function onAppearance(player: Player, character: Model)
+		measureWearFit(character)
+		refreshFor(player)
+	end
+	local function onPlayer(player: Player)
 		player.CharacterAdded:Connect(function()
 			refreshFor(player)
 		end)
-	end)
+		player.CharacterAppearanceLoaded:Connect(function(character: Model)
+			onAppearance(player, character)
+		end)
+		-- Already in before this service started (a Studio Play test):
+		-- both events have been and gone.
+		local character = player.Character
+		if character ~= nil and player:HasAppearanceLoaded() then
+			onAppearance(player, character)
+		end
+	end
+	Players.PlayerAdded:Connect(onPlayer)
+	for _, player in Players:GetPlayers() do
+		onPlayer(player)
+	end
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		local character = player.Character
