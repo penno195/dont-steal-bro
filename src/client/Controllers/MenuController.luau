@@ -80,6 +80,7 @@ local ResultsScreen = require(script.Parent.Parent.UI.Screens.Results)
 local SettingsScreen = require(script.Parent.Parent.UI.Screens.Settings)
 local StoreScreen = require(script.Parent.Parent.UI.Screens.Store)
 local ClaimPopup = require(script.Parent.Parent.UI.Screens.ClaimPopup)
+local CommunityJoin = require(script.Parent.Parent.UI.Screens.CommunityJoin)
 local ItemPreview = require(script.Parent.Parent.UI.Screens.ItemPreview)
 local StaffPanelScreen = require(script.Parent.Parent.UI.Screens.StaffPanel)
 local GiftLogic = require(script.Parent.Parent.UI.GiftLogic)
@@ -520,6 +521,27 @@ local function checkCommunity()
 			Net.fireServer("CommunityRewardCheck", {})
 		end
 	end)
+end
+
+-- The Hub notice board's pop-up (CommunityBoardController): opens with
+-- Roblox's join prompt straight over it. The grant's claim pop-up
+-- closes it (CommunityRewardResult).
+local closeCommunityJoin: (() -> ())? = nil
+
+local function openCommunityJoin()
+	if closeCommunityJoin ~= nil or not communityOffered() then
+		return
+	end
+	closeCommunityJoin = CommunityJoin.open({
+		name = cosmeticName(GameConfig.community.rewardCosmeticId),
+		image = grantImage({ kind = "Cosmetic", cosmeticId = GameConfig.community.rewardCosmeticId } :: any),
+		status = communityText,
+		join = checkCommunity,
+		onClosed = function()
+			closeCommunityJoin = nil
+		end,
+	})
+	checkCommunity()
 end
 
 -- "Same as last round", from the Locker or the queue strip. The server
@@ -1283,6 +1305,11 @@ local MenuController: Loader.Controller = {
 		return StoreOffers.featured(StoreConfig :: any, serverNow()) :: any
 	end,
 	priceOf = priceOf,
+	-- For CommunityBoardController: whether the community reward is
+	-- still on offer to this player (the board then reads JOIN), and
+	-- its pop-up.
+	communityOffered = communityOffered,
+	openCommunityJoin = openCommunityJoin,
 	repeatLastLoadout = repeatLastLoadout,
 	-- For BuyBackController: which menu is up (nil = none), and the
 	-- round state as this controller last heard it.
@@ -1368,6 +1395,9 @@ function MenuController:init()
 		local status = if type(payload) == "table" then payload.status else nil
 		if status == "Granted" then
 			communityText("Join the Studio Corvus community, then tap here.")
+			if closeCommunityJoin ~= nil then
+				closeCommunityJoin()
+			end
 			local grant = { kind = "Cosmetic", cosmeticId = GameConfig.community.rewardCosmeticId }
 			ClaimPopup.open({
 				{

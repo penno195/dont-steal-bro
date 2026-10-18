@@ -369,6 +369,12 @@ there "Got it" works as before.
     the group at any time can claim it. A player who later **leaves the
     group keeps it**; membership is checked only to grant it, on join
     and from the Locker's FREE tile, which opens Roblox's join prompt.
+  - *Applied (2026-10-18, user request):* the reward is also advertised
+    on a **notice board by the store plinths** in the Hub (FREE, the
+    pack's picture, JOIN). Tapping it opens a pop-up saying that joining
+    puts it in the Locker, with Roblox's join prompt over it; the server
+    still does the check. Once owned, the board reads "Thanks for
+    joining" and does nothing.
 - *Applied (2026-10-10, user decision):* **the first two limited
   editions** are the **Diamond Heist Crown** (hat, plinth 1) and the
   **Vault Door Shield** (back item, plinth 3), either side of the Season

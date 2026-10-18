@@ -14,6 +14,7 @@ geometry is ever cloned into a match server.
 | `HubSpawn` | SpawnLocation | exactly 1 | — |
 | `HubQueueCountdown` | BasePart | exactly 1 | — |
 | `HubStorePodium` | BasePart | exactly 3 | `Slot` (1–3) |
+| `HubCommunityBoard` | BasePart | 0–1 (optional) | — (the community reward's notice board; drawn on its **Front** face) |
 | `HubLeaderboardSurface` | BasePart | exactly 3 | `Period` (`"Daily"`, `"Weekly"`, `"AllTime"`) |
 | `HubPracticeArea` | BasePart (volume) | exactly 1 | — |
 | `HubPracticeItemSpawn` | BasePart | 4–8 | — |
